@@ -1,0 +1,19 @@
+Search icon based on Flaticon icon "Lupa De Pesquisa" by Freepik.
+Source: https://www.flaticon.com/br/icone-gratis/lupa-de-pesquisa_57477
+Color customized to the project palette (#E51B2B).
+
+Read weight icon based on Flaticon icon "Weighing Scale" by Freepik.
+Source: https://www.flaticon.com/free-icon/weighing-scale_66939
+Color customized to RGB(229, 231, 235).
+
+Manual lot icon based on Flaticon icon "Label" by Freepik.
+Source: https://www.flaticon.com/free-icon/label_1656504
+Color customized to RGB(229, 231, 235).
+
+Delete last icon based on Flaticon icon "Trash" by flatart_icons.
+Source: https://www.flaticon.com/free-icon/trash_2283126
+Color customized to RGB(229, 231, 235).
+
+Delete by code icon based on Flaticon icon "Barcode".
+Source: https://www.flaticon.com/free-icon/barcode_3375109
+Color customized to RGB(229, 231, 235).

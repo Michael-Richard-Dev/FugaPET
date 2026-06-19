@@ -1,0 +1,2227 @@
+﻿using FugaPET_Dev.Tela.Controls;
+
+namespace FugaPET_Dev.Tela.Cadastro;
+
+partial class BalancaForm
+{
+    private System.ComponentModel.IContainer components = null;
+    private TableLayoutPanel rootLayout;
+    private Panel customTitleBarPanel;
+    private Label menuHeaderLabel;
+    private PictureBox companyLogoPictureBox;
+    private Label headerDividerLabel;
+    private RoundedPanel headerTitleIconPanel;
+    private PictureBox headerTitleIconPictureBox;
+    private Label headerTitleLabel;
+    private Label headerSubtitleLabel;
+    private RoundedPanel sapStatusPanel;
+    private Label sapStatusDotLabel;
+    private Label sapStatusLabel;
+    private Label minimizeWindowLabel;
+    private Label maximizeWindowLabel;
+    private Label closeWindowLabel;
+    private Panel contentPanel;
+    private TableLayoutPanel contentLayout;
+    private RoundedPanel heroPanel;
+    private PictureBox heroLogoPictureBox;
+    private Label heroTitleLabel;
+    private Label heroSubtitleLabel;
+    private Panel heroIllustrationPanel;
+    private RoundedPanel heroShieldPanel;
+    private Label heroShieldLabel;
+    private RoundedPanel heroLockPanel;
+    private Label heroLockLabel;
+    private TableLayoutPanel bodyLayout;
+    private RoundedPanel profilesCard;
+    private RoundedPanel summaryCard;
+    private Label profilesTitleLabel;
+    private RoundedPanel profilesSearchPanel;
+    private Label profilesSearchIconLabel;
+    private RoundedPanel profilesTablePanel;
+    private Label profilesHeaderProfileLabel;
+    private Label profilesHeaderUsersLabel;
+    private Label profilesHeaderStatusLabel;
+    private Panel profileRow1Panel;
+    private Label profileRow1NameLabel;
+    private Label profileRow1UsersLabel;
+    private RoundedPanel profileRow1StatusPanel;
+    private Label profileRow1StatusLabel;
+    private Panel profileRow2Panel;
+    private Label profileRow2NameLabel;
+    private Label profileRow2UsersLabel;
+    private RoundedPanel profileRow2StatusPanel;
+    private Label profileRow2StatusLabel;
+    private Panel profileRow3Panel;
+    private Label profileRow3NameLabel;
+    private Label profileRow3UsersLabel;
+    private RoundedPanel profileRow3StatusPanel;
+    private Label profileRow3StatusLabel;
+    private Panel profileRow4Panel;
+    private Label profileRow4NameLabel;
+    private Label profileRow4UsersLabel;
+    private RoundedPanel profileRow4StatusPanel;
+    private Label profileRow4StatusLabel;
+    private Panel profileRow5Panel;
+    private Label profileRow5NameLabel;
+    private Label profileRow5UsersLabel;
+    private RoundedPanel profileRow5StatusPanel;
+    private Label profileRow5StatusLabel;
+    private DataGridView profilesDataGridView;
+    private TextBox searchTextBox;
+    private Button novoPerfilButton;
+    private Button duplicarButton;
+    private RoundedPanel novoPerfilButtonPanel;
+    private Label novoPerfilIconLabel;
+    private Label novoPerfilTextLabel;
+    private Label profilesFooterLabel;
+    private Label summaryTitleLabel;
+    private Panel summaryDividerLabel;
+    private Panel summaryDividerLabel2;
+    private Panel summaryDividerLabel3;
+    private Panel summaryDividerLabel4;
+    private Panel summaryDividerLabel5;
+    private Label summaryPerfilIconLabel;
+    private Label summaryPerfilCaptionLabel;
+    private Label summaryPerfilValueLabel;
+    private Label summarySituacaoIconLabel;
+    private Label summarySituacaoCaptionLabel;
+    private Label summarySituacaoValueLabel;
+    private Label summaryUsuariosIconLabel;
+    private Label summaryUsuariosCaptionLabel;
+    private Label summaryUsuariosValueLabel;
+    private Button salvarButton;
+    private Button novoButton;
+    private Button excluirButton;
+    private Panel footerBar;
+    private Panel cellUser;
+    private Label cellUserIcon;
+    private Label cellUserText;
+    private Panel cellUserDivider;
+    private TableLayoutPanel footerBarLayout;
+    private Panel cellTerminal;
+    private Label cellTerminalIcon;
+    private Label cellTerminalText;
+    private Panel cellTerminalDivider;
+    private Panel cellEmpresa;
+    private Label cellEmpresaIcon;
+    private Label cellEmpresaText;
+    private Panel cellEmpresaDivider;
+    private Panel cellBanco;
+    private Label cellBancoIcon;
+    private Label cellBancoText;
+    private Panel cellBancoDivider;
+    private Panel cellHora;
+    private Label cellHoraIcon;
+    private Label cellHoraText;
+    private Panel cellHoraDivider;
+    private Panel cellData;
+    private Label cellDataIcon;
+    private Label cellDataText;
+    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn4;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && (components != null))
+        {
+            components.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void InitializeComponent()
+    {
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(BalancaForm));
+        DataGridViewCellStyle dataGridViewCellStyle33 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle36 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle34 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle35 = new DataGridViewCellStyle();
+        rootLayout = new TableLayoutPanel();
+        contentPanel = new Panel();
+        contentLayout = new TableLayoutPanel();
+        bodyLayout = new TableLayoutPanel();
+        profilesCard = new RoundedPanel();
+        profilesCheckMarkLabel = new Label();
+        novoPerfilButtonPanel = new RoundedPanel();
+        novoPerfilIconLabel = new Label();
+        novoPerfilTextLabel = new Label();
+        profilesSearchPanel = new RoundedPanel();
+        profilesSearchIconLabel = new Label();
+        searchTextBox = new TextBox();
+        profilesTablePanel = new RoundedPanel();
+        profilesHeaderProfileLabel = new Label();
+        profilesHeaderUsersLabel = new Label();
+        profilesHeaderStatusLabel = new Label();
+        profileRow1Panel = new Panel();
+        profileRow1NameLabel = new Label();
+        profileRow1UsersLabel = new Label();
+        profileRow1StatusPanel = new RoundedPanel();
+        profileRow1StatusLabel = new Label();
+        profileRow2Panel = new Panel();
+        profileRow2NameLabel = new Label();
+        profileRow2UsersLabel = new Label();
+        profileRow2StatusPanel = new RoundedPanel();
+        profileRow2StatusLabel = new Label();
+        profileRow3Panel = new Panel();
+        profileRow3NameLabel = new Label();
+        profileRow3UsersLabel = new Label();
+        profileRow3StatusPanel = new RoundedPanel();
+        profileRow3StatusLabel = new Label();
+        profileRow4Panel = new Panel();
+        profileRow4NameLabel = new Label();
+        profileRow4UsersLabel = new Label();
+        profileRow4StatusPanel = new RoundedPanel();
+        profileRow4StatusLabel = new Label();
+        profileRow5Panel = new Panel();
+        profileRow5NameLabel = new Label();
+        profileRow5UsersLabel = new Label();
+        profileRow5StatusPanel = new RoundedPanel();
+        profileRow5StatusLabel = new Label();
+        profilesFooterLabel = new Label();
+        profilesTitleLabel = new Label();
+        detailsCard = new RoundedPanel();
+        RdpSetor = new RoundedPanel();
+        CmbSetor = new ComboBox();
+        LblSetorTara = new Label();
+        roundedPanel1 = new RoundedPanel();
+        TxtPeso = new TextBox();
+        LblPeso = new Label();
+        detailsTitleIconLabel = new Label();
+        detailsTitleLabel = new Label();
+        nomePerfilLabel = new Label();
+        nomePerfilInputPanel = new RoundedPanel();
+        nomePerfilTextBox = new TextBox();
+        descricaoLabel = new Label();
+        descricaoInputPanel = new RoundedPanel();
+        descricaoTextBox = new TextBox();
+        situacaoInputPanel = new RoundedPanel();
+        situacaoComboBox = new ComboBox();
+        detailsTopDividerLabel = new Label();
+        situacaoLabel = new Label();
+        summaryCard = new RoundedPanel();
+        tipTextLabel = new Label();
+        summaryTitleIconLabel = new Label();
+        summaryTitleLabel = new Label();
+        summaryDividerLabel = new Panel();
+        summaryDividerLabel2 = new Panel();
+        summaryDividerLabel3 = new Panel();
+        summaryDividerLabel4 = new Panel();
+        summaryDividerLabel5 = new Panel();
+        summaryPerfilIconLabel = new Label();
+        summaryPerfilCaptionLabel = new Label();
+        summaryPerfilValueLabel = new Label();
+        summarySituacaoIconLabel = new Label();
+        summarySituacaoCaptionLabel = new Label();
+        summarySituacaoValueLabel = new Label();
+        summaryUsuariosIconLabel = new Label();
+        summaryUsuariosCaptionLabel = new Label();
+        summaryUsuariosValueLabel = new Label();
+        salvarButton = new Button();
+        novoButton = new Button();
+        excluirButton = new Button();
+        footerBar = new Panel();
+        footerBarLayout = new TableLayoutPanel();
+        cellUser = new Panel();
+        cellUserText = new Label();
+        cellUserIcon = new Label();
+        cellUserDivider = new Panel();
+        cellTerminal = new Panel();
+        cellTerminalText = new Label();
+        cellTerminalIcon = new Label();
+        cellTerminalDivider = new Panel();
+        cellEmpresa = new Panel();
+        cellEmpresaText = new Label();
+        cellEmpresaIcon = new Label();
+        cellEmpresaDivider = new Panel();
+        cellBanco = new Panel();
+        cellBancoText = new Label();
+        cellBancoIcon = new Label();
+        cellBancoDivider = new Panel();
+        cellHora = new Panel();
+        cellHoraText = new Label();
+        cellHoraIcon = new Label();
+        cellHoraDivider = new Panel();
+        cellData = new Panel();
+        cellDataText = new Label();
+        cellDataIcon = new Label();
+        customTitleBarPanel = new Panel();
+        menuHeaderLabel = new Label();
+        companyLogoPictureBox = new PictureBox();
+        headerDividerLabel = new Label();
+        headerTitleIconPanel = new RoundedPanel();
+        headerTitleIconPictureBox = new PictureBox();
+        headerTitleLabel = new Label();
+        headerSubtitleLabel = new Label();
+        sapStatusPanel = new RoundedPanel();
+        sapStatusDotLabel = new Label();
+        sapStatusLabel = new Label();
+        minimizeWindowLabel = new Label();
+        maximizeWindowLabel = new Label();
+        closeWindowLabel = new Label();
+        novoPerfilButton = new Button();
+        duplicarButton = new Button();
+        profilesDataGridView = new DataGridView();
+        dataGridViewTextBoxColumn1 = new DataGridViewTextBoxColumn();
+        dataGridViewTextBoxColumn2 = new DataGridViewTextBoxColumn();
+        dataGridViewTextBoxColumn3 = new DataGridViewTextBoxColumn();
+        dataGridViewTextBoxColumn4 = new DataGridViewTextBoxColumn();
+        heroPanel = new RoundedPanel();
+        heroLogoPictureBox = new PictureBox();
+        heroTitleLabel = new Label();
+        heroSubtitleLabel = new Label();
+        heroIllustrationPanel = new Panel();
+        heroShieldPanel = new RoundedPanel();
+        heroShieldLabel = new Label();
+        heroLockPanel = new RoundedPanel();
+        heroLockLabel = new Label();
+        rootLayout.SuspendLayout();
+        contentPanel.SuspendLayout();
+        contentLayout.SuspendLayout();
+        bodyLayout.SuspendLayout();
+        profilesCard.SuspendLayout();
+        novoPerfilButtonPanel.SuspendLayout();
+        profilesSearchPanel.SuspendLayout();
+        profilesTablePanel.SuspendLayout();
+        profileRow1Panel.SuspendLayout();
+        profileRow1StatusPanel.SuspendLayout();
+        profileRow2Panel.SuspendLayout();
+        profileRow2StatusPanel.SuspendLayout();
+        profileRow3Panel.SuspendLayout();
+        profileRow3StatusPanel.SuspendLayout();
+        profileRow4Panel.SuspendLayout();
+        profileRow4StatusPanel.SuspendLayout();
+        profileRow5Panel.SuspendLayout();
+        profileRow5StatusPanel.SuspendLayout();
+        detailsCard.SuspendLayout();
+        RdpSetor.SuspendLayout();
+        roundedPanel1.SuspendLayout();
+        nomePerfilInputPanel.SuspendLayout();
+        descricaoInputPanel.SuspendLayout();
+        situacaoInputPanel.SuspendLayout();
+        summaryCard.SuspendLayout();
+        footerBar.SuspendLayout();
+        footerBarLayout.SuspendLayout();
+        cellUser.SuspendLayout();
+        cellTerminal.SuspendLayout();
+        cellEmpresa.SuspendLayout();
+        cellBanco.SuspendLayout();
+        cellHora.SuspendLayout();
+        cellData.SuspendLayout();
+        customTitleBarPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).BeginInit();
+        headerTitleIconPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
+        sapStatusPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).BeginInit();
+        heroPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).BeginInit();
+        heroIllustrationPanel.SuspendLayout();
+        heroShieldPanel.SuspendLayout();
+        heroLockPanel.SuspendLayout();
+        SuspendLayout();
+        // 
+        // rootLayout
+        // 
+        rootLayout.BackColor = Color.FromArgb(247, 248, 250);
+        rootLayout.ColumnCount = 1;
+        rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        rootLayout.Controls.Add(contentPanel, 0, 1);
+        rootLayout.Controls.Add(footerBar, 0, 2);
+        rootLayout.Controls.Add(customTitleBarPanel, 0, 0);
+        rootLayout.Dock = DockStyle.Fill;
+        rootLayout.Location = new Point(0, 0);
+        rootLayout.Name = "rootLayout";
+        rootLayout.RowCount = 3;
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52F));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+        rootLayout.Size = new Size(1366, 720);
+        rootLayout.TabIndex = 0;
+        // 
+        // contentPanel
+        // 
+        contentPanel.AutoScroll = true;
+        contentPanel.BackColor = Color.FromArgb(247, 248, 250);
+        contentPanel.Controls.Add(contentLayout);
+        contentPanel.Dock = DockStyle.Fill;
+        contentPanel.Location = new Point(0, 52);
+        contentPanel.Margin = new Padding(0);
+        contentPanel.Name = "contentPanel";
+        contentPanel.Padding = new Padding(18, 14, 18, 14);
+        contentPanel.Size = new Size(1366, 630);
+        contentPanel.TabIndex = 1;
+        // 
+        // contentLayout
+        // 
+        contentLayout.ColumnCount = 1;
+        contentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        contentLayout.Controls.Add(bodyLayout, 0, 0);
+        contentLayout.Dock = DockStyle.Fill;
+        contentLayout.Location = new Point(18, 14);
+        contentLayout.Name = "contentLayout";
+        contentLayout.RowCount = 1;
+        contentLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        contentLayout.Size = new Size(1330, 602);
+        contentLayout.TabIndex = 0;
+        // 
+        // bodyLayout
+        // 
+        bodyLayout.ColumnCount = 3;
+        bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
+        bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43F));
+        bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        bodyLayout.Controls.Add(profilesCard, 0, 0);
+        bodyLayout.Controls.Add(detailsCard, 1, 0);
+        bodyLayout.Controls.Add(summaryCard, 2, 0);
+        bodyLayout.Dock = DockStyle.Fill;
+        bodyLayout.Location = new Point(3, 3);
+        bodyLayout.Name = "bodyLayout";
+        bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        bodyLayout.Size = new Size(1324, 596);
+        bodyLayout.TabIndex = 1;
+        // 
+        // profilesCard
+        // 
+        profilesCard.BackColor = Color.Transparent;
+        profilesCard.BorderColor = Color.FromArgb(226, 232, 240);
+        profilesCard.Controls.Add(profilesCheckMarkLabel);
+        profilesCard.Controls.Add(novoPerfilButtonPanel);
+        profilesCard.Controls.Add(profilesSearchPanel);
+        profilesCard.Controls.Add(profilesTablePanel);
+        profilesCard.Controls.Add(profilesFooterLabel);
+        profilesCard.Controls.Add(profilesTitleLabel);
+        profilesCard.Dock = DockStyle.Fill;
+        profilesCard.Location = new Point(0, 0);
+        profilesCard.Margin = new Padding(0, 0, 12, 0);
+        profilesCard.Name = "profilesCard";
+        profilesCard.ShadowBlur = 0;
+        profilesCard.ShadowOffsetY = 0;
+        profilesCard.Size = new Size(411, 596);
+        profilesCard.TabIndex = 0;
+        // 
+        // profilesCheckMarkLabel
+        // 
+        profilesCheckMarkLabel.Font = new Font("Segoe UI Symbol", 14F, FontStyle.Bold);
+        profilesCheckMarkLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        profilesCheckMarkLabel.Location = new Point(16, 19);
+        profilesCheckMarkLabel.Name = "profilesCheckMarkLabel";
+        profilesCheckMarkLabel.Size = new Size(26, 26);
+        profilesCheckMarkLabel.TabIndex = 7;
+        profilesCheckMarkLabel.Text = "✓";
+        profilesCheckMarkLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // novoPerfilButtonPanel
+        // 
+        novoPerfilButtonPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        novoPerfilButtonPanel.BackColor = Color.Transparent;
+        novoPerfilButtonPanel.BorderColor = Color.FromArgb(203, 213, 225);
+        novoPerfilButtonPanel.BorderRadius = 4;
+        novoPerfilButtonPanel.Controls.Add(novoPerfilIconLabel);
+        novoPerfilButtonPanel.Controls.Add(novoPerfilTextLabel);
+        novoPerfilButtonPanel.Location = new Point(251, 16);
+        novoPerfilButtonPanel.Name = "novoPerfilButtonPanel";
+        novoPerfilButtonPanel.ShadowBlur = 0;
+        novoPerfilButtonPanel.ShadowOffsetY = 0;
+        novoPerfilButtonPanel.Size = new Size(142, 31);
+        novoPerfilButtonPanel.TabIndex = 3;
+        // 
+        // novoPerfilIconLabel
+        // 
+        novoPerfilIconLabel.BackColor = Color.Transparent;
+        novoPerfilIconLabel.Font = new Font("Segoe MDL2 Assets", 10F);
+        novoPerfilIconLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        novoPerfilIconLabel.Location = new Point(10, 4);
+        novoPerfilIconLabel.Name = "novoPerfilIconLabel";
+        novoPerfilIconLabel.Size = new Size(20, 23);
+        novoPerfilIconLabel.TabIndex = 0;
+        novoPerfilIconLabel.Text = "";
+        novoPerfilIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // novoPerfilTextLabel
+        // 
+        novoPerfilTextLabel.BackColor = Color.Transparent;
+        novoPerfilTextLabel.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        novoPerfilTextLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        novoPerfilTextLabel.Location = new Point(34, 4);
+        novoPerfilTextLabel.Name = "novoPerfilTextLabel";
+        novoPerfilTextLabel.Size = new Size(101, 23);
+        novoPerfilTextLabel.TabIndex = 1;
+        novoPerfilTextLabel.Text = "Nova Balança";
+        novoPerfilTextLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profilesSearchPanel
+        // 
+        profilesSearchPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        profilesSearchPanel.BackColor = Color.Transparent;
+        profilesSearchPanel.BorderColor = Color.FromArgb(214, 219, 226);
+        profilesSearchPanel.BorderRadius = 7;
+        profilesSearchPanel.Controls.Add(profilesSearchIconLabel);
+        profilesSearchPanel.Controls.Add(searchTextBox);
+        profilesSearchPanel.Location = new Point(16, 60);
+        profilesSearchPanel.Name = "profilesSearchPanel";
+        profilesSearchPanel.ShadowBlur = 0;
+        profilesSearchPanel.ShadowOffsetY = 0;
+        profilesSearchPanel.Size = new Size(379, 34);
+        profilesSearchPanel.TabIndex = 2;
+        // 
+        // profilesSearchIconLabel
+        // 
+        profilesSearchIconLabel.BackColor = Color.Transparent;
+        profilesSearchIconLabel.Font = new Font("Segoe MDL2 Assets", 11F);
+        profilesSearchIconLabel.ForeColor = Color.FromArgb(107, 114, 128);
+        profilesSearchIconLabel.Location = new Point(8, 8);
+        profilesSearchIconLabel.Name = "profilesSearchIconLabel";
+        profilesSearchIconLabel.Size = new Size(22, 24);
+        profilesSearchIconLabel.TabIndex = 0;
+        profilesSearchIconLabel.Text = "";
+        profilesSearchIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // searchTextBox
+        // 
+        searchTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        searchTextBox.BorderStyle = BorderStyle.None;
+        searchTextBox.Font = new Font("Segoe UI", 9F);
+        searchTextBox.Location = new Point(36, 8);
+        searchTextBox.Name = "searchTextBox";
+        searchTextBox.PlaceholderText = "Buscar balança...";
+        searchTextBox.Size = new Size(340, 16);
+        searchTextBox.TabIndex = 4;
+        // 
+        // profilesTablePanel
+        // 
+        profilesTablePanel.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        profilesTablePanel.BackColor = Color.Transparent;
+        profilesTablePanel.BorderColor = Color.FromArgb(226, 232, 240);
+        profilesTablePanel.BorderRadius = 5;
+        profilesTablePanel.Controls.Add(profilesHeaderProfileLabel);
+        profilesTablePanel.Controls.Add(profilesHeaderUsersLabel);
+        profilesTablePanel.Controls.Add(profilesHeaderStatusLabel);
+        profilesTablePanel.Controls.Add(profileRow1Panel);
+        profilesTablePanel.Controls.Add(profileRow2Panel);
+        profilesTablePanel.Controls.Add(profileRow3Panel);
+        profilesTablePanel.Controls.Add(profileRow4Panel);
+        profilesTablePanel.Controls.Add(profileRow5Panel);
+        profilesTablePanel.Location = new Point(16, 108);
+        profilesTablePanel.Name = "profilesTablePanel";
+        profilesTablePanel.ShadowBlur = 0;
+        profilesTablePanel.ShadowOffsetY = 0;
+        profilesTablePanel.Size = new Size(379, 446);
+        profilesTablePanel.TabIndex = 5;
+        // 
+        // profilesHeaderProfileLabel
+        // 
+        profilesHeaderProfileLabel.BackColor = Color.Transparent;
+        profilesHeaderProfileLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profilesHeaderProfileLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profilesHeaderProfileLabel.Location = new Point(16, 9);
+        profilesHeaderProfileLabel.Name = "profilesHeaderProfileLabel";
+        profilesHeaderProfileLabel.Size = new Size(138, 20);
+        profilesHeaderProfileLabel.TabIndex = 0;
+        profilesHeaderProfileLabel.Text = "Nome";
+        profilesHeaderProfileLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profilesHeaderUsersLabel
+        // 
+        profilesHeaderUsersLabel.BackColor = Color.Transparent;
+        profilesHeaderUsersLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profilesHeaderUsersLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profilesHeaderUsersLabel.Location = new Point(171, 9);
+        profilesHeaderUsersLabel.Name = "profilesHeaderUsersLabel";
+        profilesHeaderUsersLabel.Size = new Size(121, 20);
+        profilesHeaderUsersLabel.TabIndex = 1;
+        profilesHeaderUsersLabel.Text = "Setor";
+        profilesHeaderUsersLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profilesHeaderStatusLabel
+        // 
+        profilesHeaderStatusLabel.BackColor = Color.Transparent;
+        profilesHeaderStatusLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profilesHeaderStatusLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profilesHeaderStatusLabel.Location = new Point(311, 9);
+        profilesHeaderStatusLabel.Name = "profilesHeaderStatusLabel";
+        profilesHeaderStatusLabel.Size = new Size(52, 20);
+        profilesHeaderStatusLabel.TabIndex = 2;
+        profilesHeaderStatusLabel.Text = "Situação";
+        profilesHeaderStatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow1Panel
+        // 
+        profileRow1Panel.BackColor = Color.White;
+        profileRow1Panel.Controls.Add(profileRow1NameLabel);
+        profileRow1Panel.Controls.Add(profileRow1UsersLabel);
+        profileRow1Panel.Controls.Add(profileRow1StatusPanel);
+        profileRow1Panel.Location = new Point(3, 34);
+        profileRow1Panel.Name = "profileRow1Panel";
+        profileRow1Panel.Size = new Size(373, 46);
+        profileRow1Panel.TabIndex = 3;
+        // 
+        // profileRow1NameLabel
+        // 
+        profileRow1NameLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow1NameLabel.ForeColor = Color.FromArgb(30, 41, 59);
+        profileRow1NameLabel.Location = new Point(12, 11);
+        profileRow1NameLabel.Name = "profileRow1NameLabel";
+        profileRow1NameLabel.Size = new Size(142, 24);
+        profileRow1NameLabel.TabIndex = 1;
+        profileRow1NameLabel.Text = "Balança Entrada MP 01";
+        profileRow1NameLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profileRow1UsersLabel
+        // 
+        profileRow1UsersLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow1UsersLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profileRow1UsersLabel.Location = new Point(168, 11);
+        profileRow1UsersLabel.Name = "profileRow1UsersLabel";
+        profileRow1UsersLabel.Size = new Size(121, 24);
+        profileRow1UsersLabel.TabIndex = 2;
+        profileRow1UsersLabel.Text = "Entrada de Produtos";
+        profileRow1UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow1StatusPanel
+        // 
+        profileRow1StatusPanel.BackColor = Color.Transparent;
+        profileRow1StatusPanel.BorderColor = Color.FromArgb(187, 247, 208);
+        profileRow1StatusPanel.BorderRadius = 7;
+        profileRow1StatusPanel.Controls.Add(profileRow1StatusLabel);
+        profileRow1StatusPanel.FillColor = Color.FromArgb(220, 252, 231);
+        profileRow1StatusPanel.Location = new Point(310, 11);
+        profileRow1StatusPanel.Name = "profileRow1StatusPanel";
+        profileRow1StatusPanel.ShadowBlur = 0;
+        profileRow1StatusPanel.ShadowOffsetY = 0;
+        profileRow1StatusPanel.Size = new Size(50, 24);
+        profileRow1StatusPanel.TabIndex = 3;
+        // 
+        // profileRow1StatusLabel
+        // 
+        profileRow1StatusLabel.BackColor = Color.Transparent;
+        profileRow1StatusLabel.Dock = DockStyle.Fill;
+        profileRow1StatusLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profileRow1StatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        profileRow1StatusLabel.Location = new Point(0, 0);
+        profileRow1StatusLabel.Name = "profileRow1StatusLabel";
+        profileRow1StatusLabel.Size = new Size(50, 24);
+        profileRow1StatusLabel.TabIndex = 0;
+        profileRow1StatusLabel.Text = "Ativo";
+        profileRow1StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow2Panel
+        // 
+        profileRow2Panel.BackColor = Color.White;
+        profileRow2Panel.Controls.Add(profileRow2NameLabel);
+        profileRow2Panel.Controls.Add(profileRow2UsersLabel);
+        profileRow2Panel.Controls.Add(profileRow2StatusPanel);
+        profileRow2Panel.Location = new Point(3, 80);
+        profileRow2Panel.Name = "profileRow2Panel";
+        profileRow2Panel.Size = new Size(373, 46);
+        profileRow2Panel.TabIndex = 4;
+        // 
+        // profileRow2NameLabel
+        // 
+        profileRow2NameLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow2NameLabel.ForeColor = Color.FromArgb(30, 41, 59);
+        profileRow2NameLabel.Location = new Point(12, 11);
+        profileRow2NameLabel.Name = "profileRow2NameLabel";
+        profileRow2NameLabel.Size = new Size(142, 24);
+        profileRow2NameLabel.TabIndex = 1;
+        profileRow2NameLabel.Text = "Balança Produção 01";
+        profileRow2NameLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profileRow2UsersLabel
+        // 
+        profileRow2UsersLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow2UsersLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profileRow2UsersLabel.Location = new Point(168, 11);
+        profileRow2UsersLabel.Name = "profileRow2UsersLabel";
+        profileRow2UsersLabel.Size = new Size(121, 24);
+        profileRow2UsersLabel.TabIndex = 2;
+        profileRow2UsersLabel.Text = "Produção";
+        profileRow2UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow2StatusPanel
+        // 
+        profileRow2StatusPanel.BackColor = Color.Transparent;
+        profileRow2StatusPanel.BorderColor = Color.FromArgb(187, 247, 208);
+        profileRow2StatusPanel.BorderRadius = 7;
+        profileRow2StatusPanel.Controls.Add(profileRow2StatusLabel);
+        profileRow2StatusPanel.FillColor = Color.FromArgb(220, 252, 231);
+        profileRow2StatusPanel.Location = new Point(310, 11);
+        profileRow2StatusPanel.Name = "profileRow2StatusPanel";
+        profileRow2StatusPanel.ShadowBlur = 0;
+        profileRow2StatusPanel.ShadowOffsetY = 0;
+        profileRow2StatusPanel.Size = new Size(50, 24);
+        profileRow2StatusPanel.TabIndex = 3;
+        // 
+        // profileRow2StatusLabel
+        // 
+        profileRow2StatusLabel.BackColor = Color.Transparent;
+        profileRow2StatusLabel.Dock = DockStyle.Fill;
+        profileRow2StatusLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profileRow2StatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        profileRow2StatusLabel.Location = new Point(0, 0);
+        profileRow2StatusLabel.Name = "profileRow2StatusLabel";
+        profileRow2StatusLabel.Size = new Size(50, 24);
+        profileRow2StatusLabel.TabIndex = 0;
+        profileRow2StatusLabel.Text = "Ativo";
+        profileRow2StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow3Panel
+        // 
+        profileRow3Panel.BackColor = Color.White;
+        profileRow3Panel.Controls.Add(profileRow3NameLabel);
+        profileRow3Panel.Controls.Add(profileRow3UsersLabel);
+        profileRow3Panel.Controls.Add(profileRow3StatusPanel);
+        profileRow3Panel.Location = new Point(3, 126);
+        profileRow3Panel.Name = "profileRow3Panel";
+        profileRow3Panel.Size = new Size(374, 46);
+        profileRow3Panel.TabIndex = 5;
+        // 
+        // profileRow3NameLabel
+        // 
+        profileRow3NameLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow3NameLabel.ForeColor = Color.FromArgb(30, 41, 59);
+        profileRow3NameLabel.Location = new Point(12, 11);
+        profileRow3NameLabel.Name = "profileRow3NameLabel";
+        profileRow3NameLabel.Size = new Size(142, 24);
+        profileRow3NameLabel.TabIndex = 2;
+        profileRow3NameLabel.Text = "Balança Reprocesso 01";
+        profileRow3NameLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profileRow3UsersLabel
+        // 
+        profileRow3UsersLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow3UsersLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profileRow3UsersLabel.Location = new Point(168, 11);
+        profileRow3UsersLabel.Name = "profileRow3UsersLabel";
+        profileRow3UsersLabel.Size = new Size(121, 24);
+        profileRow3UsersLabel.TabIndex = 3;
+        profileRow3UsersLabel.Text = "Reprocesso";
+        profileRow3UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow3StatusPanel
+        // 
+        profileRow3StatusPanel.BackColor = Color.Transparent;
+        profileRow3StatusPanel.BorderColor = Color.FromArgb(187, 247, 208);
+        profileRow3StatusPanel.BorderRadius = 7;
+        profileRow3StatusPanel.Controls.Add(profileRow3StatusLabel);
+        profileRow3StatusPanel.FillColor = Color.FromArgb(220, 252, 231);
+        profileRow3StatusPanel.Location = new Point(310, 11);
+        profileRow3StatusPanel.Name = "profileRow3StatusPanel";
+        profileRow3StatusPanel.ShadowBlur = 0;
+        profileRow3StatusPanel.ShadowOffsetY = 0;
+        profileRow3StatusPanel.Size = new Size(50, 24);
+        profileRow3StatusPanel.TabIndex = 4;
+        // 
+        // profileRow3StatusLabel
+        // 
+        profileRow3StatusLabel.BackColor = Color.Transparent;
+        profileRow3StatusLabel.Dock = DockStyle.Fill;
+        profileRow3StatusLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profileRow3StatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        profileRow3StatusLabel.Location = new Point(0, 0);
+        profileRow3StatusLabel.Name = "profileRow3StatusLabel";
+        profileRow3StatusLabel.Size = new Size(50, 24);
+        profileRow3StatusLabel.TabIndex = 0;
+        profileRow3StatusLabel.Text = "Ativo";
+        profileRow3StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow4Panel
+        // 
+        profileRow4Panel.BackColor = Color.White;
+        profileRow4Panel.Controls.Add(profileRow4NameLabel);
+        profileRow4Panel.Controls.Add(profileRow4UsersLabel);
+        profileRow4Panel.Controls.Add(profileRow4StatusPanel);
+        profileRow4Panel.Location = new Point(3, 172);
+        profileRow4Panel.Name = "profileRow4Panel";
+        profileRow4Panel.Size = new Size(374, 46);
+        profileRow4Panel.TabIndex = 6;
+        // 
+        // profileRow4NameLabel
+        // 
+        profileRow4NameLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow4NameLabel.ForeColor = Color.FromArgb(30, 41, 59);
+        profileRow4NameLabel.Location = new Point(12, 11);
+        profileRow4NameLabel.Name = "profileRow4NameLabel";
+        profileRow4NameLabel.Size = new Size(142, 24);
+        profileRow4NameLabel.TabIndex = 1;
+        profileRow4NameLabel.Text = "Balança Expedição 01";
+        profileRow4NameLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profileRow4UsersLabel
+        // 
+        profileRow4UsersLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow4UsersLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profileRow4UsersLabel.Location = new Point(168, 11);
+        profileRow4UsersLabel.Name = "profileRow4UsersLabel";
+        profileRow4UsersLabel.Size = new Size(121, 24);
+        profileRow4UsersLabel.TabIndex = 2;
+        profileRow4UsersLabel.Text = "Expedição";
+        profileRow4UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow4StatusPanel
+        // 
+        profileRow4StatusPanel.BackColor = Color.Transparent;
+        profileRow4StatusPanel.BorderColor = Color.FromArgb(187, 247, 208);
+        profileRow4StatusPanel.BorderRadius = 7;
+        profileRow4StatusPanel.Controls.Add(profileRow4StatusLabel);
+        profileRow4StatusPanel.FillColor = Color.FromArgb(220, 252, 231);
+        profileRow4StatusPanel.Location = new Point(310, 11);
+        profileRow4StatusPanel.Name = "profileRow4StatusPanel";
+        profileRow4StatusPanel.ShadowBlur = 0;
+        profileRow4StatusPanel.ShadowOffsetY = 0;
+        profileRow4StatusPanel.Size = new Size(50, 24);
+        profileRow4StatusPanel.TabIndex = 3;
+        // 
+        // profileRow4StatusLabel
+        // 
+        profileRow4StatusLabel.BackColor = Color.Transparent;
+        profileRow4StatusLabel.Dock = DockStyle.Fill;
+        profileRow4StatusLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profileRow4StatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        profileRow4StatusLabel.Location = new Point(0, 0);
+        profileRow4StatusLabel.Name = "profileRow4StatusLabel";
+        profileRow4StatusLabel.Size = new Size(50, 24);
+        profileRow4StatusLabel.TabIndex = 0;
+        profileRow4StatusLabel.Text = "Ativo";
+        profileRow4StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow5Panel
+        // 
+        profileRow5Panel.BackColor = Color.White;
+        profileRow5Panel.Controls.Add(profileRow5NameLabel);
+        profileRow5Panel.Controls.Add(profileRow5UsersLabel);
+        profileRow5Panel.Controls.Add(profileRow5StatusPanel);
+        profileRow5Panel.Location = new Point(3, 218);
+        profileRow5Panel.Name = "profileRow5Panel";
+        profileRow5Panel.Size = new Size(374, 46);
+        profileRow5Panel.TabIndex = 7;
+        // 
+        // profileRow5NameLabel
+        // 
+        profileRow5NameLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow5NameLabel.ForeColor = Color.FromArgb(30, 41, 59);
+        profileRow5NameLabel.Location = new Point(12, 11);
+        profileRow5NameLabel.Name = "profileRow5NameLabel";
+        profileRow5NameLabel.Size = new Size(142, 24);
+        profileRow5NameLabel.TabIndex = 1;
+        profileRow5NameLabel.Text = "Balança Químicos 01";
+        profileRow5NameLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // profileRow5UsersLabel
+        // 
+        profileRow5UsersLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
+        profileRow5UsersLabel.ForeColor = Color.FromArgb(51, 65, 85);
+        profileRow5UsersLabel.Location = new Point(168, 11);
+        profileRow5UsersLabel.Name = "profileRow5UsersLabel";
+        profileRow5UsersLabel.Size = new Size(121, 24);
+        profileRow5UsersLabel.TabIndex = 2;
+        profileRow5UsersLabel.Text = "Pesagem de Químicos";
+        profileRow5UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profileRow5StatusPanel
+        // 
+        profileRow5StatusPanel.BackColor = Color.Transparent;
+        profileRow5StatusPanel.BorderColor = Color.FromArgb(187, 247, 208);
+        profileRow5StatusPanel.BorderRadius = 7;
+        profileRow5StatusPanel.Controls.Add(profileRow5StatusLabel);
+        profileRow5StatusPanel.FillColor = Color.FromArgb(220, 252, 231);
+        profileRow5StatusPanel.Location = new Point(310, 11);
+        profileRow5StatusPanel.Name = "profileRow5StatusPanel";
+        profileRow5StatusPanel.ShadowBlur = 0;
+        profileRow5StatusPanel.ShadowOffsetY = 0;
+        profileRow5StatusPanel.Size = new Size(50, 24);
+        profileRow5StatusPanel.TabIndex = 3;
+        // 
+        // profileRow5StatusLabel
+        // 
+        profileRow5StatusLabel.BackColor = Color.Transparent;
+        profileRow5StatusLabel.Dock = DockStyle.Fill;
+        profileRow5StatusLabel.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
+        profileRow5StatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        profileRow5StatusLabel.Location = new Point(0, 0);
+        profileRow5StatusLabel.Name = "profileRow5StatusLabel";
+        profileRow5StatusLabel.Size = new Size(50, 24);
+        profileRow5StatusLabel.TabIndex = 0;
+        profileRow5StatusLabel.Text = "Ativo";
+        profileRow5StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // profilesFooterLabel
+        // 
+        profilesFooterLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+        profilesFooterLabel.Font = new Font("Segoe UI", 8.5F);
+        profilesFooterLabel.ForeColor = Color.FromArgb(71, 85, 105);
+        profilesFooterLabel.Location = new Point(20, 568);
+        profilesFooterLabel.Name = "profilesFooterLabel";
+        profilesFooterLabel.Size = new Size(180, 22);
+        profilesFooterLabel.TabIndex = 6;
+        profilesFooterLabel.Text = "Exibindo 5 de 5 balanças";
+        // 
+        // profilesTitleLabel
+        // 
+        profilesTitleLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        profilesTitleLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        profilesTitleLabel.Location = new Point(43, 21);
+        profilesTitleLabel.Name = "profilesTitleLabel";
+        profilesTitleLabel.Size = new Size(150, 24);
+        profilesTitleLabel.TabIndex = 1;
+        profilesTitleLabel.Text = "Balanças Cadastradas";
+        profilesTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // detailsCard
+        // 
+        detailsCard.BackColor = Color.Transparent;
+        detailsCard.BorderColor = Color.FromArgb(226, 232, 240);
+        detailsCard.BorderRadius = 9;
+        detailsCard.Controls.Add(RdpSetor);
+        detailsCard.Controls.Add(LblSetorTara);
+        detailsCard.Controls.Add(roundedPanel1);
+        detailsCard.Controls.Add(LblPeso);
+        detailsCard.Controls.Add(detailsTitleIconLabel);
+        detailsCard.Controls.Add(detailsTitleLabel);
+        detailsCard.Controls.Add(nomePerfilLabel);
+        detailsCard.Controls.Add(nomePerfilInputPanel);
+        detailsCard.Controls.Add(descricaoLabel);
+        detailsCard.Controls.Add(descricaoInputPanel);
+        detailsCard.Controls.Add(situacaoInputPanel);
+        detailsCard.Controls.Add(detailsTopDividerLabel);
+        detailsCard.Controls.Add(situacaoLabel);
+        detailsCard.Dock = DockStyle.Fill;
+        detailsCard.Location = new Point(423, 0);
+        detailsCard.Margin = new Padding(0, 0, 12, 0);
+        detailsCard.Name = "detailsCard";
+        detailsCard.ShadowBlur = 0;
+        detailsCard.ShadowOffsetY = 0;
+        detailsCard.Size = new Size(557, 596);
+        detailsCard.TabIndex = 1;
+        // 
+        // RdpSetor
+        // 
+        RdpSetor.BackColor = Color.Transparent;
+        RdpSetor.BorderColor = Color.FromArgb(203, 213, 225);
+        RdpSetor.BorderRadius = 5;
+        RdpSetor.Controls.Add(CmbSetor);
+        RdpSetor.Location = new Point(292, 204);
+        RdpSetor.Name = "RdpSetor";
+        RdpSetor.ShadowBlur = 0;
+        RdpSetor.ShadowOffsetY = 0;
+        RdpSetor.Size = new Size(238, 33);
+        RdpSetor.TabIndex = 39;
+        // 
+        // CmbSetor
+        // 
+        CmbSetor.FlatStyle = FlatStyle.Flat;
+        CmbSetor.Font = new Font("Segoe UI", 9F);
+        CmbSetor.Items.AddRange(new object[] { "Ativo", "Inativo" });
+        CmbSetor.Location = new Point(3, 4);
+        CmbSetor.Name = "CmbSetor";
+        CmbSetor.Size = new Size(223, 23);
+        CmbSetor.TabIndex = 9;
+        CmbSetor.Text = "Entrada de Produtos";
+        // 
+        // LblSetorTara
+        // 
+        LblSetorTara.Font = new Font("Segoe UI", 7.75F, FontStyle.Bold);
+        LblSetorTara.ForeColor = Color.FromArgb(15, 23, 42);
+        LblSetorTara.Location = new Point(292, 182);
+        LblSetorTara.Name = "LblSetorTara";
+        LblSetorTara.Size = new Size(180, 19);
+        LblSetorTara.TabIndex = 38;
+        LblSetorTara.Text = "Setor *";
+        // 
+        // roundedPanel1
+        // 
+        roundedPanel1.BackColor = Color.Transparent;
+        roundedPanel1.BorderColor = Color.FromArgb(203, 213, 225);
+        roundedPanel1.BorderRadius = 5;
+        roundedPanel1.Controls.Add(TxtPeso);
+        roundedPanel1.Location = new Point(292, 140);
+        roundedPanel1.Name = "roundedPanel1";
+        roundedPanel1.ShadowBlur = 0;
+        roundedPanel1.ShadowOffsetY = 0;
+        roundedPanel1.Size = new Size(238, 33);
+        roundedPanel1.TabIndex = 35;
+        // 
+        // TxtPeso
+        // 
+        TxtPeso.BackColor = Color.White;
+        TxtPeso.BorderStyle = BorderStyle.None;
+        TxtPeso.Font = new Font("Segoe UI", 9F);
+        TxtPeso.Location = new Point(12, 8);
+        TxtPeso.Name = "TxtPeso";
+        TxtPeso.Size = new Size(214, 16);
+        TxtPeso.TabIndex = 4;
+        TxtPeso.Text = "192.168.10.101";
+        // 
+        // LblPeso
+        // 
+        LblPeso.Font = new Font("Segoe UI", 7.75F, FontStyle.Bold);
+        LblPeso.ForeColor = Color.FromArgb(15, 23, 42);
+        LblPeso.Location = new Point(292, 117);
+        LblPeso.Name = "LblPeso";
+        LblPeso.Size = new Size(180, 19);
+        LblPeso.TabIndex = 34;
+        LblPeso.Text = "IP Balança *";
+        // 
+        // detailsTitleIconLabel
+        // 
+        detailsTitleIconLabel.Font = new Font("Segoe MDL2 Assets", 14F);
+        detailsTitleIconLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        detailsTitleIconLabel.Location = new Point(20, 18);
+        detailsTitleIconLabel.Name = "detailsTitleIconLabel";
+        detailsTitleIconLabel.Size = new Size(26, 26);
+        detailsTitleIconLabel.TabIndex = 0;
+        detailsTitleIconLabel.Text = "";
+        detailsTitleIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // detailsTitleLabel
+        // 
+        detailsTitleLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        detailsTitleLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        detailsTitleLabel.Location = new Point(52, 22);
+        detailsTitleLabel.Name = "detailsTitleLabel";
+        detailsTitleLabel.Size = new Size(180, 24);
+        detailsTitleLabel.TabIndex = 1;
+        detailsTitleLabel.Text = "Dados da Balança";
+        detailsTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // nomePerfilLabel
+        // 
+        nomePerfilLabel.Font = new Font("Segoe UI", 7.75F, FontStyle.Bold);
+        nomePerfilLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        nomePerfilLabel.Location = new Point(24, 56);
+        nomePerfilLabel.Name = "nomePerfilLabel";
+        nomePerfilLabel.Size = new Size(180, 14);
+        nomePerfilLabel.TabIndex = 2;
+        nomePerfilLabel.Text = "Nome da Balança *";
+        // 
+        // nomePerfilInputPanel
+        // 
+        nomePerfilInputPanel.BackColor = Color.Transparent;
+        nomePerfilInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
+        nomePerfilInputPanel.BorderRadius = 5;
+        nomePerfilInputPanel.Controls.Add(nomePerfilTextBox);
+        nomePerfilInputPanel.Location = new Point(24, 73);
+        nomePerfilInputPanel.Name = "nomePerfilInputPanel";
+        nomePerfilInputPanel.ShadowBlur = 0;
+        nomePerfilInputPanel.ShadowOffsetY = 0;
+        nomePerfilInputPanel.Size = new Size(238, 33);
+        nomePerfilInputPanel.TabIndex = 3;
+        // 
+        // nomePerfilTextBox
+        // 
+        nomePerfilTextBox.BackColor = Color.White;
+        nomePerfilTextBox.BorderStyle = BorderStyle.None;
+        nomePerfilTextBox.Font = new Font("Segoe UI", 9F);
+        nomePerfilTextBox.Location = new Point(12, 10);
+        nomePerfilTextBox.Name = "nomePerfilTextBox";
+        nomePerfilTextBox.Size = new Size(214, 16);
+        nomePerfilTextBox.TabIndex = 3;
+        nomePerfilTextBox.Text = "Balança Entrada MP 01";
+        // 
+        // descricaoLabel
+        // 
+        descricaoLabel.Font = new Font("Segoe UI", 7.75F, FontStyle.Bold);
+        descricaoLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        descricaoLabel.Location = new Point(24, 117);
+        descricaoLabel.Name = "descricaoLabel";
+        descricaoLabel.Size = new Size(180, 19);
+        descricaoLabel.TabIndex = 6;
+        descricaoLabel.Text = "Descrição";
+        // 
+        // descricaoInputPanel
+        // 
+        descricaoInputPanel.BackColor = Color.Transparent;
+        descricaoInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
+        descricaoInputPanel.BorderRadius = 5;
+        descricaoInputPanel.Controls.Add(descricaoTextBox);
+        descricaoInputPanel.Location = new Point(24, 140);
+        descricaoInputPanel.Name = "descricaoInputPanel";
+        descricaoInputPanel.ShadowBlur = 0;
+        descricaoInputPanel.ShadowOffsetY = 0;
+        descricaoInputPanel.Size = new Size(238, 97);
+        descricaoInputPanel.TabIndex = 7;
+        // 
+        // descricaoTextBox
+        // 
+        descricaoTextBox.BorderStyle = BorderStyle.None;
+        descricaoTextBox.Font = new Font("Segoe UI", 9F);
+        descricaoTextBox.Location = new Point(3, 3);
+        descricaoTextBox.Multiline = true;
+        descricaoTextBox.Name = "descricaoTextBox";
+        descricaoTextBox.Size = new Size(232, 88);
+        descricaoTextBox.TabIndex = 7;
+        descricaoTextBox.Text = "Balança entrada de matéria prima 01.";
+        // 
+        // situacaoInputPanel
+        // 
+        situacaoInputPanel.BackColor = Color.Transparent;
+        situacaoInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
+        situacaoInputPanel.BorderRadius = 5;
+        situacaoInputPanel.Controls.Add(situacaoComboBox);
+        situacaoInputPanel.Location = new Point(292, 73);
+        situacaoInputPanel.Name = "situacaoInputPanel";
+        situacaoInputPanel.ShadowBlur = 0;
+        situacaoInputPanel.ShadowOffsetY = 0;
+        situacaoInputPanel.Size = new Size(238, 33);
+        situacaoInputPanel.TabIndex = 9;
+        // 
+        // situacaoComboBox
+        // 
+        situacaoComboBox.FlatStyle = FlatStyle.Flat;
+        situacaoComboBox.Font = new Font("Segoe UI", 9F);
+        situacaoComboBox.Items.AddRange(new object[] { "Ativo", "Inativo" });
+        situacaoComboBox.Location = new Point(3, 4);
+        situacaoComboBox.Name = "situacaoComboBox";
+        situacaoComboBox.Size = new Size(223, 23);
+        situacaoComboBox.TabIndex = 9;
+        situacaoComboBox.Text = "Ativo";
+        // 
+        // detailsTopDividerLabel
+        // 
+        detailsTopDividerLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        detailsTopDividerLabel.BackColor = Color.FromArgb(226, 232, 240);
+        detailsTopDividerLabel.Location = new Point(27, 245);
+        detailsTopDividerLabel.Name = "detailsTopDividerLabel";
+        detailsTopDividerLabel.Size = new Size(506, 1);
+        detailsTopDividerLabel.TabIndex = 33;
+        // 
+        // situacaoLabel
+        // 
+        situacaoLabel.Font = new Font("Segoe UI", 7.75F, FontStyle.Bold);
+        situacaoLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        situacaoLabel.Location = new Point(292, 56);
+        situacaoLabel.Name = "situacaoLabel";
+        situacaoLabel.Size = new Size(180, 19);
+        situacaoLabel.TabIndex = 8;
+        situacaoLabel.Text = "Situação *";
+        // 
+        // summaryCard
+        // 
+        summaryCard.BackColor = Color.Transparent;
+        summaryCard.BorderColor = Color.FromArgb(226, 232, 240);
+        summaryCard.BorderRadius = 9;
+        summaryCard.Controls.Add(tipTextLabel);
+        summaryCard.Controls.Add(summaryTitleIconLabel);
+        summaryCard.Controls.Add(summaryTitleLabel);
+        summaryCard.Controls.Add(summaryDividerLabel);
+        summaryCard.Controls.Add(summaryDividerLabel2);
+        summaryCard.Controls.Add(summaryDividerLabel3);
+        summaryCard.Controls.Add(summaryDividerLabel4);
+        summaryCard.Controls.Add(summaryDividerLabel5);
+        summaryCard.Controls.Add(summaryPerfilIconLabel);
+        summaryCard.Controls.Add(summaryPerfilCaptionLabel);
+        summaryCard.Controls.Add(summaryPerfilValueLabel);
+        summaryCard.Controls.Add(summarySituacaoIconLabel);
+        summaryCard.Controls.Add(summarySituacaoCaptionLabel);
+        summaryCard.Controls.Add(summarySituacaoValueLabel);
+        summaryCard.Controls.Add(summaryUsuariosIconLabel);
+        summaryCard.Controls.Add(summaryUsuariosCaptionLabel);
+        summaryCard.Controls.Add(summaryUsuariosValueLabel);
+        summaryCard.Controls.Add(salvarButton);
+        summaryCard.Controls.Add(novoButton);
+        summaryCard.Controls.Add(excluirButton);
+        summaryCard.Dock = DockStyle.Fill;
+        summaryCard.Location = new Point(995, 3);
+        summaryCard.Name = "summaryCard";
+        summaryCard.ShadowBlur = 0;
+        summaryCard.ShadowOffsetY = 0;
+        summaryCard.Size = new Size(326, 590);
+        summaryCard.TabIndex = 2;
+        // 
+        // tipTextLabel
+        // 
+        tipTextLabel.Font = new Font("Segoe UI", 9F);
+        tipTextLabel.ForeColor = Color.FromArgb(71, 85, 105);
+        tipTextLabel.Location = new Point(32, 242);
+        tipTextLabel.Name = "tipTextLabel";
+        tipTextLabel.Size = new Size(210, 24);
+        tipTextLabel.TabIndex = 24;
+        tipTextLabel.Text = "Último cadastro: 13/05/2026 13:37";
+        // 
+        // summaryTitleIconLabel
+        // 
+        summaryTitleIconLabel.Font = new Font("Segoe MDL2 Assets", 16F);
+        summaryTitleIconLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        summaryTitleIconLabel.Location = new Point(26, 19);
+        summaryTitleIconLabel.Name = "summaryTitleIconLabel";
+        summaryTitleIconLabel.Size = new Size(28, 28);
+        summaryTitleIconLabel.TabIndex = 23;
+        summaryTitleIconLabel.Text = "";
+        summaryTitleIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // summaryTitleLabel
+        // 
+        summaryTitleLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        summaryTitleLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        summaryTitleLabel.Location = new Point(52, 20);
+        summaryTitleLabel.Name = "summaryTitleLabel";
+        summaryTitleLabel.Size = new Size(180, 24);
+        summaryTitleLabel.TabIndex = 1;
+        summaryTitleLabel.Text = "Resumo da Balança";
+        summaryTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // summaryDividerLabel
+        // 
+        summaryDividerLabel.BackColor = Color.FromArgb(226, 232, 240);
+        summaryDividerLabel.Location = new Point(26, 56);
+        summaryDividerLabel.Name = "summaryDividerLabel";
+        summaryDividerLabel.Size = new Size(280, 1);
+        summaryDividerLabel.TabIndex = 2;
+        // 
+        // summaryDividerLabel2
+        // 
+        summaryDividerLabel2.BackColor = Color.FromArgb(226, 232, 240);
+        summaryDividerLabel2.Location = new Point(26, 124);
+        summaryDividerLabel2.Name = "summaryDividerLabel2";
+        summaryDividerLabel2.Size = new Size(280, 1);
+        summaryDividerLabel2.TabIndex = 24;
+        // 
+        // summaryDividerLabel3
+        // 
+        summaryDividerLabel3.BackColor = Color.FromArgb(226, 232, 240);
+        summaryDividerLabel3.Location = new Point(26, 178);
+        summaryDividerLabel3.Name = "summaryDividerLabel3";
+        summaryDividerLabel3.Size = new Size(280, 1);
+        summaryDividerLabel3.TabIndex = 25;
+        // 
+        // summaryDividerLabel4
+        // 
+        summaryDividerLabel4.BackColor = Color.FromArgb(226, 232, 240);
+        summaryDividerLabel4.Location = new Point(26, 232);
+        summaryDividerLabel4.Name = "summaryDividerLabel4";
+        summaryDividerLabel4.Size = new Size(280, 1);
+        summaryDividerLabel4.TabIndex = 26;
+        // 
+        // summaryDividerLabel5
+        // 
+        summaryDividerLabel5.BackColor = Color.FromArgb(226, 232, 240);
+        summaryDividerLabel5.Location = new Point(26, 286);
+        summaryDividerLabel5.Name = "summaryDividerLabel5";
+        summaryDividerLabel5.Size = new Size(280, 1);
+        summaryDividerLabel5.TabIndex = 27;
+        // 
+        // summaryPerfilIconLabel
+        // 
+        summaryPerfilIconLabel.Font = new Font("Segoe MDL2 Assets", 18F);
+        summaryPerfilIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        summaryPerfilIconLabel.Location = new Point(32, 78);
+        summaryPerfilIconLabel.Name = "summaryPerfilIconLabel";
+        summaryPerfilIconLabel.Size = new Size(32, 32);
+        summaryPerfilIconLabel.TabIndex = 3;
+        summaryPerfilIconLabel.Text = "";
+        summaryPerfilIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // summaryPerfilCaptionLabel
+        // 
+        summaryPerfilCaptionLabel.Font = new Font("Segoe UI", 8.5F);
+        summaryPerfilCaptionLabel.ForeColor = Color.FromArgb(100, 116, 139);
+        summaryPerfilCaptionLabel.Location = new Point(74, 78);
+        summaryPerfilCaptionLabel.Name = "summaryPerfilCaptionLabel";
+        summaryPerfilCaptionLabel.Size = new Size(180, 18);
+        summaryPerfilCaptionLabel.TabIndex = 4;
+        summaryPerfilCaptionLabel.Text = "Balança selecionada";
+        // 
+        // summaryPerfilValueLabel
+        // 
+        summaryPerfilValueLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        summaryPerfilValueLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        summaryPerfilValueLabel.Location = new Point(74, 98);
+        summaryPerfilValueLabel.Name = "summaryPerfilValueLabel";
+        summaryPerfilValueLabel.Size = new Size(180, 24);
+        summaryPerfilValueLabel.TabIndex = 5;
+        summaryPerfilValueLabel.Text = "Balança Entrada MP 01";
+        // 
+        // summarySituacaoIconLabel
+        // 
+        summarySituacaoIconLabel.Font = new Font("Segoe MDL2 Assets", 18F);
+        summarySituacaoIconLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        summarySituacaoIconLabel.Location = new Point(32, 131);
+        summarySituacaoIconLabel.Name = "summarySituacaoIconLabel";
+        summarySituacaoIconLabel.Size = new Size(32, 32);
+        summarySituacaoIconLabel.TabIndex = 9;
+        summarySituacaoIconLabel.Text = "";
+        summarySituacaoIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // summarySituacaoCaptionLabel
+        // 
+        summarySituacaoCaptionLabel.Font = new Font("Segoe UI", 8.5F);
+        summarySituacaoCaptionLabel.ForeColor = Color.FromArgb(100, 116, 139);
+        summarySituacaoCaptionLabel.Location = new Point(74, 131);
+        summarySituacaoCaptionLabel.Name = "summarySituacaoCaptionLabel";
+        summarySituacaoCaptionLabel.Size = new Size(180, 18);
+        summarySituacaoCaptionLabel.TabIndex = 10;
+        summarySituacaoCaptionLabel.Text = "Situação";
+        // 
+        // summarySituacaoValueLabel
+        // 
+        summarySituacaoValueLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        summarySituacaoValueLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        summarySituacaoValueLabel.Location = new Point(74, 149);
+        summarySituacaoValueLabel.Name = "summarySituacaoValueLabel";
+        summarySituacaoValueLabel.Size = new Size(180, 24);
+        summarySituacaoValueLabel.TabIndex = 11;
+        summarySituacaoValueLabel.Text = "Ativo";
+        // 
+        // summaryUsuariosIconLabel
+        // 
+        summaryUsuariosIconLabel.Font = new Font("Segoe MDL2 Assets", 18F);
+        summaryUsuariosIconLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        summaryUsuariosIconLabel.Location = new Point(32, 184);
+        summaryUsuariosIconLabel.Name = "summaryUsuariosIconLabel";
+        summaryUsuariosIconLabel.Size = new Size(32, 32);
+        summaryUsuariosIconLabel.TabIndex = 15;
+        summaryUsuariosIconLabel.Text = "";
+        summaryUsuariosIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // summaryUsuariosCaptionLabel
+        // 
+        summaryUsuariosCaptionLabel.Font = new Font("Segoe UI", 8.5F);
+        summaryUsuariosCaptionLabel.ForeColor = Color.FromArgb(100, 116, 139);
+        summaryUsuariosCaptionLabel.Location = new Point(70, 178);
+        summaryUsuariosCaptionLabel.Name = "summaryUsuariosCaptionLabel";
+        summaryUsuariosCaptionLabel.Size = new Size(180, 18);
+        summaryUsuariosCaptionLabel.TabIndex = 16;
+        summaryUsuariosCaptionLabel.Text = "Setores vinculados";
+        // 
+        // summaryUsuariosValueLabel
+        // 
+        summaryUsuariosValueLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        summaryUsuariosValueLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        summaryUsuariosValueLabel.Location = new Point(74, 196);
+        summaryUsuariosValueLabel.Name = "summaryUsuariosValueLabel";
+        summaryUsuariosValueLabel.Size = new Size(180, 24);
+        summaryUsuariosValueLabel.TabIndex = 17;
+        summaryUsuariosValueLabel.Text = "1";
+        // 
+        // salvarButton
+        // 
+        salvarButton.BackColor = Color.FromArgb(229, 27, 43);
+        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(229, 27, 43);
+        salvarButton.FlatStyle = FlatStyle.Flat;
+        salvarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        salvarButton.ForeColor = Color.White;
+        salvarButton.Location = new Point(24, 402);
+        salvarButton.Name = "salvarButton";
+        salvarButton.Size = new Size(280, 28);
+        salvarButton.TabIndex = 20;
+        salvarButton.Text = "Salvar Balança           F5";
+        salvarButton.UseVisualStyleBackColor = false;
+        // 
+        // novoButton
+        // 
+        novoButton.BackColor = Color.White;
+        novoButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        novoButton.FlatStyle = FlatStyle.Flat;
+        novoButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        novoButton.ForeColor = Color.FromArgb(15, 23, 42);
+        novoButton.Location = new Point(24, 434);
+        novoButton.Name = "novoButton";
+        novoButton.Size = new Size(280, 28);
+        novoButton.TabIndex = 21;
+        novoButton.Text = "Editar Balança             F6";
+        novoButton.UseVisualStyleBackColor = false;
+        // 
+        // excluirButton
+        // 
+        excluirButton.BackColor = Color.White;
+        excluirButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        excluirButton.FlatStyle = FlatStyle.Flat;
+        excluirButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+        excluirButton.Location = new Point(24, 466);
+        excluirButton.Name = "excluirButton";
+        excluirButton.Size = new Size(280, 28);
+        excluirButton.TabIndex = 22;
+        excluirButton.Text = "Excluir Balança           F8";
+        excluirButton.UseVisualStyleBackColor = false;
+        // 
+        // footerBar
+        // 
+        footerBar.BackColor = Color.FromArgb(248, 250, 253);
+        footerBar.Controls.Add(footerBarLayout);
+        footerBar.Dock = DockStyle.Fill;
+        footerBar.Location = new Point(0, 682);
+        footerBar.Margin = new Padding(0);
+        footerBar.Name = "footerBar";
+        footerBar.Size = new Size(1366, 38);
+        footerBar.TabIndex = 2;
+        // 
+        // footerBarLayout
+        // 
+        footerBarLayout.BackColor = Color.Transparent;
+        footerBarLayout.ColumnCount = 6;
+        footerBarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F));
+        footerBarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15F));
+        footerBarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27F));
+        footerBarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24F));
+        footerBarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8F));
+        footerBarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10F));
+        footerBarLayout.Controls.Add(cellUser, 0, 0);
+        footerBarLayout.Controls.Add(cellTerminal, 1, 0);
+        footerBarLayout.Controls.Add(cellEmpresa, 2, 0);
+        footerBarLayout.Controls.Add(cellBanco, 3, 0);
+        footerBarLayout.Controls.Add(cellHora, 4, 0);
+        footerBarLayout.Controls.Add(cellData, 5, 0);
+        footerBarLayout.Dock = DockStyle.Fill;
+        footerBarLayout.Location = new Point(0, 0);
+        footerBarLayout.Margin = new Padding(0);
+        footerBarLayout.Name = "footerBarLayout";
+        footerBarLayout.RowCount = 1;
+        footerBarLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        footerBarLayout.Size = new Size(1366, 38);
+        footerBarLayout.TabIndex = 0;
+        // 
+        // cellUser
+        // 
+        cellUser.BackColor = Color.Transparent;
+        cellUser.Controls.Add(cellUserText);
+        cellUser.Controls.Add(cellUserIcon);
+        cellUser.Controls.Add(cellUserDivider);
+        cellUser.Dock = DockStyle.Fill;
+        cellUser.Location = new Point(0, 0);
+        cellUser.Margin = new Padding(0);
+        cellUser.Name = "cellUser";
+        cellUser.Size = new Size(218, 38);
+        cellUser.TabIndex = 1;
+        // 
+        // cellUserText
+        // 
+        cellUserText.AutoEllipsis = true;
+        cellUserText.Dock = DockStyle.Fill;
+        cellUserText.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        cellUserText.ForeColor = Color.FromArgb(98, 108, 124);
+        cellUserText.Location = new Point(28, 0);
+        cellUserText.Margin = new Padding(0);
+        cellUserText.Name = "cellUserText";
+        cellUserText.Padding = new Padding(2, 0, 0, 0);
+        cellUserText.Size = new Size(189, 38);
+        cellUserText.TabIndex = 0;
+        cellUserText.Text = "Usuário:  OPERADOR01";
+        cellUserText.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // cellUserIcon
+        // 
+        cellUserIcon.Dock = DockStyle.Left;
+        cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
+        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.Location = new Point(0, 0);
+        cellUserIcon.Margin = new Padding(0);
+        cellUserIcon.Name = "cellUserIcon";
+        cellUserIcon.Size = new Size(28, 38);
+        cellUserIcon.TabIndex = 1;
+        cellUserIcon.Text = "";
+        cellUserIcon.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // cellUserDivider
+        // 
+        cellUserDivider.BackColor = Color.FromArgb(214, 219, 226);
+        cellUserDivider.Dock = DockStyle.Right;
+        cellUserDivider.Location = new Point(217, 0);
+        cellUserDivider.Margin = new Padding(0);
+        cellUserDivider.Name = "cellUserDivider";
+        cellUserDivider.Size = new Size(1, 38);
+        cellUserDivider.TabIndex = 2;
+        // 
+        // cellTerminal
+        // 
+        cellTerminal.BackColor = Color.Transparent;
+        cellTerminal.Controls.Add(cellTerminalText);
+        cellTerminal.Controls.Add(cellTerminalIcon);
+        cellTerminal.Controls.Add(cellTerminalDivider);
+        cellTerminal.Dock = DockStyle.Fill;
+        cellTerminal.Location = new Point(218, 0);
+        cellTerminal.Margin = new Padding(0);
+        cellTerminal.Name = "cellTerminal";
+        cellTerminal.Size = new Size(204, 38);
+        cellTerminal.TabIndex = 2;
+        // 
+        // cellTerminalText
+        // 
+        cellTerminalText.AutoEllipsis = true;
+        cellTerminalText.Dock = DockStyle.Fill;
+        cellTerminalText.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        cellTerminalText.ForeColor = Color.FromArgb(98, 108, 124);
+        cellTerminalText.Location = new Point(28, 0);
+        cellTerminalText.Margin = new Padding(0);
+        cellTerminalText.Name = "cellTerminalText";
+        cellTerminalText.Padding = new Padding(2, 0, 0, 0);
+        cellTerminalText.Size = new Size(175, 38);
+        cellTerminalText.TabIndex = 0;
+        cellTerminalText.Text = "Terminal:  TERM-03";
+        cellTerminalText.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // cellTerminalIcon
+        // 
+        cellTerminalIcon.Dock = DockStyle.Left;
+        cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
+        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.Location = new Point(0, 0);
+        cellTerminalIcon.Margin = new Padding(0);
+        cellTerminalIcon.Name = "cellTerminalIcon";
+        cellTerminalIcon.Size = new Size(28, 38);
+        cellTerminalIcon.TabIndex = 1;
+        cellTerminalIcon.Text = "";
+        cellTerminalIcon.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // cellTerminalDivider
+        // 
+        cellTerminalDivider.BackColor = Color.FromArgb(214, 219, 226);
+        cellTerminalDivider.Dock = DockStyle.Right;
+        cellTerminalDivider.Location = new Point(203, 0);
+        cellTerminalDivider.Margin = new Padding(0);
+        cellTerminalDivider.Name = "cellTerminalDivider";
+        cellTerminalDivider.Size = new Size(1, 38);
+        cellTerminalDivider.TabIndex = 2;
+        // 
+        // cellEmpresa
+        // 
+        cellEmpresa.BackColor = Color.Transparent;
+        cellEmpresa.Controls.Add(cellEmpresaText);
+        cellEmpresa.Controls.Add(cellEmpresaIcon);
+        cellEmpresa.Controls.Add(cellEmpresaDivider);
+        cellEmpresa.Dock = DockStyle.Fill;
+        cellEmpresa.Location = new Point(422, 0);
+        cellEmpresa.Margin = new Padding(0);
+        cellEmpresa.Name = "cellEmpresa";
+        cellEmpresa.Size = new Size(368, 38);
+        cellEmpresa.TabIndex = 3;
+        // 
+        // cellEmpresaText
+        // 
+        cellEmpresaText.AutoEllipsis = true;
+        cellEmpresaText.Dock = DockStyle.Fill;
+        cellEmpresaText.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        cellEmpresaText.ForeColor = Color.FromArgb(98, 108, 124);
+        cellEmpresaText.Location = new Point(28, 0);
+        cellEmpresaText.Margin = new Padding(0);
+        cellEmpresaText.Name = "cellEmpresaText";
+        cellEmpresaText.Padding = new Padding(2, 0, 0, 0);
+        cellEmpresaText.Size = new Size(339, 38);
+        cellEmpresaText.TabIndex = 0;
+        cellEmpresaText.Text = "Empresa:  FUGA COUROS S.A.";
+        cellEmpresaText.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // cellEmpresaIcon
+        // 
+        cellEmpresaIcon.Dock = DockStyle.Left;
+        cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.Location = new Point(0, 0);
+        cellEmpresaIcon.Margin = new Padding(0);
+        cellEmpresaIcon.Name = "cellEmpresaIcon";
+        cellEmpresaIcon.Size = new Size(28, 38);
+        cellEmpresaIcon.TabIndex = 1;
+        cellEmpresaIcon.Text = "";
+        cellEmpresaIcon.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // cellEmpresaDivider
+        // 
+        cellEmpresaDivider.BackColor = Color.FromArgb(214, 219, 226);
+        cellEmpresaDivider.Dock = DockStyle.Right;
+        cellEmpresaDivider.Location = new Point(367, 0);
+        cellEmpresaDivider.Margin = new Padding(0);
+        cellEmpresaDivider.Name = "cellEmpresaDivider";
+        cellEmpresaDivider.Size = new Size(1, 38);
+        cellEmpresaDivider.TabIndex = 2;
+        // 
+        // cellBanco
+        // 
+        cellBanco.BackColor = Color.Transparent;
+        cellBanco.Controls.Add(cellBancoText);
+        cellBanco.Controls.Add(cellBancoIcon);
+        cellBanco.Controls.Add(cellBancoDivider);
+        cellBanco.Dock = DockStyle.Fill;
+        cellBanco.Location = new Point(790, 0);
+        cellBanco.Margin = new Padding(0);
+        cellBanco.Name = "cellBanco";
+        cellBanco.Size = new Size(327, 38);
+        cellBanco.TabIndex = 4;
+        // 
+        // cellBancoText
+        // 
+        cellBancoText.AutoEllipsis = true;
+        cellBancoText.Dock = DockStyle.Fill;
+        cellBancoText.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        cellBancoText.ForeColor = Color.FromArgb(98, 108, 124);
+        cellBancoText.Location = new Point(28, 0);
+        cellBancoText.Margin = new Padding(0);
+        cellBancoText.Name = "cellBancoText";
+        cellBancoText.Padding = new Padding(2, 0, 0, 0);
+        cellBancoText.Size = new Size(298, 38);
+        cellBancoText.TabIndex = 0;
+        cellBancoText.Text = "Banco de Dados:  PRODCI01";
+        cellBancoText.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // cellBancoIcon
+        // 
+        cellBancoIcon.Dock = DockStyle.Left;
+        cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
+        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.Location = new Point(0, 0);
+        cellBancoIcon.Margin = new Padding(0);
+        cellBancoIcon.Name = "cellBancoIcon";
+        cellBancoIcon.Size = new Size(28, 38);
+        cellBancoIcon.TabIndex = 1;
+        cellBancoIcon.Text = "";
+        cellBancoIcon.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // cellBancoDivider
+        // 
+        cellBancoDivider.BackColor = Color.FromArgb(214, 219, 226);
+        cellBancoDivider.Dock = DockStyle.Right;
+        cellBancoDivider.Location = new Point(326, 0);
+        cellBancoDivider.Margin = new Padding(0);
+        cellBancoDivider.Name = "cellBancoDivider";
+        cellBancoDivider.Size = new Size(1, 38);
+        cellBancoDivider.TabIndex = 2;
+        // 
+        // cellHora
+        // 
+        cellHora.BackColor = Color.Transparent;
+        cellHora.Controls.Add(cellHoraText);
+        cellHora.Controls.Add(cellHoraIcon);
+        cellHora.Controls.Add(cellHoraDivider);
+        cellHora.Dock = DockStyle.Fill;
+        cellHora.Location = new Point(1117, 0);
+        cellHora.Margin = new Padding(0);
+        cellHora.Name = "cellHora";
+        cellHora.Size = new Size(109, 38);
+        cellHora.TabIndex = 5;
+        // 
+        // cellHoraText
+        // 
+        cellHoraText.AutoEllipsis = true;
+        cellHoraText.Dock = DockStyle.Fill;
+        cellHoraText.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        cellHoraText.ForeColor = Color.FromArgb(98, 108, 124);
+        cellHoraText.Location = new Point(24, 0);
+        cellHoraText.Margin = new Padding(0);
+        cellHoraText.Name = "cellHoraText";
+        cellHoraText.Padding = new Padding(2, 0, 0, 0);
+        cellHoraText.Size = new Size(84, 38);
+        cellHoraText.TabIndex = 0;
+        cellHoraText.Text = "13:37";
+        cellHoraText.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // cellHoraIcon
+        // 
+        cellHoraIcon.Dock = DockStyle.Left;
+        cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
+        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.Location = new Point(0, 0);
+        cellHoraIcon.Margin = new Padding(0);
+        cellHoraIcon.Name = "cellHoraIcon";
+        cellHoraIcon.Size = new Size(24, 38);
+        cellHoraIcon.TabIndex = 1;
+        cellHoraIcon.Text = "";
+        cellHoraIcon.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // cellHoraDivider
+        // 
+        cellHoraDivider.BackColor = Color.FromArgb(214, 219, 226);
+        cellHoraDivider.Dock = DockStyle.Right;
+        cellHoraDivider.Location = new Point(108, 0);
+        cellHoraDivider.Margin = new Padding(0);
+        cellHoraDivider.Name = "cellHoraDivider";
+        cellHoraDivider.Size = new Size(1, 38);
+        cellHoraDivider.TabIndex = 2;
+        // 
+        // cellData
+        // 
+        cellData.BackColor = Color.Transparent;
+        cellData.Controls.Add(cellDataText);
+        cellData.Controls.Add(cellDataIcon);
+        cellData.Dock = DockStyle.Fill;
+        cellData.Location = new Point(1226, 0);
+        cellData.Margin = new Padding(0);
+        cellData.Name = "cellData";
+        cellData.Size = new Size(140, 38);
+        cellData.TabIndex = 6;
+        // 
+        // cellDataText
+        // 
+        cellDataText.AutoEllipsis = true;
+        cellDataText.Dock = DockStyle.Fill;
+        cellDataText.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        cellDataText.ForeColor = Color.FromArgb(98, 108, 124);
+        cellDataText.Location = new Point(24, 0);
+        cellDataText.Margin = new Padding(0);
+        cellDataText.Name = "cellDataText";
+        cellDataText.Padding = new Padding(2, 0, 0, 0);
+        cellDataText.Size = new Size(116, 38);
+        cellDataText.TabIndex = 0;
+        cellDataText.Text = "04/05/2026";
+        cellDataText.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // cellDataIcon
+        // 
+        cellDataIcon.Dock = DockStyle.Left;
+        cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
+        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.Location = new Point(0, 0);
+        cellDataIcon.Margin = new Padding(0);
+        cellDataIcon.Name = "cellDataIcon";
+        cellDataIcon.Size = new Size(24, 38);
+        cellDataIcon.TabIndex = 1;
+        cellDataIcon.Text = "";
+        cellDataIcon.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // customTitleBarPanel
+        // 
+        customTitleBarPanel.BackColor = Color.FromArgb(17, 24, 39);
+        customTitleBarPanel.Controls.Add(menuHeaderLabel);
+        customTitleBarPanel.Controls.Add(companyLogoPictureBox);
+        customTitleBarPanel.Controls.Add(headerDividerLabel);
+        customTitleBarPanel.Controls.Add(headerTitleIconPanel);
+        customTitleBarPanel.Controls.Add(headerTitleLabel);
+        customTitleBarPanel.Controls.Add(headerSubtitleLabel);
+        customTitleBarPanel.Controls.Add(sapStatusPanel);
+        customTitleBarPanel.Controls.Add(minimizeWindowLabel);
+        customTitleBarPanel.Controls.Add(maximizeWindowLabel);
+        customTitleBarPanel.Controls.Add(closeWindowLabel);
+        customTitleBarPanel.Dock = DockStyle.Fill;
+        customTitleBarPanel.Location = new Point(0, 0);
+        customTitleBarPanel.Margin = new Padding(0);
+        customTitleBarPanel.Name = "customTitleBarPanel";
+        customTitleBarPanel.Size = new Size(1366, 52);
+        customTitleBarPanel.TabIndex = 0;
+        // 
+        // menuHeaderLabel
+        // 
+        menuHeaderLabel.Cursor = Cursors.Hand;
+        menuHeaderLabel.Font = new Font("Segoe MDL2 Assets", 15F);
+        menuHeaderLabel.ForeColor = Color.White;
+        menuHeaderLabel.Location = new Point(18, 8);
+        menuHeaderLabel.Name = "menuHeaderLabel";
+        menuHeaderLabel.Size = new Size(36, 36);
+        menuHeaderLabel.TabIndex = 0;
+        menuHeaderLabel.Text = "";
+        menuHeaderLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // companyLogoPictureBox
+        // 
+        companyLogoPictureBox.Image = (Image)resources.GetObject("companyLogoPictureBox.Image");
+        companyLogoPictureBox.Location = new Point(60, 5);
+        companyLogoPictureBox.Name = "companyLogoPictureBox";
+        companyLogoPictureBox.Size = new Size(128, 43);
+        companyLogoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+        companyLogoPictureBox.TabIndex = 1;
+        companyLogoPictureBox.TabStop = false;
+        // 
+        // headerDividerLabel
+        // 
+        headerDividerLabel.BackColor = Color.FromArgb(132, 142, 156);
+        headerDividerLabel.Location = new Point(208, 12);
+        headerDividerLabel.Name = "headerDividerLabel";
+        headerDividerLabel.Size = new Size(1, 30);
+        headerDividerLabel.TabIndex = 2;
+        // 
+        // headerTitleIconPanel
+        // 
+        headerTitleIconPanel.BackColor = Color.Transparent;
+        headerTitleIconPanel.BorderColor = Color.Transparent;
+        headerTitleIconPanel.BorderRadius = 0;
+        headerTitleIconPanel.Controls.Add(headerTitleIconPictureBox);
+        headerTitleIconPanel.FillColor = Color.Transparent;
+        headerTitleIconPanel.Location = new Point(232, 10);
+        headerTitleIconPanel.Name = "headerTitleIconPanel";
+        headerTitleIconPanel.ShadowBlur = 0;
+        headerTitleIconPanel.ShadowOffsetY = 0;
+        headerTitleIconPanel.Size = new Size(32, 32);
+        headerTitleIconPanel.TabIndex = 3;
+        // 
+        // headerTitleIconPictureBox
+        // 
+        headerTitleIconPictureBox.BackColor = Color.Transparent;
+        headerTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.balanca_24x_white;
+        headerTitleIconPictureBox.Location = new Point(4, 4);
+        headerTitleIconPictureBox.Name = "headerTitleIconPictureBox";
+        headerTitleIconPictureBox.Size = new Size(24, 24);
+        headerTitleIconPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+        headerTitleIconPictureBox.TabIndex = 0;
+        headerTitleIconPictureBox.TabStop = false;
+        // 
+        // headerTitleLabel
+        // 
+        headerTitleLabel.Font = new Font("Cascadia Code", 12F, FontStyle.Bold);
+        headerTitleLabel.ForeColor = Color.White;
+        headerTitleLabel.Location = new Point(278, 6);
+        headerTitleLabel.Name = "headerTitleLabel";
+        headerTitleLabel.Size = new Size(310, 23);
+        headerTitleLabel.TabIndex = 4;
+        headerTitleLabel.Text = "Balança";
+        // 
+        // headerSubtitleLabel
+        // 
+        headerSubtitleLabel.Font = new Font("Cascadia Code", 7.25F);
+        headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
+        headerSubtitleLabel.Location = new Point(279, 29);
+        headerSubtitleLabel.Name = "headerSubtitleLabel";
+        headerSubtitleLabel.Size = new Size(560, 17);
+        headerSubtitleLabel.TabIndex = 5;
+        headerSubtitleLabel.Text = "Cadastro e manutenção de balança / Integração SAP";
+        // 
+        // sapStatusPanel
+        // 
+        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        sapStatusPanel.BackColor = Color.Transparent;
+        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderRadius = 12;
+        sapStatusPanel.Controls.Add(sapStatusDotLabel);
+        sapStatusPanel.Controls.Add(sapStatusLabel);
+        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.Location = new Point(910, 10);
+        sapStatusPanel.Name = "sapStatusPanel";
+        sapStatusPanel.ShadowBlur = 0;
+        sapStatusPanel.ShadowOffsetY = 0;
+        sapStatusPanel.Size = new Size(190, 27);
+        sapStatusPanel.TabIndex = 6;
+        // 
+        // sapStatusDotLabel
+        // 
+        sapStatusDotLabel.BackColor = Color.Transparent;
+        sapStatusDotLabel.Font = new Font("Segoe UI Symbol", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
+        sapStatusDotLabel.Location = new Point(11, 4);
+        sapStatusDotLabel.Name = "sapStatusDotLabel";
+        sapStatusDotLabel.Size = new Size(14, 18);
+        sapStatusDotLabel.TabIndex = 0;
+        sapStatusDotLabel.Text = "●";
+        sapStatusDotLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // sapStatusLabel
+        // 
+        sapStatusLabel.BackColor = Color.Transparent;
+        sapStatusLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        sapStatusLabel.ForeColor = Color.White;
+        sapStatusLabel.Location = new Point(27, 5);
+        sapStatusLabel.Name = "sapStatusLabel";
+        sapStatusLabel.Size = new Size(151, 17);
+        sapStatusLabel.TabIndex = 0;
+        sapStatusLabel.Text = "SAP: não configurado";
+        sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // minimizeWindowLabel
+        // 
+        minimizeWindowLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        minimizeWindowLabel.BackColor = Color.Transparent;
+        minimizeWindowLabel.Cursor = Cursors.Hand;
+        minimizeWindowLabel.Font = new Font("Cascadia Code", 12.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        minimizeWindowLabel.ForeColor = Color.White;
+        minimizeWindowLabel.Location = new Point(1218, 0);
+        minimizeWindowLabel.Name = "minimizeWindowLabel";
+        minimizeWindowLabel.Size = new Size(48, 52);
+        minimizeWindowLabel.TabIndex = 7;
+        minimizeWindowLabel.Text = "-";
+        minimizeWindowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // maximizeWindowLabel
+        // 
+        maximizeWindowLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        maximizeWindowLabel.BackColor = Color.Transparent;
+        maximizeWindowLabel.Cursor = Cursors.Hand;
+        maximizeWindowLabel.Font = new Font("Cascadia Code", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        maximizeWindowLabel.ForeColor = Color.White;
+        maximizeWindowLabel.Location = new Point(1266, 0);
+        maximizeWindowLabel.Name = "maximizeWindowLabel";
+        maximizeWindowLabel.Size = new Size(48, 52);
+        maximizeWindowLabel.TabIndex = 8;
+        maximizeWindowLabel.Text = "□";
+        maximizeWindowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // closeWindowLabel
+        // 
+        closeWindowLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        closeWindowLabel.BackColor = Color.Transparent;
+        closeWindowLabel.Cursor = Cursors.Hand;
+        closeWindowLabel.Font = new Font("Cascadia Code ExtraLight", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        closeWindowLabel.ForeColor = Color.White;
+        closeWindowLabel.Location = new Point(1314, 0);
+        closeWindowLabel.Name = "closeWindowLabel";
+        closeWindowLabel.Size = new Size(48, 52);
+        closeWindowLabel.TabIndex = 9;
+        closeWindowLabel.Text = "×";
+        closeWindowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // novoPerfilButton
+        // 
+        novoPerfilButton.BackColor = Color.White;
+        novoPerfilButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        novoPerfilButton.FlatStyle = FlatStyle.Flat;
+        novoPerfilButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        novoPerfilButton.ForeColor = Color.FromArgb(15, 23, 42);
+        novoPerfilButton.Location = new Point(224, 18);
+        novoPerfilButton.Name = "novoPerfilButton";
+        novoPerfilButton.Size = new Size(92, 28);
+        novoPerfilButton.TabIndex = 2;
+        novoPerfilButton.Text = "＋  Nova Balança";
+        novoPerfilButton.UseVisualStyleBackColor = false;
+        // 
+        // duplicarButton
+        // 
+        duplicarButton.BackColor = Color.White;
+        duplicarButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        duplicarButton.FlatStyle = FlatStyle.Flat;
+        duplicarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        duplicarButton.ForeColor = Color.FromArgb(15, 23, 42);
+        duplicarButton.Location = new Point(323, 18);
+        duplicarButton.Name = "duplicarButton";
+        duplicarButton.Size = new Size(92, 28);
+        duplicarButton.TabIndex = 3;
+        duplicarButton.Text = "⧉  Duplicar";
+        duplicarButton.UseVisualStyleBackColor = false;
+        // 
+        // profilesDataGridView
+        // 
+        profilesDataGridView.AllowUserToAddRows = false;
+        profilesDataGridView.AllowUserToDeleteRows = false;
+        profilesDataGridView.AllowUserToResizeColumns = false;
+        profilesDataGridView.AllowUserToResizeRows = false;
+        profilesDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        profilesDataGridView.BackgroundColor = Color.White;
+        profilesDataGridView.BorderStyle = BorderStyle.None;
+        profilesDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        profilesDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        dataGridViewCellStyle33.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        dataGridViewCellStyle33.BackColor = Color.White;
+        dataGridViewCellStyle33.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        dataGridViewCellStyle33.ForeColor = Color.FromArgb(51, 65, 85);
+        dataGridViewCellStyle33.SelectionBackColor = Color.White;
+        dataGridViewCellStyle33.SelectionForeColor = Color.FromArgb(51, 65, 85);
+        dataGridViewCellStyle33.WrapMode = DataGridViewTriState.False;
+        profilesDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle33;
+        profilesDataGridView.ColumnHeadersHeight = 31;
+        profilesDataGridView.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4 });
+        dataGridViewCellStyle36.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        dataGridViewCellStyle36.BackColor = Color.White;
+        dataGridViewCellStyle36.Font = new Font("Segoe UI", 8F);
+        dataGridViewCellStyle36.ForeColor = Color.FromArgb(51, 65, 85);
+        dataGridViewCellStyle36.SelectionBackColor = Color.FromArgb(254, 242, 242);
+        dataGridViewCellStyle36.SelectionForeColor = Color.FromArgb(51, 65, 85);
+        dataGridViewCellStyle36.WrapMode = DataGridViewTriState.False;
+        profilesDataGridView.DefaultCellStyle = dataGridViewCellStyle36;
+        profilesDataGridView.EnableHeadersVisualStyles = false;
+        profilesDataGridView.GridColor = Color.FromArgb(229, 231, 235);
+        profilesDataGridView.Location = new Point(20, 107);
+        profilesDataGridView.Name = "profilesDataGridView";
+        profilesDataGridView.ReadOnly = true;
+        profilesDataGridView.RowHeadersVisible = false;
+        profilesDataGridView.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
+        profilesDataGridView.RowTemplate.Height = 42;
+        profilesDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        profilesDataGridView.Size = new Size(372, 448);
+        profilesDataGridView.TabIndex = 5;
+        // 
+        // dataGridViewTextBoxColumn1
+        // 
+        dataGridViewTextBoxColumn1.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+        dataGridViewCellStyle34.Alignment = DataGridViewContentAlignment.MiddleCenter;
+        dataGridViewCellStyle34.Font = new Font("Segoe MDL2 Assets", 11F);
+        dataGridViewTextBoxColumn1.DefaultCellStyle = dataGridViewCellStyle34;
+        dataGridViewTextBoxColumn1.HeaderText = "";
+        dataGridViewTextBoxColumn1.Name = "dataGridViewTextBoxColumn1";
+        dataGridViewTextBoxColumn1.ReadOnly = true;
+        dataGridViewTextBoxColumn1.Width = 42;
+        // 
+        // dataGridViewTextBoxColumn2
+        // 
+        dataGridViewTextBoxColumn2.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+        dataGridViewTextBoxColumn2.HeaderText = "Balança";
+        dataGridViewTextBoxColumn2.Name = "dataGridViewTextBoxColumn2";
+        dataGridViewTextBoxColumn2.ReadOnly = true;
+        dataGridViewTextBoxColumn2.Width = 162;
+        // 
+        // dataGridViewTextBoxColumn3
+        // 
+        dataGridViewTextBoxColumn3.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+        dataGridViewCellStyle35.Alignment = DataGridViewContentAlignment.MiddleCenter;
+        dataGridViewTextBoxColumn3.DefaultCellStyle = dataGridViewCellStyle35;
+        dataGridViewTextBoxColumn3.HeaderText = "Referência";
+        dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
+        dataGridViewTextBoxColumn3.ReadOnly = true;
+        // 
+        // dataGridViewTextBoxColumn4
+        // 
+        dataGridViewTextBoxColumn4.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        dataGridViewTextBoxColumn4.FillWeight = 80F;
+        dataGridViewTextBoxColumn4.HeaderText = "Situação";
+        dataGridViewTextBoxColumn4.Name = "dataGridViewTextBoxColumn4";
+        dataGridViewTextBoxColumn4.ReadOnly = true;
+        // 
+        // heroPanel
+        // 
+        heroPanel.BackColor = Color.Transparent;
+        heroPanel.BorderColor = Color.FromArgb(226, 232, 240);
+        heroPanel.BorderRadius = 9;
+        heroPanel.Controls.Add(heroLogoPictureBox);
+        heroPanel.Controls.Add(heroTitleLabel);
+        heroPanel.Controls.Add(heroSubtitleLabel);
+        heroPanel.Controls.Add(heroIllustrationPanel);
+        heroPanel.Dock = DockStyle.Fill;
+        heroPanel.Location = new Point(0, 0);
+        heroPanel.Margin = new Padding(0, 0, 0, 12);
+        heroPanel.Name = "heroPanel";
+        heroPanel.ShadowBlur = 0;
+        heroPanel.ShadowOffsetY = 0;
+        heroPanel.Size = new Size(1330, 120);
+        heroPanel.TabIndex = 0;
+        // 
+        // heroLogoPictureBox
+        // 
+        heroLogoPictureBox.BackColor = Color.FromArgb(254, 226, 226);
+        heroLogoPictureBox.Image = (Image)resources.GetObject("heroLogoPictureBox.Image");
+        heroLogoPictureBox.Location = new Point(28, 20);
+        heroLogoPictureBox.Name = "heroLogoPictureBox";
+        heroLogoPictureBox.Size = new Size(118, 80);
+        heroLogoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+        heroLogoPictureBox.TabIndex = 0;
+        heroLogoPictureBox.TabStop = false;
+        // 
+        // heroTitleLabel
+        // 
+        heroTitleLabel.Font = new Font("Segoe UI", 18F, FontStyle.Bold);
+        heroTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        heroTitleLabel.Location = new Point(178, 28);
+        heroTitleLabel.Name = "heroTitleLabel";
+        heroTitleLabel.Size = new Size(430, 34);
+        heroTitleLabel.TabIndex = 1;
+        heroTitleLabel.Text = "Gestão de Balanças";
+        // 
+        // heroSubtitleLabel
+        // 
+        heroSubtitleLabel.Font = new Font("Segoe UI", 10F);
+        heroSubtitleLabel.ForeColor = Color.FromArgb(71, 85, 105);
+        heroSubtitleLabel.Location = new Point(180, 65);
+        heroSubtitleLabel.Name = "heroSubtitleLabel";
+        heroSubtitleLabel.Size = new Size(420, 42);
+        heroSubtitleLabel.TabIndex = 2;
+        heroSubtitleLabel.Text = "Configure níveis de permissão para cada\r\ntipo de usuário do sistema.";
+        // 
+        // heroIllustrationPanel
+        // 
+        heroIllustrationPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        heroIllustrationPanel.Controls.Add(heroShieldPanel);
+        heroIllustrationPanel.Controls.Add(heroLockPanel);
+        heroIllustrationPanel.Location = new Point(1804, 8);
+        heroIllustrationPanel.Name = "heroIllustrationPanel";
+        heroIllustrationPanel.Size = new Size(620, 104);
+        heroIllustrationPanel.TabIndex = 3;
+        // 
+        // heroShieldPanel
+        // 
+        heroShieldPanel.BackColor = Color.Transparent;
+        heroShieldPanel.BorderColor = Color.FromArgb(203, 213, 225);
+        heroShieldPanel.BorderRadius = 14;
+        heroShieldPanel.Controls.Add(heroShieldLabel);
+        heroShieldPanel.FillColor = Color.FromArgb(30, 41, 59);
+        heroShieldPanel.Location = new Point(250, 12);
+        heroShieldPanel.Name = "heroShieldPanel";
+        heroShieldPanel.Size = new Size(132, 86);
+        heroShieldPanel.TabIndex = 0;
+        // 
+        // heroShieldLabel
+        // 
+        heroShieldLabel.Dock = DockStyle.Fill;
+        heroShieldLabel.Font = new Font("Segoe MDL2 Assets", 38F);
+        heroShieldLabel.ForeColor = Color.FromArgb(239, 68, 68);
+        heroShieldLabel.Location = new Point(0, 0);
+        heroShieldLabel.Name = "heroShieldLabel";
+        heroShieldLabel.Size = new Size(132, 86);
+        heroShieldLabel.TabIndex = 0;
+        heroShieldLabel.Text = "";
+        heroShieldLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // heroLockPanel
+        // 
+        heroLockPanel.BackColor = Color.Transparent;
+        heroLockPanel.Controls.Add(heroLockLabel);
+        heroLockPanel.FillColor = Color.FromArgb(229, 27, 43);
+        heroLockPanel.Location = new Point(386, 58);
+        heroLockPanel.Name = "heroLockPanel";
+        heroLockPanel.Size = new Size(42, 38);
+        heroLockPanel.TabIndex = 1;
+        // 
+        // heroLockLabel
+        // 
+        heroLockLabel.Dock = DockStyle.Fill;
+        heroLockLabel.Font = new Font("Segoe MDL2 Assets", 17F);
+        heroLockLabel.ForeColor = Color.White;
+        heroLockLabel.Location = new Point(0, 0);
+        heroLockLabel.Name = "heroLockLabel";
+        heroLockLabel.Size = new Size(42, 38);
+        heroLockLabel.TabIndex = 0;
+        heroLockLabel.Text = "";
+        heroLockLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // BalancaForm
+        // 
+        AutoScaleDimensions = new SizeF(7F, 16F);
+        AutoScaleMode = AutoScaleMode.Font;
+        BackColor = Color.FromArgb(247, 248, 250);
+        ClientSize = new Size(1366, 720);
+        Controls.Add(rootLayout);
+        Font = new Font("Cascadia Code", 9F);
+        FormBorderStyle = FormBorderStyle.None;
+        MinimumSize = new Size(1180, 648);
+        Name = "BalancaForm";
+        StartPosition = FormStartPosition.CenterScreen;
+        Text = "Cadastro de Balanças";
+        WindowState = FormWindowState.Maximized;
+        rootLayout.ResumeLayout(false);
+        contentPanel.ResumeLayout(false);
+        contentLayout.ResumeLayout(false);
+        bodyLayout.ResumeLayout(false);
+        profilesCard.ResumeLayout(false);
+        novoPerfilButtonPanel.ResumeLayout(false);
+        profilesSearchPanel.ResumeLayout(false);
+        profilesSearchPanel.PerformLayout();
+        profilesTablePanel.ResumeLayout(false);
+        profileRow1Panel.ResumeLayout(false);
+        profileRow1StatusPanel.ResumeLayout(false);
+        profileRow2Panel.ResumeLayout(false);
+        profileRow2StatusPanel.ResumeLayout(false);
+        profileRow3Panel.ResumeLayout(false);
+        profileRow3StatusPanel.ResumeLayout(false);
+        profileRow4Panel.ResumeLayout(false);
+        profileRow4StatusPanel.ResumeLayout(false);
+        profileRow5Panel.ResumeLayout(false);
+        profileRow5StatusPanel.ResumeLayout(false);
+        detailsCard.ResumeLayout(false);
+        RdpSetor.ResumeLayout(false);
+        roundedPanel1.ResumeLayout(false);
+        roundedPanel1.PerformLayout();
+        nomePerfilInputPanel.ResumeLayout(false);
+        nomePerfilInputPanel.PerformLayout();
+        descricaoInputPanel.ResumeLayout(false);
+        descricaoInputPanel.PerformLayout();
+        situacaoInputPanel.ResumeLayout(false);
+        summaryCard.ResumeLayout(false);
+        footerBar.ResumeLayout(false);
+        footerBarLayout.ResumeLayout(false);
+        cellUser.ResumeLayout(false);
+        cellTerminal.ResumeLayout(false);
+        cellEmpresa.ResumeLayout(false);
+        cellBanco.ResumeLayout(false);
+        cellHora.ResumeLayout(false);
+        cellData.ResumeLayout(false);
+        customTitleBarPanel.ResumeLayout(false);
+        ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).EndInit();
+        headerTitleIconPanel.ResumeLayout(false);
+        ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
+        sapStatusPanel.ResumeLayout(false);
+        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).EndInit();
+        heroPanel.ResumeLayout(false);
+        ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).EndInit();
+        heroIllustrationPanel.ResumeLayout(false);
+        heroShieldPanel.ResumeLayout(false);
+        heroLockPanel.ResumeLayout(false);
+        ResumeLayout(false);
+    }
+
+    private void ConfigureHeader()
+    {
+        menuHeaderLabel.Cursor = Cursors.Hand;
+        menuHeaderLabel.Font = new Font("Segoe MDL2 Assets", 15F);
+        menuHeaderLabel.ForeColor = Color.White;
+        menuHeaderLabel.Location = new Point(18, 8);
+        menuHeaderLabel.Size = new Size(36, 36);
+        menuHeaderLabel.Text = "\uE700";
+        menuHeaderLabel.TextAlign = ContentAlignment.MiddleCenter;
+        companyLogoPictureBox.Image = global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
+        companyLogoPictureBox.Location = new Point(60, 5);
+        companyLogoPictureBox.Size = new Size(128, 43);
+        companyLogoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+        headerDividerLabel.BackColor = Color.FromArgb(132, 142, 156);
+        headerDividerLabel.Location = new Point(208, 12);
+        headerDividerLabel.Size = new Size(1, 30);
+        headerTitleIconPanel.BorderRadius = 0;
+        headerTitleIconPanel.BorderColor = Color.Transparent;
+        headerTitleIconPanel.Controls.Add(headerTitleIconPictureBox);
+        headerTitleIconPanel.FillColor = Color.Transparent;
+        headerTitleIconPanel.Location = new Point(232, 10);
+        headerTitleIconPanel.Size = new Size(32, 32);
+        headerTitleIconPictureBox.BackColor = Color.Transparent;
+        headerTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.balanca_24x_white;
+        headerTitleIconPictureBox.Location = new Point(4, 4);
+        headerTitleIconPictureBox.Size = new Size(24, 24);
+        headerTitleIconPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+        headerTitleLabel.Font = new Font("Cascadia Code", 12F, FontStyle.Bold);
+        headerTitleLabel.ForeColor = Color.White;
+        headerTitleLabel.Location = new Point(278, 6);
+        headerTitleLabel.Size = new Size(310, 23);
+        headerTitleLabel.Text = "Balanças";
+        headerSubtitleLabel.Font = new Font("Cascadia Code", 7.25F);
+        headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
+        headerSubtitleLabel.Location = new Point(279, 29);
+        headerSubtitleLabel.Size = new Size(560, 17);
+        headerSubtitleLabel.Text = "Permissões e níveis de acesso / Administração do sistema";
+        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderRadius = 12;
+        sapStatusPanel.Controls.Add(sapStatusDotLabel);
+        sapStatusPanel.Controls.Add(sapStatusLabel);
+        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.Location = new Point(910, 10);
+        sapStatusPanel.Size = new Size(190, 27);
+        sapStatusDotLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
+        sapStatusDotLabel.Location = new Point(11, 4);
+        sapStatusDotLabel.Size = new Size(14, 18);
+        sapStatusDotLabel.Text = "●";
+        sapStatusLabel.Font = new Font("Cascadia Code", 7F, FontStyle.Bold);
+        sapStatusLabel.ForeColor = Color.White;
+        sapStatusLabel.Location = new Point(27, 5);
+        sapStatusLabel.Size = new Size(151, 17);
+        sapStatusLabel.Text = "SAP: não configurado";
+        ConfigureWindowButton(minimizeWindowLabel, "–", new Point(1218, 0), new Font("Segoe UI", 12F));
+        ConfigureWindowButton(maximizeWindowLabel, "\uE922", new Point(1266, 0), new Font("Segoe MDL2 Assets", 9F));
+        ConfigureWindowButton(closeWindowLabel, "\uE8BB", new Point(1314, 0), new Font("Segoe MDL2 Assets", 9F));
+    }
+
+    private static void ConfigureWindowButton(Label label, string text, Point location, Font font)
+    {
+        label.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        label.Cursor = Cursors.Hand;
+        label.Font = font;
+        label.ForeColor = Color.White;
+        label.Location = location;
+        label.Size = new Size(48, 52);
+        label.Text = text;
+        label.TextAlign = ContentAlignment.MiddleCenter;
+    }
+
+    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn1;
+    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn2;
+    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn3;
+    private Label profilesCheckMarkLabel;
+    private RoundedPanel detailsCard;
+    private Label detailsTitleIconLabel;
+    private Label detailsTitleLabel;
+    private Label nomePerfilLabel;
+    private RoundedPanel nomePerfilInputPanel;
+    private TextBox nomePerfilTextBox;
+    private Label descricaoLabel;
+    private RoundedPanel descricaoInputPanel;
+    private TextBox descricaoTextBox;
+    private Label situacaoLabel;
+    private RoundedPanel situacaoInputPanel;
+    private ComboBox situacaoComboBox;
+    private Label detailsTopDividerLabel;
+    private Label summaryTitleIconLabel;
+    private Label tipTextLabel;
+    private Label LblPeso;
+    private RoundedPanel RdpSetor;
+    private ComboBox CmbSetor;
+    private Label LblSetorTara;
+    private RoundedPanel roundedPanel1;
+    private TextBox TxtPeso;
+}
+
+
+
+
+
+
+
+
+
+

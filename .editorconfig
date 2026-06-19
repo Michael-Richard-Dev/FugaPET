@@ -1,0 +1,11 @@
+﻿root = true
+
+[*.{cs,Designer.cs,resx,config,json,sql,xml,csproj,slnx,md}]
+charset = utf-8-bom
+end_of_line = crlf
+insert_final_newline = true
+
+[*.{ps1,pubxml,gitattributes}]
+charset = utf-8-bom
+end_of_line = crlf
+insert_final_newline = true

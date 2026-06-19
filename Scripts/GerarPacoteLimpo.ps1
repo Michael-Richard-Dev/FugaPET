@@ -1,0 +1,297 @@
+<#
+.SYNOPSIS
+    Gera e valida um pacote limpo do projeto FugaPET_Dev.
+
+.DESCRIPTION
+    Copia o projeto excluindo historico Git, arquivos locais de IDE, saidas de
+    build, logs e configuracoes reais. Depois da copia e da compactacao, valida
+    o conteudo para bloquear regressao de credenciais ou configuracoes inseguras.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$DestinoRaiz,
+    [switch]$NaoGerarZip
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$ScriptDir = Split-Path -Parent $PSCommandPath
+$ProjetoRaiz = Split-Path -Parent $ScriptDir
+
+if ([string]::IsNullOrWhiteSpace($DestinoRaiz)) {
+    $DestinoRaiz = Join-Path $ProjetoRaiz 'pacotes_limpos'
+}
+
+$DataPacote = Get-Date -Format 'yyyyMMdd_HHmmss'
+$NomePacote = "FugaPET_Dev_limpo_$DataPacote"
+$DestinoPacote = Join-Path $DestinoRaiz $NomePacote
+$ZipDestino = "$DestinoPacote.zip"
+
+$DiretoriosBloqueados = @(
+    '.git',
+    '.vs',
+    'bin',
+    'obj',
+    '.claude',
+    'pacotes_limpos'
+)
+
+function Testar-NomeConfiguracaoReal {
+    param([Parameter(Mandatory)] [string]$NomeArquivo)
+
+    return $NomeArquivo -match '^configuracao\..+\.json$' -and
+        $NomeArquivo -notmatch '\.exemplo\.json$'
+}
+
+function Testar-DiretorioBloqueado {
+    param([Parameter(Mandatory)] [System.IO.DirectoryInfo]$Diretorio)
+
+    if ($DiretoriosBloqueados -contains $Diretorio.Name) {
+        return $true
+    }
+
+    $DestinoRaizCompleto = [System.IO.Path]::GetFullPath($DestinoRaiz)
+    $DiretorioCompleto = [System.IO.Path]::GetFullPath($Diretorio.FullName)
+    return $DiretorioCompleto.StartsWith(
+        $DestinoRaizCompleto,
+        [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Testar-ArquivoBloqueado {
+    param([Parameter(Mandatory)] [System.IO.FileInfo]$Arquivo)
+
+    if (Testar-NomeConfiguracaoReal -NomeArquivo $Arquivo.Name) {
+        return $true
+    }
+
+    if ($Arquivo.Extension -in @('.log', '.user')) {
+        return $true
+    }
+
+    $ProjetoRaizCompleto = [System.IO.Path]::GetFullPath($ProjetoRaiz).TrimEnd('\', '/')
+    $ArquivoCompleto = [System.IO.Path]::GetFullPath($Arquivo.FullName)
+    $CaminhoRelativo = $ArquivoCompleto
+
+    if ($ArquivoCompleto.StartsWith(
+        $ProjetoRaizCompleto + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase)) {
+        $CaminhoRelativo = $ArquivoCompleto.Substring($ProjetoRaizCompleto.Length + 1)
+    }
+
+    return $CaminhoRelativo -like 'Propriedades\PublishProfiles\*.pubxml' -or
+        $CaminhoRelativo -like 'Propriedades\PublishProfiles\*.pubxml.user'
+}
+
+function Copiar-ConteudoLimpo {
+    param(
+        [Parameter(Mandatory)] [string]$Origem,
+        [Parameter(Mandatory)] [string]$Destino
+    )
+
+    New-Item -ItemType Directory -Path $Destino -Force | Out-Null
+
+    foreach ($Item in Get-ChildItem -LiteralPath $Origem -Force) {
+        if ($Item.PSIsContainer) {
+            if (-not (Testar-DiretorioBloqueado -Diretorio $Item)) {
+                Copiar-ConteudoLimpo -Origem $Item.FullName -Destino (Join-Path $Destino $Item.Name)
+            }
+
+            continue
+        }
+
+        if (-not (Testar-ArquivoBloqueado -Arquivo $Item)) {
+            Copy-Item -LiteralPath $Item.FullName -Destination (Join-Path $Destino $Item.Name) -Force
+        }
+    }
+}
+
+function Validar-ObjetoConfiguracao {
+    param(
+        [Parameter(Mandatory)] [AllowNull()] $Objeto,
+        [Parameter(Mandatory)] [string]$Origem,
+        [Parameter(Mandatory)] [bool]$ValidarCredenciais
+    )
+
+    if ($null -eq $Objeto) {
+        return
+    }
+
+    if ($Objeto -is [System.Management.Automation.PSCustomObject]) {
+        foreach ($Propriedade in $Objeto.PSObject.Properties) {
+            $NomeNormalizado = ($Propriedade.Name -replace '[_\-\s]', '').ToLowerInvariant()
+            $Valor = $Propriedade.Value
+
+            if ($ValidarCredenciais -and
+                $NomeNormalizado -in @('password', 'senha', 'username', 'usuario') -and
+                $Valor -is [string] -and
+                -not [string]::IsNullOrWhiteSpace($Valor)) {
+                throw "Pacote bloqueado: credencial preenchida em $Origem."
+            }
+
+            if ($NomeNormalizado -eq 'ignorarvalidacaocertificado' -and $Valor -eq $true) {
+                throw "Pacote bloqueado: ignorar_validacao_certificado=true em $Origem."
+            }
+
+            Validar-ObjetoConfiguracao `
+                -Objeto $Valor `
+                -Origem $Origem `
+                -ValidarCredenciais $ValidarCredenciais
+        }
+
+        return
+    }
+
+    if ($Objeto -is [System.Collections.IEnumerable] -and $Objeto -isnot [string]) {
+        foreach ($Item in $Objeto) {
+            Validar-ObjetoConfiguracao `
+                -Objeto $Item `
+                -Origem $Origem `
+                -ValidarCredenciais $ValidarCredenciais
+        }
+    }
+}
+
+function Validar-ArquivoConfiguracao {
+    param(
+        [Parameter(Mandatory)] [string]$Conteudo,
+        [Parameter(Mandatory)] [string]$Origem,
+        [Parameter(Mandatory)] [bool]$ValidarCredenciais
+    )
+
+    try {
+        $Configuracao = $Conteudo | ConvertFrom-Json
+    }
+    catch {
+        throw "Pacote bloqueado: JSON de configuracao invalido em $Origem."
+    }
+
+    Validar-ObjetoConfiguracao `
+        -Objeto $Configuracao `
+        -Origem $Origem `
+        -ValidarCredenciais $ValidarCredenciais
+}
+
+function Validar-NomeArquivoPacote {
+    param(
+        [Parameter(Mandatory)] [string]$NomeArquivo,
+        [Parameter(Mandatory)] [string]$Origem
+    )
+
+    if ($NomeArquivo -ieq 'configuracao.sap.json' -or
+        (Testar-NomeConfiguracaoReal -NomeArquivo $NomeArquivo)) {
+        throw "Pacote bloqueado: configuracao real encontrada em $Origem."
+    }
+
+    if ([System.IO.Path]::GetExtension($NomeArquivo) -in @('.log', '.user')) {
+        throw "Pacote bloqueado: arquivo local encontrado em $Origem."
+    }
+}
+
+function Validar-PastaPacote {
+    param([Parameter(Mandatory)] [string]$Pasta)
+
+    foreach ($Diretorio in Get-ChildItem -LiteralPath $Pasta -Directory -Recurse -Force) {
+        if ($DiretoriosBloqueados -contains $Diretorio.Name) {
+            throw "Pacote bloqueado: diretorio local encontrado em $($Diretorio.FullName)."
+        }
+    }
+
+    foreach ($Arquivo in Get-ChildItem -LiteralPath $Pasta -File -Recurse -Force) {
+        Validar-NomeArquivoPacote -NomeArquivo $Arquivo.Name -Origem $Arquivo.FullName
+
+        if ($Arquivo.Name -match '^configuracao\..+\.exemplo\.json$') {
+            Validar-ArquivoConfiguracao `
+                -Conteudo (Get-Content -LiteralPath $Arquivo.FullName -Raw) `
+                -Origem $Arquivo.FullName `
+                -ValidarCredenciais ($Arquivo.Name -ieq 'configuracao.sap.exemplo.json')
+        }
+    }
+}
+
+function Validar-ZipPacote {
+    param([Parameter(Mandatory)] [string]$CaminhoZip)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $Zip = [System.IO.Compression.ZipFile]::OpenRead($CaminhoZip)
+
+    try {
+        foreach ($Entrada in $Zip.Entries) {
+            $Segmentos = $Entrada.FullName -split '[/\\]'
+            if ($Segmentos | Where-Object { $DiretoriosBloqueados -contains $_ }) {
+                throw "Pacote bloqueado: diretorio local encontrado em $($Entrada.FullName)."
+            }
+
+            if ([string]::IsNullOrWhiteSpace($Entrada.Name)) {
+                continue
+            }
+
+            Validar-NomeArquivoPacote -NomeArquivo $Entrada.Name -Origem $Entrada.FullName
+
+            if ($Entrada.Name -match '^configuracao\..+\.exemplo\.json$') {
+                $Leitor = [System.IO.StreamReader]::new($Entrada.Open())
+                try {
+                    Validar-ArquivoConfiguracao `
+                        -Conteudo $Leitor.ReadToEnd() `
+                        -Origem $Entrada.FullName `
+                        -ValidarCredenciais ($Entrada.Name -ieq 'configuracao.sap.exemplo.json')
+                }
+                finally {
+                    $Leitor.Dispose()
+                }
+            }
+        }
+    }
+    finally {
+        $Zip.Dispose()
+    }
+}
+
+New-Item -ItemType Directory -Path $DestinoRaiz -Force | Out-Null
+
+if (Test-Path -LiteralPath $DestinoPacote) {
+    throw "A pasta de destino ja existe: $DestinoPacote"
+}
+
+try {
+    Copiar-ConteudoLimpo -Origem $ProjetoRaiz -Destino $DestinoPacote
+    Validar-PastaPacote -Pasta $DestinoPacote
+
+    if (-not $NaoGerarZip) {
+        if (Test-Path -LiteralPath $ZipDestino) {
+            throw "O arquivo ZIP ja existe: $ZipDestino"
+        }
+
+        Compress-Archive -LiteralPath $DestinoPacote -DestinationPath $ZipDestino -CompressionLevel Optimal
+        Validar-ZipPacote -CaminhoZip $ZipDestino
+    }
+}
+catch {
+    $DestinoRaizCompleto = [System.IO.Path]::GetFullPath($DestinoRaiz).TrimEnd('\', '/')
+    $DestinoPacoteCompleto = [System.IO.Path]::GetFullPath($DestinoPacote)
+    $ZipDestinoCompleto = [System.IO.Path]::GetFullPath($ZipDestino)
+
+    if ($ZipDestinoCompleto.StartsWith(
+        $DestinoRaizCompleto + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $ZipDestinoCompleto)) {
+        Remove-Item -LiteralPath $ZipDestinoCompleto -Force
+    }
+
+    if ($DestinoPacoteCompleto.StartsWith(
+        $DestinoRaizCompleto + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $DestinoPacoteCompleto)) {
+        Remove-Item -LiteralPath $DestinoPacoteCompleto -Recurse -Force
+    }
+
+    throw
+}
+
+Write-Host 'Pacote limpo gerado e validado com sucesso.' -ForegroundColor Green
+Write-Host "Pasta: $DestinoPacote"
+
+if (-not $NaoGerarZip) {
+    Write-Host "ZIP:   $ZipDestino"
+}

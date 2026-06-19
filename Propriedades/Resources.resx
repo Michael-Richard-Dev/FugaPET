@@ -1,0 +1,153 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="search_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\search-red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="read_weight" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\read-weight.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="manual_lot" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\manual-lot.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="delete_last" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\delete-last.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="delete_code" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\delete-code.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="start_action" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\start-action.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="stop_action" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\stop-action.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="fuga_2026_logo" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\image\\Fuga-2026-branco-sem-fundo-cortado.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="print_green" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\print-green.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="clipboard_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\clipboard-red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="clipboard_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\clipboard-white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="clipboard_black" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\clipboard-black.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="production_title_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\production-title-icon.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="date_card_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\date-card-icon.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="planned_production_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\planned-production-icon.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="material_card_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\material-card-icon.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="production_readings_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\production-readings-icon.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="filter_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\filter-icon.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="limpar_16x" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\limpar_16x.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="pesquisar_16x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\pesquisar_16x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="box_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\box-red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="gear_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\gear-red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="estatisticas_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\estatisticas_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="estatisticas_24_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\estatisticas_24_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="estatisticas_24" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\estatisticas_24.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="carga_de_trabalho_32x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\carga-de-trabalho_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="carga_de_trabalho_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\carga-de-trabalho_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="carga_de_trabalho_24x" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\carga-de-trabalho_24x.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="usuario_header_24_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\usuario_header_24_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="usuario_header_32_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\usuario_header_32_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="novo_usuario_32x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\novo_usuario_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="tara_32x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\tara_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="perfil_header_24_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\perfil_header_24_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="producao_24x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\producao_24x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="tara_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\tara_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="balanca_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\balanca_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="etiqueta_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\etiqueta_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="seguranca_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\seguranca_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="seguranca_32x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\seguranca_32x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="etiqueta_32x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\etiqueta_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="balanca_32x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\balanca_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="perfil_header_32_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\perfil_header_32_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="perfilacesso_32x_red" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\perfilacesso_32x_red.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="ordem_producao_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\ordem_producao_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="historico_menu_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\historico_menu_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+  <data name="sap_menu_24x_white" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\\Servicos\\icone\\sap_menu_24x_white.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+  </data>
+</root>

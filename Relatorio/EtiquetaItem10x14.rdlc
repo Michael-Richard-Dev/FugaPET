@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition" xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <AutoRefresh>0</AutoRefresh>
+  <ReportSections>
+    <ReportSection>
+      <Body>
+        <ReportItems>
+          <Textbox Name="Item"><Paragraphs><Paragraph><TextRuns><TextRun><Value>ITEM# 305</Value><Style><FontSize>22pt</FontSize><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns><Style /></Paragraph></Paragraphs><Top>0.35in</Top><Left>0.10in</Left><Height>0.45in</Height><Width>2.30in</Width><Style /></Textbox>
+          <Textbox Name="Description"><Paragraphs><Paragraph><TextRuns><TextRun><Value>KNOTTED BONE 9" BEEF 24X1PCS</Value><Style><FontSize>12pt</FontSize><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns><Style /></Paragraph></Paragraphs><Top>0.95in</Top><Left>0.10in</Left><Height>0.22in</Height><Width>3.00in</Width><Style /></Textbox>
+          <Textbox Name="Info"><Paragraphs><Paragraph><TextRuns><TextRun><Value>CASE PACK QTY 24&#xD;&#xA;P.O.NO. 28327&#xD;&#xA;CARTON NO. 1&#xD;&#xA;WEIGHT 3,96 Kg&#xD;&#xA;LOT: 064 26&#xD;&#xA;BESTY BY DATE: 03/04/2029</Value><Style><FontSize>13pt</FontSize><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns><Style /></Paragraph></Paragraphs><Top>1.45in</Top><Left>0.10in</Left><Height>1.85in</Height><Width>2.05in</Width><Style><LineHeight>21pt</LineHeight></Style></Textbox>
+          <Rectangle Name="SifBox"><ReportItems><Textbox Name="SifText"><Paragraphs><Paragraph><TextRuns><TextRun><Value>MINISTERIO DA&#xD;&#xA;AGRICULTURA&#xD;&#xA;&#xD;&#xA;BRASIL&#xD;&#xA;INSPECIONADO&#xD;&#xA;3898&#xD;&#xA;SIF</Value><Style><FontSize>10pt</FontSize><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns><Style><TextAlign>Center</TextAlign></Style></Paragraph></Paragraphs><Top>0.02in</Top><Left>0.02in</Left><Height>1.18in</Height><Width>1.16in</Width><Style><VerticalAlign>Middle</VerticalAlign></Style></Textbox></ReportItems><Top>1.55in</Top><Left>2.35in</Left><Height>1.25in</Height><Width>1.20in</Width><Style><Border><Style>Solid</Style><Width>2pt</Width></Border></Style></Rectangle>
+          <Textbox Name="MainBarcode"><Paragraphs><Paragraph><TextRuns><TextRun><Value>810002632006</Value><Style><FontFamily>Libre Barcode 128</FontFamily><FontSize>32pt</FontSize></Style></TextRun></TextRuns><Style><TextAlign>Center</TextAlign></Style></Paragraph></Paragraphs><Top>3.35in</Top><Left>0.75in</Left><Height>0.42in</Height><Width>2.00in</Width><Style /></Textbox>
+          <Textbox Name="BarcodeValue"><Paragraphs><Paragraph><TextRuns><TextRun><Value>8  1000263200  6</Value><Style><FontSize>8pt</FontSize><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns><Style><TextAlign>Center</TextAlign></Style></Paragraph></Paragraphs><Top>3.73in</Top><Left>0.75in</Left><Height>0.15in</Height><Width>2.00in</Width><Style /></Textbox>
+          <Line Name="Divider"><Top>4.12in</Top><Left>0in</Left><Height>0in</Height><Width>3.84in</Width><Style><Border><Style>Solid</Style></Border></Style></Line>
+          <Textbox Name="Importer"><Paragraphs><Paragraph><TextRuns><TextRun><Value>IMPORTED: ETHICAL PRODUCTS, INC&#xD;&#xA;27 FEDERAL PLAZA&#xD;&#xA;BLOOMFIELD, NJ 07003, ESTADOS&#xD;&#xA;NOT FOR HUMAN CONSUMPTION&#xD;&#xA;PRODUCT OF BRAZIL</Value><Style><FontSize>9pt</FontSize><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns><Style><TextAlign>Center</TextAlign></Style></Paragraph></Paragraphs><Top>4.18in</Top><Left>0.10in</Left><Height>0.82in</Height><Width>2.70in</Width><Style /></Textbox>
+          <Textbox Name="SideBarcode"><Paragraphs><Paragraph><TextRuns><TextRun><Value>21654287</Value><Style><FontFamily>Libre Barcode 128</FontFamily><FontSize>20pt</FontSize></Style></TextRun></TextRuns><Style><TextAlign>Center</TextAlign></Style></Paragraph></Paragraphs><Top>4.35in</Top><Left>3.05in</Left><Height>0.40in</Height><Width>0.55in</Width><Style /></Textbox>
+        </ReportItems>
+        <Height>5.41in</Height>
+        <Style />
+      </Body>
+      <Width>3.84in</Width>
+      <Page><PageHeight>5.51in</PageHeight><PageWidth>3.94in</PageWidth><LeftMargin>0.05in</LeftMargin><RightMargin>0.05in</RightMargin><TopMargin>0.05in</TopMargin><BottomMargin>0.05in</BottomMargin><Style /></Page>
+    </ReportSection>
+  </ReportSections>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+  <rd:ReportID>34465475-b57a-4dad-a17e-309da8e91117</rd:ReportID>
+</Report>

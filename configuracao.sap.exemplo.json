@@ -1,0 +1,13 @@
+{
+  "sap": {
+    "base_url": "https://servidor-sap.exemplo.local/odata/v4/servico",
+    "sap_client": "000",
+    "hosts_permitidos": [
+      "servidor-sap.exemplo.local"
+    ],
+    "escrita_habilitada": false,
+    "timeout_segundos": 30,
+    "_credenciais": "Defina FUGAPET_SAP_USERNAME, FUGAPET_SAP_PASSWORD e FUGAPET_SAP_ALLOWED_HOSTS no ambiente.",
+    "_escrita_homologacao": "Para teste autorizado, defina FUGAPET_SAP_WRITE_ENABLED=true. O padrao permanece false."
+  }
+}

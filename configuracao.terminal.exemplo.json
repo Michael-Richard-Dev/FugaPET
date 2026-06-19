@@ -1,0 +1,15 @@
+﻿{
+  "terminal_local": {
+    "padrao": {
+      "maquina": "",
+      "nome_terminal": "TERMINAL_PADRAO",
+      "banco_local_nome": "LOCAL",
+      "codigo_setor_padrao": null,
+      "codigo_balanca_padrao": null,
+      "impressora_padrao": "",
+      "codigo_etiqueta_padrao": null,
+      "codigo_tara_padrao": null
+    },
+    "terminais": []
+  }
+}

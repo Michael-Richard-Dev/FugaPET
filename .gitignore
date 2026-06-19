@@ -1,0 +1,17 @@
+﻿bin/
+obj/
+.vs/
+.claude/
+pacotes_limpos/
+*.user
+*.suo
+*.log
+configuracao.banco.json
+!configuracao.banco.exemplo.json
+configuracao.terminal.json
+!configuracao.terminal.exemplo.json
+configuracao.sap.json
+!configuracao.sap.exemplo.json
+
+# Nota local com senha de exemplo para gerar hash do admin (nunca versionar)
+Gerar Hash para primeiro acesso.txt

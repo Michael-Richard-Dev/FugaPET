@@ -1,0 +1,7 @@
+MANIFESTO SHA-256 - BANCO DESENVOLVIMENTO V1.1
+==========================================================
+
+53ef511de16c7681bced95b1e5121c4921e1ad80664a7c1399e9484376f59d29  000_execucao_completa_desenvolvimento_v1_1.sql
+af80b4be4a347007dbc07b496673c7625231b4af018087f1a2d4578d33e1cc52  001_bootstrap_admin_desenvolvimento_v1_1_pgadmin.sql
+a0a455fae5d2a3d67e08ddd3a3c268caa4b6db67c92c09a36ee731d3707fcee6  002_validar_banco_desenvolvimento_v1_1.sql
+83dd5c3ef06abadd8096c84171ef88fa24706ef5e7ae5c6263fa52a56fc30ff9  README_EXECUCAO_BANCO_DESENVOLVIMENTO_V1_1.txt

@@ -1,0 +1,32 @@
+﻿# Normalizacao de fim de linha — alinhado ao .editorconfig.
+# Git armazena LF (canonico) no repositorio e entrega o EOL abaixo no checkout,
+# independente do core.autocrlf de cada maquina.
+
+# Base: deteccao automatica de texto (normaliza para LF no repo).
+* text=auto
+
+# Tipos cobertos pelo .editorconfig: working tree SEMPRE em CRLF.
+*.cs           text eol=crlf
+*.resx         text eol=crlf
+*.config       text eol=crlf
+*.json         text eol=crlf
+*.sql          text eol=crlf
+*.xml          text eol=crlf
+*.csproj       text eol=crlf
+*.sln          text eol=crlf
+*.md           text eol=crlf
+.editorconfig  text eol=crlf
+.gitignore     text eol=crlf
+.gitattributes text eol=crlf
+
+# Binarios: nunca aplicar conversao de EOL.
+*.ico  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.bmp  binary
+*.dll  binary
+*.exe  binary
+*.pdb  binary
+*.zip  binary

@@ -1,0 +1,124 @@
+Gerar conexão do fugapet com o sap:
+
+1. Fechar o sistema
+	Feche completamente:
+		FugaPET;
+		Visual Studio;
+		PowerShell aberto anteriormente.
+
+2. Abrir o PowerShell
+	Abra um novo Windows PowerShell e execute os comandos abaixo.
+
+3. Informar os dados do SAP
+	$hostSap = Read-Host "Host SAP, sem https e sem porta"
+	$usuario = Read-Host "Usuario SAP"
+	$senhaSegura = Read-Host "Senha SAP" -AsSecureString
+	$sapClient = Read-Host "SAP Client"
+
+	Exemplo do formato do host:
+	servidor.sap.empresa.com.br
+	Não informe https://, porta ou caminho no campo do host.
+
+4. Montar a URL do serviço
+	$caminhoSap = "sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001"
+
+	$baseUrl = ([UriBuilder]::new(
+    	"https",
+    	$hostSap.Trim(),
+    	44300,
+    	$caminhoSap
+	)).Uri.AbsoluteUri.TrimEnd("/")
+
+5. Salvar as configurações
+	Cole o bloco completo:
+	$ponteiro = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($senhaSegura)
+
+	try {
+    	$senhaTemporaria = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ponteiro)
+
+    	[Environment]::SetEnvironmentVariable(
+        	"FUGAPET_SAP_BASE_URL",
+        	$baseUrl,
+        	"User"
+    	)
+
+    	[Environment]::SetEnvironmentVariable(
+        	"FUGAPET_SAP_USERNAME",
+        	$usuario.Trim(),
+        	"User"
+    	)
+
+    	[Environment]::SetEnvironmentVariable(
+        	"FUGAPET_SAP_PASSWORD",
+        	$senhaTemporaria,
+        	"User"
+    	)
+
+    	[Environment]::SetEnvironmentVariable(
+        	"FUGAPET_SAP_CLIENT",
+        	$sapClient.Trim(),
+        	"User"
+    	)
+}
+finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ponteiro)
+    Remove-Variable senhaTemporaria -ErrorAction SilentlyContinue
+}
+
+6. Validar sem mostrar credenciais
+	$base = [Environment]::GetEnvironmentVariable(
+    	"FUGAPET_SAP_BASE_URL",
+    	"User"
+	)
+
+	$uri = [Uri]$base
+
+	"URL configurada: $(-not [string]::IsNullOrWhiteSpace($base))"
+	"Host correto: $($uri.Host -ne 'https')"
+	"Porta: $($uri.Port)"
+	"Final correto: $($uri.AbsolutePath.EndsWith('/0001'))"
+
+	$nomes = @(
+    	"FUGAPET_SAP_USERNAME",
+    	"FUGAPET_SAP_PASSWORD",
+    	"FUGAPET_SAP_CLIENT"
+	)
+
+	foreach ($nome in $nomes) {
+    	$valor = [Environment]::GetEnvironmentVariable($nome, "User")
+    	"$nome configurada: $(-not [string]::IsNullOrWhiteSpace($valor))"
+	}
+
+	Resultado esperado:
+	URL configurada: True
+	Host correto: True
+	Porta: 44300
+	Final correto: True
+	FUGAPET_SAP_USERNAME configurada: True
+	FUGAPET_SAP_PASSWORD configurada: True
+	FUGAPET_SAP_CLIENT configurada: True
+
+7. Testar a conexão de rede
+	Test-NetConnection -ComputerName $uri.Host -Port $uri.Port
+	Resultado esperado:
+	TcpTestSucceeded : True
+
+	Se retornar False, verificar:
+	conexão com a rede interna ou VPN;
+	disponibilidade do servidor SAP;
+	liberação da porta 44300 no firewall.
+
+8. Reiniciar o sistema
+	Feche o PowerShell.
+	Abra novamente o Visual Studio.
+	Execute o FugaPET.
+	Acesse a tela de entrada de produto.
+	Confirme a sincronização dos pedidos.
+	Faça uma pesagem e finalize para validar o PATCH dos pesos.
+
+Observações de segurança
+	Nunca grave usuário ou senha em arquivos .json.
+	Nunca coloque a senha neste arquivo de instruções.
+	Não compartilhe prints contendo credenciais.
+	Não configure ignorar_validacao_certificado=true.
+	As credenciais devem existir apenas nas variáveis de ambiente do Windows.
