@@ -7,11 +7,16 @@ using FugaPET_Dev.Servicos.Seguranca;
 namespace FugaPET_Dev.Servicos.Operacao;
 
 /// <summary>
-/// Portao de seguranca da pesagem de Entrada de Produto: valida autenticacao, permissao,
-/// origem do peso, peso positivo e situacao do pedido/item/material ANTES de gravar em
-/// pesagem_entrada_item. Tentativas negadas sao auditadas (best-effort) sem que
-/// uma falha de auditoria libere a operacao.
+/// LEGADO — NAO USAR PARA NOVA ENTRADA DE PRODUTO. Usar EntradaProdutoServico +
+/// EntradaProdutoRepositorio (modelo de rastreabilidade completa: entrada_produto_lancamento /
+/// entrada_produto_item / entrada_produto_pesagem).
+///
+/// Este fluxo grava em pesagem_entrada_item, que mantem apenas UMA pesagem por item (sobrescreve),
+/// perdendo o historico de leituras. Mantido somente por compatibilidade ate a tabela legada ser
+/// aposentada; nenhuma tela ou controller deve voltar a usa-lo.
 /// </summary>
+[Obsolete("Fluxo legado de pesagem (uma pesagem por item, sobrescreve). " +
+    "Nao usar para nova Entrada de Produto. Usar EntradaProdutoServico + EntradaProdutoRepositorio.")]
 public sealed class PesagemEntradaServico
 {
     private const string OrigemManual = "DIGITADO";

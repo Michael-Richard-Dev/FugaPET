@@ -6,8 +6,13 @@ using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Tests.Seguranca;
 
+// TESTE DE COMPATIBILIDADE do fluxo LEGADO de pesagem (PesagemEntradaServico / pesagem_entrada_item).
+// O fluxo oficial e EntradaProdutoServico + EntradaProdutoRepositorio; aqui apenas garantimos que o
+// portao legado segue bloqueando enquanto a tabela legada nao e aposentada. CS0618 e esperado.
+#pragma warning disable CS0618 // Fluxo legado marcado como obsoleto de proposito (H21).
+
 /// <summary>
-/// H3 - PesagemEntradaServico como portao de seguranca. Valida as regras que disparam ANTES
+/// H3 (LEGADO) - PesagemEntradaServico como portao de seguranca. Valida as regras que disparam ANTES
 /// de qualquer acesso ao banco (autenticacao, permissao, peso, origem). Sem dependencia de DB.
 /// </summary>
 public sealed class PesagemEntradaServicoSegurancaH3Tests : IDisposable

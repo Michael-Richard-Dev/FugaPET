@@ -72,6 +72,9 @@ public sealed class PermissoesEntradaProdutoH1Tests : IDisposable
             PermissoesSistema.Acoes.PesoManual));
     }
 
+    // Compatibilidade do fluxo LEGADO (PesagemEntradaServico): garante que o portao antigo segue
+    // bloqueando. Fluxo oficial e EntradaProdutoServico + EntradaProdutoRepositorio. CS0618 esperado.
+#pragma warning disable CS0618
     [Fact]
     public async Task PesagemServico_SemFinalizar_DeveBloquearAntesDoRepositorio()
     {
@@ -88,6 +91,7 @@ public sealed class PermissoesEntradaProdutoH1Tests : IDisposable
                 }
             ]));
     }
+#pragma warning restore CS0618
 
     [Fact]
     public void View_NaoDeveAutorizarPesoManualPorPerfil()

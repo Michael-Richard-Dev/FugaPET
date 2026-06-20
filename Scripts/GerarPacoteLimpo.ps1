@@ -218,6 +218,10 @@ function Validar-ZipPacote {
 
     try {
         foreach ($Entrada in $Zip.Entries) {
+            if ($Entrada.FullName.Contains('\')) {
+                throw "Pacote bloqueado: entrada do ZIP usa barra invertida como separador: $($Entrada.FullName)."
+            }
+
             $Segmentos = $Entrada.FullName -split '[/\\]'
             if ($Segmentos | Where-Object { $DiretoriosBloqueados -contains $_ }) {
                 throw "Pacote bloqueado: diretorio local encontrado em $($Entrada.FullName)."
@@ -248,6 +252,40 @@ function Validar-ZipPacote {
     }
 }
 
+function Compactar-PastaComBarrasNormais {
+    param(
+        [Parameter(Mandatory)] [string]$PastaOrigem,
+        [Parameter(Mandatory)] [string]$CaminhoZip
+    )
+
+    # Compress-Archive (Windows PowerShell) grava entradas com "\", o que gera aviso no unzip do
+    # Linux. Aqui geramos o ZIP via System.IO.Compression escrevendo nomes com "/" (portavel).
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    $PastaOrigemCompleta = [System.IO.Path]::GetFullPath($PastaOrigem)
+    # Mantem a pasta-raiz do pacote dentro do ZIP (mesma estrutura do Compress-Archive).
+    $BaseRelativa = [System.IO.Path]::GetDirectoryName($PastaOrigemCompleta)
+
+    $Zip = [System.IO.Compression.ZipFile]::Open(
+        $CaminhoZip,
+        [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($Arquivo in Get-ChildItem -LiteralPath $PastaOrigem -File -Recurse -Force) {
+            $CaminhoRelativo = $Arquivo.FullName.Substring($BaseRelativa.Length + 1)
+            $NomeEntrada = $CaminhoRelativo -replace '\\', '/'
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $Zip,
+                $Arquivo.FullName,
+                $NomeEntrada,
+                [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    }
+    finally {
+        $Zip.Dispose()
+    }
+}
+
 New-Item -ItemType Directory -Path $DestinoRaiz -Force | Out-Null
 
 if (Test-Path -LiteralPath $DestinoPacote) {
@@ -263,7 +301,7 @@ try {
             throw "O arquivo ZIP ja existe: $ZipDestino"
         }
 
-        Compress-Archive -LiteralPath $DestinoPacote -DestinationPath $ZipDestino -CompressionLevel Optimal
+        Compactar-PastaComBarrasNormais -PastaOrigem $DestinoPacote -CaminhoZip $ZipDestino
         Validar-ZipPacote -CaminhoZip $ZipDestino
     }
 }

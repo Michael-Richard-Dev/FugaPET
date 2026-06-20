@@ -49,7 +49,13 @@ public sealed class PesagemEntradaItemRepositorio : RepositorioBase
             MaterialPresente: !leitor.IsDBNull(2) && leitor.GetBoolean(2));
     }
 
-    /// <summary>Grava as pesagens informadas em uma unica transacao auditavel. Retorna a quantidade gravada.</summary>
+    /// <summary>
+    /// LEGADO — NAO USAR PARA NOVA ENTRADA DE PRODUTO. Grava em pesagem_entrada_item (uma pesagem
+    /// por item, sobrescreve). Usar EntradaProdutoServico + EntradaProdutoRepositorio.SalvarLancamentoAsync.
+    /// O metodo ValidarItemAsync acima NAO e legado: continua usado pelo fluxo oficial de Entrada.
+    /// </summary>
+    [Obsolete("Gravacao legada (uma pesagem por item, sobrescreve). Nao usar para nova Entrada de Produto. " +
+        "Usar EntradaProdutoServico + EntradaProdutoRepositorio.")]
     public async Task<int> SalvarPesagensAsync(IReadOnlyList<PesagemEntradaItem> pesagens, CancellationToken cancellationToken = default)
     {
         if (pesagens.Count == 0)
