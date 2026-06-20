@@ -184,6 +184,27 @@ public sealed class PedidoCompraSapHttpSegurancaTests
     }
 
     [Fact]
+    public async Task CargaEmMassa_DeveAplicarFiltroDeEscopoJales()
+    {
+        // H5/PEND#5: a carga do cache so pode trazer pedidos do escopo Jales — grupo de compras 700,
+        // pedido nao totalmente entregue e com pelo menos um item no centro 3007.
+        CapturaHandler handler = new("""{ "value": [] }""");
+        using HttpClient http = new(handler);
+        PedidoCompraSapApiClient cliente = new(CriarConfiguracao(), http);
+
+        await cliente.ConsultarPedidosAsync();
+
+        Assert.NotEmpty(handler.Destinos);
+        string filtro = Uri.UnescapeDataString(handler.Destinos[0].Query);
+        Assert.Contains("$filter=", filtro, StringComparison.Ordinal);
+        Assert.Contains("PurchasingGroup eq '700'", filtro, StringComparison.Ordinal);
+        Assert.Contains(
+            "_PurchaseOrderItem/any(d:d/Plant eq '3007' and d/IsCompletelyDelivered eq false)",
+            filtro,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ConsultarPedidoValido_DeveUsarSomenteEndpointEspecifico()
     {
         const string json = """

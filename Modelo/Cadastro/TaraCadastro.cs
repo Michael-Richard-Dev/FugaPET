@@ -19,7 +19,5 @@ public sealed class TaraCadastro
     public long IdTipoTara { get => CodigoTipoTara; set => CodigoTipoTara = value; }
     public long IdSetor { get => CodigoSetor; set => CodigoSetor = value; }
     public string Nome { get => NomeTara; set => NomeTara = value; }
-    // Alias somente-leitura em gramas, para telas de pesagem que exibem em g. O peso real e PesoKg.
-    public int PesoGrama => decimal.ToInt32(decimal.Round(PesoKg * 1000m));
     public bool Ativo { get => SituacaoTara; set => SituacaoTara = value; }
 }

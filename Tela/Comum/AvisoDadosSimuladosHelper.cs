@@ -68,13 +68,11 @@ internal static class AvisoDadosSimuladosHelper
     }
 
     /// <summary>
-    /// True somente em MODO DEMONSTRACAO. Em homologacao/producao, telas simuladas
-    /// nao devem abrir — use BloquearTelaSimulada para barrar.
+    /// True somente com banco desabilitado, modo demonstracao ativo e ambiente
+    /// explicitamente demonstrativo.
     /// </summary>
     public static bool PodeUsarDadosSimulados()
-    {
-        return EstadoIntegracaoBanco.ModoDemonstracao;
-    }
+        => EstadoIntegracaoBanco.PodeUsarDadosSimulados;
 
     /// <summary>
     /// Bloqueia uma tela simulada em operacao real: avisa o usuario e agenda o fechamento
@@ -83,7 +81,7 @@ internal static class AvisoDadosSimuladosHelper
     public static void BloquearTelaSimulada(Form form)
     {
         MessageBox.Show(
-            "Esta tela ainda utiliza dados simulados e não está liberada para homologação operacional.",
+            "Esta tela utiliza dados simulados e só pode abrir com banco desabilitado, modo demonstração ativo e ambiente demonstrativo.",
             "Tela não disponível",
             MessageBoxButtons.OK,
             MessageBoxIcon.Warning);

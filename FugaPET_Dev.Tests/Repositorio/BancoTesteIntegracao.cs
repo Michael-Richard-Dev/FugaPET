@@ -11,7 +11,7 @@ internal static class BancoTesteIntegracao
     public const string VariavelPermitirDestrutivo = "FUGAPET_DEV_PERMITIR_TESTE_DESTRUTIVO";
 
     // Prefixo de seguranca: o database DEVE comecar com isto (nao basta "conter teste"),
-    // para nunca rodar DELETE contra um banco compartilhado como "homologacao_teste".
+    // para nunca rodar DELETE contra um banco compartilhado como "desenvolvimento_teste".
     public const string PrefixoBancoSeguro = "fuga_balanca_teste_";
 
     /// <summary>True somente se a flag destrutiva estiver explicitamente em "true".</summary>
@@ -58,9 +58,9 @@ internal static class BancoTesteIntegracao
         return true;
     }
 
-    public static async Task<bool> SchemaHomologacaoDisponivelAsync(FabricaConexaoBancoTeste fabrica)
+    public static async Task<bool> SchemaDesenvolvimentoDisponivelAsync(FabricaConexaoBancoTeste fabrica)
     {
-        const string sql = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'homologacao');";
+        const string sql = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'desenvolvimento');";
         await using NpgsqlConnection conexao = await fabrica.CriarConexaoAbertaAsync();
         await using NpgsqlCommand comando = new(sql, conexao);
         object? retorno = await comando.ExecuteScalarAsync();

@@ -54,24 +54,27 @@ public sealed class EscritaSapBloqueadaTests
     }
 
     [Fact]
-    public void TelaEntrada_DeveSalvarLocalmenteAntesDeChamarEscritaSap()
+    public void Finalizacao_DeveSalvarLocalmenteAntesDeChamarEscritaSap()
     {
-        string arquivo = Path.Combine(
+        // H9 Etapa 2: a coordenacao (persistencia local + PATCH SAP) vive no controller.
+        string controller = File.ReadAllText(Path.Combine(
             RaizProjeto(),
-            "Tela",
+            "Controle",
             "Processo",
-            "ProcessoEntradaProdutoForm.cs");
-        string conteudo = File.ReadAllText(arquivo);
-        // H7: a persistencia local passou a ser o lancamento de rastreabilidade completo.
-        int salvarLocal = conteudo.IndexOf("_entradaServico.RegistrarLancamentoAsync", StringComparison.Ordinal);
-        int atualizarSap = conteudo.IndexOf("AtualizarPesosNoSapAsync(atualizacoesSap", StringComparison.Ordinal);
+            "EntradaProdutoController.cs"));
+        int salvarLocal = controller.IndexOf("EntradaProduto.RegistrarLancamentoAsync", StringComparison.Ordinal);
+        int atualizarSap = controller.IndexOf("AtualizarPesoItemSapAsync", StringComparison.Ordinal);
 
         Assert.True(salvarLocal >= 0);
         Assert.True(atualizarSap > salvarLocal);
-        Assert.DoesNotContain(
-            "_pedidoCompraServico.EscritaSapHabilitada && atualizacoesSap.Count > 0",
-            conteudo,
-            StringComparison.Ordinal);
+
+        // A tela nao executa mais o PATCH no SAP — quem coordena a escrita e o controller.
+        string form = File.ReadAllText(Path.Combine(
+            RaizProjeto(),
+            "Tela",
+            "Processo",
+            "ProcessoEntradaProdutoForm.cs"));
+        Assert.DoesNotContain("AtualizarPesoItemSapAsync", form, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -2,10 +2,11 @@
   "banco": {
     "habilitado": false,
     "modo_demonstracao": false,
+    "ambiente_demonstrativo": false,
     "servidor": "localhost",
     "porta": 5432,
     "nome_banco": "nome_do_banco",
-    "schema": "homologacao",
+    "schema": "desenvolvimento",
     "usuario": "usuario_do_banco",
     "senha": "",
     "timeout_segundos": 15,

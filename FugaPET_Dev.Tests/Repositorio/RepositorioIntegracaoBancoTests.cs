@@ -19,9 +19,9 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
             return;
         }
 
-        if (!await BancoTesteIntegracao.SchemaHomologacaoDisponivelAsync(fabrica))
+        if (!await BancoTesteIntegracao.SchemaDesenvolvimentoDisponivelAsync(fabrica))
         {
-            _motivoIgnorado = "Schema homologacao nao encontrado no banco de teste.";
+            _motivoIgnorado = "Schema desenvolvimento nao encontrado no banco de teste.";
             return;
         }
 
@@ -149,7 +149,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task<long> InserirPerfilAsync(string nome)
     {
         const string sql = """
-            INSERT INTO homologacao.perfil_acesso
+            INSERT INTO desenvolvimento.perfil_acesso
                    (nome_perfil_acesso, descricao_perfil_acesso, perfil_sistema, situacao_perfil_acesso)
             VALUES (@nome, @descricao, false, true)
             RETURNING codigo_perfil_acesso;
@@ -165,7 +165,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task<long> InserirUsuarioAsync(string login)
     {
         const string sql = """
-            INSERT INTO homologacao.usuario
+            INSERT INTO desenvolvimento.usuario
                    (nome_usuario, login_usuario, senha_hash, deve_trocar_senha, bloqueado_usuario, situacao_usuario)
             VALUES (@nome, @login, @senha_hash, false, false, true)
             RETURNING codigo_usuario;
@@ -247,7 +247,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task<long> InserirTipoTaraAsync(string nome)
     {
         const string sql = """
-            INSERT INTO homologacao.tipo_tara
+            INSERT INTO desenvolvimento.tipo_tara
                    (nome_tipo_tara, descricao_tipo_tara, situacao_tipo_tara)
             VALUES (@nome, @descricao, true)
             RETURNING codigo_tipo_tara;
@@ -263,7 +263,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task<long> InserirTaraAsync(long codigoTipo, long codigoSetor, string nome, bool ativo)
     {
         const string sql = """
-            INSERT INTO homologacao.tara
+            INSERT INTO desenvolvimento.tara
                    (codigo_tipo_tara, codigo_setor, nome_tara, tamanho, peso_kg, situacao_tara)
             VALUES (@tipo, @setor, @nome, 'M', 1.500, @ativo)
             RETURNING codigo_tara;
@@ -281,7 +281,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task<long> InserirSetorAsync(string nome)
     {
         const string sql = """
-            INSERT INTO homologacao.setor
+            INSERT INTO desenvolvimento.setor
                    (nome_setor, descricao_setor, situacao_setor)
             VALUES (@nome, @descricao, true)
             RETURNING codigo_setor;
@@ -297,7 +297,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task InserirUsuarioPerfilAsync(long codigoUsuario, long codigoPerfil, bool ativo)
     {
         const string sql = """
-            INSERT INTO homologacao.usuario_perfil
+            INSERT INTO desenvolvimento.usuario_perfil
                    (codigo_usuario, codigo_perfil_acesso, situacao_usuario_perfil)
             VALUES (@codigo_usuario, @codigo_perfil_acesso, @ativo);
             """;
@@ -313,7 +313,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     private async Task InserirPerfilPermissaoAsync(long codigoPerfil, long codigoPermissao, bool ativo)
     {
         const string sql = """
-            INSERT INTO homologacao.perfil_permissao
+            INSERT INTO desenvolvimento.perfil_permissao
                    (codigo_perfil_acesso, codigo_permissao, situacao_perfil_permissao)
             VALUES (@codigo_perfil_acesso, @codigo_permissao, @ativo);
             """;
@@ -330,7 +330,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     {
         const string sql = """
             SELECT count(*)::int, max(codigo_perfil_acesso)
-              FROM homologacao.usuario_perfil
+              FROM desenvolvimento.usuario_perfil
              WHERE codigo_usuario = @codigo_usuario
                AND situacao_usuario_perfil = true;
             """;
@@ -347,7 +347,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
 
     private async Task<long?> ObterSetorPadraoUsuarioAsync(long codigoUsuario)
     {
-        const string sql = "SELECT codigo_setor_padrao FROM homologacao.usuario WHERE codigo_usuario = @codigo_usuario;";
+        const string sql = "SELECT codigo_setor_padrao FROM desenvolvimento.usuario WHERE codigo_usuario = @codigo_usuario;";
         await using NpgsqlConnection conexao = await _fabrica!.CriarConexaoAbertaAsync();
         await using NpgsqlCommand comando = new(sql, conexao);
         comando.Parameters.AddWithValue("@codigo_usuario", codigoUsuario);
@@ -359,7 +359,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     {
         const string sql = """
             SELECT codigo_permissao
-              FROM homologacao.permissao
+              FROM desenvolvimento.permissao
              WHERE situacao_permissao = true
                AND (
                     (modulo_permissao = 'SEGURANCA' AND rotina_permissao = 'PERFIL_ACESSO' AND acao_permissao = 'GERENCIAR')
@@ -385,7 +385,7 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
     {
         const string sql = """
             SELECT count(*)::int
-              FROM homologacao.perfil_permissao
+              FROM desenvolvimento.perfil_permissao
              WHERE codigo_perfil_acesso = @codigo_perfil_acesso
                AND situacao_perfil_permissao = true;
             """;
@@ -419,30 +419,30 @@ public sealed class RepositorioIntegracaoBancoTests : IAsyncLifetime
         string like = _prefixo + "%";
         await ExecutarAsync(
             """
-            DELETE FROM homologacao.perfil_permissao
+            DELETE FROM desenvolvimento.perfil_permissao
              WHERE codigo_perfil_acesso IN (
-                   SELECT codigo_perfil_acesso FROM homologacao.perfil_acesso WHERE nome_perfil_acesso LIKE @like
+                   SELECT codigo_perfil_acesso FROM desenvolvimento.perfil_acesso WHERE nome_perfil_acesso LIKE @like
              );
 
-            DELETE FROM homologacao.usuario_setor
+            DELETE FROM desenvolvimento.usuario_setor
              WHERE codigo_usuario IN (
-                   SELECT codigo_usuario FROM homologacao.usuario WHERE login_usuario LIKE @like
+                   SELECT codigo_usuario FROM desenvolvimento.usuario WHERE login_usuario LIKE @like
              );
 
-            DELETE FROM homologacao.usuario_perfil
+            DELETE FROM desenvolvimento.usuario_perfil
              WHERE codigo_usuario IN (
-                   SELECT codigo_usuario FROM homologacao.usuario WHERE login_usuario LIKE @like
+                   SELECT codigo_usuario FROM desenvolvimento.usuario WHERE login_usuario LIKE @like
              )
                 OR codigo_perfil_acesso IN (
-                   SELECT codigo_perfil_acesso FROM homologacao.perfil_acesso WHERE nome_perfil_acesso LIKE @like
+                   SELECT codigo_perfil_acesso FROM desenvolvimento.perfil_acesso WHERE nome_perfil_acesso LIKE @like
              );
 
-            DELETE FROM homologacao.tara WHERE nome_tara LIKE @like;
-            DELETE FROM homologacao.tipo_tara WHERE nome_tipo_tara LIKE @like;
+            DELETE FROM desenvolvimento.tara WHERE nome_tara LIKE @like;
+            DELETE FROM desenvolvimento.tipo_tara WHERE nome_tipo_tara LIKE @like;
 
-            DELETE FROM homologacao.usuario WHERE login_usuario LIKE @like;
-            DELETE FROM homologacao.setor WHERE nome_setor LIKE @like;
-            DELETE FROM homologacao.perfil_acesso WHERE nome_perfil_acesso LIKE @like;
+            DELETE FROM desenvolvimento.usuario WHERE login_usuario LIKE @like;
+            DELETE FROM desenvolvimento.setor WHERE nome_setor LIKE @like;
+            DELETE FROM desenvolvimento.perfil_acesso WHERE nome_perfil_acesso LIKE @like;
             """,
             comando => comando.Parameters.AddWithValue("@like", like));
     }

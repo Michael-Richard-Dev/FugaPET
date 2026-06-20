@@ -14,15 +14,15 @@ public sealed class PesagemMultiplaItemFormTests
 
         int concluir = conteudo.IndexOf("private void Concluir()", StringComparison.Ordinal);
         int validarPendente = conteudo.IndexOf(
-            "TryParsePeso(_pesoManualTextBox.Text, out decimal pesoPendente)",
+            "if (!string.IsNullOrWhiteSpace(_pesoManualTextBox.Text))",
             concluir,
             StringComparison.Ordinal);
         int adicionarPendente = conteudo.IndexOf(
-            "AdicionarPeso(pesoPendente, \"MANUAL\")",
+            "AdicionarPesoManual();",
             concluir,
             StringComparison.Ordinal);
         int validarLista = conteudo.IndexOf(
-            "if (_pesos.Count == 0)",
+            "EntradaProdutoPesagemCalculos.PossuiLeituraValida(_pesagens)",
             concluir,
             StringComparison.Ordinal);
 
@@ -50,7 +50,7 @@ public sealed class PesagemMultiplaItemFormTests
             localizarLinha,
             StringComparison.Ordinal);
         int consolidarPeso = conteudo.IndexOf(
-            "SetCellValue(linhaAlvo, \"productionPesoLidoColumn\"",
+            "AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem])",
             preservarTara,
             StringComparison.Ordinal);
 

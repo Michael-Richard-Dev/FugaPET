@@ -32,6 +32,11 @@ public sealed class UsuarioServico
     public Task<UsuarioCadastro?> ObterPorIdAsync(long id, CancellationToken cancellationToken = default)
         => _usuarioRepositorio.ObterPorIdAsync(id, cancellationToken);
 
+    public Task<UsuarioEdicaoAgregado?> ObterEdicaoAgregadaAsync(
+        long id,
+        CancellationToken cancellationToken = default)
+        => _usuarioRepositorio.ObterEdicaoAgregadaAsync(id, cancellationToken);
+
     /// <summary>
     /// Cadastra o usuario recebendo a senha em TEXTO PURO. O hash BCrypt e gerado
     /// aqui, no servico, via SenhaServico. A camada de tela nunca deve montar SenhaHash.
@@ -442,5 +447,4 @@ public sealed class UsuarioServico
         }
     }
 }
-
 

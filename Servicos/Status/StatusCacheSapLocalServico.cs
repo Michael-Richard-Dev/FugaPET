@@ -163,7 +163,7 @@ public sealed class StatusCacheSapLocalServico
         const string sql = """
             SELECT COUNT(*)::integer
             FROM information_schema.tables
-            WHERE table_schema IN ('homologacao', 'producao')
+            WHERE table_schema IN ('desenvolvimento', 'producao')
               AND table_type = 'BASE TABLE'
               AND table_name LIKE 'sap_%';
             """;

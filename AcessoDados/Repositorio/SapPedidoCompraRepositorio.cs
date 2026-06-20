@@ -245,6 +245,102 @@ public sealed class SapPedidoCompraRepositorio : RepositorioBase
         return numeros;
     }
 
+    public async Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(numeroPedido))
+        {
+            return null;
+        }
+
+        const string sql = """
+            SELECT p.numero_pedido,
+                   COALESCE(f.codigo_fornecedor, p.payload_original ->> 'Supplier', ''),
+                   p.data_pedido,
+                   COALESCE(
+                       p.tipo_pedido,
+                       left(trim(p.payload_original ->> 'PurchaseOrderType'), 4),
+                       ''
+                   ),
+                   i.codigo_sap_pedido_compra_item,
+                   i.numero_item,
+                   COALESCE(i.codigo_produto, ''),
+                   i.descricao_produto,
+                   i.quantidade_pedida,
+                   i.unidade_medida,
+                   i.peso_item,
+                   i.centro,
+                   i.deposito,
+                   i.grupo_material
+              FROM sap_pedido_compra p
+              LEFT JOIN sap_fornecedor f
+                ON f.codigo_sap_fornecedor = p.codigo_sap_fornecedor
+              LEFT JOIN sap_pedido_compra_item i
+                ON i.codigo_sap_pedido_compra = p.codigo_sap_pedido_compra
+               AND i.situacao_sap_pedido_compra_item = true
+               AND i.ativo_sap = true
+               AND length(trim(coalesce(i.codigo_produto, ''))) > 0
+             WHERE trim(p.numero_pedido) = trim(@numero_pedido)
+               AND p.situacao_sap_pedido_compra = true
+               AND p.ativo_sap = true
+             ORDER BY i.numero_item;
+            """;
+
+        await using NpgsqlConnection conexao =
+            await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroTexto("@numero_pedido", numeroPedido));
+        await using NpgsqlDataReader leitor =
+            await comando.ExecuteReaderAsync(cancellationToken);
+
+        string? numero = null;
+        string fornecedor = string.Empty;
+        DateOnly? dataPedido = null;
+        string tipoPedido = string.Empty;
+        List<PedidoCompraSapItem> itens = [];
+
+        while (await leitor.ReadAsync(cancellationToken))
+        {
+            numero ??= leitor.GetString(0);
+            fornecedor = leitor.GetString(1);
+            dataPedido = leitor.IsDBNull(2)
+                ? null
+                : leitor.GetFieldValue<DateOnly>(2);
+            tipoPedido = leitor.GetString(3);
+
+            if (leitor.IsDBNull(4))
+            {
+                continue;
+            }
+
+            itens.Add(new PedidoCompraSapItem
+            {
+                CodigoItem = leitor.GetInt64(4),
+                NumeroItem = leitor.GetString(5),
+                CodigoMaterial = leitor.GetString(6),
+                Descricao = leitor.IsDBNull(7) ? null : leitor.GetString(7),
+                Quantidade = leitor.IsDBNull(8) ? null : leitor.GetDecimal(8),
+                UnidadeMedida = leitor.IsDBNull(9) ? null : leitor.GetString(9),
+                PesoItem = leitor.IsDBNull(10) ? null : leitor.GetDecimal(10),
+                Centro = leitor.IsDBNull(11) ? null : leitor.GetString(11),
+                Deposito = leitor.IsDBNull(12) ? null : leitor.GetString(12),
+                GrupoMaterial = leitor.IsDBNull(13) ? null : leitor.GetString(13)
+            });
+        }
+
+        return numero is null
+            ? null
+            : new PedidoCompraSapAgregado
+            {
+                NumeroPedido = numero,
+                Fornecedor = fornecedor,
+                DataPedido = dataPedido,
+                TipoPedido = tipoPedido,
+                Itens = itens
+            };
+    }
+
     /// <summary>
     /// Codigo do fornecedor do pedido no cache local. Usa a FK quando ela existe e,
     /// como fallback, o campo Supplier preservado no payload original do SAP.

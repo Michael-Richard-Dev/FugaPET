@@ -28,6 +28,9 @@ public sealed class CampoEtiquetaServico
     public Task<CampoEtiquetaCadastro?> ObterPorIdAsync(long id, CancellationToken cancellationToken = default)
         => _repositorio.ObterPorIdAsync(id, cancellationToken);
 
+    public Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(long id, CancellationToken cancellationToken = default)
+        => _repositorio.ObterEdicaoAgregadaAsync(id, cancellationToken);
+
     public async Task<ResultadoOperacao> InserirAsync(CampoEtiquetaCadastro campo, CancellationToken cancellationToken = default)
     {
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarEtiquetaAsync(Entidade, PermissoesSistema.Acoes.Criar, _auditoriaServico, Tela, cancellationToken);
@@ -178,5 +181,4 @@ public sealed class CampoEtiquetaServico
         return null;
     }
 }
-
 

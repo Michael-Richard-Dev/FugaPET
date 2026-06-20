@@ -251,9 +251,7 @@ public sealed class PedidoCompraSapApiClient
     private Uri MontarUrlPedido(string numeroPedido)
     {
         string pedido = numeroPedido.Trim().Replace("'", "''");
-        const string select = "$select=PurchaseOrder,Supplier,PurchaseOrderDate,DocumentCurrency,PurchaseOrderType,IncotermsClassification,IncotermsTransferLocation,IncotermsLocation1";
-        const string expand = "$expand=_PurchaseOrderItem($select=PurchaseOrderItem,Material,PurchaseOrderItemText,OrderQuantity,PurchaseOrderQuantityUnit,ItemNetWeight,Plant,StorageLocation,MaterialGroup)";
-        string query = $"{select}&{expand}";
+        string query = $"{SelectCabecalho}&{ExpandItens}";
         if (!string.IsNullOrWhiteSpace(_configuracao.SapClient))
         {
             query = $"sap-client={Uri.EscapeDataString(_configuracao.SapClient.Trim())}&{query}";
@@ -302,18 +300,27 @@ public sealed class PedidoCompraSapApiClient
         return "O SAP recusou a alteracao do peso.";
     }
 
+    // Cabecalho inclui PurchasingGroup (escopo Jales). Plant e IsCompletelyDelivered sao de ITEM
+    // e vem no $select do _PurchaseOrderItem; a selecao final dos itens elegiveis e feita em C#.
+    private const string SelectCabecalho = "$select=PurchaseOrder,Supplier,PurchaseOrderDate,DocumentCurrency,PurchaseOrderType,PurchasingGroup,IncotermsClassification,IncotermsTransferLocation,IncotermsLocation1";
+    private const string ExpandItens = "$expand=_PurchaseOrderItem($select=PurchaseOrderItem,Material,PurchaseOrderItemText,OrderQuantity,PurchaseOrderQuantityUnit,ItemNetWeight,Plant,StorageLocation,MaterialGroup,IsCompletelyDelivered)";
+
     private Uri MontarUrlInicial()
     {
-        const string select = "$select=PurchaseOrder,Supplier,PurchaseOrderDate,DocumentCurrency,PurchaseOrderType,IncotermsClassification,IncotermsTransferLocation,IncotermsLocation1";
-        const string expand = "$expand=_PurchaseOrderItem($select=PurchaseOrderItem,Material,PurchaseOrderItemText,OrderQuantity,PurchaseOrderQuantityUnit,ItemNetWeight,Plant,StorageLocation,MaterialGroup)";
-        string query = $"{select}&{expand}";
+        string filtro = MontarFiltroEscopoJales();
+        string query = $"{filtro}&{SelectCabecalho}&{ExpandItens}";
         if (!string.IsNullOrWhiteSpace(_configuracao.SapClient))
         {
-            query = $"sap-client={Uri.EscapeDataString(_configuracao.SapClient.Trim())}&{select}&{expand}";
+            query = $"sap-client={Uri.EscapeDataString(_configuracao.SapClient.Trim())}&{query}";
         }
 
         return ValidarDestino(new Uri($"{_baseUri.AbsoluteUri}PurchaseOrder?{query}", UriKind.Absolute));
     }
+
+    // $filter OData de CABECALHO do escopo Jales (fonte unica em EscopoPedidoSapJales). Espacos
+    // percent-encoded. A selecao dos itens elegiveis (centro/entrega) e concluida em C#.
+    private static string MontarFiltroEscopoJales()
+        => "$filter=" + EscopoPedidoSapJales.ExpressaoFiltroPedido().Replace(" ", "%20");
 
     // O @odata.nextLink pode vir absoluto (http...) ou relativo a raiz do servico (.../0001).
     private Uri? ResolverNextLink(string? nextLink)
@@ -388,6 +395,7 @@ public sealed class PedidoCompraSapApiClient
                     IncotermsLocation1 = LerTextoNulo(item, "IncotermsLocation1"),
                     // SAP nao expoe um status de cabecalho neste $select; nulo ate confirmar o campo.
                     Status = LerTextoNulo(item, "PurchasingDocumentStatus"),
+                    GrupoCompra = LerTextoNulo(item, "PurchasingGroup"),
                     PayloadOriginalJson = item.GetRawText(),
                     Itens = MapearItens(item)
                 });
@@ -431,6 +439,7 @@ public sealed class PedidoCompraSapApiClient
             IncotermsTransferLocation = LerTextoNulo(pedido, "IncotermsTransferLocation"),
             IncotermsLocation1 = LerTextoNulo(pedido, "IncotermsLocation1"),
             Status = LerTextoNulo(pedido, "PurchasingDocumentStatus"),
+            GrupoCompra = LerTextoNulo(pedido, "PurchasingGroup"),
             PayloadOriginalJson = pedido.GetRawText(),
             Itens = MapearItens(pedido)
         };
@@ -464,6 +473,7 @@ public sealed class PedidoCompraSapApiClient
                 Centro = LerTextoNulo(item, "Plant"),
                 Deposito = LerTextoNulo(item, "StorageLocation"),
                 GrupoMaterial = LerTextoNulo(item, "MaterialGroup"),
+                CompletamenteEntregue = LerBooleano(item, "IsCompletelyDelivered"),
                 PayloadOriginalJson = item.GetRawText()
             });
         }
@@ -480,6 +490,23 @@ public sealed class PedidoCompraSapApiClient
     {
         string texto = LerTexto(elemento, propriedade);
         return string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
+    }
+
+    // IsCompletelyDelivered vem como booleano JSON (true/false); aceita string "true"/"false" por seguranca.
+    private static bool? LerBooleano(JsonElement elemento, string propriedade)
+    {
+        if (!elemento.TryGetProperty(propriedade, out JsonElement valor))
+        {
+            return null;
+        }
+
+        return valor.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(valor.GetString(), out bool resultado) ? resultado : null,
+            _ => null
+        };
     }
 
     // OrderQuantity vem como numero JSON (ex.: 2.000); aceita tambem string por seguranca.

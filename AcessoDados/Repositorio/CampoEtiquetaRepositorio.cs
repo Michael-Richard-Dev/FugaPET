@@ -55,6 +55,61 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         return MapearCampo(leitor);
     }
 
+    public async Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(
+        long codigoCampoEtiqueta,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT c.codigo_campo_etiqueta, c.codigo_etiqueta, c.nome_campo, c.descricao_campo_etiqueta,
+                   c.tipo_dado, c.obrigatorio, c.tamanho_maximo, c.formato_saida, c.ordem,
+                   c.situacao_campo_etiqueta, c.campo_etiqueta_criado_em,
+                   m.codigo_mapeamento_campo_etiqueta, m.codigo_campo_etiqueta, m.origem_dado,
+                   m.expressao_origem, m.valor_padrao, m.obrigatorio_para_impressao, m.observacao,
+                   m.situacao_mapeamento_campo_etiqueta, m.mapeamento_campo_etiqueta_criado_em
+              FROM campo_etiqueta c
+              LEFT JOIN LATERAL (
+                  SELECT codigo_mapeamento_campo_etiqueta, codigo_campo_etiqueta, origem_dado,
+                         expressao_origem, valor_padrao, obrigatorio_para_impressao, observacao,
+                         situacao_mapeamento_campo_etiqueta, mapeamento_campo_etiqueta_criado_em
+                    FROM mapeamento_campo_etiqueta
+                   WHERE codigo_campo_etiqueta = c.codigo_campo_etiqueta
+                     AND situacao_mapeamento_campo_etiqueta = true
+                   ORDER BY codigo_mapeamento_campo_etiqueta DESC
+                   LIMIT 1
+              ) m ON true
+             WHERE c.codigo_campo_etiqueta = @codigo_campo_etiqueta
+             LIMIT 1;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_campo_etiqueta", codigoCampoEtiqueta));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+
+        if (!await leitor.ReadAsync(cancellationToken)) return null;
+
+        return new CampoEtiquetaEdicaoAgregado
+        {
+            Campo = MapearCampo(leitor),
+            MapeamentoAtivo = leitor.IsDBNull(11)
+                ? null
+                : new MapeamentoCampoEtiquetaCadastro
+                {
+                    CodigoMapeamentoCampoEtiqueta = leitor.GetInt64(11),
+                    CodigoCampoEtiqueta = leitor.GetInt64(12),
+                    OrigemDado = leitor.GetString(13),
+                    ExpressaoOrigem = leitor.IsDBNull(14) ? string.Empty : leitor.GetString(14),
+                    ValorPadrao = leitor.IsDBNull(15) ? string.Empty : leitor.GetString(15),
+                    ObrigatorioParaImpressao = leitor.GetBoolean(16),
+                    Observacao = leitor.IsDBNull(17) ? string.Empty : leitor.GetString(17),
+                    SituacaoMapeamentoCampoEtiqueta = leitor.GetBoolean(18),
+                    MapeamentoCampoEtiquetaCriadoEm = leitor.IsDBNull(19)
+                        ? null
+                        : leitor.GetDateTime(19).ToLocalTime()
+                }
+        };
+    }
+
     public async Task<bool> ExisteNomeNaEtiquetaAsync(long codigoEtiqueta, string nomeCampo, long? ignorarCodigo = null, CancellationToken cancellationToken = default)
     {
         // Espelha uq_campo_etiqueta_nome (codigo_etiqueta, upper(trim(nome_campo))) WHERE situacao = true.

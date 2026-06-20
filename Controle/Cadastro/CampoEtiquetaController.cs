@@ -18,6 +18,9 @@ public sealed class CampoEtiquetaController
     public Task<CampoEtiquetaCadastro?> ObterPorIdAsync(long id, CancellationToken cancellationToken = default)
         => _servico.ObterPorIdAsync(id, cancellationToken);
 
+    public Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(long id, CancellationToken cancellationToken = default)
+        => _servico.ObterEdicaoAgregadaAsync(id, cancellationToken);
+
     public Task<ResultadoOperacao> InserirAsync(CampoEtiquetaCadastro campo, CancellationToken cancellationToken = default)
         => _servico.InserirAsync(campo, cancellationToken);
 

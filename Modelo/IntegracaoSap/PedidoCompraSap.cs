@@ -2,7 +2,7 @@
 
 /// <summary>
 /// Cabecalho de um pedido de compra vindo do SAP (API_PURCHASEORDER_2), preparado para a
-/// carga no cache local <c>homologacao.sap_pedido_compra</c>.
+/// carga no cache local <c>desenvolvimento.sap_pedido_compra</c>.
 /// </summary>
 public sealed record PedidoCompraSap
 {
@@ -24,13 +24,16 @@ public sealed record PedidoCompraSap
     /// <summary>Status do pedido no SAP, quando disponivel (mapeia <c>status_pedido</c>).</summary>
     public string? Status { get; init; }
 
-    /// <summary>IncotermsClassification do cabecalho (ex.: CIF). Obrigatorio para o PATCH no SAP.</summary>
+    /// <summary>PurchasingGroup — grupo de compras do cabecalho. Usado no filtro de escopo (Jales).</summary>
+    public string? GrupoCompra { get; init; }
+
+    /// <summary>IncotermsClassification do cabecalho (ex.: CIF), preservado para consulta.</summary>
     public string? IncotermsClassification { get; init; }
 
-    /// <summary>IncotermsTransferLocation do cabecalho. Obrigatorio para o PATCH no SAP.</summary>
+    /// <summary>IncotermsTransferLocation do cabecalho, preservado para consulta.</summary>
     public string? IncotermsTransferLocation { get; init; }
 
-    /// <summary>IncotermsLocation1 do cabecalho. Obrigatorio para o PATCH no SAP.</summary>
+    /// <summary>IncotermsLocation1 do cabecalho, preservado para consulta.</summary>
     public string? IncotermsLocation1 { get; init; }
 
     /// <summary>JSON original do cabecalho retornado pela API (vai para <c>payload_original</c>).</summary>

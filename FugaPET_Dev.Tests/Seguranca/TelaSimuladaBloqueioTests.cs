@@ -22,10 +22,32 @@ public sealed class TelaSimuladaBloqueioTests
         Assert.False(AvisoDadosSimuladosHelper.PodeUsarDadosSimulados());
     }
 
-    [Fact]
-    public void PodeUsarDadosSimulados_DeveRefletirModoDemonstracao()
+    [Theory]
+    [InlineData(true, true, true, false)]
+    [InlineData(false, true, true, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, false, true, false)]
+    public void PodeUsarDadosSimulados_DeveExigirAsTresCondicoes(
+        bool bancoHabilitado,
+        bool modoDemonstracao,
+        bool ambienteDemonstrativo,
+        bool esperado)
     {
-        // A decisao de liberar dado simulado e exatamente o modo demonstracao (fonte unica).
-        Assert.Equal(EstadoIntegracaoBanco.ModoDemonstracao, AvisoDadosSimuladosHelper.PodeUsarDadosSimulados());
+        Assert.Equal(
+            esperado,
+            EstadoIntegracaoBanco.CalcularPodeUsarDadosSimulados(
+                bancoHabilitado,
+                modoDemonstracao,
+                ambienteDemonstrativo));
+    }
+
+    [Fact]
+    public void AmbienteNaoDemonstrativo_DeveBloquearMesmoComBancoOffEDemoOn()
+    {
+        Assert.False(
+            EstadoIntegracaoBanco.CalcularPodeUsarDadosSimulados(
+                bancoHabilitado: false,
+                modoDemonstracao: true,
+                ambienteDemonstrativo: false));
     }
 }

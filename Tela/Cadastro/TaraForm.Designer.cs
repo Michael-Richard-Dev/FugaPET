@@ -533,7 +533,7 @@ partial class TaraForm
         profilesHeaderUsersLabel.Name = "profilesHeaderUsersLabel";
         profilesHeaderUsersLabel.Size = new Size(122, 20);
         profilesHeaderUsersLabel.TabIndex = 1;
-        profilesHeaderUsersLabel.Text = "Peso (g)";
+        profilesHeaderUsersLabel.Text = "Peso (kg)";
         profilesHeaderUsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profilesHeaderStatusLabel
@@ -999,7 +999,7 @@ partial class TaraForm
         LblPeso.Name = "LblPeso";
         LblPeso.Size = new Size(180, 19);
         LblPeso.TabIndex = 34;
-        LblPeso.Text = "Peso (g) *";
+        LblPeso.Text = "Peso (kg) *";
         // 
         // detailsTitleIconLabel
         // 
@@ -2259,7 +2259,6 @@ partial class TaraForm
     private RoundedPanel roundedPanel1;
     private TextBox TxtPeso;
 }
-
 
 
 

@@ -22,7 +22,7 @@ internal static class ModoDemonstracaoHelper
     /// </summary>
     public static void AplicarFaixaSeModoDemonstracao(Form form)
     {
-        if (!EstadoIntegracaoBanco.ModoDemonstracao)
+        if (!EstadoIntegracaoBanco.PodeUsarDadosSimulados)
         {
             return;
         }

@@ -25,6 +25,11 @@ public sealed class UsuarioController
     public Task<UsuarioCadastro?> ObterPorIdAsync(long id, CancellationToken cancellationToken = default)
         => _usuarioServico.ObterPorIdAsync(id, cancellationToken);
 
+    public Task<UsuarioEdicaoAgregado?> ObterEdicaoAgregadaAsync(
+        long id,
+        CancellationToken cancellationToken = default)
+        => _usuarioServico.ObterEdicaoAgregadaAsync(id, cancellationToken);
+
     public Task<ResultadoOperacao> InserirAsync(UsuarioCadastro usuario, string senhaPlana, CancellationToken cancellationToken = default)
         => _usuarioServico.InserirAsync(usuario, senhaPlana, cancellationToken);
 

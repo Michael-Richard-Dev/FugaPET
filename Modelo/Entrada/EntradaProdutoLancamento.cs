@@ -1,7 +1,7 @@
 namespace FugaPET_Dev.Modelo.Entrada;
 
 /// <summary>
-/// Cabecalho de um lancamento de Entrada de Produto (homologacao.entrada_produto_lancamento).
+/// Cabecalho de um lancamento de Entrada de Produto (desenvolvimento.entrada_produto_lancamento).
 /// Cada lancamento e independente; nunca sobrescreve um anterior.
 /// </summary>
 public sealed record EntradaProdutoLancamento

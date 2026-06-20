@@ -32,12 +32,25 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
             {
                 long codigoItem = await InserirItemAsync(conexao, transacao, codigoLancamento, item, usuario, cancellationToken);
 
-                int sequencia = 0;
-                foreach (EntradaProdutoPesagem pesagem in item.Pesagens)
+                IReadOnlyList<EntradaProdutoPesagem> pesagens =
+                    EntradaProdutoPesagemCalculos.ValidarSequencias(item.Pesagens);
+                foreach (EntradaProdutoPesagem pesagem in pesagens)
                 {
-                    sequencia++;
-                    await InserirPesagemAsync(conexao, transacao, codigoItem, sequencia, pesagem, usuario, cancellationToken);
+                    await InserirPesagemAsync(
+                        conexao,
+                        transacao,
+                        codigoItem,
+                        pesagem,
+                        usuario,
+                        cancellationToken);
                 }
+
+                await AtualizarTotalRecebidoAsync(
+                    conexao,
+                    transacao,
+                    codigoItem,
+                    usuario,
+                    cancellationToken);
             }
 
             return codigoLancamento;
@@ -80,7 +93,7 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
                  centro, deposito, unidade, quantidade_prevista, quantidade_recebida, status_item, entrada_produto_item_criado_por)
             VALUES
                 (@lancamento, @sap_item, @numero_item, @material,
-                 @centro, @deposito, @unidade, @qtd_prevista, @qtd_recebida, 'FINALIZADO_LOCAL', @usuario)
+                 @centro, @deposito, @unidade, @qtd_prevista, NULL, 'FINALIZADO_LOCAL', @usuario)
             RETURNING codigo_entrada_produto_item;
             """;
 
@@ -93,7 +106,6 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
         comando.Parameters.Add(ParametroTextoNulo("@deposito", item.Deposito));
         comando.Parameters.Add(ParametroTextoNulo("@unidade", item.Unidade));
         comando.Parameters.Add(ParametroNumericoNulo("@qtd_prevista", item.QuantidadePrevista));
-        comando.Parameters.Add(ParametroNumericoNulo("@qtd_recebida", item.QuantidadeRecebida));
         comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
         object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
         return retorno is long codigo ? codigo : throw new InvalidOperationException("Nao foi possivel criar o item do lancamento.");
@@ -101,28 +113,146 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
 
     private async Task InserirPesagemAsync(
         NpgsqlConnection conexao, NpgsqlTransaction transacao,
-        long codigoItem, int sequencia, EntradaProdutoPesagem pesagem, long? usuario, CancellationToken cancellationToken)
+        long codigoItem, EntradaProdutoPesagem pesagem, long? usuario, CancellationToken cancellationToken)
     {
         const string sql = """
             INSERT INTO entrada_produto_pesagem
                 (codigo_entrada_produto_item, sequencia, peso_bruto_kg, peso_tara_kg, peso_liquido_kg,
-                 codigo_tara, codigo_balanca, origem, codigo_usuario, entrada_produto_pesagem_criado_por)
+                 codigo_tara, codigo_balanca, origem, status_pesagem, leitura_original,
+                 payload_balanca, codigo_usuario, pesado_em, entrada_produto_pesagem_criado_por)
             VALUES
                 (@item, @sequencia, @bruto, @tara, @liquido,
-                 @codigo_tara, @codigo_balanca, @origem, @usuario, @usuario);
+                 @codigo_tara, @codigo_balanca, @origem, @status, @leitura_original,
+                 @payload_balanca, @usuario, @pesado_em, @usuario);
             """;
 
         await using NpgsqlCommand comando = new(sql, conexao, transacao);
         comando.Parameters.Add(ParametroLongo("@item", codigoItem));
-        comando.Parameters.Add(ParametroInteiro("@sequencia", sequencia));
+        comando.Parameters.Add(ParametroInteiro("@sequencia", pesagem.Sequencia));
         comando.Parameters.Add(new NpgsqlParameter("@bruto", NpgsqlDbType.Numeric) { Value = pesagem.PesoBrutoKg });
         comando.Parameters.Add(new NpgsqlParameter("@tara", NpgsqlDbType.Numeric) { Value = pesagem.PesoTaraKg });
         comando.Parameters.Add(new NpgsqlParameter("@liquido", NpgsqlDbType.Numeric) { Value = pesagem.PesoLiquidoKg });
         comando.Parameters.Add(ParametroLongoNulo("@codigo_tara", pesagem.CodigoTara));
         comando.Parameters.Add(ParametroLongoNulo("@codigo_balanca", pesagem.CodigoBalanca));
         comando.Parameters.Add(ParametroTexto("@origem", string.IsNullOrWhiteSpace(pesagem.Origem) ? "BALANCA" : pesagem.Origem));
+        comando.Parameters.Add(ParametroTexto("@status", string.IsNullOrWhiteSpace(pesagem.StatusPesagem) ? "VALIDA" : pesagem.StatusPesagem));
+        comando.Parameters.Add(ParametroTextoNulo("@leitura_original", pesagem.LeituraOriginal));
+        comando.Parameters.Add(new NpgsqlParameter("@payload_balanca", NpgsqlDbType.Jsonb)
+        {
+            Value = string.IsNullOrWhiteSpace(pesagem.PayloadBalanca)
+                ? DBNull.Value
+                : pesagem.PayloadBalanca
+        });
+        comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
+        comando.Parameters.Add(new NpgsqlParameter("@pesado_em", NpgsqlDbType.TimestampTz)
+        {
+            Value = pesagem.PesadoEm
+        });
+        await comando.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task AtualizarTotalRecebidoAsync(
+        NpgsqlConnection conexao,
+        NpgsqlTransaction transacao,
+        long codigoItem,
+        long? usuario,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE entrada_produto_item item
+               SET quantidade_recebida = (
+                       SELECT COALESCE(SUM(pesagem.peso_liquido_kg), 0)
+                         FROM entrada_produto_pesagem pesagem
+                        WHERE pesagem.codigo_entrada_produto_item = item.codigo_entrada_produto_item
+                          AND pesagem.situacao_entrada_produto_pesagem = true
+                          AND pesagem.status_pesagem = 'VALIDA'
+                   ),
+                   entrada_produto_item_atualizado_por = @usuario
+             WHERE item.codigo_entrada_produto_item = @codigo_item;
+            """;
+
+        await using NpgsqlCommand comando = new(sql, conexao, transacao);
+        comando.Parameters.Add(ParametroLongo("@codigo_item", codigoItem));
         comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
         await comando.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<EntradaProdutoItemPersistido?> ObterItemPersistidoAsync(
+        long codigoLancamento,
+        long codigoSapPedidoCompraItem,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT lancamento.codigo_entrada_produto_lancamento,
+                   item.codigo_sap_pedido_compra_item,
+                   lancamento.numero_pedido,
+                   item.numero_item,
+                   COALESCE(item.material, ''),
+                   COALESCE(item_sap.descricao_produto, ''),
+                   COALESCE(lancamento.fornecedor, fornecedor.codigo_fornecedor, ''),
+                   pedido_sap.data_pedido,
+                   COALESCE(lancamento.terminal, ''),
+                   COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0)::numeric(14,3)
+              FROM entrada_produto_lancamento lancamento
+              JOIN entrada_produto_item item
+                ON item.codigo_entrada_produto_lancamento =
+                   lancamento.codigo_entrada_produto_lancamento
+              LEFT JOIN sap_pedido_compra_item item_sap
+                ON item_sap.codigo_sap_pedido_compra_item =
+                   item.codigo_sap_pedido_compra_item
+              LEFT JOIN sap_pedido_compra pedido_sap
+                ON pedido_sap.codigo_sap_pedido_compra =
+                   item_sap.codigo_sap_pedido_compra
+              LEFT JOIN sap_fornecedor fornecedor
+                ON fornecedor.codigo_sap_fornecedor =
+                   pedido_sap.codigo_sap_fornecedor
+              LEFT JOIN entrada_produto_pesagem pesagem
+                ON pesagem.codigo_entrada_produto_item =
+                   item.codigo_entrada_produto_item
+             WHERE lancamento.codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND item.codigo_sap_pedido_compra_item = @codigo_sap_item
+               AND lancamento.situacao_entrada_produto_lancamento = true
+               AND item.situacao_entrada_produto_item = true
+             GROUP BY
+                   lancamento.codigo_entrada_produto_lancamento,
+                   item.codigo_sap_pedido_compra_item,
+                   lancamento.numero_pedido,
+                   item.numero_item,
+                   item.material,
+                   item_sap.descricao_produto,
+                   lancamento.fornecedor,
+                   fornecedor.codigo_fornecedor,
+                   pedido_sap.data_pedido,
+                   lancamento.terminal
+             LIMIT 1;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        comando.Parameters.Add(ParametroLongo("@codigo_sap_item", codigoSapPedidoCompraItem));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+        if (!await leitor.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new EntradaProdutoItemPersistido
+        {
+            CodigoLancamento = leitor.GetInt64(0),
+            CodigoSapPedidoCompraItem = leitor.GetInt64(1),
+            NumeroPedido = leitor.GetString(2),
+            NumeroItem = leitor.GetString(3),
+            Material = leitor.GetString(4),
+            DescricaoMaterial = leitor.GetString(5),
+            Fornecedor = leitor.GetString(6),
+            DataPedido = leitor.IsDBNull(7) ? null : leitor.GetFieldValue<DateOnly>(7),
+            Terminal = leitor.GetString(8),
+            PesoLiquidoTotalKg = leitor.GetDecimal(9)
+        };
     }
 
     private static NpgsqlParameter ParametroTextoNulo(string nome, string? valor)

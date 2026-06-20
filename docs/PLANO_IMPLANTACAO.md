@@ -36,7 +36,7 @@ Configuração por terminal via `configuracao.banco.json` e `configuracao.termin
 3. **Configuração do terminal** — `configuracao.terminal.json` (balança, impressora padrão).
 4. **Validação em homologação** — fluxos de cadastro, pesagem e etiquetas com banco real.
 5. **Treinamento do operador** — telas principais e mensagens do FugaPET.
-6. **Go-live em produção** — `modo_demonstracao = false`, schema `producao`.
+6. **Go-live em produção** — `modo_demonstracao = false`, `ambiente_demonstrativo = false`, schema `producao`.
 
 ## 5. Integração SAP
 
@@ -46,7 +46,8 @@ Configuração por terminal via `configuracao.banco.json` e `configuracao.termin
 
 ## 6. Rollback
 
-- Operação por terminal: reverter `configuracao.*.json` e voltar `modo_demonstracao`.
+- Operação por terminal: reverter `configuracao.*.json`; dados simulados exigem banco desabilitado,
+  `modo_demonstracao = true` e `ambiente_demonstrativo = true`.
 - Banco: scripts incrementais são forward-only; rollback via restore controlado.
 
 ## 7. Checklist de go-live
@@ -56,3 +57,4 @@ Configuração por terminal via `configuracao.banco.json` e `configuracao.termin
 - [ ] Balança e impressora do terminal testadas
 - [ ] Títulos/mensagens exibindo o nome FugaPET
 - [ ] `modo_demonstracao = false` em produção
+- [ ] `ambiente_demonstrativo = false` em homologação e produção

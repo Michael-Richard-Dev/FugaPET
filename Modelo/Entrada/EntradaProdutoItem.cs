@@ -1,11 +1,11 @@
 namespace FugaPET_Dev.Modelo.Entrada;
 
 /// <summary>
-/// Item de um lancamento de Entrada (homologacao.entrada_produto_item) com suas pesagens.
+/// Item de um lancamento de Entrada (desenvolvimento.entrada_produto_item) com suas pesagens.
 /// </summary>
 public sealed record EntradaProdutoItem
 {
-    /// <summary>FK opcional ao item do pedido SAP (homologacao.sap_pedido_compra_item).</summary>
+    /// <summary>FK opcional ao item do pedido SAP (desenvolvimento.sap_pedido_compra_item).</summary>
     public long? CodigoSapPedidoCompraItem { get; init; }
 
     public string NumeroItem { get; init; } = string.Empty;

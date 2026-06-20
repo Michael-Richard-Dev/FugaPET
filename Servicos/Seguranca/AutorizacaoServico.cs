@@ -31,9 +31,8 @@ public static class AutorizacaoServico
     {
         if (!EstadoIntegracaoBanco.Habilitado)
         {
-            // Banco desabilitado: libera tudo APENAS em modo demonstracao (com faixa visual).
-            // Em homologacao/producao (sem demo), nega — nunca operar sem seguranca.
-            return EstadoIntegracaoBanco.ModoDemonstracao;
+            // Banco desabilitado: libera tudo apenas na demonstracao segura e explicita.
+            return EstadoIntegracaoBanco.PodeUsarDadosSimulados;
         }
 
         SessaoUsuarioAplicacao? sessao = EstadoSessaoUsuarioAtual.SessaoAtual;
@@ -51,9 +50,8 @@ public static class AutorizacaoServico
     {
         if (!EstadoIntegracaoBanco.Habilitado)
         {
-            // Banco desabilitado: libera tudo APENAS em modo demonstracao (com faixa visual).
-            // Em homologacao/producao (sem demo), nega — nunca operar sem seguranca.
-            return EstadoIntegracaoBanco.ModoDemonstracao;
+            // Banco desabilitado: libera tudo apenas na demonstracao segura e explicita.
+            return EstadoIntegracaoBanco.PodeUsarDadosSimulados;
         }
 
         SessaoUsuarioAplicacao? sessao = EstadoSessaoUsuarioAtual.SessaoAtual;

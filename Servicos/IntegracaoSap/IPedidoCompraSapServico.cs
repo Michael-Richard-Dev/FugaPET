@@ -17,6 +17,9 @@ public interface IPedidoCompraSapServico
     Task<ResultadoOperacao> SincronizarPedidoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default);
+    Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default);
     Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default);
     Task<DateOnly?> ObterDataPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default);

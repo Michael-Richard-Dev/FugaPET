@@ -11,12 +11,19 @@ namespace FugaPET_Dev.Tests.IntegracaoSap;
 /// </summary>
 public sealed class IntegracaoSapMockServicoTests
 {
-    private static IIntegracaoSapServico CriarServico() => new IntegracaoSapMockServico();
+    private static IIntegracaoSapServico CriarServico()
+        => FabricaIntegracaoSap.Criar(
+            bancoHabilitado: false,
+            modoDemonstracao: true,
+            ambienteDemonstrativo: true);
 
     [Fact]
     public void FabricaLegada_EmDemonstracao_DeveRetornarImplementacaoSimulada()
     {
-        IIntegracaoSapServico servico = FabricaIntegracaoSap.Criar(modoDemonstracao: true);
+        IIntegracaoSapServico servico = FabricaIntegracaoSap.Criar(
+            bancoHabilitado: false,
+            modoDemonstracao: true,
+            ambienteDemonstrativo: true);
         Assert.True(servico.EhSimulado);
     }
 
@@ -24,7 +31,17 @@ public sealed class IntegracaoSapMockServicoTests
     public void FabricaLegada_ForaDaDemonstracao_DeveFalharFechado()
     {
         Assert.Throws<InvalidOperationException>(
-            () => FabricaIntegracaoSap.Criar(modoDemonstracao: false));
+            () => FabricaIntegracaoSap.Criar(
+                bancoHabilitado: true,
+                modoDemonstracao: true,
+                ambienteDemonstrativo: true));
+    }
+
+    [Fact]
+    public void CriacaoDireta_ForaDaPoliticaDemonstrativa_DeveFalharFechado()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => new IntegracaoSapMockServico());
     }
 
     [Fact]

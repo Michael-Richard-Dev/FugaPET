@@ -141,6 +141,68 @@ public class UsuarioRepositorio : RepositorioBase
         return MapearUsuario(leitor);
     }
 
+    public virtual async Task<UsuarioEdicaoAgregado?> ObterEdicaoAgregadaAsync(
+        long codigoUsuario,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                   COALESCE(NULLIF(j ->> 'codigo_usuario', ''), NULLIF(j ->> 'id_usuario', ''))::bigint,
+                   COALESCE(NULLIF(j ->> 'codigo_cargo', ''), NULLIF(j ->> 'id_cargo', ''))::bigint,
+                   COALESCE(NULLIF(j ->> 'codigo_setor_padrao', ''), NULLIF(j ->> 'id_setor_padrao', ''))::bigint,
+                   COALESCE(NULLIF(j ->> 'nome_usuario', ''), ''),
+                   COALESCE(NULLIF(j ->> 'login_usuario', ''), ''),
+                   COALESCE(NULLIF(j ->> 'email_usuario', ''), ''),
+                   COALESCE(NULLIF(j ->> 'senha_hash', ''), ''),
+                   COALESCE(NULLIF(j ->> 'telefone_usuario', ''), ''),
+                   COALESCE(NULLIF(j ->> 'deve_trocar_senha', ''), 'false')::boolean,
+                   COALESCE(NULLIF(j ->> 'bloqueado_usuario', ''), 'false')::boolean,
+                   NULLIF(j ->> 'ultimo_login_em', '')::timestamptz,
+                   COALESCE(NULLIF(j ->> 'situacao_usuario', ''), 'true')::boolean,
+                   perfil.codigo_perfil_acesso,
+                   setor.codigo_setor
+              FROM usuario u
+              CROSS JOIN LATERAL to_jsonb(u) AS j
+              LEFT JOIN LATERAL (
+                  SELECT up.codigo_perfil_acesso
+                    FROM usuario_perfil up
+                   WHERE up.codigo_usuario = u.codigo_usuario
+                     AND up.situacao_usuario_perfil = true
+                   ORDER BY up.codigo_usuario_perfil DESC
+                   LIMIT 1
+              ) perfil ON true
+              LEFT JOIN LATERAL (
+                  SELECT us.codigo_setor
+                    FROM usuario_setor us
+                   WHERE us.codigo_usuario = u.codigo_usuario
+                     AND us.situacao_usuario_setor = true
+                     AND us.setor_padrao = true
+                   ORDER BY us.codigo_usuario_setor DESC
+                   LIMIT 1
+              ) setor ON true
+             WHERE u.codigo_usuario = @codigo_usuario
+             LIMIT 1;
+            """;
+
+        await using NpgsqlConnection conexao =
+            await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_usuario", codigoUsuario));
+        await using NpgsqlDataReader leitor =
+            await comando.ExecuteReaderAsync(cancellationToken);
+        if (!await leitor.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new UsuarioEdicaoAgregado
+        {
+            Usuario = MapearUsuario(leitor),
+            IdPerfilAcessoAtivo = leitor.IsDBNull(12) ? null : leitor.GetInt64(12),
+            IdSetorPadraoAtivo = leitor.IsDBNull(13) ? null : leitor.GetInt64(13)
+        };
+    }
+
     public virtual async Task<bool> ExisteLoginAsync(string login, long? ignorarCodigo = null, CancellationToken cancellationToken = default)
     {
         // Espelha uq_usuario_login (upper(trim(login)) WHERE situacao_usuario = true).
@@ -266,7 +328,7 @@ public class UsuarioRepositorio : RepositorioBase
         // de log_alteracao_cadastral identificar quem provocou o UPDATE.
         const string sql = """
             UPDATE usuario
-               SET ultimo_login_em = date_trunc('second', now()),
+               SET ultimo_login_em = clock_timestamp(),
                    usuario_atualizado_por = @codigo_usuario
              WHERE codigo_usuario = @codigo_usuario;
             """;
@@ -606,8 +668,6 @@ public class UsuarioRepositorio : RepositorioBase
             SituacaoUsuario = leitor.GetBoolean(11)
         };
 }
-
-
 
 
 

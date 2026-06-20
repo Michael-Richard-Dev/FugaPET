@@ -41,6 +41,8 @@ private readonly bool _integracaoBancoHabilitada = EstadoIntegracaoBanco.Habilit
     private static readonly Color ResumoSituacaoNeutroTexto = Color.FromArgb(100, 116, 139);
     private bool _atualizandoWorkspace;
     private bool _atualizandoFiltroPerfil;
+    private CancellationTokenSource? _carregarPermissoesPerfilCts;
+    private Task _carregarPermissoesPerfilTask = Task.CompletedTask;
 
     public PermissaoForm(PermissaoController? permissaoController = null, PerfilAcessoController? perfilAcessoController = null)
     {
@@ -269,24 +271,56 @@ summaryTipTextLabel.AutoEllipsis = true;
             return;
         }
 
-        await CarregarPermissoesDoPerfilSelecionadoAsync();
+        _carregarPermissoesPerfilTask = CarregarPermissoesDoPerfilSelecionadoAsync();
+        await _carregarPermissoesPerfilTask;
     }
 
     private async Task CarregarPermissoesDoPerfilSelecionadoAsync()
     {
-        _codigosPermissaoPerfilSelecionado.Clear();
         long codigoPerfil = ObterCodigoPerfilSelecionado();
+        CancellationTokenSource atual = new();
+        CancellationTokenSource? anterior =
+            Interlocked.Exchange(ref _carregarPermissoesPerfilCts, atual);
+        anterior?.Cancel();
+        anterior?.Dispose();
 
-        if (codigoPerfil > 0)
+        _codigosPermissaoPerfilSelecionado.Clear();
+        AtualizarWorkspacePermissao();
+
+        if (codigoPerfil <= 0)
         {
-            IReadOnlyList<long> codigos = await _permissaoController.ListarCodigosPermissaoPorPerfilAsync(codigoPerfil);
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<long> codigos =
+                await _permissaoController.ListarCodigosPermissaoPorPerfilAsync(codigoPerfil, atual.Token);
+            if (!PerfilSolicitadoAindaEhAtual(codigoPerfil, atual)) return;
+
             foreach (long codigo in codigos)
             {
                 _codigosPermissaoPerfilSelecionado.Add(codigo);
             }
-        }
 
-        AtualizarWorkspacePermissao();
+            AtualizarWorkspacePermissao();
+        }
+        catch (OperationCanceledException) when (atual.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!PerfilSolicitadoAindaEhAtual(codigoPerfil, atual)) return;
+            MessageBox.Show(
+                await FugaPET_Dev.Tela.Comum.ErroUsuarioHelper.TratarAsync(
+                    "PERMISSAO_PERFIL_CARREGAR_ERRO",
+                    ex,
+                    "PermissaoForm",
+                    "Não foi possível carregar as permissões do perfil. Acione o suporte."),
+                "Permissões",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private async Task EditarPermissaoAsync()
@@ -1574,7 +1608,8 @@ summaryTipTextLabel.AutoEllipsis = true;
 
         if (resultado.Sucesso)
         {
-            await CarregarPermissoesDoPerfilSelecionadoAsync();
+            _carregarPermissoesPerfilTask = CarregarPermissoesDoPerfilSelecionadoAsync();
+            await _carregarPermissoesPerfilTask;
         }
     }
 
@@ -1590,6 +1625,19 @@ summaryTipTextLabel.AutoEllipsis = true;
         return _filtroPerfilComboBox?.SelectedItem is PerfilFiltroItem item
             ? item.NomePerfil
             : "Selecione um perfil";
+    }
+
+    private bool PerfilSolicitadoAindaEhAtual(long codigoPerfil, CancellationTokenSource origem)
+        => !origem.IsCancellationRequested
+           && ReferenceEquals(_carregarPermissoesPerfilCts, origem)
+           && ObterCodigoPerfilSelecionado() == codigoPerfil;
+
+    private void CancelarCarregamentoPermissoesPerfil()
+    {
+        CancellationTokenSource? anterior =
+            Interlocked.Exchange(ref _carregarPermissoesPerfilCts, null);
+        anterior?.Cancel();
+        anterior?.Dispose();
     }
 
     /// <summary>
@@ -1998,12 +2046,12 @@ summaryTipTextLabel.AutoEllipsis = true;
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        CancelarCarregamentoPermissoesPerfil();
         _footerClockTimer?.Stop();
         _footerClockTimer?.Dispose();
         base.OnFormClosed(e);
     }
 }
-
 
 
 

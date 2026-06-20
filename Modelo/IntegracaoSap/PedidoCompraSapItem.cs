@@ -2,11 +2,11 @@ namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Item de um pedido de compra vindo do SAP (API_PURCHASEORDER_2), preparado para a
-/// carga no cache local <c>homologacao.sap_pedido_compra_item</c>.
+/// carga no cache local <c>desenvolvimento.sap_pedido_compra_item</c>.
 /// </summary>
 public sealed record PedidoCompraSapItem
 {
-    /// <summary>PK local do item (homologacao.sap_pedido_compra_item). 0 quando vindo da API.</summary>
+    /// <summary>PK local do item (desenvolvimento.sap_pedido_compra_item). 0 quando vindo da API.</summary>
     public long CodigoItem { get; init; }
 
     /// <summary>PurchaseOrderItem — numero do item do pedido.</summary>
@@ -35,6 +35,9 @@ public sealed record PedidoCompraSapItem
 
     /// <summary>MaterialGroup — grupo de material do item (mapeia <c>grupo_material</c>).</summary>
     public string? GrupoMaterial { get; init; }
+
+    /// <summary>IsCompletelyDelivered — item totalmente entregue. Usado no filtro de escopo (Jales); nao persistido.</summary>
+    public bool? CompletamenteEntregue { get; init; }
 
     /// <summary>JSON original do item retornado pela API.</summary>
     public string? PayloadOriginalJson { get; init; }

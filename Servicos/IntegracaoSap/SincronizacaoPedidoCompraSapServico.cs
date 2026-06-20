@@ -18,6 +18,11 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
     private readonly Lazy<PedidoCompraSapApiClient> _clienteSap;
     private readonly ILogIntegracaoSapServico _logIntegracaoSapServico;
 
+    // Mensagem unica ao operador quando o pedido nao pode ser usado na entrada: nao encontrado no
+    // SAP OU fora do escopo autorizado. Nao distingue os dois casos de proposito (nao revela ao
+    // operador se o numero existe no SAP); o motivo tecnico fica registrado no log de integracao.
+    internal const string MensagemPedidoNaoLiberado = "Pedido nao liberado para entrada.";
+
     public SincronizacaoPedidoCompraSapServico()
         : this(
             LeitorConfiguracaoSap.Carregar(),
@@ -91,8 +96,6 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
                 cancellationToken);
             if (pedido is null)
             {
-                ResultadoOperacao naoEncontrado =
-                    ResultadoOperacao.Falha("Pedido de compra nao encontrado no SAP.");
                 await RegistrarLogAsync(
                     "CONSULTA_PEDIDO",
                     numeroPedido,
@@ -100,26 +103,8 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
                     cronometro,
                     "NAO_ENCONTRADO",
                     404,
-                    naoEncontrado.Mensagem);
-                return naoEncontrado;
-            }
-
-            // H6: Incoterms NAO bloqueia mais a existencia/consulta do pedido. So bloqueia quando
-            // a regra de elegibilidade estiver explicitamente ligada (FUGAPET_ENTRADA_EXIGIR_INCOTERMS),
-            // e ainda assim NAO inativa o pedido: apenas informa o motivo ao usuario.
-            if (ExigeIncotermsParaEntrada() && !PossuiIncotermsObrigatorios(pedido))
-            {
-                ResultadoOperacao incotermsInvalidos = ResultadoOperacao.Falha(
-                    "Pedido nao elegivel para entrada: Incoterms obrigatorios ausentes (regra configuravel).");
-                await RegistrarLogAsync(
-                    "CONSULTA_PEDIDO",
-                    numeroPedido,
-                    correlationId,
-                    cronometro,
-                    "BLOQUEADO",
-                    200,
-                    incotermsInvalidos.Mensagem);
-                return incotermsInvalidos;
+                    "Pedido nao encontrado no SAP.");
+                return ResultadoOperacao.Falha(MensagemPedidoNaoLiberado);
             }
 
             if (pedido.Itens.Count == 0)
@@ -137,7 +122,25 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
                 return semItens;
             }
 
-            int processados = await _repositorio.SincronizarAsync([pedido], cancellationToken);
+            // Escopo Jales: so persiste no cache pedidos dentro do escopo autorizado (grupo de
+            // compras 700, nao totalmente entregue e com item no centro 3007). GET por chave do
+            // OData nao aceita $filter, entao a regra e reaplicada aqui (fonte unica de escopo).
+            if (!EscopoPedidoSapJales.PedidoElegivel(pedido))
+            {
+                await RegistrarLogAsync(
+                    "CONSULTA_PEDIDO",
+                    numeroPedido,
+                    correlationId,
+                    cronometro,
+                    "BLOQUEADO",
+                    200,
+                    "Pedido fora do escopo autorizado (grupo de compras / centro / entrega).");
+                return ResultadoOperacao.Falha(MensagemPedidoNaoLiberado);
+            }
+
+            // Traz para o cache somente os itens elegiveis (centro 3007 e nao totalmente entregues).
+            PedidoCompraSap pedidoElegivel = EscopoPedidoSapJales.FiltrarItensElegiveis(pedido);
+            int processados = await _repositorio.SincronizarAsync([pedidoElegivel], cancellationToken);
             ResultadoOperacao sucesso =
                 ResultadoOperacao.Ok("Pedido de compra atualizado pelo SAP.", processados);
             await RegistrarLogAsync(
@@ -223,11 +226,15 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
             pedidosRecebidos = consulta.Pedidos.Count;
             itensRecebidos = consulta.ItensProcessados;
 
-            // H6: NAO filtrar por Incoterms. Cacheia todos os pedidos retornados pelo SAP
-            // (Incoterms deixou de ser regra de existencia/cache). A inativacao de ausentes
-            // abaixo trata apenas pedidos que sairam do escopo retornado pelo SAP.
+            // H6: NAO filtrar por Incoterms. Escopo Jales: traz apenas itens elegiveis (centro 3007
+            // nao entregues) e descarta pedidos que ficaram sem item elegivel. O $filter de cabecalho
+            // ja restringe por grupo/centro, mas os itens entregues ainda vem no expand.
+            IReadOnlyList<PedidoCompraSap> pedidosElegiveis = consulta.Pedidos
+                .Select(EscopoPedidoSapJales.FiltrarItensElegiveis)
+                .Where(pedido => pedido.Itens.Count > 0)
+                .ToList();
             int processados = await _repositorio.SincronizarCargaCompletaAsync(
-                consulta.Pedidos,
+                pedidosElegiveis,
                 cancellationToken);
 
             cronometro.Stop();
@@ -354,30 +361,14 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
         }
     }
 
-    /// <summary>Variavel que liga a exigencia de Incoterms para elegibilidade de entrada (padrao: desligado).</summary>
-    public const string VariavelExigirIncoterms = "FUGAPET_ENTRADA_EXIGIR_INCOTERMS";
-
-    // Regra de ELEGIBILIDADE (nao de existencia): por padrao NAO exige Incoterms, evitando que
-    // pedidos validos deixem de aparecer. So exige quando explicitamente configurado.
-    private static bool ExigeIncotermsParaEntrada()
-    {
-        string? valor = Environment.GetEnvironmentVariable(VariavelExigirIncoterms);
-        return string.Equals(valor?.Trim(), "true", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(valor?.Trim(), "1", StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Elegibilidade de Incoterms (cabecalho) para acoes que exigem (ex.: edicao/PATCH no SAP).
-    /// NAO e regra de existencia do pedido no cache (H6).
-    /// </summary>
-    private static bool PossuiIncotermsObrigatorios(PedidoCompraSap pedido)
-        => !string.IsNullOrWhiteSpace(pedido.IncotermsClassification)
-           && !string.IsNullOrWhiteSpace(pedido.IncotermsTransferLocation)
-           && !string.IsNullOrWhiteSpace(pedido.IncotermsLocation1);
-
     /// <summary>Numeros de pedido disponiveis no cache local (para o combo da tela de Entrada).</summary>
     public Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default)
         => _repositorio.ListarNumerosAsync(cancellationToken);
+
+    public Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ObterPedidoAgregadoAsync(numeroPedido, cancellationToken);
 
     /// <summary>Fornecedor vinculado ao pedido no cache local, para preencher a tela de Entrada.</summary>
     public Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)

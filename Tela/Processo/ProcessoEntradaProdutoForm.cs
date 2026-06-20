@@ -8,6 +8,7 @@ using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Tela.Teste;
 using FugaPET_Dev.Tela;
 using FugaPET_Dev.Tela.Comum;
@@ -37,8 +38,8 @@ public partial class ProcessoEntradaProdutoForm : Form
     private static readonly Color ActionDisabledColor = Color.FromArgb(82, 87, 96);
     private static readonly Color ReadingStatusInactiveColor = Color.FromArgb(220, 53, 69);
     private static readonly Color ReadingStatusActiveColor = Color.FromArgb(34, 166, 82);
-    private readonly BalancaLeituraServico _balancaLeituraServico = new();
-    private readonly ImpressoraEtiquetaServico _impressoraEtiquetaServico = new();
+    private readonly BalancaLeituraServico _balancaLeituraServico;
+    private readonly ImpressaoEntradaServico _impressaoEntrada;
     private bool _isStartActionHovering;
     private bool _isReadWeightHovering;
     private Panel? _hoveredDangerActionPanel;
@@ -49,6 +50,7 @@ public partial class ProcessoEntradaProdutoForm : Form
     private Task? _productionDevicesWarmUpTask;
     private readonly SemaphoreSlim _consultaPedidoGate = new(1, 1);
     private CancellationTokenSource? _consultaPedidoCts;
+    private Task _consultaPedidoTask = Task.CompletedTask;
     private string _numeroPedidoCarregado = string.Empty;
     private ContextoTerminalLocal? _contextoTerminal;
     private long? _idSetorSelecionado;
@@ -56,31 +58,39 @@ public partial class ProcessoEntradaProdutoForm : Form
     private long? _idTaraSelecionada;
     private long? _idEtiquetaSelecionada;
 
-    private readonly IPedidoCompraSapServico _pedidoCompraServico;
-    private readonly AutorizacaoCentroDepositoEntrada _autorizacaoCentroDeposito =
-        AutorizacaoCentroDepositoEntrada.CarregarDoAmbiente();
-    private readonly EntradaProdutoServico _entradaServico = new();
+    // H9: os servicos vem do controller (Form nao instancia servicos concretos nem fala direto com
+    // o SAP). A escolha mock/real e da fabrica, encapsulada no controller/IntegracaoEntradaSapServico.
+    private readonly global::FugaPET_Dev.Controle.Processo.EntradaProdutoController _controller;
+    private readonly EntradaProdutoServico _entradaServico;
     private readonly Dictionary<long, PedidoCompraSapItem> _itensCarregadosPorCodigo = [];
+    private readonly Dictionary<long, List<EntradaProdutoPesagem>> _leiturasPorItem = [];
+    private long? _codigoLancamentoPersistido;
     private readonly CancellationTokenSource _fechamentoTelaCts = new();
-    private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController =
-        global::FugaPET_Dev.Controle.FabricaControladoresCadastro.CriarTaraController();
+    private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController;
 
     public ProcessoEntradaProdutoForm()
-        : this(FabricaPedidoCompraSapServico.Criar())
+        : this(new global::FugaPET_Dev.Controle.Processo.EntradaProdutoController())
     {
     }
 
-    internal ProcessoEntradaProdutoForm(IPedidoCompraSapServico pedidoCompraServico)
+    internal ProcessoEntradaProdutoForm(global::FugaPET_Dev.Controle.Processo.EntradaProdutoController controller)
     {
-        _pedidoCompraServico = pedidoCompraServico
-            ?? throw new ArgumentNullException(nameof(pedidoCompraServico));
+        _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        _entradaServico = _controller.EntradaProduto;
+        _balancaLeituraServico = _controller.BalancaLeitura;
+        _impressaoEntrada = _controller.Impressao;
+        _taraController = _controller.Tara;
         InitializeComponent();
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
-        if (_pedidoCompraServico.EhSimulado)
+        if (_controller.Sap.EhSimulado)
         {
-            // Entrada de Produto: liberada para acesso mesmo com dados simulados (em desenvolvimento).
-            // Diferente das demais telas simuladas, NAO bloqueia o acesso; apenas mantem a faixa de aviso.
+            if (!global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.PodeUsarDadosSimulados())
+            {
+                global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.BloquearTelaSimulada(this);
+                return;
+            }
+
             global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.Aplicar(headerSubtitleLabel);
             global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.AplicarFaixa(this);
         }
@@ -92,7 +102,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         ConfigureProductionSearchBox();
         ConfigurarComboPedidos();
         ConfigureSideActionButtonIcons();
-        if (_pedidoCompraServico.EhSimulado)
+        if (_controller.Sap.EhSimulado)
         {
             LoadMockData();
         }
@@ -255,7 +265,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void AtualizarStatusSap()
     {
-        bool sapConfigurado = _pedidoCompraServico.SapConfigurado;
+        bool sapConfigurado = _controller.Sap.SapConfigurado;
         sapStatusDotLabel.ForeColor = sapConfigurado
             ? Color.FromArgb(34, 197, 94)
             : Color.FromArgb(250, 204, 21);
@@ -857,7 +867,7 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         try
         {
-            await _impressoraEtiquetaServico.AquecerAsync();
+            await _impressaoEntrada.AquecerAsync();
         }
         catch (Exception)
         {
@@ -905,7 +915,8 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
     }
 
-    // Varre o grid e grava em pesagem_entrada_item os pesos lidos/digitados de cada item.
+    // Captura as leituras do grid, delega a finalizacao (persistencia + escrita SAP) ao controller
+    // e apenas apresenta o resultado. Regra de negocio/PATCH ficam no controller/servicos (H9 Etapa 2).
     private async Task GravarPesagensAsync()
     {
         if (!EstadoIntegracaoBanco.Habilitado)
@@ -914,8 +925,15 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        List<PesagemEntradaItem> pesagens = [];
-        List<AtualizacaoPesoSap> atualizacoesSap = [];
+        EntradaProdutoLancamento lancamento = MontarLancamentoDoGrid();
+        ResultadoFinalizacaoEntrada resultado =
+            await _controller.FinalizarLeituraAsync(lancamento, _fechamentoTelaCts.Token);
+        ApresentarResultadoFinalizacao(resultado);
+    }
+
+    // Le o grid de producao e monta o lancamento (captura de selecao da tela).
+    private EntradaProdutoLancamento MontarLancamentoDoGrid()
+    {
         List<EntradaProdutoItem> itensLancamento = [];
         string numeroPedido = pedidoComboBox.Text.Trim();
         foreach (DataGridViewRow row in productionDataGridView.Rows)
@@ -925,177 +943,115 @@ public partial class ProcessoEntradaProdutoForm : Form
                 continue;
             }
 
-            string pesoTexto = GetCellValue(row, "productionPesoLidoColumn");
-            if (string.IsNullOrWhiteSpace(pesoTexto))
-            {
-                continue;
-            }
-
             if (!long.TryParse(GetCellValue(row, "productionItemIdColumn"), out long codigoItem) || codigoItem <= 0)
             {
                 continue;
             }
 
-            if (!TryParsePesoKg(pesoTexto, out decimal pesoKg))
+            IReadOnlyList<EntradaProdutoPesagem> leituras = ObterLeiturasItem(codigoItem);
+            if (leituras.Count == 0)
             {
                 continue;
             }
 
-            if (!LinhaPossuiTaraSelecionada(row, out global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro? tara))
+            if (!LinhaPossuiTaraSelecionada(row, out _))
             {
                 continue;
             }
 
-            string origem = GetCellValue(row, "productionPesoOrigemColumn");
-            pesagens.Add(new PesagemEntradaItem
-            {
-                CodigoSapPedidoCompraItem = codigoItem,
-                PesoKg = pesoKg,
-                OrigemPeso = string.IsNullOrWhiteSpace(origem) ? "LIDO" : origem
-            });
-
-            string numeroItem = GetCellValue(row, "productionNumeroItemColumn");
-            decimal pesoLiquido = Math.Max(0m, pesoKg - tara.PesoKg);
-            if (!string.IsNullOrWhiteSpace(numeroPedido) && !string.IsNullOrWhiteSpace(numeroItem))
-            {
-                atualizacoesSap.Add(new AtualizacaoPesoSap(numeroPedido, numeroItem, pesoLiquido, pesoKg));
-            }
-
-            // H7: monta o item do lancamento (peso bruto = leitura; tara = tara selecionada; liquido = bruto - tara).
+            decimal pesoLiquidoTotal = EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido(leituras);
             _itensCarregadosPorCodigo.TryGetValue(codigoItem, out PedidoCompraSapItem? itemCarregado);
-            string origemPesagem = string.Equals(origem?.Trim(), "DIGITADO", StringComparison.OrdinalIgnoreCase)
-                ? "MANUAL"
-                : "BALANCA";
             itensLancamento.Add(new EntradaProdutoItem
             {
                 CodigoSapPedidoCompraItem = codigoItem,
-                NumeroItem = numeroItem,
+                NumeroItem = GetCellValue(row, "productionNumeroItemColumn"),
                 Material = GetCellValue(row, "productionCodeColumn"),
                 Centro = itemCarregado?.Centro,
                 Deposito = itemCarregado?.Deposito,
                 Unidade = GetCellValue(row, "productionWeightColumn"),
                 QuantidadePrevista = itemCarregado?.Quantidade,
-                QuantidadeRecebida = pesoLiquido,
-                Pesagens =
-                [
-                    new EntradaProdutoPesagem
-                    {
-                        PesoBrutoKg = pesoKg,
-                        PesoTaraKg = tara.PesoKg,
-                        PesoLiquidoKg = pesoLiquido,
-                        CodigoTara = tara.CodigoTara,
-                        Origem = origemPesagem
-                    }
-                ]
+                QuantidadeRecebida = pesoLiquidoTotal,
+                Pesagens = leituras
             });
         }
 
-        if (pesagens.Count == 0)
+        return new EntradaProdutoLancamento
         {
-            statusLabel.Text = "Producao parada. Nenhum peso para gravar.";
-            MessageBox.Show(
-                "Nenhuma pesagem elegivel foi encontrada para finalizar.\n\nConfirme se o item possui peso e tara selecionada.",
-                "Finalização da pesagem",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-            return;
-        }
+            NumeroPedido = numeroPedido,
+            Fornecedor = lotTextBox.Text.Trim(),
+            CodigoSetor = _idSetorSelecionado,
+            Terminal = ObterNomeTerminalAtual(),
+            Itens = itensLancamento
+        };
+    }
 
-        try
+    // Apresenta o resultado da finalizacao (somente UI: status + dialogo).
+    private void ApresentarResultadoFinalizacao(ResultadoFinalizacaoEntrada resultado)
+    {
+        switch (resultado.Cenario)
         {
-            EntradaProdutoLancamento lancamento = new()
-            {
-                NumeroPedido = numeroPedido,
-                Fornecedor = lotTextBox.Text.Trim(),
-                CodigoSetor = _idSetorSelecionado,
-                Terminal = Environment.MachineName,
-                Itens = itensLancamento
-            };
-            long codigoLancamento = await _entradaServico.RegistrarLancamentoAsync(lancamento);
-            int gravados = itensLancamento.Count;
-            statusLabel.Text = $"Producao parada. Lancamento {codigoLancamento} gravado ({gravados} item(ns)).";
+            case CenarioFinalizacaoEntrada.NenhumaLeitura:
+                statusLabel.Text = "Producao parada. Nenhuma leitura para gravar.";
+                MessageBox.Show(
+                    "Nenhuma leitura foi encontrada para finalizar.\n\nConfirme se o item possui leituras ou cancelamentos registrados.",
+                    "Finalização da pesagem",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                break;
 
-            if (atualizacoesSap.Count > 0
-                && PossuiPermissaoEntrada(PermissoesSistema.Acoes.EnviarSap))
-            {
-                await AtualizarPesosNoSapAsync(atualizacoesSap, gravados);
-            }
-            else if (atualizacoesSap.Count > 0)
-            {
+            case CenarioFinalizacaoEntrada.LancamentoNaoGravado:
+                statusLabel.Text = "Producao parada. Lancamento nao foi gravado.";
+                MessageBox.Show(
+                    resultado.MensagemFalhaLancamento ?? string.Empty,
+                    "Lancamento nao gravado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                break;
+
+            case CenarioFinalizacaoEntrada.GravadoSemSap:
+                _codigoLancamentoPersistido = resultado.CodigoLancamento;
                 statusLabel.Text =
-                    $"Producao parada. {gravados} pesagem(ns) gravada(s) localmente. Envio ao SAP nao autorizado para o usuario.";
-            }
-            else
-            {
-                statusLabel.Text =
-                    $"Producao parada. {gravados} pesagem(ns) gravada(s) localmente, mas faltaram dados do item para enviar ao SAP.";
+                    $"Producao parada. {resultado.Gravados} pesagem(ns) gravada(s) localmente, mas faltaram dados do item para enviar ao SAP.";
                 MessageBox.Show(
                     "A pesagem foi salva no banco local, mas nenhuma atualização SAP pôde ser montada.\n\nVerifique o número do pedido e o número do item.",
                     "Atualização SAP",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
-            }
-        }
-        catch (Exception ex)
-        {
-            SincronizacaoPedidoCompraSapServico.RegistrarDiagnostico($"ERRO ao gravar pesagens.{Environment.NewLine}{ex}");
-            statusLabel.Text = "Producao parada, mas nao foi possivel gravar as pesagens no banco.";
-        }
-    }
+                break;
 
-    private async Task AtualizarPesosNoSapAsync(
-        IReadOnlyList<AtualizacaoPesoSap> atualizacoes,
-        int gravados)
-    {
-        int enviados = 0;
-        string? ultimaFalha = null;
+            case CenarioFinalizacaoEntrada.GravadoSapNaoAutorizado:
+                _codigoLancamentoPersistido = resultado.CodigoLancamento;
+                statusLabel.Text =
+                    $"Producao parada. {resultado.Gravados} pesagem(ns) gravada(s) localmente. Envio ao SAP nao autorizado para o usuario.";
+                break;
 
-        foreach (AtualizacaoPesoSap atualizacao in atualizacoes)
-        {
-            ResultadoOperacao resultado = await _pedidoCompraServico.AtualizarPesoItemSapAsync(
-                atualizacao.NumeroPedido,
-                atualizacao.NumeroItem,
-                atualizacao.PesoLiquido,
-                atualizacao.PesoBruto,
-                _fechamentoTelaCts.Token);
+            case CenarioFinalizacaoEntrada.GravadoSapEnviado:
+                _codigoLancamentoPersistido = resultado.CodigoLancamento;
+                statusLabel.Text =
+                    $"Producao parada. {resultado.Gravados} pesagem(ns) gravada(s) e {resultado.SapEnviados} peso(s) atualizado(s) no SAP.";
+                MessageBox.Show(
+                    $"{resultado.SapEnviados} peso(s) atualizado(s) com sucesso no SAP.",
+                    "Atualização SAP",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                break;
 
-            if (resultado.Sucesso)
-            {
-                enviados++;
-            }
-            else
-            {
-                ultimaFalha = resultado.Mensagem;
-            }
-        }
+            case CenarioFinalizacaoEntrada.GravadoSapParcial:
+                _codigoLancamentoPersistido = resultado.CodigoLancamento;
+                statusLabel.Text =
+                    $"Producao parada. Pesagens salvas localmente. SAP: {resultado.UltimaFalhaSap ?? "atualizacao parcial"}.";
+                MessageBox.Show(
+                    $"As pesagens foram salvas no banco local, mas o SAP nao confirmou todos os pesos.\n\n{resultado.UltimaFalhaSap ?? "Atualizacao parcial."}",
+                    "Atualização SAP",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                break;
 
-        statusLabel.Text = enviados == atualizacoes.Count
-            ? $"Producao parada. {gravados} pesagem(ns) gravada(s) e {enviados} peso(s) atualizado(s) no SAP."
-            : $"Producao parada. Pesagens salvas localmente. SAP: {ultimaFalha ?? "atualizacao parcial"}.";
-
-        if (enviados == atualizacoes.Count)
-        {
-            MessageBox.Show(
-                $"{enviados} peso(s) atualizado(s) com sucesso no SAP.",
-                "Atualização SAP",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-        }
-        else
-        {
-            MessageBox.Show(
-                $"As pesagens foram salvas no banco local, mas o SAP nao confirmou todos os pesos.\n\n{ultimaFalha ?? "Atualizacao parcial."}",
-                "Atualização SAP",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+            case CenarioFinalizacaoEntrada.ErroAoGravar:
+                statusLabel.Text = "Producao parada, mas nao foi possivel gravar as pesagens no banco.";
+                break;
         }
     }
-
-    private sealed record AtualizacaoPesoSap(
-        string NumeroPedido,
-        string NumeroItem,
-        decimal PesoLiquido,
-        decimal PesoBruto);
 
     private static bool TryParsePesoKg(string texto, out decimal peso)
     {
@@ -1152,7 +1108,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         try
         {
-            await _impressoraEtiquetaServico.GarantirImpressoraDisponivelAsync();
+            await _impressaoEntrada.GarantirImpressoraDisponivelAsync();
             statusLabel.Text = "Lendo peso da balanca...";
 
             ResultadoLeituraPeso leitura = await _balancaLeituraServico.LerPesoAsync();
@@ -1168,9 +1124,12 @@ public partial class ProcessoEntradaProdutoForm : Form
             }
 
             string weight = leitura.Peso;
-            RegistrarPesoLido(linhaItem, weight);
+            if (!RegistrarPesoLido(linhaItem, weight))
+            {
+                return;
+            }
             DadosEtiquetaMateriaPrima label = ConstruirDadosEtiquetaMateriaPrima(linhaItem);
-            await _impressoraEtiquetaServico.ImprimirEtiquetaMateriaPrimaAsync(label);
+            await _impressaoEntrada.ImprimirEtiquetaMateriaPrimaAsync(label);
             statusLabel.Text = $"Peso {weight} registrado no item {GetCellValue(linhaItem, "productionCodeColumn")} e etiqueta {label.CodigoProduto} enviada para impressao.";
         }
         catch (Exception ex)
@@ -1204,13 +1163,21 @@ public partial class ProcessoEntradaProdutoForm : Form
     }
 
     // Grava o peso lido da balanca na coluna Peso da linha do item selecionado.
-    private void RegistrarPesoLido(DataGridViewRow linhaItem, string weight)
+    private bool RegistrarPesoLido(DataGridViewRow linhaItem, string weight)
     {
-        if (!SetCellValue(linhaItem, "productionPesoLidoColumn", weight)
-            || !SetCellValue(linhaItem, "productionPesoOrigemColumn", "LIDO"))
+        if (!TryParsePesoKg(weight, out decimal pesoBruto))
         {
-            statusLabel.Text = "Nao foi possivel localizar as colunas de peso do item.";
-            return;
+            statusLabel.Text = "Peso lido invalido.";
+            return false;
+        }
+
+        if (!AdicionarLeituraNaLinha(
+                linhaItem,
+                pesoBruto,
+                "BALANCA",
+                weight))
+        {
+            return false;
         }
 
         ApplyProductionRowStyle(linhaItem, linhaItem.Index);
@@ -1218,6 +1185,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         linhaItem.Selected = true;
         SetCurrentProductionCell(linhaItem, "productionPesoLidoColumn");
         UpdateProductionCounters();
+        return true;
     }
 
     private async void DeleteLastProductionRow_Click(object? sender, EventArgs e)
@@ -1249,6 +1217,12 @@ public partial class ProcessoEntradaProdutoForm : Form
         if (!ConfirmDeleteLastProductionRow(productionCode))
         {
             statusLabel.Text = "Exclusao cancelada.";
+            return;
+        }
+
+        if (CancelarLeiturasDaLinha(lastRow))
+        {
+            statusLabel.Text = $"Leituras do item {productionCode} marcadas como canceladas.";
             return;
         }
 
@@ -1303,6 +1277,12 @@ public partial class ProcessoEntradaProdutoForm : Form
         if (!ConfirmProductionRowDelete(productionCode, "Deseja realmente excluir a etiqueta informada?"))
         {
             statusLabel.Text = "Exclusao cancelada.";
+            return;
+        }
+
+        if (CancelarLeiturasDaLinha(row))
+        {
+            statusLabel.Text = $"Leituras do item {productionCode} marcadas como canceladas.";
             return;
         }
 
@@ -1568,8 +1548,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             }
         }
 
-        string currentWeight = GetCellValue(selectedRow, "productionPesoLidoColumn");
-        string? manualWeight = PromptManualProductionWeight(currentWeight);
+        string? manualWeight = PromptManualProductionWeight(string.Empty);
         if (string.IsNullOrWhiteSpace(manualWeight))
         {
             statusLabel.Text = "Peso manual cancelado.";
@@ -1586,10 +1565,13 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (!SetCellValue(selectedRow, "productionPesoLidoColumn", normalizedWeight)
-            || !SetCellValue(selectedRow, "productionPesoOrigemColumn", "DIGITADO"))
+        if (!TryParsePesoKg(normalizedWeight, out decimal pesoManual)
+            || !AdicionarLeituraNaLinha(
+                selectedRow,
+                pesoManual,
+                "MANUAL",
+                manualWeight))
         {
-            statusLabel.Text = "Nao foi possivel localizar as colunas de peso do item.";
             return;
         }
 
@@ -1598,7 +1580,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         selectedRow.Selected = true;
         SetCurrentProductionCell(selectedRow, "productionPesoLidoColumn");
         UpdateProductionCounters();
-        statusLabel.Text = $"Peso manual atualizado para a linha {GetCellValue(selectedRow, "productionCodeColumn")}.";
+        statusLabel.Text = $"Peso manual adicionado a linha {GetCellValue(selectedRow, "productionCodeColumn")}.";
     }
 
     private void UpdateProductionState(bool started)
@@ -1748,6 +1730,27 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
+        if (_codigoLancamentoPersistido is not long codigoLancamento
+            || codigoLancamento <= 0)
+        {
+            statusLabel.Text = "Finalize e persista o lancamento antes de reimprimir.";
+            MessageBox.Show(
+                "A reimpressao usa os dados persistidos.\n\nFinalize o lancamento antes de reimprimir a etiqueta.",
+                "Reimpressao indisponivel",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!long.TryParse(
+                GetCellValue(row, "productionItemIdColumn"),
+                out long codigoSapItem)
+            || codigoSapItem <= 0)
+        {
+            statusLabel.Text = "Item invalido para reimpressao.";
+            return;
+        }
+
         string itemPedido = GetCellValue(row, "productionCodeColumn");
         using ConfirmarReimpressaoEtiquetaForm confirmacao = new(itemPedido);
         if (confirmacao.ShowDialog(this) != DialogResult.Yes)
@@ -1756,10 +1759,44 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        await ImprimirEtiquetaDaLinhaAsync(
-            row,
-            "Etiqueta reimpressa com sucesso.",
-            reimpressao: true);
+        try
+        {
+            EntradaProdutoItemPersistido? itemPersistido =
+                await _entradaServico.ObterItemPersistidoAsync(
+                    codigoLancamento,
+                    codigoSapItem,
+                    _fechamentoTelaCts.Token);
+            if (itemPersistido is null || itemPersistido.PesoLiquidoTotalKg <= 0m)
+            {
+                statusLabel.Text = "Dados persistidos nao encontrados para reimpressao.";
+                MessageBox.Show(
+                    "Nao foi encontrada pesagem valida persistida para este item.",
+                    "Reimpressao indisponivel",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            DadosEtiquetaMateriaPrima etiqueta =
+                ImpressaoEntradaServico.MontarEtiqueta(itemPersistido, expirationDateTextBox.Text);
+            await _impressaoEntrada.ReimprimirEtiquetaMateriaPrimaAsync(etiqueta);
+            statusLabel.Text =
+                $"Etiqueta reimpressa com dados do lancamento {codigoLancamento}.";
+        }
+        catch (Exception ex)
+        {
+            string mensagem = await ErroUsuarioHelper.TratarAsync(
+                "REIMPRESSAO_ETIQUETA_ERRO",
+                ex,
+                "ProcessoEntradaProdutoForm",
+                "Nao foi possivel reimprimir a etiqueta. Acione o suporte.");
+            statusLabel.Text = mensagem;
+            MessageBox.Show(
+                mensagem,
+                "Erro ao reimprimir etiqueta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private async Task AbrirPesagemMultiplaParaLinhaAsync(DataGridViewRow linhaItem)
@@ -1780,11 +1817,21 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
 
         string itemPedido = GetCellValue(linhaItem, "productionCodeColumn");
-        string taraResumo = $"Tara: {tara.NomeTara} ({tara.PesoGrama} g)";
-        string pesoAtual = GetCellValue(linhaItem, "productionPesoLidoColumn");
         string itemId = GetCellValue(linhaItem, "productionItemIdColumn");
+        if (!long.TryParse(itemId, out long codigoItem) || codigoItem <= 0)
+        {
+            statusLabel.Text = "Item invalido para pesagem.";
+            return;
+        }
 
-        using PesagemMultiplaItemForm form = new(_balancaLeituraServico, itemPedido, taraResumo, pesoAtual);
+        IReadOnlyList<EntradaProdutoPesagem> leiturasAtuais =
+            ObterLeiturasItem(codigoItem);
+        using PesagemMultiplaItemForm form = new(
+            _balancaLeituraServico,
+            itemPedido,
+            tara,
+            _idBalancaSelecionada,
+            leiturasAtuais);
         if (form.ShowDialog(this) != DialogResult.OK)
         {
             statusLabel.Text = "Pesagem múltipla cancelada.";
@@ -1795,9 +1842,9 @@ public partial class ProcessoEntradaProdutoForm : Form
         // desatualizada se o grid foi recarregado. Garante que o peso somado seja gravado na linha viva.
         DataGridViewRow linhaAlvo = LocalizarLinhaProducaoPorItemId(itemId) ?? linhaItem;
         linhaAlvo.Tag = tara;
+        _leiturasPorItem[codigoItem] = form.Pesagens.ToList();
 
-        if (!SetCellValue(linhaAlvo, "productionPesoLidoColumn", form.PesoTotalTexto)
-            || !SetCellValue(linhaAlvo, "productionPesoOrigemColumn", "MULTIPLA"))
+        if (!AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem]))
         {
             statusLabel.Text = "Nao foi possivel consolidar o peso na linha do item.";
             MessageBox.Show(
@@ -1813,9 +1860,9 @@ public partial class ProcessoEntradaProdutoForm : Form
         linhaAlvo.Selected = true;
         SetCurrentProductionCell(linhaAlvo, "productionPesoLidoColumn");
         UpdateProductionCounters();
-        statusLabel.Text = $"Peso total {form.PesoTotalTexto} registrado no item {itemPedido}.";
+        statusLabel.Text = $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}.";
         MessageBox.Show(
-            $"Peso total {form.PesoTotalTexto} registrado no item {itemPedido}.",
+            $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}.",
             "Pesagem múltipla",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
@@ -1870,7 +1917,9 @@ public partial class ProcessoEntradaProdutoForm : Form
             }
 
             linhaItem.Tag = form.TaraSelecionada;
-            string tooltipTara = $"Tara: {form.TaraSelecionada.NomeTara} ({form.TaraSelecionada.PesoGrama} g)";
+            string tooltipTara =
+                $"Tara: {form.TaraSelecionada.NomeTara} " +
+                $"({form.TaraSelecionada.PesoKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg)";
             foreach (DataGridViewCell cell in linhaItem.Cells)
             {
                 cell.ToolTipText = tooltipTara;
@@ -1884,7 +1933,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
         catch (Exception ex)
         {
-            SincronizacaoPedidoCompraSapServico.RegistrarDiagnostico($"ERRO ao carregar taras para pesagem.{Environment.NewLine}{ex}");
+            _controller.Sap.RegistrarDiagnostico($"ERRO ao carregar taras para pesagem.{Environment.NewLine}{ex}");
             statusLabel.Text = "Não foi possível carregar as taras cadastradas.";
             MessageBox.Show(
                 "Não foi possível carregar as taras cadastradas. Acione o suporte.",
@@ -1991,11 +2040,11 @@ public partial class ProcessoEntradaProdutoForm : Form
             DadosEtiquetaMateriaPrima label = ConstruirDadosEtiquetaMateriaPrima(row);
             if (reimpressao)
             {
-                await _impressoraEtiquetaServico.ReimprimirEtiquetaMateriaPrimaAsync(label);
+                await _impressaoEntrada.ReimprimirEtiquetaMateriaPrimaAsync(label);
             }
             else
             {
-                await _impressoraEtiquetaServico.ImprimirEtiquetaMateriaPrimaAsync(label);
+                await _impressaoEntrada.ImprimirEtiquetaMateriaPrimaAsync(label);
             }
             statusLabel.Text = $"{mensagemSucesso} Item {label.CodigoProduto}.";
         }
@@ -2075,6 +2124,100 @@ public partial class ProcessoEntradaProdutoForm : Form
         tara = linhaItem.Tag as global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro;
         return tara is not null;
     }
+
+    private IReadOnlyList<EntradaProdutoPesagem> ObterLeiturasItem(long codigoItem)
+        => _leiturasPorItem.TryGetValue(codigoItem, out List<EntradaProdutoPesagem>? leituras)
+            ? leituras
+            : [];
+
+    private bool AdicionarLeituraNaLinha(
+        DataGridViewRow linhaItem,
+        decimal pesoBruto,
+        string origem,
+        string leituraOriginal)
+    {
+        if (!long.TryParse(
+                GetCellValue(linhaItem, "productionItemIdColumn"),
+                out long codigoItem)
+            || codigoItem <= 0)
+        {
+            statusLabel.Text = "Item invalido para registrar a leitura.";
+            return false;
+        }
+
+        if (!LinhaPossuiTaraSelecionada(
+                linhaItem,
+                out global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro? tara))
+        {
+            statusLabel.Text = "Selecione a tara antes de registrar a leitura.";
+            return false;
+        }
+
+        decimal pesoLiquido = EntradaProdutoPesagemCalculos.CalcularPesoLiquido(pesoBruto, tara.PesoKg);
+        if (!EntradaProdutoPesagemCalculos.LeituraTemPesoValido(pesoBruto, pesoLiquido))
+        {
+            statusLabel.Text = "O peso bruto deve ser maior que a tara.";
+            return false;
+        }
+
+        List<EntradaProdutoPesagem> leituras =
+            _leiturasPorItem.GetValueOrDefault(codigoItem) ?? [];
+        leituras.Add(EntradaProdutoPesagemCalculos.MontarLeitura(
+            leituras,
+            pesoBruto,
+            tara.PesoKg,
+            tara.CodigoTara,
+            origem,
+            _idBalancaSelecionada,
+            leituraOriginal,
+            DateTimeOffset.Now));
+        _leiturasPorItem[codigoItem] = leituras;
+        return AtualizarTotaisDaLinha(linhaItem, leituras);
+    }
+
+    private static bool AtualizarTotaisDaLinha(
+        DataGridViewRow linhaItem,
+        IReadOnlyList<EntradaProdutoPesagem> leituras)
+    {
+        decimal pesoBrutoTotal =
+            EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(leituras);
+        string origem = EntradaProdutoPesagemCalculos.DescreverOrigemConsolidada(leituras);
+
+        return SetCellValue(
+                linhaItem,
+                "productionPesoLidoColumn",
+                pesoBrutoTotal > 0m
+                    ? pesoBrutoTotal.ToString(
+                        "0.###",
+                        System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
+                    : string.Empty)
+            && SetCellValue(linhaItem, "productionPesoOrigemColumn", origem);
+    }
+
+    private bool CancelarLeiturasDaLinha(DataGridViewRow linhaItem)
+    {
+        if (!long.TryParse(
+                GetCellValue(linhaItem, "productionItemIdColumn"),
+                out long codigoItem)
+            || !_leiturasPorItem.TryGetValue(
+                codigoItem,
+                out List<EntradaProdutoPesagem>? leituras)
+            || leituras.Count == 0)
+        {
+            return false;
+        }
+
+        _leiturasPorItem[codigoItem] =
+            [.. EntradaProdutoPesagemCalculos.Cancelar(leituras)];
+        AtualizarTotaisDaLinha(linhaItem, _leiturasPorItem[codigoItem]);
+        UpdateProductionCounters();
+        return true;
+    }
+
+    private string ObterNomeTerminalAtual()
+        => string.IsNullOrWhiteSpace(_contextoTerminal?.NomeTerminal)
+            ? Environment.MachineName
+            : _contextoTerminal.NomeTerminal;
 
     private string? PromptManualProductionWeight(string currentWeight)
     {
@@ -2286,13 +2429,15 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private async void PedidoComboBox_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        await AtualizarDadosPedidoSelecionadoAsync();
+        _consultaPedidoTask = AtualizarDadosPedidoSelecionadoAsync();
+        await _consultaPedidoTask;
         AtualizarDisponibilidadeInicioLeitura();
     }
 
     private async void PedidoComboBox_Validated(object? sender, EventArgs e)
     {
-        await AtualizarDadosPedidoSelecionadoAsync();
+        _consultaPedidoTask = AtualizarDadosPedidoSelecionadoAsync();
+        await _consultaPedidoTask;
         AtualizarDisponibilidadeInicioLeitura();
     }
 
@@ -2339,63 +2484,65 @@ public partial class ProcessoEntradaProdutoForm : Form
             await _consultaPedidoGate.WaitAsync(cancellationToken);
             gateAdquirido = true;
             cancellationToken.ThrowIfCancellationRequested();
+            if (!PedidoSolicitadoAindaEhAtual(numeroPedido))
+            {
+                return;
+            }
             statusLabel.Text = $"Consultando pedido {numeroPedido} no SAP...";
 
-            ResultadoOperacao sincronizacao = await _pedidoCompraServico.SincronizarPedidoAsync(
-                numeroPedido,
-                cancellationToken);
-            if (!sincronizacao.Sucesso)
+            ResultadoConsultaPedido resultado =
+                await _controller.ConsultarPedidoAsync(numeroPedido, cancellationToken);
+            if (!PedidoSolicitadoAindaEhAtual(numeroPedido))
+            {
+                return;
+            }
+            if (!resultado.Sucesso)
             {
                 _numeroPedidoCarregado = string.Empty;
                 LimparDadosPedidoSelecionado();
-                statusLabel.Text = sincronizacao.Mensagem;
+                statusLabel.Text = resultado.Mensagem;
+                if (PodeAtualizarTela())
+                {
+                    MessageBox.Show(
+                        resultado.Mensagem,
+                        "Consulta de pedido",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
                 return;
             }
 
-            string fornecedor = await _pedidoCompraServico.ObterFornecedorPorPedidoAsync(
-                numeroPedido,
-                cancellationToken);
-            DateOnly? dataPedido = await _pedidoCompraServico.ObterDataPorPedidoAsync(
-                numeroPedido,
-                cancellationToken);
-            string tipoPedido = await _pedidoCompraServico.ObterTipoPorPedidoAsync(
-                numeroPedido,
-                cancellationToken);
-            IReadOnlyList<PedidoCompraSapItem> itens =
-                await _pedidoCompraServico.ListarItensPorPedidoAsync(
-                    numeroPedido,
-                    cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (!PodeAtualizarTela())
+            if (!PodeAtualizarTela()
+                || !PedidoSolicitadoAindaEhAtual(numeroPedido)
+                || !string.Equals(
+                    resultado.NumeroPedido,
+                    numeroPedido,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            lotTextBox.Text = fornecedor;
-            stepLabel.Text = dataPedido.HasValue
-                ? dataPedido.Value.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
+            lotTextBox.Text = resultado.Fornecedor;
+            stepLabel.Text = resultado.DataPedido.HasValue
+                ? resultado.DataPedido.Value.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
                 : "--/--/----";
-            finishedProductCodeTextBox.Text = tipoPedido;
-            finishedProductTextBox.Text = string.Equals(tipoPedido, TipoPedidoNormal, StringComparison.OrdinalIgnoreCase)
+            finishedProductCodeTextBox.Text = resultado.TipoPedido;
+            finishedProductTextBox.Text = string.Equals(resultado.TipoPedido, TipoPedidoNormal, StringComparison.OrdinalIgnoreCase)
                 ? DescricaoPedidoNormal
                 : string.Empty;
-            // H5: exibe apenas itens dentro do centro/deposito autorizado (escopo Jales).
-            IReadOnlyList<PedidoCompraSapItem> itensAutorizados = itens
-                .Where(item => _autorizacaoCentroDeposito.ItemAutorizado(item.Centro, item.Deposito))
-                .ToList();
-            int itensOcultados = itens.Count - itensAutorizados.Count;
 
             _itensCarregadosPorCodigo.Clear();
-            foreach (PedidoCompraSapItem itemAutorizado in itensAutorizados)
+            foreach (PedidoCompraSapItem itemAutorizado in resultado.ItensAutorizados)
             {
                 _itensCarregadosPorCodigo[itemAutorizado.CodigoItem] = itemAutorizado;
             }
 
-            PreencherItensPedidoCompra(itensAutorizados);
+            PreencherItensPedidoCompra(resultado.ItensAutorizados);
             _numeroPedidoCarregado = numeroPedido;
-            statusLabel.Text = itensOcultados > 0
-                ? $"{sincronizacao.Mensagem} {itensOcultados} item(ns) fora do centro/deposito autorizado nao exibido(s)."
-                : sincronizacao.Mensagem;
+            statusLabel.Text = resultado.ItensOcultados > 0
+                ? $"{resultado.Mensagem} {resultado.ItensOcultados} item(ns) fora do centro/deposito autorizado nao exibido(s)."
+                : resultado.Mensagem;
             AtualizarDisponibilidadeInicioLeitura();
         }
         catch (OperationCanceledException)
@@ -2404,16 +2551,16 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
         catch (IntegracaoSapBloqueadaException ex)
         {
-            if (PodeAtualizarTela())
+            if (PodeAtualizarTela() && PedidoSolicitadoAindaEhAtual(numeroPedido))
             {
                 statusLabel.Text = ex.Message;
             }
         }
         catch (Exception ex)
         {
-            SincronizacaoPedidoCompraSapServico.RegistrarDiagnostico(
+            _controller.Sap.RegistrarDiagnostico(
                 $"ERRO ao carregar dados do pedido {numeroPedido}.{Environment.NewLine}{ex}");
-            if (!PodeAtualizarTela())
+            if (!PodeAtualizarTela() || !PedidoSolicitadoAindaEhAtual(numeroPedido))
             {
                 return;
             }
@@ -2429,8 +2576,25 @@ public partial class ProcessoEntradaProdutoForm : Form
             {
                 _consultaPedidoGate.Release();
             }
+
+            if (ReferenceEquals(
+                    Interlocked.CompareExchange(
+                        ref _consultaPedidoCts,
+                        null,
+                        novaConsulta),
+                    novaConsulta))
+            {
+                novaConsulta.Dispose();
+            }
         }
     }
+
+    private bool PedidoSolicitadoAindaEhAtual(string numeroPedido)
+        => PodeAtualizarTela()
+            && string.Equals(
+                pedidoComboBox.Text.Trim(),
+                numeroPedido,
+                StringComparison.OrdinalIgnoreCase);
 
     private void LimparDadosPedidoSelecionado()
     {
@@ -2450,6 +2614,8 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void LimparItensPedidoCompra()
     {
+        _leiturasPorItem.Clear();
+        _codigoLancamentoPersistido = null;
         productionDataGridView.Rows.Clear();
         UpdateProductionCounters();
         UpdateProductionGridFooter();
@@ -2457,6 +2623,8 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void PreencherItensPedidoCompra(IReadOnlyList<PedidoCompraSapItem> itens)
     {
+        _leiturasPorItem.Clear();
+        _codigoLancamentoPersistido = null;
         productionDataGridView.Rows.Clear();
         var cultura = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
         foreach (PedidoCompraSapItem item in itens)
@@ -2464,16 +2632,13 @@ public partial class ProcessoEntradaProdutoForm : Form
             string quantidade = item.Quantidade.HasValue
                 ? item.Quantidade.Value.ToString("0.###", cultura)
                 : string.Empty;
-            string peso = item.PesoItem.HasValue
-                ? item.PesoItem.Value.ToString("0.###", cultura)
-                : string.Empty;
             int rowIndex = productionDataGridView.Rows.Add();
             DataGridViewRow row = productionDataGridView.Rows[rowIndex];
             row.Cells["productionCodeColumn"].Value = item.CodigoMaterial ?? string.Empty;
             row.Cells["productionProductColumn"].Value = item.Descricao ?? string.Empty;
             row.Cells["productionQuantityColumn"].Value = quantidade;
             row.Cells["productionWeightColumn"].Value = item.UnidadeMedida ?? string.Empty;
-            row.Cells["productionPesoLidoColumn"].Value = peso;
+            row.Cells["productionPesoLidoColumn"].Value = string.Empty;
             row.Cells["productionItemIdColumn"].Value = item.CodigoItem.ToString();
             row.Cells["productionPesoOrigemColumn"].Value = string.Empty;
             row.Cells["productionNumeroItemColumn"].Value = item.NumeroItem;

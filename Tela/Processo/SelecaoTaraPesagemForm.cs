@@ -1,4 +1,5 @@
 using FugaPET_Dev.Modelo.Cadastro;
+using System.Globalization;
 
 namespace FugaPET_Dev.Tela.Processo;
 
@@ -80,7 +81,7 @@ public sealed class SelecaoTaraPesagemForm : Form
 
         _tarasGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "codigoColumn", HeaderText = "Código", FillWeight = 18 });
         _tarasGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "nomeColumn", HeaderText = "Tara", FillWeight = 42 });
-        _tarasGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "pesoColumn", HeaderText = "Peso (g)", FillWeight = 20 });
+        _tarasGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "pesoColumn", HeaderText = "Peso (kg)", FillWeight = 20 });
         _tarasGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "situacaoColumn", HeaderText = "Situação", FillWeight = 20 });
     }
 
@@ -117,7 +118,7 @@ public sealed class SelecaoTaraPesagemForm : Form
             int rowIndex = _tarasGrid.Rows.Add(
                 tara.CodigoTara,
                 tara.NomeTara,
-                tara.PesoGrama,
+                tara.PesoKg.ToString("0.###", CultureInfo.GetCultureInfo("pt-BR")),
                 tara.SituacaoTara ? "Ativa" : "Inativa");
 
             DataGridViewRow row = _tarasGrid.Rows[rowIndex];

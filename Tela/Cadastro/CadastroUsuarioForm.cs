@@ -27,6 +27,9 @@ public partial class CadastroUsuarioForm : Form
     private readonly CargoController _cargoController;
     private readonly SetorController _setorController;
     private readonly PerfilAcessoController _perfilAcessoController;
+    private readonly CancellationTokenSource _fechamentoCts = new();
+    private CancellationTokenSource? _selecaoUsuarioCts;
+    private Task _selecaoUsuarioTask = Task.CompletedTask;
     private long _idUsuarioAtual;
     private Button? _alterarSenhaButton;
 
@@ -58,6 +61,11 @@ public partial class CadastroUsuarioForm : Form
         LayoutSummaryCard();
         ApplyProfilesFilter();
         ConectarAcoesCadastro();
+        FormClosed += (_, _) =>
+        {
+            _selecaoUsuarioCts?.Cancel();
+            _fechamentoCts.Cancel();
+        };
         if (_integracaoBancoHabilitada)
         {
             Shown += async (_, _) =>
@@ -150,7 +158,13 @@ public partial class CadastroUsuarioForm : Form
         ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
 
         voltarButton.Click += (_, _) => ReturnToCadastroModules();
-        limparButton.Click += (_, _) => ClearFields();
+        limparButton.Click += (_, _) =>
+        {
+            CancelarSelecaoUsuarioPendente();
+            _idUsuarioAtual = 0;
+            ClearFields();
+            AtualizarRotuloSalvar();
+        };
 
         AlignHeaderRightControls();
     }
@@ -344,6 +358,7 @@ public partial class CadastroUsuarioForm : Form
         salvarButton.Click += async (_, _) => await SalvarUsuarioAsync();
         novoButton.Click += (_, _) =>
         {
+            CancelarSelecaoUsuarioPendente();
             _idUsuarioAtual = 0;
             ClearFields();
             AtualizarRotuloSalvar();
@@ -603,6 +618,7 @@ public partial class CadastroUsuarioForm : Form
 
     private async Task CarregarUsuariosAsync()
     {
+        CancelarSelecaoUsuarioPendente();
         IReadOnlyList<UsuarioCadastro> usuarios = await _usuarioController.ListarAsync();
         (Panel RowPanel, Label LoginLabel, Label CargoLabel, Label StatusLabel)[] linhas =
         [
@@ -762,7 +778,11 @@ public partial class CadastroUsuarioForm : Form
 
     private void AttachRowSelectionHandlers(Control control, Panel rowPanel)
     {
-        control.Click += (_, _) => SetSelectedProfileRow(rowPanel);
+        control.Click += async (_, _) =>
+        {
+            _selecaoUsuarioTask = SetSelectedProfileRowAsync(rowPanel);
+            await _selecaoUsuarioTask;
+        };
 
         foreach (Control child in control.Controls)
         {
@@ -770,7 +790,7 @@ public partial class CadastroUsuarioForm : Form
         }
     }
 
-    private void SetSelectedProfileRow(Panel selectedRowPanel)
+    private async Task SetSelectedProfileRowAsync(Panel selectedRowPanel)
     {
         Color selectedBackColor = Color.FromArgb(254, 242, 242);
 
@@ -789,16 +809,77 @@ public partial class CadastroUsuarioForm : Form
         }
 
         _idUsuarioAtual = _idUsuarioPorLinha.TryGetValue(selectedRowPanel, out long id) ? id : 0;
-        PreencherCamposUsuarioPorLinha(selectedRowPanel);
         SyncSummaryFromRow(selectedRowPanel);
-    }
+        AtualizarRotuloSalvar();
 
-    private void PreencherCamposUsuarioPorLinha(Panel rowPanel)
-    {
-        if (!_usuarioPorLinha.TryGetValue(rowPanel, out UsuarioCadastro? usuario))
+        if (_idUsuarioAtual <= 0)
         {
             return;
         }
+
+        long idSolicitado = _idUsuarioAtual;
+        CancellationTokenSource novaSelecao =
+            CancellationTokenSource.CreateLinkedTokenSource(_fechamentoCts.Token);
+        CancellationTokenSource? selecaoAnterior = Interlocked.Exchange(
+            ref _selecaoUsuarioCts,
+            novaSelecao);
+        selecaoAnterior?.Cancel();
+        selecaoAnterior?.Dispose();
+
+        try
+        {
+            UsuarioEdicaoAgregado? agregado =
+                await _usuarioController.ObterEdicaoAgregadaAsync(
+                    idSolicitado,
+                    novaSelecao.Token);
+            novaSelecao.Token.ThrowIfCancellationRequested();
+            if (agregado is null
+                || !UsuarioSolicitadoAindaEhAtual(idSolicitado))
+            {
+                return;
+            }
+
+            AplicarUsuarioAgregado(agregado);
+        }
+        catch (OperationCanceledException)
+        {
+            // Outra linha foi selecionada ou a tela foi fechada.
+        }
+        catch (Exception ex)
+        {
+            if (!UsuarioSolicitadoAindaEhAtual(idSolicitado))
+            {
+                return;
+            }
+
+            string mensagem = await global::FugaPET_Dev.Tela.Comum.ErroUsuarioHelper.TratarAsync(
+                "USUARIO_SELECAO_ERRO",
+                ex,
+                "CadastroUsuarioForm",
+                "Nao foi possivel carregar os dados do usuario selecionado.");
+            MessageBox.Show(
+                mensagem,
+                "Cadastro de Usuario",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    Interlocked.CompareExchange(
+                        ref _selecaoUsuarioCts,
+                        null,
+                        novaSelecao),
+                    novaSelecao))
+            {
+                novaSelecao.Dispose();
+            }
+        }
+    }
+
+    private void AplicarUsuarioAgregado(UsuarioEdicaoAgregado agregado)
+    {
+        UsuarioCadastro usuario = agregado.Usuario;
 
         nomeTextBox.Text = usuario.NomeUsuario;
         loginTextBox.Text = usuario.LoginUsuario;
@@ -810,33 +891,26 @@ public partial class CadastroUsuarioForm : Form
         confirmarSenhaTextBox.Text = string.Empty;
 
         SelecionarValorCombo(cargoComboBox, usuario.IdCargo);
-        SelecionarValorCombo(setorComboBox, usuario.IdSetorPadrao);
-
-        // Perfil ativo do usuario (carregado de forma assincrona).
-        _ = CarregarPerfilAtivoDoUsuarioAsync(usuario.IdUsuario);
+        SelecionarValorCombo(
+            setorComboBox,
+            agregado.IdSetorPadraoAtivo ?? usuario.IdSetorPadrao);
+        SelecionarValorCombo(perfilComboBox, agregado.IdPerfilAcessoAtivo);
 
         AtualizarRotuloSalvar();
     }
 
-    private async Task CarregarPerfilAtivoDoUsuarioAsync(long idUsuario)
+    private bool UsuarioSolicitadoAindaEhAtual(long idUsuario)
+        => !IsDisposed
+            && !Disposing
+            && _idUsuarioAtual == idUsuario;
+
+    private void CancelarSelecaoUsuarioPendente()
     {
-        try
-        {
-            IReadOnlyList<UsuarioPerfilCadastro> perfis = await _usuarioController.ListarPerfisAsync(idUsuario);
-            UsuarioPerfilCadastro? ativo = perfis.FirstOrDefault(p => p.Ativo);
-            if (ativo is not null)
-            {
-                SelecionarValorCombo(perfilComboBox, ativo.IdPerfilAcesso);
-            }
-            else
-            {
-                perfilComboBox.SelectedIndex = -1;
-            }
-        }
-        catch
-        {
-            // Falha ao carregar perfil nao deve travar a selecao.
-        }
+        CancellationTokenSource? selecao = Interlocked.Exchange(
+            ref _selecaoUsuarioCts,
+            null);
+        selecao?.Cancel();
+        selecao?.Dispose();
     }
 
     private static void SelecionarValorCombo(ComboBox comboBox, long? valor)
@@ -1346,8 +1420,6 @@ public partial class CadastroUsuarioForm : Form
         base.OnFormClosed(e);
     }
 }
-
-
 
 
 

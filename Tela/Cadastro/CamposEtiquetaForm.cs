@@ -29,6 +29,11 @@ public sealed class CamposEtiquetaForm : Form
     private long _idCampoAtual;
     private long _idMapeamentoAtual;
     private IReadOnlyList<CampoEtiquetaCadastro> _campos = [];
+    private CancellationTokenSource? _carregarCamposCts;
+    private CancellationTokenSource? _selecaoCampoCts;
+    private Task _carregarCamposTask = Task.CompletedTask;
+    private Task _selecaoCampoTask = Task.CompletedTask;
+    private bool _carregandoEtiquetas;
 
     // Controles
     private ComboBox _cmbEtiqueta = null!;
@@ -66,6 +71,7 @@ public sealed class CamposEtiquetaForm : Form
         _mapeamentoController = mapeamentoController ?? FabricaControladoresCadastro.CriarMapeamentoCampoEtiquetaController();
 
         ConstruirUi();
+        FormClosed += (_, _) => CancelarConsultasPendentes();
 
         if (_integracaoBancoHabilitada)
         {
@@ -96,7 +102,12 @@ public sealed class CamposEtiquetaForm : Form
             Width = 460,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
-        _cmbEtiqueta.SelectedIndexChanged += async (_, _) => await CarregarCamposAsync();
+        _cmbEtiqueta.SelectedIndexChanged += async (_, _) =>
+        {
+            if (_carregandoEtiquetas) return;
+            _carregarCamposTask = CarregarCamposAsync();
+            await _carregarCamposTask;
+        };
 
         // Grid de campos (esquerda)
         _grid = new DataGridView
@@ -120,7 +131,11 @@ public sealed class CamposEtiquetaForm : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Nome", HeaderText = "Campo", DataPropertyName = "Nome", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Tipo", HeaderText = "Tipo", DataPropertyName = "Tipo", Width = 110 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Situacao", HeaderText = "Situacao", DataPropertyName = "Situacao", Width = 80 });
-        _grid.SelectionChanged += (_, _) => AoSelecionarCampo();
+        _grid.SelectionChanged += async (_, _) =>
+        {
+            _selecaoCampoTask = AoSelecionarCampoAsync();
+            await _selecaoCampoTask;
+        };
 
         // Painel direito: editor de campo
         GroupBox grpCampo = new()
@@ -227,16 +242,25 @@ public sealed class CamposEtiquetaForm : Form
         {
             IReadOnlyList<EtiquetaCadastro> etiquetas = await _etiquetaController.ListarAsync();
             var ativas = etiquetas.Where(e => e.SituacaoEtiqueta).ToList();
-            _cmbEtiqueta.DisplayMember = nameof(EtiquetaCadastro.NomeEtiqueta);
-            _cmbEtiqueta.ValueMember = nameof(EtiquetaCadastro.CodigoEtiqueta);
-            _cmbEtiqueta.DataSource = ativas;
-
-            if (_etiquetaPreSelecionada > 0)
+            _carregandoEtiquetas = true;
+            try
             {
-                _cmbEtiqueta.SelectedValue = _etiquetaPreSelecionada;
+                _cmbEtiqueta.DisplayMember = nameof(EtiquetaCadastro.NomeEtiqueta);
+                _cmbEtiqueta.ValueMember = nameof(EtiquetaCadastro.CodigoEtiqueta);
+                _cmbEtiqueta.DataSource = ativas;
+
+                if (_etiquetaPreSelecionada > 0)
+                {
+                    _cmbEtiqueta.SelectedValue = _etiquetaPreSelecionada;
+                }
             }
-            _cmbEtiqueta.SelectedIndexChanged -= OnEtiquetaChangedNoop;
-            await CarregarCamposAsync();
+            finally
+            {
+                _carregandoEtiquetas = false;
+            }
+
+            _carregarCamposTask = CarregarCamposAsync();
+            await _carregarCamposTask;
         }
         catch (Exception ex)
         {
@@ -244,11 +268,14 @@ public sealed class CamposEtiquetaForm : Form
         }
     }
 
-    private void OnEtiquetaChangedNoop(object? sender, EventArgs e) { }
-
     private async Task CarregarCamposAsync()
     {
         long idEtiqueta = EtiquetaSelecionada;
+        CancellationTokenSource atual = new();
+        CancellationTokenSource? anterior = Interlocked.Exchange(ref _carregarCamposCts, atual);
+        anterior?.Cancel();
+        anterior?.Dispose();
+        CancelarSelecaoCampo();
         LimparEditorCampo();
         LimparEditorMapeamento();
 
@@ -261,7 +288,11 @@ public sealed class CamposEtiquetaForm : Form
 
         try
         {
-            _campos = await _campoController.ListarPorEtiquetaAsync(idEtiqueta);
+            IReadOnlyList<CampoEtiquetaCadastro> campos =
+                await _campoController.ListarPorEtiquetaAsync(idEtiqueta, atual.Token);
+            if (!EtiquetaSolicitadaAindaEhAtual(idEtiqueta, atual)) return;
+
+            _campos = campos;
             _grid.DataSource = _campos.Select(c => new CampoLinha
             {
                 Codigo = c.CodigoCampoEtiqueta,
@@ -271,19 +302,50 @@ public sealed class CamposEtiquetaForm : Form
                 Situacao = c.SituacaoCampoEtiqueta ? "Ativo" : "Inativo"
             }).ToList();
         }
+        catch (OperationCanceledException) when (atual.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
+            if (!EtiquetaSolicitadaAindaEhAtual(idEtiqueta, atual)) return;
             MessageBox.Show(await ErroUsuarioHelper.TratarAsync("CAMPOS_ETIQUETA_ERRO", ex, "CamposEtiquetaForm", "Não foi possível carregar os campos. Acione o suporte."), "Campos da Etiqueta", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
-    private void AoSelecionarCampo()
+    private async Task AoSelecionarCampoAsync()
     {
         if (_grid.CurrentRow?.Cells["Codigo"].Value is not { } valor) return;
-        long codigo = TryParseLong(valor);
-        CampoEtiquetaCadastro? campo = _campos.FirstOrDefault(c => c.CodigoCampoEtiqueta == codigo);
-        if (campo is null) return;
+        long idSolicitado = TryParseLong(valor);
+        if (idSolicitado <= 0) return;
 
+        CancellationTokenSource atual = new();
+        CancellationTokenSource? anterior = Interlocked.Exchange(ref _selecaoCampoCts, atual);
+        anterior?.Cancel();
+        anterior?.Dispose();
+        _idCampoAtual = idSolicitado;
+        LimparEditorMapeamento();
+
+        try
+        {
+            CampoEtiquetaEdicaoAgregado? agregado =
+                await _campoController.ObterEdicaoAgregadaAsync(idSolicitado, atual.Token);
+            if (!CampoSolicitadoAindaEhAtual(idSolicitado, atual) || agregado is null) return;
+
+            PreencherEditorCampo(agregado.Campo);
+            PreencherEditorMapeamento(agregado.MapeamentoAtivo);
+        }
+        catch (OperationCanceledException) when (atual.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!CampoSolicitadoAindaEhAtual(idSolicitado, atual)) return;
+            _lblMapaInfo.Text = await ErroUsuarioHelper.TratarAsync("MAPEAMENTO_CAMPO_ERRO", ex, "CamposEtiquetaForm", "Não foi possível carregar o campo e seu mapeamento. Acione o suporte.");
+        }
+    }
+
+    private void PreencherEditorCampo(CampoEtiquetaCadastro campo)
+    {
         _idCampoAtual = campo.CodigoCampoEtiqueta;
         _txtNome.Text = campo.NomeCampo;
         SelecionarCombo(_cmbTipoDado, campo.TipoDado);
@@ -293,34 +355,24 @@ public sealed class CamposEtiquetaForm : Form
         _txtFormato.Text = campo.FormatoSaida;
         _txtDescricao.Text = campo.DescricaoCampoEtiqueta;
         _cmbSituacao.Text = campo.SituacaoCampoEtiqueta ? "Ativo" : "Inativo";
-
-        _ = CarregarMapeamentoAsync(campo.CodigoCampoEtiqueta);
     }
 
-    private async Task CarregarMapeamentoAsync(long idCampo)
+    private void PreencherEditorMapeamento(MapeamentoCampoEtiquetaCadastro? mapa)
     {
         LimparEditorMapeamento();
-        try
+        if (mapa is null)
         {
-            MapeamentoCampoEtiquetaCadastro? mapa = await _mapeamentoController.ObterAtivoPorCampoAsync(idCampo);
-            if (mapa is null)
-            {
-                _lblMapaInfo.Text = "Campo sem mapeamento ativo. Defina abaixo.";
-                return;
-            }
+            _lblMapaInfo.Text = "Campo sem mapeamento ativo. Defina abaixo.";
+            return;
+        }
 
-            _idMapeamentoAtual = mapa.CodigoMapeamentoCampoEtiqueta;
-            SelecionarCombo(_cmbOrigem, mapa.OrigemDado);
-            _txtExpressao.Text = mapa.ExpressaoOrigem;
-            _txtValorPadrao.Text = mapa.ValorPadrao;
-            _chkObrigImpressao.Checked = mapa.ObrigatorioParaImpressao;
-            _txtObsMapa.Text = mapa.Observacao;
-            _lblMapaInfo.Text = $"Mapeamento ativo (cod. {mapa.CodigoMapeamentoCampoEtiqueta}).";
-        }
-        catch (Exception ex)
-        {
-            _lblMapaInfo.Text = await ErroUsuarioHelper.TratarAsync("MAPEAMENTO_CAMPO_ERRO", ex, "CamposEtiquetaForm", "Não foi possível carregar o mapeamento. Acione o suporte.");
-        }
+        _idMapeamentoAtual = mapa.CodigoMapeamentoCampoEtiqueta;
+        SelecionarCombo(_cmbOrigem, mapa.OrigemDado);
+        _txtExpressao.Text = mapa.ExpressaoOrigem;
+        _txtValorPadrao.Text = mapa.ValorPadrao;
+        _chkObrigImpressao.Checked = mapa.ObrigatorioParaImpressao;
+        _txtObsMapa.Text = mapa.Observacao;
+        _lblMapaInfo.Text = $"Mapeamento ativo (cod. {mapa.CodigoMapeamentoCampoEtiqueta}).";
     }
 
     // ============================================================
@@ -412,7 +464,7 @@ public sealed class CamposEtiquetaForm : Form
         MessageBox.Show(resultado.Mensagem, "Campos da Etiqueta", MessageBoxButtons.OK,
             resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
 
-        if (resultado.Sucesso) await CarregarMapeamentoAsync(_idCampoAtual);
+        if (resultado.Sucesso) await RecarregarCampoAtualAsync();
     }
 
     private async Task RemoverMapeamentoAsync()
@@ -428,7 +480,7 @@ public sealed class CamposEtiquetaForm : Form
         MessageBox.Show(resultado.Mensagem, "Campos da Etiqueta", MessageBoxButtons.OK,
             resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
 
-        if (resultado.Sucesso && _idCampoAtual > 0) await CarregarMapeamentoAsync(_idCampoAtual);
+        if (resultado.Sucesso && _idCampoAtual > 0) await RecarregarCampoAtualAsync();
     }
 
     // ============================================================
@@ -437,6 +489,7 @@ public sealed class CamposEtiquetaForm : Form
 
     private void LimparEditorCampo()
     {
+        CancelarSelecaoCampo();
         _idCampoAtual = 0;
         _txtNome.Text = string.Empty;
         if (_cmbTipoDado.Items.Count > 0) _cmbTipoDado.SelectedIndex = 0;
@@ -457,6 +510,39 @@ public sealed class CamposEtiquetaForm : Form
         _chkObrigImpressao.Checked = false;
         _txtObsMapa.Text = string.Empty;
         _lblMapaInfo.Text = "Selecione um campo.";
+    }
+
+    private async Task RecarregarCampoAtualAsync()
+    {
+        if (_idCampoAtual <= 0) return;
+        _selecaoCampoTask = AoSelecionarCampoAsync();
+        await _selecaoCampoTask;
+    }
+
+    private bool EtiquetaSolicitadaAindaEhAtual(long idEtiqueta, CancellationTokenSource origem)
+        => !origem.IsCancellationRequested
+           && ReferenceEquals(_carregarCamposCts, origem)
+           && EtiquetaSelecionada == idEtiqueta;
+
+    private bool CampoSolicitadoAindaEhAtual(long idCampo, CancellationTokenSource origem)
+        => !origem.IsCancellationRequested
+           && ReferenceEquals(_selecaoCampoCts, origem)
+           && _idCampoAtual == idCampo
+           && TryParseLong(_grid.CurrentRow?.Cells["Codigo"].Value) == idCampo;
+
+    private void CancelarSelecaoCampo()
+    {
+        CancellationTokenSource? anterior = Interlocked.Exchange(ref _selecaoCampoCts, null);
+        anterior?.Cancel();
+        anterior?.Dispose();
+    }
+
+    private void CancelarConsultasPendentes()
+    {
+        CancellationTokenSource? campos = Interlocked.Exchange(ref _carregarCamposCts, null);
+        campos?.Cancel();
+        campos?.Dispose();
+        CancelarSelecaoCampo();
     }
 
     private int ProximaOrdemSugerida()

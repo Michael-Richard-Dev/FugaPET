@@ -34,10 +34,11 @@ public static class LeitorConfiguracaoBancoPostgreSql
         {
             Habilitado = LerBooleano(banco, "habilitado", false),
             ModoDemonstracao = LerBooleano(banco, "modo_demonstracao", false),
+            AmbienteDemonstrativo = LerBooleano(banco, "ambiente_demonstrativo", false),
             Servidor = LerTexto(banco, "servidor", "127.0.0.1"),
             Porta = LerInteiro(banco, "porta", 5432),
             NomeBanco = LerTexto(banco, "nome_banco", "api_balanca"),
-            Schema = ValidarSchema(LerTexto(banco, "schema", "homologacao")),
+            Schema = ValidarSchema(LerTexto(banco, "schema", "desenvolvimento")),
             Usuario = LerTexto(banco, "usuario", "postgres"),
             Senha = LerSenha(banco),
             TimeoutSegundos = LerInteiro(banco, "timeout_segundos", 15),
@@ -62,6 +63,8 @@ public static class LeitorConfiguracaoBancoPostgreSql
         return new ConfiguracaoBancoPostgreSql
         {
             Habilitado = true,
+            ModoDemonstracao = false,
+            AmbienteDemonstrativo = false,
             Servidor = LerChave(itens, "Host", "127.0.0.1"),
             Porta = int.TryParse(LerChave(itens, "Port", "5432"), out int porta) ? porta : 5432,
             NomeBanco = LerChave(itens, "Database", "api_balanca"),
@@ -69,7 +72,7 @@ public static class LeitorConfiguracaoBancoPostgreSql
                 LerChave(
                     itens,
                     "Search Path",
-                    LerChave(itens, "SearchPath", "homologacao"))),
+                    LerChave(itens, "SearchPath", "desenvolvimento"))),
             Usuario = LerChave(itens, "Username", "postgres"),
             Senha = LerChave(itens, "Password", string.Empty),
             TimeoutSegundos = int.TryParse(LerChave(itens, "Timeout", "15"), out int timeout) ? timeout : 15,
@@ -84,7 +87,7 @@ public static class LeitorConfiguracaoBancoPostgreSql
     private static string ValidarSchema(string schema)
     {
         string valor = string.IsNullOrWhiteSpace(schema)
-            ? "homologacao"
+            ? "desenvolvimento"
             : schema.Trim();
 
         if (!char.IsLetter(valor[0]) && valor[0] != '_'

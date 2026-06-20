@@ -1,0 +1,9 @@
+Gerar pacote limpo:
+
+/*RODAR TUDO NO POWER SHELL*/
+
+1 - Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+2 - Set-Location "C:\Visual Studio 2026\Projetos\FrigoSul\API_Balanca"
+
+3 - .\Scripts\GerarPacoteLimpo.ps1

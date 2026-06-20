@@ -9,11 +9,11 @@ public sealed class ConfiguracaoSchemaBancoTests : IDisposable
         Environment.GetEnvironmentVariable("FUGAPET_DEV_CONEXAO_POSTGRES");
 
     [Fact]
-    public void ConfiguracaoPadrao_DeveUsarHomologacao()
+    public void ConfiguracaoPadrao_DeveUsarDesenvolvimento()
     {
         ConfiguracaoBancoPostgreSql configuracao = new();
 
-        Assert.Equal("homologacao", configuracao.Schema);
+        Assert.Equal("desenvolvimento", configuracao.Schema);
     }
 
     [Fact]
@@ -43,6 +43,24 @@ public sealed class ConfiguracaoSchemaBancoTests : IDisposable
         Environment.SetEnvironmentVariable(
             "FUGAPET_DEV_CONEXAO_POSTGRES",
             "Host=localhost;Database=teste;Username=teste;Password=teste;Search Path=desenvolvimento");
+
+        ConfiguracaoBancoPostgreSql configuracao =
+            LeitorConfiguracaoBancoPostgreSql.Carregar();
+
+        Assert.Equal("desenvolvimento", configuracao.Schema);
+        Assert.True(configuracao.Habilitado);
+        Assert.False(configuracao.ModoDemonstracao);
+        Assert.False(configuracao.AmbienteDemonstrativo);
+    }
+
+    [Fact]
+    public void LeitorConnectionString_SemSearchPath_DeveUsarDesenvolvimento()
+    {
+        // Sem Search Path na connection string, o fallback do leitor deve ser o schema do
+        // ambiente DEV (desenvolvimento) — nunca o legado "homologacao".
+        Environment.SetEnvironmentVariable(
+            "FUGAPET_DEV_CONEXAO_POSTGRES",
+            "Host=localhost;Database=teste;Username=teste;Password=teste");
 
         ConfiguracaoBancoPostgreSql configuracao =
             LeitorConfiguracaoBancoPostgreSql.Carregar();

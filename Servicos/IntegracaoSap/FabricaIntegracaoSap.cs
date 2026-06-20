@@ -12,16 +12,27 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 public static class FabricaIntegracaoSap
 {
     public static IIntegracaoSapServico Criar()
-        => Criar(EstadoIntegracaoBanco.ModoDemonstracao);
+        => Criar(
+            EstadoIntegracaoBanco.Habilitado,
+            EstadoIntegracaoBanco.ModoDemonstracao,
+            EstadoIntegracaoBanco.AmbienteDemonstrativo);
 
-    internal static IIntegracaoSapServico Criar(bool modoDemonstracao)
+    internal static IIntegracaoSapServico Criar(
+        bool bancoHabilitado,
+        bool modoDemonstracao,
+        bool ambienteDemonstrativo)
     {
-        if (!modoDemonstracao)
+        bool podeUsarDadosSimulados =
+            EstadoIntegracaoBanco.CalcularPodeUsarDadosSimulados(
+                bancoHabilitado,
+                modoDemonstracao,
+                ambienteDemonstrativo);
+        if (!podeUsarDadosSimulados)
         {
             throw new InvalidOperationException(
-                "A integracao SAP simulada so pode ser criada no modo DEMONSTRACAO.");
+                "A integracao SAP simulada exige banco desabilitado, modo demonstracao ativo e ambiente demonstrativo.");
         }
 
-        return new IntegracaoSapMockServico();
+        return new IntegracaoSapMockServico(podeUsarDadosSimulados);
     }
 }

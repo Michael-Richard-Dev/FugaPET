@@ -10,6 +10,20 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 /// </summary>
 public sealed class IntegracaoSapMockServico : IIntegracaoSapServico
 {
+    public IntegracaoSapMockServico()
+    {
+        global::FugaPET_Dev.AcessoDados.Banco.EstadoIntegracaoBanco.GarantirDadosSimuladosPermitidos();
+    }
+
+    internal IntegracaoSapMockServico(bool usoAutorizado)
+    {
+        if (!usoAutorizado)
+        {
+            throw new InvalidOperationException(
+                "Mock SAP proibido fora de ambiente demonstrativo com banco desabilitado.");
+        }
+    }
+
     public bool EhSimulado => true;
 
     public Task<IReadOnlyList<RegistroIntegracaoSap>> ConsultarHistoricoAsync(

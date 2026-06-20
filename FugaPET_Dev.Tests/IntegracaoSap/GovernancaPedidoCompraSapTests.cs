@@ -5,10 +5,13 @@ namespace FugaPET_Dev.Tests.IntegracaoSap;
 public sealed class GovernancaPedidoCompraSapTests
 {
     [Fact]
-    public void Demonstracao_DeveSelecionarMockExplicitamente()
+    public void DemonstracaoSegura_DeveSelecionarMockExplicitamente()
     {
         IPedidoCompraSapServico servico =
-            FabricaPedidoCompraSapServico.Criar(modoDemonstracao: true);
+            FabricaPedidoCompraSapServico.Criar(
+                bancoHabilitado: false,
+                modoDemonstracao: true,
+                ambienteDemonstrativo: true);
 
         Assert.True(servico.EhSimulado);
         Assert.False(servico.SapConfigurado);
@@ -18,7 +21,10 @@ public sealed class GovernancaPedidoCompraSapTests
     public void HomologacaoOuProducao_DeveSelecionarImplementacaoReal()
     {
         IPedidoCompraSapServico servico =
-            FabricaPedidoCompraSapServico.Criar(modoDemonstracao: false);
+            FabricaPedidoCompraSapServico.Criar(
+                bancoHabilitado: true,
+                modoDemonstracao: false,
+                ambienteDemonstrativo: false);
 
         Assert.False(servico.EhSimulado);
         Assert.IsType<PedidoCompraSapGovernadoServico>(servico);
@@ -28,29 +34,58 @@ public sealed class GovernancaPedidoCompraSapTests
     public void HomologacaoSemConfiguracao_NuncaDeveUsarMockSilencioso()
     {
         IPedidoCompraSapServico servico =
-            FabricaPedidoCompraSapServico.Criar(modoDemonstracao: false);
+            FabricaPedidoCompraSapServico.Criar(
+                bancoHabilitado: true,
+                modoDemonstracao: false,
+                ambienteDemonstrativo: false);
+
+        Assert.False(servico.EhSimulado);
+        Assert.IsNotType<PedidoCompraSapMockServico>(servico);
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public void CombinacaoNaoPermitida_NuncaDeveSelecionarMock(
+        bool bancoHabilitado,
+        bool modoDemonstracao)
+    {
+        IPedidoCompraSapServico servico =
+            FabricaPedidoCompraSapServico.Criar(
+                bancoHabilitado,
+                modoDemonstracao,
+                ambienteDemonstrativo: true);
 
         Assert.False(servico.EhSimulado);
         Assert.IsNotType<PedidoCompraSapMockServico>(servico);
     }
 
     [Fact]
-    public void Form_NaoDeveInstanciarImplementacaoSapConcreta()
+    public void Composicao_NaoDeveInstanciarImplementacaoSapConcreta()
     {
-        string arquivo = Path.Combine(
-            RaizProjeto(),
-            "Tela",
-            "Processo",
-            "ProcessoEntradaProdutoForm.cs");
-        string conteudo = File.ReadAllText(arquivo);
+        // H9 Etapa 5: a composicao SAP (escolha mock/real via fabrica) vive no controller; a tela
+        // nao decide mock/real nem fala direto com a implementacao SAP.
+        string form = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Tela", "Processo", "ProcessoEntradaProdutoForm.cs"));
+        string controller = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Controle", "Processo", "EntradaProdutoController.cs"));
+        string seam = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Servicos", "IntegracaoSap", "IntegracaoEntradaSapServico.cs"));
 
-        Assert.Contains("IPedidoCompraSapServico _pedidoCompraServico", conteudo, StringComparison.Ordinal);
-        Assert.Contains("FabricaPedidoCompraSapServico.Criar()", conteudo, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "new SincronizacaoPedidoCompraSapServico",
-            conteudo,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("new IntegracaoSapMockServico", conteudo, StringComparison.Ordinal);
+        // A fabrica (decisao mock/real) fica no controller, nunca na tela.
+        Assert.Contains("FabricaPedidoCompraSapServico.Criar()", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("FabricaPedidoCompraSapServico.Criar()", form, StringComparison.Ordinal);
+
+        // Ninguem instancia implementacao SAP concreta diretamente.
+        foreach (string conteudo in new[] { form, controller, seam })
+        {
+            Assert.DoesNotContain("new SincronizacaoPedidoCompraSapServico", conteudo, StringComparison.Ordinal);
+            Assert.DoesNotContain("new IntegracaoSapMockServico", conteudo, StringComparison.Ordinal);
+        }
+
+        // O seam recebe a abstracao por construtor (nao escolhe implementacao).
+        Assert.Contains("IPedidoCompraSapServico", seam, StringComparison.Ordinal);
     }
 
     [Fact]

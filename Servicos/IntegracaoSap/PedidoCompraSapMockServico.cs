@@ -22,6 +22,15 @@ internal sealed class PedidoCompraSapMockServico : IPedidoCompraSapServico
         }
     ];
 
+    internal PedidoCompraSapMockServico(bool usoAutorizado)
+    {
+        if (!usoAutorizado)
+        {
+            throw new InvalidOperationException(
+                "Mock SAP proibido fora de ambiente demonstrativo com banco desabilitado.");
+        }
+    }
+
     public bool EhSimulado => true;
     public bool SapConfigurado => false;
     public bool EscritaSapHabilitada => false;
@@ -35,6 +44,21 @@ internal sealed class PedidoCompraSapMockServico : IPedidoCompraSapServico
 
     public Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<string>>([NumeroPedidoDemonstracao]);
+
+    public Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<PedidoCompraSapAgregado?>(
+            EhPedidoDemonstracao(numeroPedido)
+                ? new PedidoCompraSapAgregado
+                {
+                    NumeroPedido = NumeroPedidoDemonstracao,
+                    Fornecedor = "FORNECEDOR DEMO",
+                    DataPedido = DateOnly.FromDateTime(DateTime.Today),
+                    TipoPedido = "NB",
+                    Itens = Itens
+                }
+                : null);
 
     public Task<string> ObterFornecedorPorPedidoAsync(
         string numeroPedido,

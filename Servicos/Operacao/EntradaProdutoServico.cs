@@ -3,6 +3,7 @@ using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Servicos.Auditoria;
+using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Seguranca;
 
@@ -10,14 +11,16 @@ namespace FugaPET_Dev.Servicos.Operacao;
 
 /// <summary>
 /// Portao de seguranca e persistencia do lancamento de Entrada de Produto (rastreabilidade
-/// completa: lancamento + itens + pesagens). Valida autenticacao, permissao, origem, pesos,
-/// situacao do pedido/item, tara x setor e centro x deposito ANTES de gravar. Tentativas negadas
-/// sao auditadas (best-effort) sem que falha de auditoria libere a operacao.
+/// completa: lancamento + itens + pesagens). Valida autenticacao, permissao (FINALIZAR ou
+/// EXECUTAR), origem, pesos, situacao do pedido/item, setor, tara x setor e balanca x setor
+/// ANTES de gravar. Tentativas negadas sao auditadas (best-effort) sem que falha de auditoria
+/// libere a operacao. Retorna ResultadoOperacao amigavel — excecoes de infraestrutura propagam.
 /// </summary>
 public sealed class EntradaProdutoServico
 {
     private const string OrigemManual = "MANUAL";
     private static readonly string[] OrigensValidas = ["BALANCA", "MANUAL"];
+    private static readonly string[] StatusPesagemValidos = ["VALIDA", "CANCELADA", "ESTORNADA"];
     private const string TelaAuditoria = "Entrada de Produto";
 
     // Tolerancia para liquido = bruto - tara, alinhada a regra endurecida aprovada pelo Gaia (script 022 consolidado).
@@ -26,6 +29,7 @@ public sealed class EntradaProdutoServico
     private readonly EntradaProdutoRepositorio _repositorio;
     private readonly PesagemEntradaItemRepositorio _itemRepositorio;
     private readonly TaraRepositorio _taraRepositorio;
+    private readonly BalancaRepositorio? _balancaRepositorio;
     private readonly AutorizacaoCentroDepositoEntrada _autorizacaoCentroDeposito;
     private readonly AuditoriaServico? _auditoria;
 
@@ -34,6 +38,7 @@ public sealed class EntradaProdutoServico
             new EntradaProdutoRepositorio(Fabrica()),
             new PesagemEntradaItemRepositorio(Fabrica()),
             new TaraRepositorio(Fabrica()),
+            new BalancaRepositorio(Fabrica()),
             AutorizacaoCentroDepositoEntrada.CarregarDoAmbiente(),
             CriarAuditoriaPadrao())
     {
@@ -43,63 +48,102 @@ public sealed class EntradaProdutoServico
         EntradaProdutoRepositorio repositorio,
         PesagemEntradaItemRepositorio itemRepositorio,
         TaraRepositorio taraRepositorio,
+        BalancaRepositorio? balancaRepositorio,
         AutorizacaoCentroDepositoEntrada autorizacaoCentroDeposito,
         AuditoriaServico? auditoria)
     {
         _repositorio = repositorio;
         _itemRepositorio = itemRepositorio;
         _taraRepositorio = taraRepositorio;
+        _balancaRepositorio = balancaRepositorio;
         _autorizacaoCentroDeposito = autorizacaoCentroDeposito;
         _auditoria = auditoria;
     }
 
     /// <summary>
-    /// Valida e grava um lancamento completo. Lanca <see cref="ErroOperacionalEsperadoException"/>
-    /// com mensagem amigavel quando alguma regra falha. Retorna o codigo do lancamento gravado.
+    /// Valida e grava um lancamento completo. Retorna <see cref="ResultadoOperacao.Falha"/> com
+    /// mensagem amigavel quando alguma regra de negocio falha. Excecoes de infraestrutura (DB,
+    /// null de repositorio em testes) propagam normalmente para o chamador.
     /// </summary>
-    public async Task<long> RegistrarLancamentoAsync(EntradaProdutoLancamento lancamento, CancellationToken cancellationToken = default)
+    public async Task<ResultadoOperacao> RegistrarLancamentoAsync(
+        EntradaProdutoLancamento lancamento, CancellationToken cancellationToken = default)
     {
-        long usuario = ExigirUsuarioAutenticado();
-
-        if (!AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Finalizar))
+        try
         {
-            await NegarAsync(usuario, AutorizacaoEntradaProdutoServico.MensagemSemPermissao(PermissoesSistema.Acoes.Finalizar), cancellationToken);
-        }
+            long usuario = ExigirUsuarioAutenticado();
 
-        if (string.IsNullOrWhiteSpace(lancamento.NumeroPedido))
+            // Permissao: FINALIZAR ou EXECUTAR sao suficientes para registrar a pesagem.
+            bool temPermissao =
+                AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Finalizar)
+                || AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Executar);
+            if (!temPermissao)
+            {
+                await NegarAsync(usuario,
+                    AutorizacaoEntradaProdutoServico.MensagemSemPermissao(PermissoesSistema.Acoes.Finalizar),
+                    cancellationToken);
+            }
+
+            if (string.IsNullOrWhiteSpace(lancamento.NumeroPedido))
+            {
+                throw new ErroOperacionalEsperadoException("Pedido obrigatorio para o lancamento de entrada.");
+            }
+
+            IReadOnlyList<EntradaProdutoItem> itensComPesagem = lancamento.Itens
+                .Where(item => item.Pesagens.Count > 0)
+                .ToList();
+            if (itensComPesagem.Count == 0)
+            {
+                throw new ErroOperacionalEsperadoException("Nenhuma pesagem informada para gravar.");
+            }
+
+            bool possuiManual = itensComPesagem
+                .SelectMany(item => item.Pesagens)
+                .Any(p => string.Equals(p.Origem?.Trim(), OrigemManual, StringComparison.OrdinalIgnoreCase));
+            if (possuiManual && !AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.PesoManual))
+            {
+                await NegarAsync(usuario,
+                    AutorizacaoEntradaProdutoServico.MensagemSemPermissao(PermissoesSistema.Acoes.PesoManual),
+                    cancellationToken);
+            }
+
+            // Setor: quando o lancamento especifica setor e o usuario tem setor padrao, devem coincidir.
+            if (lancamento.CodigoSetor is long setorLancamento
+                && EstadoSessaoUsuarioAtual.SessaoAtual?.IdSetorPadrao is long setorUsuario
+                && setorLancamento != setorUsuario)
+            {
+                await NegarAsync(usuario, "Setor do lancamento nao autorizado para o usuario.", cancellationToken);
+            }
+
+            IReadOnlySet<long> tarasDoSetor = await CarregarTarasDoSetorAsync(lancamento.CodigoSetor, cancellationToken);
+
+            foreach (EntradaProdutoItem item in itensComPesagem)
+            {
+                await ValidarItemAsync(usuario, lancamento.CodigoSetor, item, tarasDoSetor, cancellationToken);
+            }
+
+            long id = await _repositorio.SalvarLancamentoAsync(
+                lancamento with { Itens = itensComPesagem }, cancellationToken);
+
+            return ResultadoOperacao.Ok($"Lancamento {id} gravado com sucesso.", idGerado: id);
+        }
+        catch (ErroOperacionalEsperadoException ex)
         {
-            throw new ErroOperacionalEsperadoException("Pedido obrigatorio para o lancamento de entrada.");
+            return ResultadoOperacao.Falha(ex.Message);
         }
-
-        IReadOnlyList<EntradaProdutoItem> itensComPesagem = lancamento.Itens
-            .Where(item => item.Pesagens.Count > 0)
-            .ToList();
-        if (itensComPesagem.Count == 0)
-        {
-            throw new ErroOperacionalEsperadoException("Nenhuma pesagem informada para gravar.");
-        }
-
-        bool possuiManual = itensComPesagem
-            .SelectMany(item => item.Pesagens)
-            .Any(pesagem => string.Equals(pesagem.Origem?.Trim(), OrigemManual, StringComparison.OrdinalIgnoreCase));
-        if (possuiManual && !AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.PesoManual))
-        {
-            await NegarAsync(usuario, AutorizacaoEntradaProdutoServico.MensagemSemPermissao(PermissoesSistema.Acoes.PesoManual), cancellationToken);
-        }
-
-        // Taras ativas do setor do lancamento (validacao tara x setor). Vazio quando nao ha setor.
-        IReadOnlySet<long> tarasDoSetor = await CarregarTarasDoSetorAsync(lancamento.CodigoSetor, cancellationToken);
-
-        foreach (EntradaProdutoItem item in itensComPesagem)
-        {
-            await ValidarItemAsync(usuario, item, tarasDoSetor, cancellationToken);
-        }
-
-        return await _repositorio.SalvarLancamentoAsync(lancamento with { Itens = itensComPesagem }, cancellationToken);
     }
 
+    public Task<EntradaProdutoItemPersistido?> ObterItemPersistidoAsync(
+        long codigoLancamento,
+        long codigoSapPedidoCompraItem,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ObterItemPersistidoAsync(
+            codigoLancamento,
+            codigoSapPedidoCompraItem,
+            cancellationToken);
+
     private async Task ValidarItemAsync(
-        long usuario, EntradaProdutoItem item, IReadOnlySet<long> tarasDoSetor, CancellationToken cancellationToken)
+        long usuario, long? codigoSetor, EntradaProdutoItem item,
+        IReadOnlySet<long> tarasDoSetor, CancellationToken cancellationToken)
     {
         // H5: centro/deposito autorizado.
         if (!_autorizacaoCentroDeposito.ItemAutorizado(item.Centro, item.Deposito))
@@ -131,18 +175,25 @@ public sealed class EntradaProdutoServico
 
         foreach (EntradaProdutoPesagem pesagem in item.Pesagens)
         {
-            await ValidarPesagemAsync(usuario, item, pesagem, tarasDoSetor, cancellationToken);
+            await ValidarPesagemAsync(usuario, codigoSetor, item, pesagem, tarasDoSetor, cancellationToken);
         }
     }
 
     private async Task ValidarPesagemAsync(
-        long usuario, EntradaProdutoItem item, EntradaProdutoPesagem pesagem,
+        long usuario, long? codigoSetor, EntradaProdutoItem item, EntradaProdutoPesagem pesagem,
         IReadOnlySet<long> tarasDoSetor, CancellationToken cancellationToken)
     {
         string origem = pesagem.Origem?.Trim() ?? string.Empty;
         if (!OrigensValidas.Contains(origem, StringComparer.OrdinalIgnoreCase))
         {
             await NegarAsync(usuario, $"Origem de peso invalida no item {item.NumeroItem}.", cancellationToken);
+        }
+
+        if (!StatusPesagemValidos.Contains(
+                pesagem.StatusPesagem?.Trim(),
+                StringComparer.OrdinalIgnoreCase))
+        {
+            await NegarAsync(usuario, $"Status da pesagem invalido no item {item.NumeroItem}.", cancellationToken);
         }
 
         if (pesagem.PesoBrutoKg <= 0m)
@@ -172,6 +223,20 @@ public sealed class EntradaProdutoServico
             && tarasDoSetor.Count > 0 && !tarasDoSetor.Contains(codigoTara))
         {
             await NegarAsync(usuario, $"Tara selecionada nao pertence ao setor autorizado (item {item.NumeroItem}).", cancellationToken);
+        }
+
+        // Balanca: quando informada, deve estar ativa e pertencer ao setor do lancamento.
+        if (pesagem.CodigoBalanca is long codigoBalanca && codigoBalanca > 0 && _balancaRepositorio is not null)
+        {
+            BalancaCadastro? balanca = await _balancaRepositorio.ObterPorIdAsync(codigoBalanca, cancellationToken);
+            if (balanca is null || !balanca.SituacaoBalanca)
+            {
+                await NegarAsync(usuario, $"Balanca informada nao encontrada ou inativa (item {item.NumeroItem}).", cancellationToken);
+            }
+            if (codigoSetor is long setorLancamento && balanca!.CodigoSetor != setorLancamento)
+            {
+                await NegarAsync(usuario, $"Balanca nao pertence ao setor do lancamento (item {item.NumeroItem}).", cancellationToken);
+            }
         }
     }
 

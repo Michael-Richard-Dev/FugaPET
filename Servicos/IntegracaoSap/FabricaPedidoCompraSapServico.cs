@@ -8,13 +8,24 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 public static class FabricaPedidoCompraSapServico
 {
     public static IPedidoCompraSapServico Criar()
-        => Criar(EstadoIntegracaoBanco.ModoDemonstracao);
+        => Criar(
+            EstadoIntegracaoBanco.Habilitado,
+            EstadoIntegracaoBanco.ModoDemonstracao,
+            EstadoIntegracaoBanco.AmbienteDemonstrativo);
 
-    internal static IPedidoCompraSapServico Criar(bool modoDemonstracao)
+    internal static IPedidoCompraSapServico Criar(
+        bool bancoHabilitado,
+        bool modoDemonstracao,
+        bool ambienteDemonstrativo)
     {
-        if (modoDemonstracao)
+        bool podeUsarDadosSimulados =
+            EstadoIntegracaoBanco.CalcularPodeUsarDadosSimulados(
+                bancoHabilitado,
+                modoDemonstracao,
+                ambienteDemonstrativo);
+        if (podeUsarDadosSimulados)
         {
-            return new PedidoCompraSapMockServico();
+            return new PedidoCompraSapMockServico(podeUsarDadosSimulados);
         }
 
         ConfiguracaoSap configuracaoSap = LeitorConfiguracaoSap.Carregar();

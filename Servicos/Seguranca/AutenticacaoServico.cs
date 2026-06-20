@@ -43,9 +43,8 @@ public sealed class AutenticacaoServico
 
         if (!EstadoIntegracaoBanco.Habilitado)
         {
-            // Sem banco, o login local offline so e permitido em modo demonstracao.
-            // Em homologacao/producao, banco desabilitado BLOQUEIA o login (sem operar inseguro).
-            if (!EstadoIntegracaoBanco.ModoDemonstracao)
+            // Sem banco, o login local offline exige demonstracao segura e explicita.
+            if (!EstadoIntegracaoBanco.PodeUsarDadosSimulados)
             {
                 return ResultadoAutenticacao.Falha(
                     "Sistema sem conexao com o banco de dados. Login bloqueado — acione o suporte.");
