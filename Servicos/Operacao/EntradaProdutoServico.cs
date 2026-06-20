@@ -141,6 +141,12 @@ public sealed class EntradaProdutoServico
             codigoSapPedidoCompraItem,
             cancellationToken);
 
+    /// <summary>Itens ja persistidos do lancamento, com pesos consolidados, para envio controlado ao SAP.</summary>
+    public Task<IReadOnlyList<EntradaProdutoItemEnvioSap>> ListarItensParaEnvioSapAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken);
+
     private async Task ValidarItemAsync(
         long usuario, long? codigoSetor, EntradaProdutoItem item,
         IReadOnlySet<long> tarasDoSetor, CancellationToken cancellationToken)

@@ -12,9 +12,11 @@ namespace FugaPET_Dev.Controle.Processo;
 /// Coordenador da tela de Entrada de Produto (ProcessoEntradaProdutoForm).
 ///
 /// Refactor H9: este controller e o dono dos servicos usados pela tela e coordena o fluxo de
-/// negocio, para que o Form apenas capture selecao e apresente dados/mensagens. O servico de SAP
-/// continua vindo da fabrica (FabricaPedidoCompraSapServico) — quem decide mock/real e a fabrica,
-/// nunca o Form nem este controller.
+/// negocio, para que o Form apenas capture selecao e apresente dados/mensagens.
+///
+/// C12: a FINALIZACAO grava SOMENTE local (sem PATCH automatico). A escrita de peso no SAP fica
+/// num fluxo SEPARADO e controlado (<see cref="EnviarPesoEntradaParaSapHomologacaoAsync"/>), que so
+/// roda em HOMOLOGACAO, com escrita habilitada e permissao ENVIAR_SAP.
 /// </summary>
 public sealed class EntradaProdutoController
 {
@@ -25,6 +27,9 @@ public sealed class EntradaProdutoController
     public ImpressaoEntradaServico Impressao { get; }
     public AutorizacaoCentroDepositoEntrada AutorizacaoCentroDeposito { get; }
     public TaraController Tara { get; }
+
+    private readonly Func<bool> _ehAmbienteHomologacao;
+    private readonly Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>> _carregarItensParaEnvio;
 
     // Ctor padrao: a fabrica decide mock/real (a tela nao decide nem instancia servico SAP concreto).
     public EntradaProdutoController()
@@ -44,7 +49,9 @@ public sealed class EntradaProdutoController
         BalancaLeituraServico balancaLeituraServico,
         ImpressoraEtiquetaServico impressoraEtiquetaServico,
         AutorizacaoCentroDepositoEntrada autorizacaoCentroDeposito,
-        TaraController taraController)
+        TaraController taraController,
+        Func<bool>? ehAmbienteHomologacao = null,
+        Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>>? carregarItensParaEnvio = null)
     {
         Sap = sap ?? throw new ArgumentNullException(nameof(sap));
         EntradaProduto = entradaProdutoServico ?? throw new ArgumentNullException(nameof(entradaProdutoServico));
@@ -53,12 +60,16 @@ public sealed class EntradaProdutoController
         Impressao = new ImpressaoEntradaServico(ImpressoraEtiqueta);
         AutorizacaoCentroDeposito = autorizacaoCentroDeposito ?? throw new ArgumentNullException(nameof(autorizacaoCentroDeposito));
         Tara = taraController ?? throw new ArgumentNullException(nameof(taraController));
+        _ehAmbienteHomologacao = ehAmbienteHomologacao ?? AmbienteIntegracaoSap.EhHomologacao;
+        _carregarItensParaEnvio = carregarItensParaEnvio
+            ?? ((codigoLancamento, cancellationToken) =>
+                EntradaProduto.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken));
     }
 
     /// <summary>
-    /// Finaliza a leitura: grava o lancamento LOCALMENTE (rastreabilidade completa) e, somente
-    /// depois, tenta a ESCRITA no SAP (PATCH de peso) — respeitando autorizacao e a chave de escrita.
-    /// Nao lanca: devolve um <see cref="ResultadoFinalizacaoEntrada"/> que a tela apenas apresenta.
+    /// C12: finaliza a leitura gravando SOMENTE local (rastreabilidade completa). NAO executa PATCH
+    /// no SAP — o envio de peso ao SAP e um fluxo separado e controlado. Nao lanca: devolve um
+    /// <see cref="ResultadoFinalizacaoEntrada"/> que a tela apenas apresenta.
     /// </summary>
     public async Task<ResultadoFinalizacaoEntrada> FinalizarLeituraAsync(
         EntradaProdutoLancamento lancamento,
@@ -71,7 +82,6 @@ public sealed class EntradaProdutoController
 
         try
         {
-            // (1) Persistencia local ANTES de qualquer escrita no SAP.
             ResultadoOperacao resultadoLancamento =
                 await EntradaProduto.RegistrarLancamentoAsync(lancamento, cancellationToken);
             if (!resultadoLancamento.Sucesso)
@@ -83,64 +93,11 @@ public sealed class EntradaProdutoController
                 };
             }
 
-            long codigoLancamento = resultadoLancamento.IdGerado ?? 0;
-            int gravados = lancamento.Itens.Count;
-
-            // (2) Monta as atualizacoes de peso a partir do lancamento ja gravado.
-            List<AtualizacaoPesoSap> atualizacoes = MontarAtualizacoesSap(lancamento);
-            if (atualizacoes.Count == 0)
-            {
-                return new ResultadoFinalizacaoEntrada
-                {
-                    Cenario = CenarioFinalizacaoEntrada.GravadoSemSap,
-                    CodigoLancamento = codigoLancamento,
-                    Gravados = gravados
-                };
-            }
-
-            // (3) Autorizacao da escrita no SAP por modulo+rotina+acao (nunca por nome de perfil).
-            if (!AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.EnviarSap))
-            {
-                return new ResultadoFinalizacaoEntrada
-                {
-                    Cenario = CenarioFinalizacaoEntrada.GravadoSapNaoAutorizado,
-                    CodigoLancamento = codigoLancamento,
-                    Gravados = gravados
-                };
-            }
-
-            // (4) PATCH de peso no SAP (a chave de escrita ainda e respeitada pelo servico).
-            int enviados = 0;
-            string? ultimaFalha = null;
-            foreach (AtualizacaoPesoSap atualizacao in atualizacoes)
-            {
-                ResultadoOperacao resultado = await Sap.AtualizarPesoItemSapAsync(
-                    atualizacao.NumeroPedido,
-                    atualizacao.NumeroItem,
-                    atualizacao.PesoLiquido,
-                    atualizacao.PesoBruto,
-                    cancellationToken);
-
-                if (resultado.Sucesso)
-                {
-                    enviados++;
-                }
-                else
-                {
-                    ultimaFalha = resultado.Mensagem;
-                }
-            }
-
             return new ResultadoFinalizacaoEntrada
             {
-                Cenario = enviados == atualizacoes.Count
-                    ? CenarioFinalizacaoEntrada.GravadoSapEnviado
-                    : CenarioFinalizacaoEntrada.GravadoSapParcial,
-                CodigoLancamento = codigoLancamento,
-                Gravados = gravados,
-                SapEnviados = enviados,
-                SapTotal = atualizacoes.Count,
-                UltimaFalhaSap = ultimaFalha
+                Cenario = CenarioFinalizacaoEntrada.GravadoLocal,
+                CodigoLancamento = resultadoLancamento.IdGerado ?? 0,
+                Gravados = lancamento.Itens.Count
             };
         }
         catch (Exception ex)
@@ -148,6 +105,90 @@ public sealed class EntradaProdutoController
             Sap.RegistrarDiagnostico($"ERRO ao gravar pesagens.{Environment.NewLine}{ex}");
             return new ResultadoFinalizacaoEntrada { Cenario = CenarioFinalizacaoEntrada.ErroAoGravar };
         }
+    }
+
+    /// <summary>
+    /// C12: envio CONTROLADO do peso ao SAP de homologacao (PATCH), SEPARADO da finalizacao local.
+    /// So executa o PATCH quando TODAS as travas estao habilitadas: ambiente HOMOLOGACAO, permissao
+    /// ENVIAR_SAP e escrita habilitada (FUGAPET_SAP_WRITE_ENABLED). A integracao ativa, a
+    /// configuracao SAP e a chave de escrita ainda sao reaplicadas pelo servico governado no PATCH.
+    /// Registra o resultado por item de forma sanitizada (sem segredo/payload).
+    /// </summary>
+    public async Task<ResultadoEnvioSapEntrada> EnviarPesoEntradaParaSapHomologacaoAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_ehAmbienteHomologacao())
+        {
+            Sap.RegistrarDiagnostico($"Envio SAP bloqueado (lancamento {codigoLancamento}): ambiente nao e homologacao.");
+            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.AmbienteNaoHomologacao };
+        }
+
+        if (!AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.EnviarSap))
+        {
+            Sap.RegistrarDiagnostico($"Envio SAP bloqueado (lancamento {codigoLancamento}): sem permissao ENVIAR_SAP.");
+            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.SemPermissao };
+        }
+
+        if (!Sap.EscritaSapHabilitada)
+        {
+            Sap.RegistrarDiagnostico($"Envio SAP bloqueado (lancamento {codigoLancamento}): escrita SAP desabilitada.");
+            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.EscritaDesabilitada };
+        }
+
+        IReadOnlyList<EntradaProdutoItemEnvioSap> itens;
+        try
+        {
+            itens = await _carregarItensParaEnvio(codigoLancamento, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Sap.RegistrarDiagnostico(
+                $"Envio SAP: falha ao carregar itens do lancamento {codigoLancamento}.{Environment.NewLine}{ex}");
+            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.Falha };
+        }
+
+        if (itens.Count == 0)
+        {
+            Sap.RegistrarDiagnostico($"Envio SAP bloqueado: lancamento {codigoLancamento} sem itens gravados.");
+            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.LancamentoSemItens };
+        }
+
+        List<ResultadoItemEnvioSap> resultados = [];
+        int enviados = 0;
+        foreach (EntradaProdutoItemEnvioSap item in itens)
+        {
+            ResultadoOperacao resultado = await Sap.AtualizarPesoItemSapAsync(
+                item.NumeroPedido,
+                item.NumeroItem,
+                item.PesoLiquidoKg,
+                item.PesoBrutoKg,
+                cancellationToken);
+
+            resultados.Add(new ResultadoItemEnvioSap(item.NumeroItem, resultado.Sucesso, resultado.Mensagem));
+            if (resultado.Sucesso)
+            {
+                enviados++;
+            }
+
+            Sap.RegistrarDiagnostico(
+                $"Envio SAP lancamento {codigoLancamento} item {item.NumeroItem}: "
+                + $"{(resultado.Sucesso ? "OK" : "FALHA")} - {resultado.Mensagem}");
+        }
+
+        CenarioEnvioSapEntrada cenario = enviados == itens.Count
+            ? CenarioEnvioSapEntrada.Enviado
+            : enviados == 0
+                ? CenarioEnvioSapEntrada.Falha
+                : CenarioEnvioSapEntrada.Parcial;
+
+        return new ResultadoEnvioSapEntrada
+        {
+            Cenario = cenario,
+            Enviados = enviados,
+            Total = itens.Count,
+            Itens = resultados
+        };
     }
 
     /// <summary>
@@ -196,55 +237,48 @@ public sealed class EntradaProdutoController
             ItensOcultados = pedido.Itens.Count - itensAutorizados.Count
         };
     }
-
-    private static List<AtualizacaoPesoSap> MontarAtualizacoesSap(EntradaProdutoLancamento lancamento)
-    {
-        List<AtualizacaoPesoSap> atualizacoes = [];
-        string numeroPedido = lancamento.NumeroPedido?.Trim() ?? string.Empty;
-        foreach (EntradaProdutoItem item in lancamento.Itens)
-        {
-            decimal pesoLiquido = EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido(item.Pesagens);
-            decimal pesoBruto = EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(item.Pesagens);
-            if (pesoLiquido > 0m
-                && !string.IsNullOrWhiteSpace(numeroPedido)
-                && !string.IsNullOrWhiteSpace(item.NumeroItem))
-            {
-                atualizacoes.Add(new AtualizacaoPesoSap(numeroPedido, item.NumeroItem, pesoLiquido, pesoBruto));
-            }
-        }
-
-        return atualizacoes;
-    }
-
-    private sealed record AtualizacaoPesoSap(
-        string NumeroPedido,
-        string NumeroItem,
-        decimal PesoLiquido,
-        decimal PesoBruto);
 }
 
-/// <summary>Cenarios possiveis da finalizacao de leitura, para a tela apresentar a mensagem certa.</summary>
+/// <summary>Cenarios da finalizacao LOCAL (C12: sem PATCH automatico).</summary>
 public enum CenarioFinalizacaoEntrada
 {
     NenhumaLeitura,
     LancamentoNaoGravado,
-    GravadoSemSap,
-    GravadoSapNaoAutorizado,
-    GravadoSapEnviado,
-    GravadoSapParcial,
+    GravadoLocal,
     ErroAoGravar
 }
 
-/// <summary>Resultado da finalizacao de leitura (somente dados; a tela formata a apresentacao).</summary>
+/// <summary>Resultado da finalizacao local (somente dados; a tela formata a apresentacao).</summary>
 public sealed class ResultadoFinalizacaoEntrada
 {
     public CenarioFinalizacaoEntrada Cenario { get; init; }
     public long? CodigoLancamento { get; init; }
     public int Gravados { get; init; }
-    public int SapEnviados { get; init; }
-    public int SapTotal { get; init; }
     public string? MensagemFalhaLancamento { get; init; }
-    public string? UltimaFalhaSap { get; init; }
+}
+
+/// <summary>Cenarios do envio CONTROLADO de peso ao SAP (fluxo separado da finalizacao).</summary>
+public enum CenarioEnvioSapEntrada
+{
+    AmbienteNaoHomologacao,
+    SemPermissao,
+    EscritaDesabilitada,
+    LancamentoSemItens,
+    Enviado,
+    Parcial,
+    Falha
+}
+
+/// <summary>Resultado por item do envio de peso ao SAP (mensagem ja sanitizada pelo servico).</summary>
+public sealed record ResultadoItemEnvioSap(string NumeroItem, bool Sucesso, string Mensagem);
+
+/// <summary>Resultado do envio controlado de peso ao SAP de homologacao.</summary>
+public sealed class ResultadoEnvioSapEntrada
+{
+    public CenarioEnvioSapEntrada Cenario { get; init; }
+    public int Enviados { get; init; }
+    public int Total { get; init; }
+    public IReadOnlyList<ResultadoItemEnvioSap> Itens { get; init; } = [];
 }
 
 /// <summary>Resultado da consulta de um pedido (dados ja filtrados pelo escopo; a tela so apresenta).</summary>

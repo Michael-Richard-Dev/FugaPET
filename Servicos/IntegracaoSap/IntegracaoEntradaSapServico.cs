@@ -29,6 +29,9 @@ public sealed class IntegracaoEntradaSapServico
 
     public bool SapConfigurado => _pedidoCompra.SapConfigurado;
 
+    /// <summary>Escrita SAP habilitada (chave FUGAPET_SAP_WRITE_ENABLED / Sap:EscritaHabilitada).</summary>
+    public bool EscritaSapHabilitada => _pedidoCompra.EscritaSapHabilitada;
+
     public Task<ResultadoOperacao> SincronizarPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)
         => _pedidoCompra.SincronizarPedidoAsync(numeroPedido, cancellationToken);
 

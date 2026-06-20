@@ -49,11 +49,23 @@ public static class LeitorConfiguracaoSap
         bool escritaHabilitada = false;
         int timeout = 30;
 
+        // Arquivo ausente: e valido carregar a configuracao apenas por variaveis de ambiente.
+        // Arquivo presente porem malformado e ERRO DE IMPLANTACAO: erro controlado, nunca tratado
+        // silenciosamente como "nao configurado" (e nunca expondo caminho ou conteudo do arquivo).
         if (File.Exists(caminhoArquivo))
         {
+            JsonDocument documento;
             try
             {
-                using JsonDocument documento = JsonDocument.Parse(File.ReadAllText(caminhoArquivo));
+                documento = JsonDocument.Parse(File.ReadAllText(caminhoArquivo));
+            }
+            catch (JsonException ex)
+            {
+                throw new ConfiguracaoSapInvalidaException(ex);
+            }
+
+            using (documento)
+            {
                 if (documento.RootElement.TryGetProperty("sap", out JsonElement sap))
                 {
                     baseUrlArquivo = LerTexto(sap, "base_url", string.Empty);
@@ -62,10 +74,6 @@ public static class LeitorConfiguracaoSap
                     escritaHabilitada = LerBooleano(sap, "escrita_habilitada", false);
                     timeout = LerInteiro(sap, "timeout_segundos", 30);
                 }
-            }
-            catch
-            {
-                // Arquivo malformado nao deve quebrar a aplicacao: trata como nao configurado.
             }
         }
 

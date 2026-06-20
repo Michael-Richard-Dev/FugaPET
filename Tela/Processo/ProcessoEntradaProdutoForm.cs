@@ -19,6 +19,20 @@ namespace FugaPET_Dev.Tela.Processo;
 
 public partial class ProcessoEntradaProdutoForm : Form
 {
+    private enum EstadoVisualLocalEntrada
+    {
+        Pendente,
+        Gravado
+    }
+
+    private enum EstadoVisualIntegracaoSap
+    {
+        Pendente,
+        Enviada,
+        Falha,
+        Parcial
+    }
+
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
     private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
@@ -67,6 +81,7 @@ public partial class ProcessoEntradaProdutoForm : Form
     private long? _codigoLancamentoPersistido;
     private readonly CancellationTokenSource _fechamentoTelaCts = new();
     private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController;
+    private Task _envioSapTask = Task.CompletedTask;
 
     public ProcessoEntradaProdutoForm()
         : this(new global::FugaPET_Dev.Controle.Processo.EntradaProdutoController())
@@ -265,11 +280,44 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void AtualizarStatusSap()
     {
-        bool sapConfigurado = _controller.Sap.SapConfigurado;
-        sapStatusDotLabel.ForeColor = sapConfigurado
-            ? Color.FromArgb(34, 197, 94)
-            : Color.FromArgb(250, 204, 21);
-        sapStatusLabel.Text = sapConfigurado ? "SAP: integrado" : "SAP: não configurado";
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.Pendente,
+            _controller.Sap.SapConfigurado
+                ? "aguardando envio autorizado"
+                : "configuração indisponível");
+    }
+
+    private void AtualizarEstadoVisualLocal(EstadoVisualLocalEntrada estado, string detalhe)
+    {
+        statusLabel.ForeColor = estado == EstadoVisualLocalEntrada.Gravado
+            ? Color.FromArgb(34, 166, 82)
+            : Color.FromArgb(180, 83, 9);
+        statusLabel.Text = estado == EstadoVisualLocalEntrada.Gravado
+            ? $"LOCAL GRAVADO — {detalhe}"
+            : $"LOCAL PENDENTE — {detalhe}";
+    }
+
+    private void AtualizarEstadoVisualIntegracaoSap(
+        EstadoVisualIntegracaoSap estado,
+        string? detalhe = null)
+    {
+        (string texto, Color cor) = estado switch
+        {
+            EstadoVisualIntegracaoSap.Enviada =>
+                ("INTEGRAÇÃO SAP HML: ENVIADA", Color.FromArgb(34, 197, 94)),
+            EstadoVisualIntegracaoSap.Falha =>
+                ("INTEGRAÇÃO SAP HML: FALHA", Color.FromArgb(239, 68, 68)),
+            EstadoVisualIntegracaoSap.Parcial =>
+                ("INTEGRAÇÃO SAP HML: PARCIAL", Color.FromArgb(249, 115, 22)),
+            _ =>
+                ("INTEGRAÇÃO SAP HML: PENDENTE", Color.FromArgb(250, 204, 21))
+        };
+
+        sapStatusDotLabel.ForeColor = cor;
+        sapStatusLabel.Text = string.IsNullOrWhiteSpace(detalhe)
+            ? texto
+            : $"{texto} — {detalhe}";
+        sapStatusLabel.AutoSize = true;
     }
 
     private void ReturnToLeituraProducao()
@@ -573,11 +621,186 @@ public partial class ProcessoEntradaProdutoForm : Form
         iniciarLeituraButton.Click += ToggleProductionFromSideButton_Click;
         lerEtiquetaButton.Click += ReadWeightLegend_Click;
         leituraManualButton.Click += LeituraManual_Click;
+        ConfigurarAcaoEnvioSapHomologacao();
 
         UpdateProductionState(false);
         SetReadWeightEnabled(false);
         SetDeleteActionsEnabled(false);
         UpdateProductionCounters();
+    }
+
+    private void ConfigurarAcaoEnvioSapHomologacao()
+    {
+        bool podeEnviarSap = PossuiPermissaoEntrada(PermissoesSistema.Acoes.EnviarSap);
+        productionActionsButton.Visible = podeEnviarSap;
+        productionActionsButton.Enabled = podeEnviarSap;
+        productionActionsButton.Text = "Enviar SAP HML";
+        productionActionsButton.AccessibleName = "Enviar lançamento para SAP de homologação";
+        productionActionsButton.Click += EnviarSapHomologacao_Click;
+    }
+
+    private async void EnviarSapHomologacao_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (_envioSapTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _envioSapTask = EnviarSapHomologacaoAsync();
+            await _envioSapTask;
+        }
+        catch (OperationCanceledException) when (_fechamentoTelaCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            string mensagem = await ErroUsuarioHelper.TratarAsync(
+                "ENVIO_SAP_HML_ERRO",
+                ex,
+                "ProcessoEntradaProdutoForm",
+                "Não foi possível concluir o envio controlado ao SAP de homologação.");
+            AtualizarEstadoVisualIntegracaoSap(EstadoVisualIntegracaoSap.Falha);
+            MessageBox.Show(
+                mensagem,
+                "Falha no envio SAP HML",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task EnviarSapHomologacaoAsync()
+    {
+        if (await BloquearAcaoSemPermissaoAsync(
+                PermissoesSistema.Acoes.EnviarSap,
+                "enviar lançamento ao SAP de homologação"))
+        {
+            return;
+        }
+
+        if (_isProductionStarted)
+        {
+            AtualizarEstadoVisualLocal(
+                EstadoVisualLocalEntrada.Pendente,
+                "finalize e grave o lançamento antes do envio SAP");
+            return;
+        }
+
+        if (_codigoLancamentoPersistido is not long codigoLancamento || codigoLancamento <= 0)
+        {
+            AtualizarEstadoVisualLocal(
+                EstadoVisualLocalEntrada.Pendente,
+                "nenhum lançamento local gravado para envio");
+            MessageBox.Show(
+                "Finalize e grave o lançamento local antes de solicitar o envio ao SAP de homologação.",
+                "Envio SAP HML indisponível",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        DialogResult confirmacao = MessageBox.Show(
+            $"Confirma o envio do lançamento {codigoLancamento} para o SAP DE HOMOLOGAÇÃO?\n\n"
+            + "Esta é uma etapa separada da gravação local e será executada somente após esta confirmação.",
+            "Confirmar envio para SAP HML",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirmacao != DialogResult.Yes)
+        {
+            AtualizarEstadoVisualIntegracaoSap(
+                EstadoVisualIntegracaoSap.Pendente,
+                "envio não confirmado");
+            return;
+        }
+
+        productionActionsButton.Enabled = false;
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.Pendente,
+            "envio autorizado em processamento");
+
+        try
+        {
+            ResultadoEnvioSapEntrada resultado =
+                await _controller.EnviarPesoEntradaParaSapHomologacaoAsync(
+                    codigoLancamento,
+                    _fechamentoTelaCts.Token);
+            ApresentarResultadoEnvioSapHomologacao(resultado);
+        }
+        finally
+        {
+            if (PodeAtualizarTela())
+            {
+                productionActionsButton.Enabled =
+                    PossuiPermissaoEntrada(PermissoesSistema.Acoes.EnviarSap);
+            }
+        }
+    }
+
+    private void ApresentarResultadoEnvioSapHomologacao(ResultadoEnvioSapEntrada resultado)
+    {
+        switch (resultado.Cenario)
+        {
+            case CenarioEnvioSapEntrada.Enviado:
+                AtualizarEstadoVisualIntegracaoSap(
+                    EstadoVisualIntegracaoSap.Enviada,
+                    $"{resultado.Enviados} de {resultado.Total} item(ns)");
+                MessageBox.Show(
+                    $"Envio controlado ao SAP de homologação concluído para {resultado.Enviados} item(ns).",
+                    "Envio SAP HML concluído",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                break;
+
+            case CenarioEnvioSapEntrada.Parcial:
+                AtualizarEstadoVisualIntegracaoSap(
+                    EstadoVisualIntegracaoSap.Parcial,
+                    $"{resultado.Enviados} de {resultado.Total} item(ns)");
+                MessageBox.Show(
+                    $"O SAP de homologação confirmou {resultado.Enviados} de {resultado.Total} item(ns). "
+                    + "Verifique a rotina autorizada de integração antes de tentar novamente.",
+                    "Envio SAP HML parcial",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                break;
+
+            case CenarioEnvioSapEntrada.SemPermissao:
+                AtualizarEstadoVisualIntegracaoSap(
+                    EstadoVisualIntegracaoSap.Pendente,
+                    "usuário sem permissão ENVIAR_SAP");
+                break;
+
+            case CenarioEnvioSapEntrada.AmbienteNaoHomologacao:
+                ApresentarFalhaEnvioSap(
+                    "O envio foi bloqueado porque o ambiente atual não é homologação.");
+                break;
+
+            case CenarioEnvioSapEntrada.EscritaDesabilitada:
+                ApresentarFalhaEnvioSap(
+                    "O envio foi bloqueado porque a escrita SAP está desabilitada.");
+                break;
+
+            case CenarioEnvioSapEntrada.LancamentoSemItens:
+                ApresentarFalhaEnvioSap(
+                    "O lançamento local não possui itens persistidos elegíveis para envio.");
+                break;
+
+            default:
+                ApresentarFalhaEnvioSap(
+                    "O envio controlado ao SAP de homologação não foi concluído.");
+                break;
+        }
+    }
+
+    private void ApresentarFalhaEnvioSap(string mensagem)
+    {
+        AtualizarEstadoVisualIntegracaoSap(EstadoVisualIntegracaoSap.Falha);
+        MessageBox.Show(
+            mensagem,
+            "Falha no envio SAP HML",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
     }
 
     private void ConfigureStartActionHoverEffect()
@@ -915,8 +1138,8 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
     }
 
-    // Captura as leituras do grid, delega a finalizacao (persistencia + escrita SAP) ao controller
-    // e apenas apresenta o resultado. Regra de negocio/PATCH ficam no controller/servicos (H9 Etapa 2).
+    // Captura as leituras do grid e delega somente a persistencia LOCAL ao controller.
+    // O envio SAP HML permanece uma acao separada, explicita e confirmada.
     private async Task GravarPesagensAsync()
     {
         if (!EstadoIntegracaoBanco.Habilitado)
@@ -991,7 +1214,9 @@ public partial class ProcessoEntradaProdutoForm : Form
         switch (resultado.Cenario)
         {
             case CenarioFinalizacaoEntrada.NenhumaLeitura:
-                statusLabel.Text = "Producao parada. Nenhuma leitura para gravar.";
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Pendente,
+                    "nenhuma leitura para gravar");
                 MessageBox.Show(
                     "Nenhuma leitura foi encontrada para finalizar.\n\nConfirme se o item possui leituras ou cancelamentos registrados.",
                     "Finalização da pesagem",
@@ -1000,7 +1225,9 @@ public partial class ProcessoEntradaProdutoForm : Form
                 break;
 
             case CenarioFinalizacaoEntrada.LancamentoNaoGravado:
-                statusLabel.Text = "Producao parada. Lancamento nao foi gravado.";
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Pendente,
+                    "lançamento não foi gravado");
                 MessageBox.Show(
                     resultado.MensagemFalhaLancamento ?? string.Empty,
                     "Lancamento nao gravado",
@@ -1008,47 +1235,28 @@ public partial class ProcessoEntradaProdutoForm : Form
                     MessageBoxIcon.Warning);
                 break;
 
-            case CenarioFinalizacaoEntrada.GravadoSemSap:
+            case CenarioFinalizacaoEntrada.GravadoLocal:
+                // C12: a finalizacao grava SOMENTE local; o envio ao SAP e um passo separado.
                 _codigoLancamentoPersistido = resultado.CodigoLancamento;
-                statusLabel.Text =
-                    $"Producao parada. {resultado.Gravados} pesagem(ns) gravada(s) localmente, mas faltaram dados do item para enviar ao SAP.";
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Gravado,
+                    $"lançamento {resultado.CodigoLancamento} com {resultado.Gravados} item(ns)");
+                AtualizarEstadoVisualIntegracaoSap(
+                    EstadoVisualIntegracaoSap.Pendente,
+                    "aguardando rotina autorizada");
                 MessageBox.Show(
-                    "A pesagem foi salva no banco local, mas nenhuma atualização SAP pôde ser montada.\n\nVerifique o número do pedido e o número do item.",
-                    "Atualização SAP",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                break;
-
-            case CenarioFinalizacaoEntrada.GravadoSapNaoAutorizado:
-                _codigoLancamentoPersistido = resultado.CodigoLancamento;
-                statusLabel.Text =
-                    $"Producao parada. {resultado.Gravados} pesagem(ns) gravada(s) localmente. Envio ao SAP nao autorizado para o usuario.";
-                break;
-
-            case CenarioFinalizacaoEntrada.GravadoSapEnviado:
-                _codigoLancamentoPersistido = resultado.CodigoLancamento;
-                statusLabel.Text =
-                    $"Producao parada. {resultado.Gravados} pesagem(ns) gravada(s) e {resultado.SapEnviados} peso(s) atualizado(s) no SAP.";
-                MessageBox.Show(
-                    $"{resultado.SapEnviados} peso(s) atualizado(s) com sucesso no SAP.",
-                    "Atualização SAP",
+                    $"Lançamento local {resultado.CodigoLancamento} gravado com sucesso "
+                    + $"com {resultado.Gravados} item(ns).\n\n"
+                    + "O envio ao SAP deve ser executado pela rotina autorizada de integração em homologação.",
+                    "Lançamento local gravado",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 break;
 
-            case CenarioFinalizacaoEntrada.GravadoSapParcial:
-                _codigoLancamentoPersistido = resultado.CodigoLancamento;
-                statusLabel.Text =
-                    $"Producao parada. Pesagens salvas localmente. SAP: {resultado.UltimaFalhaSap ?? "atualizacao parcial"}.";
-                MessageBox.Show(
-                    $"As pesagens foram salvas no banco local, mas o SAP nao confirmou todos os pesos.\n\n{resultado.UltimaFalhaSap ?? "Atualizacao parcial."}",
-                    "Atualização SAP",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                break;
-
             case CenarioFinalizacaoEntrada.ErroAoGravar:
-                statusLabel.Text = "Producao parada, mas nao foi possivel gravar as pesagens no banco.";
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Pendente,
+                    "não foi possível gravar as pesagens");
                 break;
         }
     }
@@ -2616,6 +2824,12 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         _leiturasPorItem.Clear();
         _codigoLancamentoPersistido = null;
+        AtualizarEstadoVisualLocal(
+            EstadoVisualLocalEntrada.Pendente,
+            "aguardando finalização do lançamento");
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.Pendente,
+            "aguardando gravação local");
         productionDataGridView.Rows.Clear();
         UpdateProductionCounters();
         UpdateProductionGridFooter();
@@ -2625,6 +2839,12 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         _leiturasPorItem.Clear();
         _codigoLancamentoPersistido = null;
+        AtualizarEstadoVisualLocal(
+            EstadoVisualLocalEntrada.Pendente,
+            "pedido carregado; lançamento ainda não gravado");
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.Pendente,
+            "aguardando gravação local");
         productionDataGridView.Rows.Clear();
         var cultura = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
         foreach (PedidoCompraSapItem item in itens)

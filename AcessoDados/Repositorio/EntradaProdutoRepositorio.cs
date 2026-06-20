@@ -255,6 +255,62 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
         };
     }
 
+    /// <summary>
+    /// Itens de um lancamento ja persistido, com pesos consolidados das pesagens VALIDAS, para o
+    /// envio CONTROLADO de peso ao SAP. Retorna apenas itens com peso liquido positivo.
+    /// </summary>
+    public async Task<IReadOnlyList<EntradaProdutoItemEnvioSap>> ListarItensParaEnvioSapAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT lancamento.numero_pedido,
+                   item.numero_item,
+                   COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0)::numeric(14,3) AS peso_liquido,
+                   COALESCE(SUM(pesagem.peso_bruto_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0)::numeric(14,3) AS peso_bruto
+              FROM entrada_produto_lancamento lancamento
+              JOIN entrada_produto_item item
+                ON item.codigo_entrada_produto_lancamento =
+                   lancamento.codigo_entrada_produto_lancamento
+              LEFT JOIN entrada_produto_pesagem pesagem
+                ON pesagem.codigo_entrada_produto_item =
+                   item.codigo_entrada_produto_item
+             WHERE lancamento.codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND lancamento.situacao_entrada_produto_lancamento = true
+               AND item.situacao_entrada_produto_item = true
+             GROUP BY lancamento.numero_pedido, item.numero_item
+            HAVING COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0) > 0
+             ORDER BY item.numero_item;
+            """;
+
+        List<EntradaProdutoItemEnvioSap> itens = [];
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+        while (await leitor.ReadAsync(cancellationToken))
+        {
+            itens.Add(new EntradaProdutoItemEnvioSap
+            {
+                NumeroPedido = leitor.GetString(0),
+                NumeroItem = leitor.GetString(1),
+                PesoLiquidoKg = leitor.GetDecimal(2),
+                PesoBrutoKg = leitor.GetDecimal(3)
+            });
+        }
+
+        return itens;
+    }
+
     private static NpgsqlParameter ParametroTextoNulo(string nome, string? valor)
         => new(nome, NpgsqlDbType.Text) { Value = string.IsNullOrWhiteSpace(valor) ? DBNull.Value : valor.Trim() };
 

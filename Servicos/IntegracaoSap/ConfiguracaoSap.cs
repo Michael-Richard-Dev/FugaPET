@@ -40,4 +40,11 @@ public sealed class ConfiguracaoSap
 
     public const string MensagemEscritaBloqueada =
         "Escrita no SAP desativada. Defina FUGAPET_SAP_WRITE_ENABLED=true somente no ambiente autorizado.";
+
+    /// <summary>
+    /// Mensagem operacional para arquivo de configuracao SAP existente porem malformado (erro de
+    /// implantacao). Nunca expoe caminho do arquivo nem o conteudo.
+    /// </summary>
+    public const string MensagemConfiguracaoInvalida =
+        "Configuração SAP inválida. Acione o suporte técnico.";
 }

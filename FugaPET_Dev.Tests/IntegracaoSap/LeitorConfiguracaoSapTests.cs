@@ -129,6 +129,45 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
         Assert.Equal("false", valor);
     }
 
+    [Fact]
+    public void Carregar_ArquivoInexistente_ComVariaveis_DeveCarregarDoAmbiente()
+    {
+        string inexistente = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        Dictionary<string, string> ambiente = new()
+        {
+            ["FUGAPET_SAP_BASE_URL"] = "https://sap.exemplo.local/odata",
+            ["FUGAPET_SAP_USERNAME"] = "usuario",
+            ["FUGAPET_SAP_PASSWORD"] = "senha",
+            ["FUGAPET_SAP_ALLOWED_HOSTS"] = "sap.exemplo.local"
+        };
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(
+            inexistente,
+            nome => ambiente.GetValueOrDefault(nome));
+
+        Assert.True(configuracao.Configurado);
+    }
+
+    [Fact]
+    public void Carregar_ArquivoInexistente_SemVariaveis_NaoDeveConfigurar()
+    {
+        string inexistente = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(inexistente, _ => null);
+
+        Assert.False(configuracao.Configurado);
+    }
+
+    [Fact]
+    public void Carregar_ArquivoMalformado_DeveLancarConfiguracaoInvalida()
+    {
+        // JSON malformado e ERRO DE IMPLANTACAO: erro controlado, nunca "nao configurado".
+        File.WriteAllText(_arquivoTemporario, "{ isto nao e json valido ");
+
+        Assert.Throws<ConfiguracaoSapInvalidaException>(
+            () => LeitorConfiguracaoSap.Carregar(_arquivoTemporario, _ => null));
+    }
+
     public void Dispose()
     {
         File.Delete(_arquivoTemporario);
