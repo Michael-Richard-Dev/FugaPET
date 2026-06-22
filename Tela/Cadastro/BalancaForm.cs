@@ -47,7 +47,29 @@ public partial class BalancaForm : Form
     private RoundedPanel? _identificacaoLocalInputPanel;
     private TextBox? _txtIdentificacaoLocal;
 
+    private Label? _lblPortaSerial;
+    private RoundedPanel? _portaSerialInputPanel;
+    private TextBox? _txtPortaSerial;
+
+    private Label? _lblBaudRate;
+    private RoundedPanel? _baudRateInputPanel;
+    private TextBox? _txtBaudRate;
+
+    private Label? _lblDataBits;
+    private RoundedPanel? _dataBitsInputPanel;
+    private TextBox? _txtDataBits;
+
+    private Label? _lblParidade;
+    private RoundedPanel? _paridadeInputPanel;
+    private ComboBox? _cmbParidade;
+
+    private Label? _lblStopBits;
+    private RoundedPanel? _stopBitsInputPanel;
+    private ComboBox? _cmbStopBits;
+
     private static readonly string[] TiposConexao = ["SERIAL", "TCP_IP", "USB", "MANUAL"];
+    private static readonly string[] Paridades = ["NONE", "EVEN", "ODD", "MARK", "SPACE"];
+    private static readonly string[] StopBits = ["1", "1.5", "2"];
 
     private static readonly Color StatusAtivoFundo = Color.FromArgb(220, 252, 231);
     private static readonly Color StatusAtivoTexto = Color.FromArgb(22, 163, 74);
@@ -74,6 +96,8 @@ public partial class BalancaForm : Form
         // Reaproveita TxtPeso como "Endereço IP" e descricaoTextBox como "Observação".
         RotularControlesReaproveitados();
         CriarCamposExtrasRuntime();
+        ConfigurarLimitesVisuais();
+        situacaoComboBox.Enabled = false;
 
         profilesCard.Resize += (_, _) => LayoutProfilesCard();
         detailsCard.Resize += (_, _) => LayoutDetailsCard();
@@ -99,6 +123,25 @@ public partial class BalancaForm : Form
         // TxtPeso passa a ser "Endereço IP" — banco da balança nao tem peso, mas precisa de IP.
         LblPeso.Text = "Endereço IP";
         descricaoLabel.Text = "Observação";
+    }
+
+    private void ConfigurarLimitesVisuais()
+    {
+        nomePerfilTextBox.MaxLength = BalancaCadastro.TamanhoMaximoNome;
+        descricaoTextBox.MaxLength = BalancaCadastro.TamanhoMaximoObservacao;
+        TxtPeso.MaxLength = BalancaCadastro.TamanhoMaximoEnderecoIp;
+        searchTextBox.MaxLength = 120;
+
+        if (_txtIdentificacaoLocal is not null)
+            _txtIdentificacaoLocal.MaxLength = BalancaCadastro.TamanhoMaximoIdentificacaoLocal;
+        if (_txtPortaSerial is not null)
+            _txtPortaSerial.MaxLength = BalancaCadastro.TamanhoMaximoPortaSerial;
+        if (_txtPortaTcp is not null)
+            _txtPortaTcp.MaxLength = 5;
+        if (_txtBaudRate is not null)
+            _txtBaudRate.MaxLength = 7;
+        if (_txtDataBits is not null)
+            _txtDataBits.MaxLength = 2;
     }
 
     private async Task InicializarDadosAsync()
@@ -154,7 +197,7 @@ public partial class BalancaForm : Form
     {
         salvarButton.Click += async (_, _) => await SalvarBalancaAsync();
         novoButton.Click += async (_, _) => await EditarBalancaAsync();
-        excluirButton.Click += async (_, _) => await ExcluirBalancaAsync();
+        excluirButton.Click += async (_, _) => await AlterarSituacaoBalancaAsync();
     }
 
     private async Task SalvarBalancaAsync()
@@ -203,11 +246,6 @@ public partial class BalancaForm : Form
 
         BalancaCadastro balanca = MontarBalancaDoForm();
         balanca.CodigoBalanca = _idBalancaAtual;
-        // Preserva campos avançados que o Form nao expõe (BaudRate, DataBits, etc.)
-        balanca.BaudRate = balancaSelecionada.BaudRate;
-        balanca.DataBits = balancaSelecionada.DataBits;
-        balanca.Paridade = balancaSelecionada.Paridade;
-        balanca.StopBits = balancaSelecionada.StopBits;
         balanca.FlowControl = balancaSelecionada.FlowControl;
         balanca.Protocolo = balancaSelecionada.Protocolo;
         balanca.ParametrosTecnicos = balancaSelecionada.ParametrosTecnicos;
@@ -223,7 +261,7 @@ public partial class BalancaForm : Form
         }
     }
 
-    private async Task ExcluirBalancaAsync()
+    private async Task AlterarSituacaoBalancaAsync()
     {
         if (!_integracaoBancoHabilitada)
         {
@@ -237,15 +275,27 @@ public partial class BalancaForm : Form
             return;
         }
 
+        BalancaCadastro? balancaSelecionada = _balancaPorLinha.Values
+            .FirstOrDefault(item => item.CodigoBalanca == _idBalancaAtual);
+        if (balancaSelecionada is null)
+        {
+            MessageBox.Show("Selecione uma balanca valida.", "Cadastro de Balanca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        bool inativar = balancaSelecionada.SituacaoBalanca;
+        string acao = inativar ? "inativacao" : "reativacao";
         DialogResult confirmacao = MessageBox.Show(
-            "Confirma a inativacao da balanca atual?\n\nA balanca ficara inativa, mas pode ser reativada depois alterando a situacao na edicao.",
+            $"Confirma a {acao} da balanca atual?",
             "Cadastro de Balanca",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
 
         if (confirmacao != DialogResult.Yes) return;
 
-        ResultadoOperacao resultado = await _balancaController.ExcluirAsync(_idBalancaAtual);
+        ResultadoOperacao resultado = inativar
+            ? await _balancaController.ExcluirAsync(_idBalancaAtual)
+            : await _balancaController.ReativarAsync(_idBalancaAtual);
         MessageBox.Show(resultado.Mensagem, "Cadastro de Balanca", MessageBoxButtons.OK,
             resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
 
@@ -267,8 +317,12 @@ public partial class BalancaForm : Form
             IdentificacaoLocal = _txtIdentificacaoLocal?.Text.Trim() ?? string.Empty,
             EnderecoIp = TxtPeso.Text.Trim(),
             PortaTcp = ParseIntNullable(_txtPortaTcp?.Text),
-            PortaSerial = string.Empty,
+            PortaSerial = _txtPortaSerial?.Text.Trim() ?? string.Empty,
             TipoConexao = tipoConexao,
+            BaudRate = ParseIntNullable(_txtBaudRate?.Text),
+            DataBits = ParseIntNullable(_txtDataBits?.Text),
+            Paridade = _cmbParidade?.SelectedItem?.ToString() ?? string.Empty,
+            StopBits = ParseDecimalNullable(_cmbStopBits?.SelectedItem?.ToString()),
             Observacao = descricaoTextBox.Text.Trim(),
             SituacaoBalanca = string.Equals(situacaoComboBox.Text, "Ativo", StringComparison.OrdinalIgnoreCase)
         };
@@ -280,12 +334,16 @@ public partial class BalancaForm : Form
         nomePerfilTextBox.Text = string.Empty;
         descricaoTextBox.Text = string.Empty;
         TxtPeso.Text = string.Empty;
-        situacaoComboBox.SelectedIndex = -1;
-        situacaoComboBox.Text = string.Empty;
+        situacaoComboBox.Text = "Ativo";
         CmbSetor.SelectedIndex = -1;
         if (_cmbTipoConexao is not null) _cmbTipoConexao.SelectedIndex = 0; // SERIAL por padrao
         if (_txtPortaTcp is not null) _txtPortaTcp.Text = string.Empty;
         if (_txtIdentificacaoLocal is not null) _txtIdentificacaoLocal.Text = string.Empty;
+        if (_txtPortaSerial is not null) _txtPortaSerial.Text = string.Empty;
+        if (_txtBaudRate is not null) _txtBaudRate.Text = "9600";
+        if (_txtDataBits is not null) _txtDataBits.Text = "8";
+        if (_cmbParidade is not null) _cmbParidade.SelectedItem = "NONE";
+        if (_cmbStopBits is not null) _cmbStopBits.SelectedItem = "1";
         nomePerfilTextBox.ReadOnly = false;
         nomePerfilTextBox.BackColor = Color.White;
 
@@ -305,6 +363,15 @@ public partial class BalancaForm : Form
     {
         if (string.IsNullOrWhiteSpace(texto)) return null;
         return int.TryParse(texto.Trim(), out int v) ? v : null;
+    }
+
+    private static decimal? ParseDecimalNullable(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return null;
+        string normalizado = texto.Trim().Replace(',', '.');
+        return decimal.TryParse(normalizado, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal valor)
+            ? valor
+            : null;
     }
 
     // ============================================================
@@ -532,6 +599,19 @@ public partial class BalancaForm : Form
         CmbSetor.SelectedValue = balanca.CodigoSetor;
         if (_txtIdentificacaoLocal is not null) _txtIdentificacaoLocal.Text = balanca.IdentificacaoLocal;
         if (_txtPortaTcp is not null) _txtPortaTcp.Text = balanca.PortaTcp?.ToString() ?? string.Empty;
+        if (_txtPortaSerial is not null) _txtPortaSerial.Text = balanca.PortaSerial;
+        if (_txtBaudRate is not null) _txtBaudRate.Text = balanca.BaudRate?.ToString() ?? string.Empty;
+        if (_txtDataBits is not null) _txtDataBits.Text = balanca.DataBits?.ToString() ?? string.Empty;
+        if (_cmbParidade is not null)
+        {
+            string paridade = string.IsNullOrWhiteSpace(balanca.Paridade) ? "NONE" : balanca.Paridade;
+            _cmbParidade.SelectedItem = Paridades.Contains(paridade) ? paridade : "NONE";
+        }
+        if (_cmbStopBits is not null)
+        {
+            string stopBits = balanca.StopBits?.ToString(CultureInfo.InvariantCulture) ?? "1";
+            _cmbStopBits.SelectedItem = StopBits.Contains(stopBits) ? stopBits : "1";
+        }
         if (_cmbTipoConexao is not null)
         {
             string tipo = string.IsNullOrWhiteSpace(balanca.TipoConexao) ? "SERIAL" : balanca.TipoConexao;
@@ -569,7 +649,15 @@ public partial class BalancaForm : Form
 
         salvarButton.Visible = modo == ModoAcaoBotoes.SomenteSalvar && podeCriar;
         novoButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeEditar;
-        excluirButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeExcluir;
+
+        BalancaCadastro? selecionada = _balancaPorLinha.Values
+            .FirstOrDefault(item => item.CodigoBalanca == _idBalancaAtual);
+        bool balancaAtiva = selecionada?.SituacaoBalanca ?? true;
+        excluirButton.Text = balancaAtiva
+            ? "Inativar Balança          F8"
+            : "Reativar Balança          F8";
+        excluirButton.Visible = modo == ModoAcaoBotoes.EditarExcluir
+            && (balancaAtiva ? podeExcluir : podeEditar);
     }
 
     private enum ModoAcaoBotoes { Nenhum = 0, SomenteSalvar = 1, EditarExcluir = 2 }
@@ -766,6 +854,16 @@ public partial class BalancaForm : Form
         if (_txtPortaTcp is not null) ApplyScaledFont(_txtPortaTcp, 9F, contentScale, 9F, 12F);
         if (_lblIdentificacaoLocal is not null) ApplyScaledFont(_lblIdentificacaoLocal, 7.75F, contentScale, 8.5F, 11F);
         if (_txtIdentificacaoLocal is not null) ApplyScaledFont(_txtIdentificacaoLocal, 9F, contentScale, 9F, 12F);
+        if (_lblPortaSerial is not null) ApplyScaledFont(_lblPortaSerial, 7.75F, contentScale, 8.5F, 11F);
+        if (_txtPortaSerial is not null) ApplyScaledFont(_txtPortaSerial, 9F, contentScale, 9F, 12F);
+        if (_lblBaudRate is not null) ApplyScaledFont(_lblBaudRate, 7.75F, contentScale, 8.5F, 11F);
+        if (_txtBaudRate is not null) ApplyScaledFont(_txtBaudRate, 9F, contentScale, 9F, 12F);
+        if (_lblDataBits is not null) ApplyScaledFont(_lblDataBits, 7.75F, contentScale, 8.5F, 11F);
+        if (_txtDataBits is not null) ApplyScaledFont(_txtDataBits, 9F, contentScale, 9F, 12F);
+        if (_lblParidade is not null) ApplyScaledFont(_lblParidade, 7.75F, contentScale, 8.5F, 11F);
+        if (_cmbParidade is not null) ApplyScaledFont(_cmbParidade, 9F, contentScale, 9F, 12F);
+        if (_lblStopBits is not null) ApplyScaledFont(_lblStopBits, 7.75F, contentScale, 8.5F, 11F);
+        if (_cmbStopBits is not null) ApplyScaledFont(_cmbStopBits, 9F, contentScale, 9F, 12F);
 
         situacaoComboBox.IntegralHeight = false;
         situacaoComboBox.DropDownHeight = Math.Max(96, Scale(120, scaleY));
@@ -776,6 +874,8 @@ public partial class BalancaForm : Form
             _cmbTipoConexao.IntegralHeight = false;
             _cmbTipoConexao.DropDownHeight = Math.Max(96, Scale(120, scaleY));
         }
+        if (_cmbParidade is not null) _cmbParidade.IntegralHeight = false;
+        if (_cmbStopBits is not null) _cmbStopBits.IntegralHeight = false;
 
         SetBounds(detailsTitleIconLabel, Scale(20, scaleX), Scale(18, scaleY), Scale(26, scaleX), Scale(26, scaleY));
         SetBounds(detailsTitleLabel, Scale(52, scaleX), Scale(22, scaleY), Math.Max(190, Scale(220, scaleX)), Scale(24, scaleY));
@@ -839,9 +939,60 @@ public partial class BalancaForm : Form
             SetBounds(_txtIdentificacaoLocal, Scale(12, scaleX), Scale(8, scaleY), Math.Max(80, fieldWidth - Scale(24, scaleX)), Scale(16, scaleY));
         }
 
-        SetBounds(detailsTopDividerLabel, col1,
-            Math.Max(_identificacaoLocalInputPanel?.Bottom ?? 0, RdpSetor.Bottom) + Scale(12, scaleY),
-            layoutWidth, 1);
+        int divisorY = Math.Max(_identificacaoLocalInputPanel?.Bottom ?? 0, RdpSetor.Bottom) + Scale(12, scaleY);
+        SetBounds(detailsTopDividerLabel, col1, divisorY, layoutWidth, 1);
+
+        int tecnicoY1 = divisorY + Scale(10, scaleY);
+        PosicionarCampoRuntime(_lblPortaSerial, _portaSerialInputPanel, _txtPortaSerial, col1, tecnicoY1, fieldWidth, scaleX, scaleY);
+        PosicionarCampoRuntime(_lblBaudRate, _baudRateInputPanel, _txtBaudRate, col2, tecnicoY1, fieldWidth, scaleX, scaleY);
+
+        int tecnicoY2 = tecnicoY1 + Scale(58, scaleY);
+        PosicionarCampoRuntime(_lblDataBits, _dataBitsInputPanel, _txtDataBits, col1, tecnicoY2, fieldWidth, scaleX, scaleY);
+        PosicionarComboRuntime(_lblParidade, _paridadeInputPanel, _cmbParidade, col2, tecnicoY2, fieldWidth, scaleX, scaleY);
+
+        int tecnicoY3 = tecnicoY2 + Scale(58, scaleY);
+        PosicionarComboRuntime(_lblStopBits, _stopBitsInputPanel, _cmbStopBits, col1, tecnicoY3, fieldWidth, scaleX, scaleY);
+    }
+
+    private static void PosicionarCampoRuntime(
+        Label? label,
+        RoundedPanel? panel,
+        TextBox? campo,
+        int x,
+        int y,
+        int width,
+        float scaleX,
+        float scaleY)
+    {
+        if (label is null || panel is null || campo is null) return;
+        label.Bounds = new Rectangle(x, y, width, Math.Max(16, (int)Math.Round(19 * scaleY)));
+        panel.Bounds = new Rectangle(x, y + Math.Max(18, (int)Math.Round(20 * scaleY)), width, Math.Max(28, (int)Math.Round(33 * scaleY)));
+        campo.Bounds = new Rectangle(
+            Math.Max(8, (int)Math.Round(12 * scaleX)),
+            Math.Max(6, (int)Math.Round(8 * scaleY)),
+            Math.Max(80, width - Math.Max(16, (int)Math.Round(24 * scaleX))),
+            Math.Max(16, (int)Math.Round(16 * scaleY)));
+    }
+
+    private static void PosicionarComboRuntime(
+        Label? label,
+        RoundedPanel? panel,
+        ComboBox? combo,
+        int x,
+        int y,
+        int width,
+        float scaleX,
+        float scaleY)
+    {
+        if (label is null || panel is null || combo is null) return;
+        label.Bounds = new Rectangle(x, y, width, Math.Max(16, (int)Math.Round(19 * scaleY)));
+        panel.Bounds = new Rectangle(x, y + Math.Max(18, (int)Math.Round(20 * scaleY)), width, Math.Max(28, (int)Math.Round(33 * scaleY)));
+        int comboHeight = Math.Max(22, combo.PreferredHeight);
+        combo.Bounds = new Rectangle(
+            Math.Max(8, (int)Math.Round(12 * scaleX)),
+            Math.Max(2, (panel.Height - comboHeight) / 2),
+            Math.Max(80, width - Math.Max(16, (int)Math.Round(24 * scaleX))),
+            comboHeight);
     }
 
     private void LayoutProfilesCard()
@@ -1092,16 +1243,108 @@ public partial class BalancaForm : Form
         };
         _identificacaoLocalInputPanel.Controls.Add(_txtIdentificacaoLocal);
 
+        _lblPortaSerial = CriarLabelTopico("lblPortaSerialRuntime", "Porta Serial");
+        _portaSerialInputPanel = CriarPanelArredondado("portaSerialInputPanelRuntime");
+        _txtPortaSerial = CriarTextBoxRuntime("txtPortaSerialRuntime");
+        _portaSerialInputPanel.Controls.Add(_txtPortaSerial);
+
+        _lblBaudRate = CriarLabelTopico("lblBaudRateRuntime", "Baud Rate");
+        _baudRateInputPanel = CriarPanelArredondado("baudRateInputPanelRuntime");
+        _txtBaudRate = CriarTextBoxRuntime("txtBaudRateRuntime");
+        _baudRateInputPanel.Controls.Add(_txtBaudRate);
+
+        _lblDataBits = CriarLabelTopico("lblDataBitsRuntime", "Data Bits");
+        _dataBitsInputPanel = CriarPanelArredondado("dataBitsInputPanelRuntime");
+        _txtDataBits = CriarTextBoxRuntime("txtDataBitsRuntime");
+        _dataBitsInputPanel.Controls.Add(_txtDataBits);
+
+        _lblParidade = CriarLabelTopico("lblParidadeRuntime", "Paridade");
+        _paridadeInputPanel = CriarPanelArredondado("paridadeInputPanelRuntime");
+        _cmbParidade = CriarComboRuntime("cmbParidadeRuntime", Paridades);
+        _paridadeInputPanel.Controls.Add(_cmbParidade);
+
+        _lblStopBits = CriarLabelTopico("lblStopBitsRuntime", "Stop Bits");
+        _stopBitsInputPanel = CriarPanelArredondado("stopBitsInputPanelRuntime");
+        _cmbStopBits = CriarComboRuntime("cmbStopBitsRuntime", StopBits);
+        _stopBitsInputPanel.Controls.Add(_cmbStopBits);
+
         detailsCard.Controls.Add(_lblTipoConexao);
         detailsCard.Controls.Add(_tipoConexaoInputPanel);
         detailsCard.Controls.Add(_lblPortaTcp);
         detailsCard.Controls.Add(_portaTcpInputPanel);
         detailsCard.Controls.Add(_lblIdentificacaoLocal);
         detailsCard.Controls.Add(_identificacaoLocalInputPanel);
+        detailsCard.Controls.Add(_lblPortaSerial);
+        detailsCard.Controls.Add(_portaSerialInputPanel);
+        detailsCard.Controls.Add(_lblBaudRate);
+        detailsCard.Controls.Add(_baudRateInputPanel);
+        detailsCard.Controls.Add(_lblDataBits);
+        detailsCard.Controls.Add(_dataBitsInputPanel);
+        detailsCard.Controls.Add(_lblParidade);
+        detailsCard.Controls.Add(_paridadeInputPanel);
+        detailsCard.Controls.Add(_lblStopBits);
+        detailsCard.Controls.Add(_stopBitsInputPanel);
 
         _lblTipoConexao.BringToFront(); _tipoConexaoInputPanel.BringToFront(); _cmbTipoConexao.BringToFront();
         _lblPortaTcp.BringToFront(); _portaTcpInputPanel.BringToFront(); _txtPortaTcp.BringToFront();
         _lblIdentificacaoLocal.BringToFront(); _identificacaoLocalInputPanel.BringToFront(); _txtIdentificacaoLocal.BringToFront();
+        _lblPortaSerial.BringToFront(); _portaSerialInputPanel.BringToFront(); _txtPortaSerial.BringToFront();
+        _lblBaudRate.BringToFront(); _baudRateInputPanel.BringToFront(); _txtBaudRate.BringToFront();
+        _lblDataBits.BringToFront(); _dataBitsInputPanel.BringToFront(); _txtDataBits.BringToFront();
+        _lblParidade.BringToFront(); _paridadeInputPanel.BringToFront(); _cmbParidade.BringToFront();
+        _lblStopBits.BringToFront(); _stopBitsInputPanel.BringToFront(); _cmbStopBits.BringToFront();
+
+        _cmbTipoConexao.SelectedIndexChanged += (_, _) => AtualizarVisibilidadeCamposTecnicos();
+        AtualizarVisibilidadeCamposTecnicos();
+    }
+
+    private TextBox CriarTextBoxRuntime(string name)
+        => new()
+        {
+            Name = name,
+            BorderStyle = BorderStyle.None,
+            Font = nomePerfilTextBox.Font,
+            BackColor = Color.White
+        };
+
+    private ComboBox CriarComboRuntime(string name, string[] itens)
+    {
+        ComboBox combo = new()
+        {
+            Name = name,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            FlatStyle = FlatStyle.Flat,
+            Font = situacaoComboBox.Font,
+            BackColor = Color.White
+        };
+        combo.Items.AddRange(itens);
+        combo.SelectedIndex = 0;
+        return combo;
+    }
+
+    private void AtualizarVisibilidadeCamposTecnicos()
+    {
+        string tipo = _cmbTipoConexao?.SelectedItem?.ToString() ?? "SERIAL";
+        bool serial = tipo == "SERIAL";
+        bool tcp = tipo == "TCP_IP";
+        bool usb = tipo == "USB";
+
+        DefinirVisibilidade(tcp, LblPeso, roundedPanel1);
+        DefinirVisibilidade(tcp, _lblPortaTcp, _portaTcpInputPanel);
+        DefinirVisibilidade(usb, _lblIdentificacaoLocal, _identificacaoLocalInputPanel);
+        DefinirVisibilidade(serial, _lblPortaSerial, _portaSerialInputPanel);
+        DefinirVisibilidade(serial, _lblBaudRate, _baudRateInputPanel);
+        DefinirVisibilidade(serial, _lblDataBits, _dataBitsInputPanel);
+        DefinirVisibilidade(serial, _lblParidade, _paridadeInputPanel);
+        DefinirVisibilidade(serial, _lblStopBits, _stopBitsInputPanel);
+    }
+
+    private static void DefinirVisibilidade(bool visivel, params Control?[] controles)
+    {
+        foreach (Control? controle in controles)
+        {
+            if (controle is not null) controle.Visible = visivel;
+        }
     }
 
     private Label CriarLabelTopico(string name, string text)

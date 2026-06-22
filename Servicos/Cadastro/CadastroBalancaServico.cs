@@ -2,6 +2,7 @@
 
 namespace FugaPET_Dev.Servicos.Cadastro;
 
+[Obsolete("Use BalancaServico diretamente. Wrapper legado mantido apenas por compatibilidade.")]
 public sealed class CadastroBalancaServico
 {
     private readonly BalancaServico _balancaServico;

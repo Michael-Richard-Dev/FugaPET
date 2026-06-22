@@ -6,7 +6,7 @@ using NpgsqlTypes;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
-public sealed class BalancaRepositorio : RepositorioBase
+public class BalancaRepositorio : RepositorioBase
 {
     public BalancaRepositorio(IFabricaConexaoBanco fabricaConexaoBanco) : base(fabricaConexaoBanco)
     {
@@ -36,7 +36,7 @@ public sealed class BalancaRepositorio : RepositorioBase
         return balancas;
     }
 
-    public async Task<BalancaCadastro?> ObterPorIdAsync(long codigoBalanca, CancellationToken cancellationToken = default)
+    public virtual async Task<BalancaCadastro?> ObterPorIdAsync(long codigoBalanca, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT codigo_balanca, codigo_setor, nome_balanca, identificacao_local, endereco_ip::text,
@@ -56,7 +56,7 @@ public sealed class BalancaRepositorio : RepositorioBase
         return MapearBalanca(leitor);
     }
 
-    public async Task<bool> ExisteNomeNoSetorAsync(string nome, long codigoSetor, long? ignorarCodigo, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> ExisteNomeNoSetorAsync(string nome, long codigoSetor, long? ignorarCodigo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT EXISTS (
@@ -79,7 +79,7 @@ public sealed class BalancaRepositorio : RepositorioBase
         return retorno is bool existe && existe;
     }
 
-    public async Task<long> InserirAsync(BalancaCadastro balanca, CancellationToken cancellationToken = default)
+    public virtual async Task<long> InserirAsync(BalancaCadastro balanca, CancellationToken cancellationToken = default)
     {
         const string sql = """
             INSERT INTO balanca
@@ -96,7 +96,7 @@ public sealed class BalancaRepositorio : RepositorioBase
         return await ExecutarEmTransacaoAuditavelAsync(async (conexao, transacao) =>
         {
             await using NpgsqlCommand comando = new(sql, conexao, transacao);
-            PreencherParametros(comando, balanca);
+            PreencherParametros(comando, balanca, incluirSituacao: true);
             comando.Parameters.Add(ParametroLongoNulo("@balanca_criado_por", balanca.BalancaCriadoPor ?? ObterCodigoUsuarioSessao()));
 
             object? id = await comando.ExecuteScalarAsync(cancellationToken);
@@ -104,7 +104,7 @@ public sealed class BalancaRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public async Task<int> AtualizarAsync(BalancaCadastro balanca, CancellationToken cancellationToken = default)
+    public virtual async Task<int> AtualizarAsync(BalancaCadastro balanca, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE balanca
@@ -123,7 +123,6 @@ public sealed class BalancaRepositorio : RepositorioBase
                 protocolo = @protocolo,
                 parametros_tecnicos = CAST(NULLIF(@parametros_tecnicos, '') AS jsonb),
                 observacao = @observacao,
-                situacao_balanca = @situacao_balanca,
                 balanca_atualizado_por = @balanca_atualizado_por
             WHERE codigo_balanca = @codigo_balanca;
             """;
@@ -132,20 +131,50 @@ public sealed class BalancaRepositorio : RepositorioBase
         {
             await using NpgsqlCommand comando = new(sql, conexao, transacao);
             comando.Parameters.Add(ParametroLongo("@codigo_balanca", balanca.CodigoBalanca));
-            PreencherParametros(comando, balanca);
+            PreencherParametros(comando, balanca, incluirSituacao: false);
             comando.Parameters.Add(ParametroLongoNulo("@balanca_atualizado_por", balanca.BalancaAtualizadoPor ?? ObterCodigoUsuarioSessao()));
             return await comando.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
     }
 
-    public async Task<int> ExcluirAsync(long codigoBalanca, CancellationToken cancellationToken = default)
+    public virtual async Task<int> ExcluirAsync(long codigoBalanca, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE balanca
                SET situacao_balanca = false,
                    balanca_atualizado_por = @balanca_atualizado_por
              WHERE codigo_balanca = @codigo_balanca
-               AND situacao_balanca = true;
+               AND situacao_balanca = true
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM entrada_produto_pesagem
+                    WHERE codigo_balanca = @codigo_balanca
+                      AND situacao_entrada_produto_pesagem = true
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM hu_caixa
+                    WHERE codigo_balanca = @codigo_balanca
+                      AND situacao_hu_caixa = true
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM hu_caixa_pesagem
+                    WHERE codigo_balanca = @codigo_balanca
+                      AND situacao_hu_caixa_pesagem = true
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM pesagem_entrada_item
+                    WHERE codigo_balanca = @codigo_balanca
+                      AND situacao_pesagem_entrada_item = true
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM pesagem_entrada_item_leitura
+                    WHERE codigo_balanca = @codigo_balanca
+                      AND situacao_pesagem_entrada_item_leitura = true
+               );
             """;
 
         return await ExecutarEmTransacaoAuditavelAsync(async (conexao, transacao) =>
@@ -157,7 +186,7 @@ public sealed class BalancaRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public async Task<int> ReativarAsync(long codigoBalanca, CancellationToken cancellationToken = default)
+    public virtual async Task<int> ReativarAsync(long codigoBalanca, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE balanca
@@ -176,7 +205,45 @@ public sealed class BalancaRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    private static void PreencherParametros(NpgsqlCommand comando, BalancaCadastro balanca)
+    public virtual async Task<ResumoDependenciasBalanca> ObterResumoDependenciasAtivasAsync(
+        long codigoBalanca,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+              (SELECT count(*)::integer FROM entrada_produto_pesagem
+                 WHERE codigo_balanca = @codigo_balanca AND situacao_entrada_produto_pesagem = true),
+              (SELECT count(*)::integer FROM hu_caixa
+                 WHERE codigo_balanca = @codigo_balanca AND situacao_hu_caixa = true),
+              (SELECT count(*)::integer FROM hu_caixa_pesagem
+                 WHERE codigo_balanca = @codigo_balanca AND situacao_hu_caixa_pesagem = true),
+              (SELECT count(*)::integer FROM pesagem_entrada_item
+                 WHERE codigo_balanca = @codigo_balanca AND situacao_pesagem_entrada_item = true),
+              (SELECT count(*)::integer FROM pesagem_entrada_item_leitura
+                 WHERE codigo_balanca = @codigo_balanca AND situacao_pesagem_entrada_item_leitura = true);
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_balanca", codigoBalanca));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+
+        if (!await leitor.ReadAsync(cancellationToken))
+        {
+            return new ResumoDependenciasBalanca();
+        }
+
+        return new ResumoDependenciasBalanca
+        {
+            PesagensEntradaProduto = leitor.GetInt32(0),
+            HusCaixaAtivas = leitor.GetInt32(1),
+            PesagensHuCaixa = leitor.GetInt32(2),
+            PesagensEntradaItem = leitor.GetInt32(3),
+            LeiturasEntradaItem = leitor.GetInt32(4)
+        };
+    }
+
+    private static void PreencherParametros(NpgsqlCommand comando, BalancaCadastro balanca, bool incluirSituacao)
     {
         comando.Parameters.Add(ParametroLongo("@codigo_setor", balanca.CodigoSetor));
         comando.Parameters.Add(ParametroTexto("@nome_balanca", balanca.NomeBalanca));
@@ -193,7 +260,10 @@ public sealed class BalancaRepositorio : RepositorioBase
         comando.Parameters.Add(ParametroTexto("@protocolo", balanca.Protocolo));
         comando.Parameters.Add(ParametroTexto("@parametros_tecnicos", balanca.ParametrosTecnicos));
         comando.Parameters.Add(ParametroTexto("@observacao", balanca.Observacao));
-        comando.Parameters.Add(ParametroBooleano("@situacao_balanca", balanca.SituacaoBalanca));
+        if (incluirSituacao)
+        {
+            comando.Parameters.Add(ParametroBooleano("@situacao_balanca", balanca.SituacaoBalanca));
+        }
     }
 
     private static BalancaCadastro MapearBalanca(NpgsqlDataReader leitor)
