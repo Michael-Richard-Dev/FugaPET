@@ -75,6 +75,24 @@ public sealed class AutorizacaoServicoTests : IDisposable
         Assert.True(AutorizacaoServico.PodeAcessar(AutorizacaoServico.ModuloEtiqueta));
     }
 
+    [Theory]
+    [InlineData("CONSULTAR")]
+    [InlineData("VISUALIZAR")]
+    public void PodeVisualizarRotina_DevePermitirAcaoDeVisualizacaoEquivalente(string acao)
+    {
+        EstadoSessaoUsuarioAtual.Definir(CriarSessaoComPermissao("CADASTRO", "SETOR", acao));
+
+        Assert.True(AutorizacaoServico.PodeVisualizarRotina("CADASTRO", "SETOR"));
+    }
+
+    [Fact]
+    public void PodeVisualizarRotina_DeveNegarSemPermissaoDaRotina()
+    {
+        EstadoSessaoUsuarioAtual.Definir(CriarSessaoComPermissao("CADASTRO", "CARGO", "CONSULTAR"));
+
+        Assert.False(AutorizacaoServico.PodeVisualizarRotina("CADASTRO", "SETOR"));
+    }
+
     [Fact]
     public void PossuiPermissao_DeveNegarPerfilComumSemGerenciarPerfilAcesso()
     {

@@ -488,7 +488,7 @@ public partial class PainelInicialForm : Form
     /// </summary>
     private async Task<bool> PermiteAbrirTelaAsync(string modulo, string rotina, string telaAlvo)
     {
-        if (AutorizacaoServico.PossuiPermissao(modulo, rotina, PermissoesSistema.Acoes.Consultar))
+        if (AutorizacaoServico.PodeVisualizarRotina(modulo, rotina))
         {
             return true;
         }
@@ -534,7 +534,7 @@ public partial class PainelInicialForm : Form
         {
             await _auditoriaServico.RegistrarAcessoNegadoAsync(
                 codigoUsuario,
-                $"Acesso negado a {telaAlvo} ({modulo}/{rotina}/{PermissoesSistema.Acoes.Consultar}).",
+                $"Acesso negado a {telaAlvo} ({modulo}/{rotina}/CONSULTAR ou VISUALIZAR).",
                 telaAlvo);
         }
         catch (Exception ex)
@@ -1132,7 +1132,6 @@ public partial class PainelInicialForm : Form
         cellHoraText.Text = now.ToString("HH:mm", ptBr);
     }
 }
-
 
 
 

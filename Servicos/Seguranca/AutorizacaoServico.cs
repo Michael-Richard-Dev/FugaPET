@@ -70,6 +70,12 @@ public static class AutorizacaoServico
         return PossuiPermissao(PermissoesSistema.Modulos.Cadastro, rotina, PermissoesSistema.Acoes.Gerenciar);
     }
 
+    public static bool PodeVisualizarRotina(string modulo, string rotina)
+    {
+        return PossuiPermissao(modulo, rotina, PermissoesSistema.Acoes.Consultar)
+            || PossuiPermissao(modulo, rotina, PermissoesSistema.Acoes.Visualizar);
+    }
+
     public static string MensagemSemPermissao(string modulo, string rotina, string acao)
     {
         return $"Usuario sem permissao para {acao.ToLowerInvariant()} em {modulo}/{rotina}.";

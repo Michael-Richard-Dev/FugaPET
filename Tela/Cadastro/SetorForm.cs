@@ -6,7 +6,9 @@ using FugaPET_Dev.Tela.Controls;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Seguranca;
+using FugaPET_Dev.Tela.Comum;
 
 namespace FugaPET_Dev.Tela.Cadastro;
 
@@ -26,9 +28,12 @@ public partial class SetorForm : Form
     private readonly List<SetorCadastro> _setoresCarregados = new();
     private readonly ToolTip _toolTipSetor = new();
     private readonly SetorController _setorController;
+    private readonly AuditoriaServico _auditoriaServico;
     private long _idSetorAtual;
     private bool _edicaoSetorExistente;
+    private bool _operacaoEmAndamento;
     private ModoCard _modoCard = ModoCard.Novo;
+    private ModoAcaoBotoes _modoAcaoBotoesAtual = ModoAcaoBotoes.Nenhum;
     private static readonly Color StatusAtivoFundo = Color.FromArgb(220, 252, 231);
     private static readonly Color StatusAtivoTexto = Color.FromArgb(22, 163, 74);
     private static readonly Color StatusInativoFundo = Color.FromArgb(255, 237, 213);
@@ -39,9 +44,12 @@ public partial class SetorForm : Form
     private static readonly Color ResumoSituacaoInativoTexto = Color.FromArgb(220, 38, 38);
     private static readonly Color ResumoSituacaoNeutroTexto = Color.FromArgb(100, 116, 139);
 
-    public SetorForm(SetorController? setorController = null)
+    public SetorForm(
+        SetorController? setorController = null,
+        AuditoriaServico? auditoriaServico = null)
     {
         _setorController = setorController ?? FabricaControladoresCadastro.CriarSetorController();
+        _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
@@ -65,17 +73,93 @@ public partial class SetorForm : Form
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
         ConfigurarCard(ModoCard.Vazio);
         ConectarAcoesCadastro();
+        Shown += async (_, _) => await InicializarTelaAsync();
+    }
+
+    private async Task InicializarTelaAsync()
+    {
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Cadastro,
+                PermissoesSistema.Rotinas.Setor))
+        {
+            long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+            if (codigoUsuario.HasValue)
+            {
+                await RegistrarAcessoDiretoNegadoSeguroAsync(codigoUsuario.Value);
+            }
+
+            MessageBox.Show(
+                "Você não possui permissão para acessar esta rotina.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            Close();
+            return;
+        }
+
         if (_integracaoBancoHabilitada)
         {
-            Shown += async (_, _) => await CarregarSetoresAsync();
+            await CarregarSetoresAsync();
+        }
+    }
+
+    private async Task RegistrarAcessoDiretoNegadoSeguroAsync(long codigoUsuario)
+    {
+        try
+        {
+            await _auditoriaServico.RegistrarAcessoNegadoAsync(
+                codigoUsuario,
+                $"Acesso direto negado a Cadastro de Setor ({PermissoesSistema.Modulos.Cadastro}/{PermissoesSistema.Rotinas.Setor}/CONSULTAR ou VISUALIZAR).",
+                nameof(SetorForm));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError(
+                $"Falha ao registrar acesso direto negado ao SetorForm: {ex}");
         }
     }
 
     private void ConectarAcoesCadastro()
     {
-        salvarButton.Click += async (_, _) => await SalvarSetorAsync();
-        BtnEditar.Click += async (_, _) => await EditarSetorAsync();
-        excluirButton.Click += async (_, _) => await AlternarSituacaoSetorAsync();
+        salvarButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(SalvarSetorAsync, "SETOR_SALVAR_ERRO");
+        BtnEditar.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(EditarSetorAsync, "SETOR_ATUALIZAR_ERRO");
+        excluirButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(AlternarSituacaoSetorAsync, "SETOR_ALTERAR_SITUACAO_ERRO");
+    }
+
+    private async Task ExecutarOperacaoProtegidaAsync(Func<Task> operacao, string acaoErro)
+    {
+        if (_operacaoEmAndamento)
+        {
+            return;
+        }
+
+        _operacaoEmAndamento = true;
+        AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+
+        try
+        {
+            await operacao();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                await ErroUsuarioHelper.TratarAsync(
+                    acaoErro,
+                    ex,
+                    nameof(SetorForm),
+                    "Não foi possível concluir a operação de setor. Acione o suporte."),
+                "Cadastro de Setor",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+        }
     }
 
     // Atalhos de teclado: F5 Salvar, F6 Editar, F8 Inativar/Reativar.
@@ -228,12 +312,33 @@ public partial class SetorForm : Form
 
     private async Task CarregarSetoresAsync()
     {
-        IReadOnlyList<SetorCadastro> setores = await _setorController.ListarAsync();
-        _setoresCarregados.Clear();
-        _setoresCarregados.AddRange(setores);
-        RecriarLinhasPerfis();
-        PopularLinhasComSetores(_setoresCarregados);
-        ApplyProfilesFilter();
+        try
+        {
+            IReadOnlyList<SetorCadastro> setores = await _setorController.ListarAsync();
+            _setoresCarregados.Clear();
+            _setoresCarregados.AddRange(setores);
+            RecriarLinhasPerfis();
+            PopularLinhasComSetores(_setoresCarregados);
+            ClearRowSelection();
+            ApplyProfilesFilter();
+        }
+        catch (Exception ex)
+        {
+            _setoresCarregados.Clear();
+            RemoverLinhasPerfisExistentes();
+            ClearRowSelection();
+            AtualizarRodapePerfis(0);
+
+            MessageBox.Show(
+                await ErroUsuarioHelper.TratarAsync(
+                    "SETOR_CARREGAR_ERRO",
+                    ex,
+                    nameof(SetorForm),
+                    "Não foi possível carregar os setores. Acione o suporte."),
+                "Cadastro de Setor",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private void ConfigureProfilesSearchFilter()
@@ -381,19 +486,14 @@ public partial class SetorForm : Form
         AtualizarAreaRolagem(visibleIndex);
         AtualizarRodapePerfis(visibleIndex);
 
-        if (string.IsNullOrWhiteSpace(query))
+        Panel? linhaSelecionada = _idSetorPorLinha
+            .FirstOrDefault(item => item.Value == _idSetorAtual)
+            .Key;
+
+        if (linhaSelecionada is not null && !linhaSelecionada.Visible)
         {
             ClearRowSelection();
-            return;
         }
-
-        if (visibleIndex > 0)
-        {
-            SetFilteredRowsSelected();
-            return;
-        }
-
-        HideAllMarkers();
     }
 
     private void AtualizarAreaRolagem(int quantidadeLinhasVisiveis)
@@ -420,41 +520,14 @@ public partial class SetorForm : Form
 
     private void ClearRowSelection()
     {
+        _idSetorAtual = 0;
+
         foreach (RowSelection row in _rowSelections)
         {
             row.RowPanel.BackColor = row.NormalBackColor;
         }
 
         HideAllMarkers();
-        ClearSummarySelectionValues();
-    }
-
-    private void SetFilteredRowsSelected()
-    {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-        Panel? firstVisibleRow = null;
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isVisible = row.RowPanel.Visible;
-            row.RowPanel.BackColor = isVisible ? selectedBackColor : row.NormalBackColor;
-            if (isVisible)
-            {
-                ShowMarkerForRow(row.RowPanel);
-                firstVisibleRow ??= row.RowPanel;
-            }
-            else
-            {
-                HideMarkerForRow(row.RowPanel);
-            }
-        }
-
-        if (firstVisibleRow is null)
-        {
-            HideAllMarkers();
-            ClearSummarySelectionValues();
-            return;
-        }
         ClearSummarySelectionValues();
     }
 
@@ -508,7 +581,7 @@ public partial class SetorForm : Form
 
     private void PrepareNewSetor()
     {
-        _idSetorAtual = 0;
+        ClearRowSelection();
         ConfigurarCard(ModoCard.Novo);
         nomePerfilTextBox.Text = string.Empty;
         descricaoTextBox.Text = string.Empty;
@@ -957,12 +1030,15 @@ public partial class SetorForm : Form
 
     private void AtualizarBotoesAcao(ModoAcaoBotoes modo)
     {
+        _modoAcaoBotoesAtual = modo;
+
         bool podeCriar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Setor, PermissoesSistema.Acoes.Criar);
         bool podeEditar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Setor, PermissoesSistema.Acoes.Editar);
         bool podeExcluir = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Setor, PermissoesSistema.Acoes.Excluir);
 
         salvarButton.Visible = modo == ModoAcaoBotoes.SomenteSalvar && podeCriar;
         BtnEditar.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeEditar;
+        BtnEditar.Text = "Salvar Alterações          F6";
 
         // Botao unico de status: alterna entre Inativar (setor ativo) e Reativar (setor inativo).
         if (modo == ModoAcaoBotoes.EditarExcluir)
@@ -986,6 +1062,11 @@ public partial class SetorForm : Form
         {
             excluirButton.Visible = false;
         }
+
+        bool habilitar = !_operacaoEmAndamento;
+        salvarButton.Enabled = habilitar;
+        BtnEditar.Enabled = habilitar;
+        excluirButton.Enabled = habilitar;
     }
 
     private enum ModoAcaoBotoes
@@ -1138,9 +1219,5 @@ public partial class SetorForm : Form
         public Label StatusLabel { get; }
     }
 }
-
-
-
-
 
 

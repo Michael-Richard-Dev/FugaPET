@@ -19,25 +19,13 @@ partial class SetorForm
     private Label closeWindowLabel;
     private Panel contentPanel;
     private TableLayoutPanel contentLayout;
-    private RoundedPanel heroPanel;
-    private PictureBox heroLogoPictureBox;
-    private Label heroTitleLabel;
-    private Label heroSubtitleLabel;
-    private Panel heroIllustrationPanel;
-    private RoundedPanel heroShieldPanel;
-    private Label heroShieldLabel;
-    private RoundedPanel heroLockPanel;
-    private Label heroLockLabel;
     private TableLayoutPanel bodyLayout;
     private RoundedPanel profilesCard;
     private RoundedPanel summaryCard;
     private Label profilesTitleLabel;
     private RoundedPanel profilesSearchPanel;
     private Label profilesSearchIconLabel;
-    private DataGridView profilesDataGridView;
     private TextBox searchTextBox;
-    private Button novoPerfilButton;
-    private Button duplicarButton;
     private RoundedPanel novoPerfilButtonPanel;
     private Label novoPerfilIconLabel;
     private Label novoPerfilTextLabel;
@@ -81,7 +69,6 @@ partial class SetorForm
     private Panel cellData;
     private Label cellDataIcon;
     private Label cellDataText;
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn4;
 
     protected override void Dispose(bool disposing)
     {
@@ -96,10 +83,6 @@ partial class SetorForm
     private void InitializeComponent()
     {
         System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SetorForm));
-        DataGridViewCellStyle dataGridViewCellStyle17 = new DataGridViewCellStyle();
-        DataGridViewCellStyle dataGridViewCellStyle20 = new DataGridViewCellStyle();
-        DataGridViewCellStyle dataGridViewCellStyle18 = new DataGridViewCellStyle();
-        DataGridViewCellStyle dataGridViewCellStyle19 = new DataGridViewCellStyle();
         rootLayout = new TableLayoutPanel();
         contentPanel = new Panel();
         contentLayout = new TableLayoutPanel();
@@ -183,22 +166,6 @@ partial class SetorForm
         minimizeWindowLabel = new Label();
         maximizeWindowLabel = new Label();
         closeWindowLabel = new Label();
-        novoPerfilButton = new Button();
-        duplicarButton = new Button();
-        profilesDataGridView = new DataGridView();
-        dataGridViewTextBoxColumn1 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn2 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn3 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn4 = new DataGridViewTextBoxColumn();
-        heroPanel = new RoundedPanel();
-        heroLogoPictureBox = new PictureBox();
-        heroTitleLabel = new Label();
-        heroSubtitleLabel = new Label();
-        heroIllustrationPanel = new Panel();
-        heroShieldPanel = new RoundedPanel();
-        heroShieldLabel = new Label();
-        heroLockPanel = new RoundedPanel();
-        heroLockLabel = new Label();
         rootLayout.SuspendLayout();
         contentPanel.SuspendLayout();
         contentLayout.SuspendLayout();
@@ -224,12 +191,6 @@ partial class SetorForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).BeginInit();
         headerTitleIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
-        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).BeginInit();
-        heroPanel.SuspendLayout();
-        ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).BeginInit();
-        heroIllustrationPanel.SuspendLayout();
-        heroShieldPanel.SuspendLayout();
-        heroLockPanel.SuspendLayout();
         SuspendLayout();
         // 
         // rootLayout
@@ -396,6 +357,7 @@ partial class SetorForm
         searchTextBox.Location = new Point(36, 8);
         searchTextBox.Name = "searchTextBox";
         searchTextBox.PlaceholderText = "Buscar setor...";
+        searchTextBox.MaxLength = 120;
         searchTextBox.Size = new Size(340, 16);
         searchTextBox.TabIndex = 4;
         // 
@@ -535,6 +497,7 @@ partial class SetorForm
         nomePerfilTextBox.Font = new Font("Segoe UI", 9F);
         nomePerfilTextBox.Location = new Point(12, 10);
         nomePerfilTextBox.Name = "nomePerfilTextBox";
+        nomePerfilTextBox.MaxLength = 80;
         nomePerfilTextBox.Size = new Size(214, 16);
         nomePerfilTextBox.TabIndex = 3;
         // 
@@ -568,6 +531,7 @@ partial class SetorForm
         descricaoTextBox.Location = new Point(12, 10);
         descricaoTextBox.Multiline = true;
         descricaoTextBox.Name = "descricaoTextBox";
+        descricaoTextBox.MaxLength = 255;
         descricaoTextBox.Size = new Size(482, 73);
         descricaoTextBox.TabIndex = 7;
         // 
@@ -796,7 +760,7 @@ partial class SetorForm
         BtnEditar.Name = "BtnEditar";
         BtnEditar.Size = new Size(280, 28);
         BtnEditar.TabIndex = 21;
-        BtnEditar.Text = "Editar Setor               F6";
+        BtnEditar.Text = "Salvar Alterações          F6";
         BtnEditar.UseVisualStyleBackColor = false;
         // 
         // excluirButton
@@ -1280,216 +1244,6 @@ partial class SetorForm
         closeWindowLabel.Text = "×";
         closeWindowLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // novoPerfilButton
-        // 
-        novoPerfilButton.BackColor = Color.White;
-        novoPerfilButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        novoPerfilButton.FlatStyle = FlatStyle.Flat;
-        novoPerfilButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        novoPerfilButton.ForeColor = Color.FromArgb(15, 23, 42);
-        novoPerfilButton.Location = new Point(224, 18);
-        novoPerfilButton.Name = "novoPerfilButton";
-        novoPerfilButton.Size = new Size(92, 28);
-        novoPerfilButton.TabIndex = 2;
-        novoPerfilButton.Text = "＋  Novo Setor";
-        novoPerfilButton.UseVisualStyleBackColor = false;
-        // 
-        // duplicarButton
-        // 
-        duplicarButton.BackColor = Color.White;
-        duplicarButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        duplicarButton.FlatStyle = FlatStyle.Flat;
-        duplicarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        duplicarButton.ForeColor = Color.FromArgb(15, 23, 42);
-        duplicarButton.Location = new Point(323, 18);
-        duplicarButton.Name = "duplicarButton";
-        duplicarButton.Size = new Size(92, 28);
-        duplicarButton.TabIndex = 3;
-        duplicarButton.Text = "⧉  Duplicar";
-        duplicarButton.UseVisualStyleBackColor = false;
-        // 
-        // profilesDataGridView
-        // 
-        profilesDataGridView.AllowUserToAddRows = false;
-        profilesDataGridView.AllowUserToDeleteRows = false;
-        profilesDataGridView.AllowUserToResizeColumns = false;
-        profilesDataGridView.AllowUserToResizeRows = false;
-        profilesDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        profilesDataGridView.BackgroundColor = Color.White;
-        profilesDataGridView.BorderStyle = BorderStyle.None;
-        profilesDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        profilesDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dataGridViewCellStyle17.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridViewCellStyle17.BackColor = Color.White;
-        dataGridViewCellStyle17.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        dataGridViewCellStyle17.ForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle17.SelectionBackColor = Color.White;
-        dataGridViewCellStyle17.SelectionForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle17.WrapMode = DataGridViewTriState.False;
-        profilesDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle17;
-        profilesDataGridView.ColumnHeadersHeight = 31;
-        profilesDataGridView.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4 });
-        dataGridViewCellStyle20.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridViewCellStyle20.BackColor = Color.White;
-        dataGridViewCellStyle20.Font = new Font("Segoe UI", 8F);
-        dataGridViewCellStyle20.ForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle20.SelectionBackColor = Color.FromArgb(254, 242, 242);
-        dataGridViewCellStyle20.SelectionForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle20.WrapMode = DataGridViewTriState.False;
-        profilesDataGridView.DefaultCellStyle = dataGridViewCellStyle20;
-        profilesDataGridView.EnableHeadersVisualStyles = false;
-        profilesDataGridView.GridColor = Color.FromArgb(229, 231, 235);
-        profilesDataGridView.Location = new Point(20, 107);
-        profilesDataGridView.Name = "profilesDataGridView";
-        profilesDataGridView.ReadOnly = true;
-        profilesDataGridView.RowHeadersVisible = false;
-        profilesDataGridView.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
-        profilesDataGridView.RowTemplate.Height = 42;
-        profilesDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        profilesDataGridView.Size = new Size(372, 448);
-        profilesDataGridView.TabIndex = 5;
-        // 
-        // dataGridViewTextBoxColumn1
-        // 
-        dataGridViewTextBoxColumn1.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-        dataGridViewCellStyle18.Alignment = DataGridViewContentAlignment.MiddleCenter;
-        dataGridViewCellStyle18.Font = new Font("Segoe MDL2 Assets", 11F);
-        dataGridViewTextBoxColumn1.DefaultCellStyle = dataGridViewCellStyle18;
-        dataGridViewTextBoxColumn1.HeaderText = "";
-        dataGridViewTextBoxColumn1.Name = "dataGridViewTextBoxColumn1";
-        dataGridViewTextBoxColumn1.ReadOnly = true;
-        dataGridViewTextBoxColumn1.Width = 42;
-        // 
-        // dataGridViewTextBoxColumn2
-        // 
-        dataGridViewTextBoxColumn2.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-        dataGridViewTextBoxColumn2.HeaderText = "Setor";
-        dataGridViewTextBoxColumn2.Name = "dataGridViewTextBoxColumn2";
-        dataGridViewTextBoxColumn2.ReadOnly = true;
-        dataGridViewTextBoxColumn2.Width = 162;
-        // 
-        // dataGridViewTextBoxColumn3
-        // 
-        dataGridViewTextBoxColumn3.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-        dataGridViewCellStyle19.Alignment = DataGridViewContentAlignment.MiddleCenter;
-        dataGridViewTextBoxColumn3.DefaultCellStyle = dataGridViewCellStyle19;
-        dataGridViewTextBoxColumn3.HeaderText = "Referência";
-        dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
-        dataGridViewTextBoxColumn3.ReadOnly = true;
-        // 
-        // dataGridViewTextBoxColumn4
-        // 
-        dataGridViewTextBoxColumn4.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        dataGridViewTextBoxColumn4.FillWeight = 80F;
-        dataGridViewTextBoxColumn4.HeaderText = "Situação";
-        dataGridViewTextBoxColumn4.Name = "dataGridViewTextBoxColumn4";
-        dataGridViewTextBoxColumn4.ReadOnly = true;
-        // 
-        // heroPanel
-        // 
-        heroPanel.BackColor = Color.Transparent;
-        heroPanel.BorderColor = Color.FromArgb(226, 232, 240);
-        heroPanel.BorderRadius = 9;
-        heroPanel.Controls.Add(heroLogoPictureBox);
-        heroPanel.Controls.Add(heroTitleLabel);
-        heroPanel.Controls.Add(heroSubtitleLabel);
-        heroPanel.Controls.Add(heroIllustrationPanel);
-        heroPanel.Dock = DockStyle.Fill;
-        heroPanel.Location = new Point(0, 0);
-        heroPanel.Margin = new Padding(0, 0, 0, 12);
-        heroPanel.Name = "heroPanel";
-        heroPanel.ShadowBlur = 0;
-        heroPanel.ShadowOffsetY = 0;
-        heroPanel.Size = new Size(1330, 120);
-        heroPanel.TabIndex = 0;
-        // 
-        // heroLogoPictureBox
-        // 
-        heroLogoPictureBox.BackColor = Color.FromArgb(254, 226, 226);
-        heroLogoPictureBox.Image = (Image)resources.GetObject("heroLogoPictureBox.Image");
-        heroLogoPictureBox.Location = new Point(28, 20);
-        heroLogoPictureBox.Name = "heroLogoPictureBox";
-        heroLogoPictureBox.Size = new Size(118, 80);
-        heroLogoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-        heroLogoPictureBox.TabIndex = 0;
-        heroLogoPictureBox.TabStop = false;
-        // 
-        // heroTitleLabel
-        // 
-        heroTitleLabel.Font = new Font("Segoe UI", 18F, FontStyle.Bold);
-        heroTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
-        heroTitleLabel.Location = new Point(178, 28);
-        heroTitleLabel.Name = "heroTitleLabel";
-        heroTitleLabel.Size = new Size(430, 34);
-        heroTitleLabel.TabIndex = 1;
-        heroTitleLabel.Text = "Gestão de Setores";
-        // 
-        // heroSubtitleLabel
-        // 
-        heroSubtitleLabel.Font = new Font("Segoe UI", 10F);
-        heroSubtitleLabel.ForeColor = Color.FromArgb(71, 85, 105);
-        heroSubtitleLabel.Location = new Point(180, 65);
-        heroSubtitleLabel.Name = "heroSubtitleLabel";
-        heroSubtitleLabel.Size = new Size(420, 42);
-        heroSubtitleLabel.TabIndex = 2;
-        heroSubtitleLabel.Text = "Configure níveis de permissão para cada\r\ntipo de usuário do sistema.";
-        // 
-        // heroIllustrationPanel
-        // 
-        heroIllustrationPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        heroIllustrationPanel.Controls.Add(heroShieldPanel);
-        heroIllustrationPanel.Controls.Add(heroLockPanel);
-        heroIllustrationPanel.Location = new Point(1804, 8);
-        heroIllustrationPanel.Name = "heroIllustrationPanel";
-        heroIllustrationPanel.Size = new Size(620, 104);
-        heroIllustrationPanel.TabIndex = 3;
-        // 
-        // heroShieldPanel
-        // 
-        heroShieldPanel.BackColor = Color.Transparent;
-        heroShieldPanel.BorderColor = Color.FromArgb(203, 213, 225);
-        heroShieldPanel.BorderRadius = 14;
-        heroShieldPanel.Controls.Add(heroShieldLabel);
-        heroShieldPanel.FillColor = Color.FromArgb(30, 41, 59);
-        heroShieldPanel.Location = new Point(250, 12);
-        heroShieldPanel.Name = "heroShieldPanel";
-        heroShieldPanel.Size = new Size(132, 86);
-        heroShieldPanel.TabIndex = 0;
-        // 
-        // heroShieldLabel
-        // 
-        heroShieldLabel.Dock = DockStyle.Fill;
-        heroShieldLabel.Font = new Font("Segoe MDL2 Assets", 38F);
-        heroShieldLabel.ForeColor = Color.FromArgb(239, 68, 68);
-        heroShieldLabel.Location = new Point(0, 0);
-        heroShieldLabel.Name = "heroShieldLabel";
-        heroShieldLabel.Size = new Size(132, 86);
-        heroShieldLabel.TabIndex = 0;
-        heroShieldLabel.Text = "";
-        heroShieldLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // heroLockPanel
-        // 
-        heroLockPanel.BackColor = Color.Transparent;
-        heroLockPanel.Controls.Add(heroLockLabel);
-        heroLockPanel.FillColor = Color.FromArgb(229, 27, 43);
-        heroLockPanel.Location = new Point(386, 58);
-        heroLockPanel.Name = "heroLockPanel";
-        heroLockPanel.Size = new Size(42, 38);
-        heroLockPanel.TabIndex = 1;
-        // 
-        // heroLockLabel
-        // 
-        heroLockLabel.Dock = DockStyle.Fill;
-        heroLockLabel.Font = new Font("Segoe MDL2 Assets", 17F);
-        heroLockLabel.ForeColor = Color.White;
-        heroLockLabel.Location = new Point(0, 0);
-        heroLockLabel.Name = "heroLockLabel";
-        heroLockLabel.Size = new Size(42, 38);
-        heroLockLabel.TabIndex = 0;
-        heroLockLabel.Text = "";
-        heroLockLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
         // SetorForm
         // 
         AutoScaleDimensions = new SizeF(7F, 16F);
@@ -1532,72 +1286,9 @@ partial class SetorForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).EndInit();
         headerTitleIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
-        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).EndInit();
-        heroPanel.ResumeLayout(false);
-        ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).EndInit();
-        heroIllustrationPanel.ResumeLayout(false);
-        heroShieldPanel.ResumeLayout(false);
-        heroLockPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 
-    private void ConfigureHeader()
-    {
-        menuHeaderLabel.Cursor = Cursors.Hand;
-        menuHeaderLabel.Font = new Font("Segoe MDL2 Assets", 15F);
-        menuHeaderLabel.ForeColor = Color.White;
-        menuHeaderLabel.Location = new Point(18, 8);
-        menuHeaderLabel.Size = new Size(36, 36);
-        menuHeaderLabel.Text = "\uE700";
-        menuHeaderLabel.TextAlign = ContentAlignment.MiddleCenter;
-        companyLogoPictureBox.Image = global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
-        companyLogoPictureBox.Location = new Point(60, 5);
-        companyLogoPictureBox.Size = new Size(128, 43);
-        companyLogoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-        headerDividerLabel.BackColor = Color.FromArgb(132, 142, 156);
-        headerDividerLabel.Location = new Point(208, 12);
-        headerDividerLabel.Size = new Size(1, 30);
-        headerTitleIconPanel.BorderRadius = 0;
-        headerTitleIconPanel.BorderColor = Color.Transparent;
-        headerTitleIconPanel.Controls.Add(headerTitleIconPictureBox);
-        headerTitleIconPanel.FillColor = Color.Transparent;
-        headerTitleIconPanel.Location = new Point(232, 10);
-        headerTitleIconPanel.Size = new Size(32, 32);
-        headerTitleIconPictureBox.BackColor = Color.Transparent;
-        headerTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.estatisticas_24_white;
-        headerTitleIconPictureBox.Location = new Point(4, 4);
-        headerTitleIconPictureBox.Size = new Size(24, 24);
-        headerTitleIconPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-        headerTitleLabel.Font = new Font("Cascadia Code", 12F, FontStyle.Bold);
-        headerTitleLabel.ForeColor = Color.White;
-        headerTitleLabel.Location = new Point(278, 6);
-        headerTitleLabel.Size = new Size(310, 23);
-        headerTitleLabel.Text = "Setores";
-        headerSubtitleLabel.Font = new Font("Cascadia Code", 7.25F);
-        headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
-        headerSubtitleLabel.Location = new Point(279, 29);
-        headerSubtitleLabel.Size = new Size(560, 17);
-        headerSubtitleLabel.Text = "Permissões e níveis de acesso / Administração do sistema";
-        ConfigureWindowButton(minimizeWindowLabel, "–", new Point(1218, 0), new Font("Segoe UI", 12F));
-        ConfigureWindowButton(maximizeWindowLabel, "\uE922", new Point(1266, 0), new Font("Segoe MDL2 Assets", 9F));
-        ConfigureWindowButton(closeWindowLabel, "\uE8BB", new Point(1314, 0), new Font("Segoe MDL2 Assets", 9F));
-    }
-
-    private static void ConfigureWindowButton(Label label, string text, Point location, Font font)
-    {
-        label.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        label.Cursor = Cursors.Hand;
-        label.Font = font;
-        label.ForeColor = Color.White;
-        label.Location = location;
-        label.Size = new Size(48, 52);
-        label.Text = text;
-        label.TextAlign = ContentAlignment.MiddleCenter;
-    }
-
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn1;
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn2;
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn3;
     private Label profilesCheckMarkLabel;
     private RoundedPanel detailsCard;
     private Label detailsTitleIconLabel;
@@ -1618,11 +1309,5 @@ partial class SetorForm
     private Label profilesHeaderProfileLabel;
     private Label profilesHeaderStatusLabel;
 }
-
-
-
-
-
-
 
 

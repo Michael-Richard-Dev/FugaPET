@@ -2,6 +2,7 @@
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Seguranca;
+using FugaPET_Dev.Servicos.Terminal;
 using Npgsql;
 
 namespace FugaPET_Dev.Servicos.Cadastro;
@@ -13,11 +14,17 @@ public sealed class SetorServico
 
     private readonly SetorRepositorio _setorRepositorio;
     private readonly AuditoriaServico _auditoriaServico;
+    private readonly Func<long?> _obterSetorTerminalLocal;
 
-    public SetorServico(SetorRepositorio setorRepositorio, AuditoriaServico auditoriaServico)
+    public SetorServico(
+        SetorRepositorio setorRepositorio,
+        AuditoriaServico auditoriaServico,
+        Func<long?>? obterSetorTerminalLocal = null)
     {
         _setorRepositorio = setorRepositorio;
         _auditoriaServico = auditoriaServico;
+        _obterSetorTerminalLocal = obterSetorTerminalLocal
+            ?? (() => EstadoTerminalLocalAtual.Contexto.IdSetorPadrao);
     }
 
     public Task<IReadOnlyList<SetorCadastro>> ListarAsync(CancellationToken cancellationToken = default)
@@ -28,12 +35,8 @@ public sealed class SetorServico
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarAsync(Entidade, PermissoesSistema.Acoes.Criar, _auditoriaServico, Tela, cancellationToken);
         if (bloqueio is not null) return bloqueio;
 
-        if (string.IsNullOrWhiteSpace(setor.NomeSetor))
-        {
-            return ResultadoOperacao.Falha("Nome do setor e obrigatorio.");
-        }
-
-        setor.NomeSetor = setor.NomeSetor.Trim();
+        ResultadoOperacao? validacao = ValidarENormalizar(setor);
+        if (validacao is not null) return validacao;
 
         try
         {
@@ -71,26 +74,31 @@ public sealed class SetorServico
             return ResultadoOperacao.Falha("Id do setor invalido para edicao.");
         }
 
-        if (string.IsNullOrWhiteSpace(setor.NomeSetor))
-        {
-            return ResultadoOperacao.Falha("Nome do setor e obrigatorio.");
-        }
-
-        setor.NomeSetor = setor.NomeSetor.Trim();
+        ResultadoOperacao? validacao = ValidarENormalizar(setor);
+        if (validacao is not null) return validacao;
 
         try
         {
-            if (await _setorRepositorio.ExisteNomeAsync(setor.NomeSetor, ignorarCodigo: setor.CodigoSetor, cancellationToken))
-            {
-                return ResultadoOperacao.Falha("Ja existe outro setor ativo com este nome.");
-            }
-
-            // Carrega estado anterior para emitir o evento de auditoria correto
-            // (ATUALIZADO vs EXCLUIDO vs REATIVADO) coerente com o trigger do banco.
             SetorCadastro? anterior = await _setorRepositorio.ObterPorIdAsync(setor.CodigoSetor, cancellationToken);
             if (anterior is null)
             {
                 return ResultadoOperacao.Falha("Setor nao encontrado para edicao.");
+            }
+
+            if (anterior.SituacaoSetor && !setor.SituacaoSetor)
+            {
+                return ResultadoOperacao.Falha(
+                    "A inativação do setor deve ser feita pela ação Inativar, pois exige validação de dependências.");
+            }
+
+            if (!anterior.SituacaoSetor && setor.SituacaoSetor)
+            {
+                return ResultadoOperacao.Falha("A reativação do setor deve ser feita pela ação Reativar.");
+            }
+
+            if (await _setorRepositorio.ExisteNomeAsync(setor.NomeSetor, ignorarCodigo: setor.CodigoSetor, cancellationToken))
+            {
+                return ResultadoOperacao.Falha("Ja existe outro setor ativo com este nome.");
             }
 
             int atualizados = await _setorRepositorio.AtualizarAsync(setor, cancellationToken);
@@ -100,20 +108,6 @@ public sealed class SetorServico
             }
 
             string descricao = $"Setor '{setor.NomeSetor}'";
-            if (anterior.SituacaoSetor && !setor.SituacaoSetor)
-            {
-                // Ativo -> Inativo: trigger registra DELETE_LOGICO; auditoria reflete inativacao.
-                await _auditoriaServico.RegistrarCadastroExcluidoAsync(Entidade, setor.CodigoSetor, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Setor inativado com sucesso.");
-            }
-
-            if (!anterior.SituacaoSetor && setor.SituacaoSetor)
-            {
-                // Inativo -> Ativo: trigger registra REATIVACAO.
-                await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, setor.CodigoSetor, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Setor reativado com sucesso.");
-            }
-
             await _auditoriaServico.RegistrarCadastroAtualizadoAsync(Entidade, setor.CodigoSetor, descricao, Tela, cancellationToken);
             return ResultadoOperacao.Ok("Edicao concluida com sucesso.");
         }
@@ -139,9 +133,27 @@ public sealed class SetorServico
 
         try
         {
+            if (_obterSetorTerminalLocal() == id)
+            {
+                return ResultadoOperacao.Falha(
+                    "Nao e possivel inativar este setor porque ele esta configurado como setor padrao deste terminal. Altere a configuracao local antes de continuar.");
+            }
+
+            ResumoDependenciasSetor dependencias = await _setorRepositorio.ObterResumoDependenciasAtivasAsync(id, cancellationToken);
+            if (dependencias.PossuiDependenciasAtivas)
+            {
+                return ResultadoOperacao.Falha(dependencias.ObterMensagemBloqueio());
+            }
+
             int excluidos = await _setorRepositorio.ExcluirAsync(id, cancellationToken);
             if (excluidos <= 0)
             {
+                ResumoDependenciasSetor dependenciasConcorrentes = await _setorRepositorio.ObterResumoDependenciasAtivasAsync(id, cancellationToken);
+                if (dependenciasConcorrentes.PossuiDependenciasAtivas)
+                {
+                    return ResultadoOperacao.Falha(dependenciasConcorrentes.ObterMensagemBloqueio());
+                }
+
                 return ResultadoOperacao.Falha("Setor nao encontrado ou ja estava inativo.");
             }
 
@@ -166,6 +178,22 @@ public sealed class SetorServico
 
         try
         {
+            SetorCadastro? setor = await _setorRepositorio.ObterPorIdAsync(id, cancellationToken);
+            if (setor is null)
+            {
+                return ResultadoOperacao.Falha("Setor nao encontrado para reativacao.");
+            }
+
+            if (setor.SituacaoSetor)
+            {
+                return ResultadoOperacao.Falha("Setor ja esta ativo.");
+            }
+
+            if (await _setorRepositorio.ExisteNomeAsync(setor.NomeSetor, ignorarCodigo: setor.CodigoSetor, cancellationToken))
+            {
+                return ResultadoOperacao.Falha("Já existe um setor ativo com este nome. Não é possível reativar este setor.");
+            }
+
             int reativados = await _setorRepositorio.ReativarAsync(id, cancellationToken);
             if (reativados <= 0)
             {
@@ -175,11 +203,32 @@ public sealed class SetorServico
             await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, id, tela: Tela, cancellationToken: cancellationToken);
             return ResultadoOperacao.Ok("Setor reativado com sucesso.");
         }
+        catch (PostgresException ex) when (ex.SqlState == "23505")
+        {
+            return ResultadoOperacao.Falha("Já existe um setor ativo com este nome. Não é possível reativar este setor.");
+        }
         catch (Exception ex)
         {
             return await TratamentoErroCadastroServico.TratarFalhaAsync(_auditoriaServico, Entidade + "_ERRO", ex, Tela, cancellationToken);
         }
     }
+
+    private static ResultadoOperacao? ValidarENormalizar(SetorCadastro setor)
+    {
+        setor.NomeSetor = setor.NomeSetor?.Trim() ?? string.Empty;
+        setor.DescricaoSetor = setor.DescricaoSetor?.Trim() ?? string.Empty;
+
+        if (setor.NomeSetor.Length < SetorCadastro.TamanhoMinimoNome
+            || setor.NomeSetor.Length > SetorCadastro.TamanhoMaximoNome)
+        {
+            return ResultadoOperacao.Falha("Nome do setor deve ter entre 2 e 80 caracteres.");
+        }
+
+        if (setor.DescricaoSetor.Length > SetorCadastro.TamanhoMaximoDescricao)
+        {
+            return ResultadoOperacao.Falha("Descrição do setor deve ter no máximo 255 caracteres.");
+        }
+
+        return null;
+    }
 }
-
-

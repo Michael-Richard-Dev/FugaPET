@@ -13,7 +13,59 @@ public partial class CadastroForm : UserControl
     public CadastroForm()
     {
         InitializeComponent();
+        if (System.ComponentModel.LicenseManager.UsageMode != System.ComponentModel.LicenseUsageMode.Designtime)
+        {
+            AplicarFiltroPermissoes();
+        }
         WireCardClickEvents();
+    }
+
+    private void AplicarFiltroPermissoes()
+    {
+        ConfigurarVisibilidadeCadastro(
+            setorCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Cadastro,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.Setor);
+
+        ConfigurarVisibilidadeCadastro(
+            cargoCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Cadastro,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.Cargo);
+
+        ConfigurarVisibilidadeCadastro(
+            balancaCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Cadastro,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.Balanca);
+
+        ConfigurarVisibilidadeCadastro(
+            tipoTaraCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Cadastro,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.TipoTara);
+
+        ConfigurarVisibilidadeCadastro(
+            taraCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Cadastro,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.Tara);
+
+        ConfigurarVisibilidadeCadastro(
+            etiquetaCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Etiqueta,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.Etiqueta);
+
+        ConfigurarVisibilidadeCadastro(
+            modeloEtiquetaCard,
+            Servicos.Seguranca.PermissoesSistema.Modulos.Etiqueta,
+            Servicos.Seguranca.PermissoesSistema.Rotinas.ModeloEtiqueta);
+    }
+
+    private static void ConfigurarVisibilidadeCadastro(Control opcao, string modulo, string rotina)
+    {
+        opcao.Visible = UsuarioPodeVerCadastro(modulo, rotina);
+    }
+
+    private static bool UsuarioPodeVerCadastro(string modulo, string rotina)
+    {
+        return Servicos.Seguranca.AutorizacaoServico.PodeVisualizarRotina(modulo, rotina);
     }
 
     private void WireCardClickEvents()
@@ -119,43 +171,43 @@ public partial class CadastroForm : UserControl
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (keyData == Keys.F1)
+        if (keyData == Keys.F1 && setorCard.Visible)
         {
             OnSetorClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F2)
+        if (keyData == Keys.F2 && cargoCard.Visible)
         {
             OnCargoClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F3)
+        if (keyData == Keys.F3 && balancaCard.Visible)
         {
             OnBalancaClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F4)
+        if (keyData == Keys.F4 && tipoTaraCard.Visible)
         {
             OnTipoTaraClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F5)
+        if (keyData == Keys.F5 && taraCard.Visible)
         {
             OnTaraClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F6)
+        if (keyData == Keys.F6 && etiquetaCard.Visible)
         {
             OnEtiquetaClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F7)
+        if (keyData == Keys.F7 && modeloEtiquetaCard.Visible)
         {
             OnModeloEtiquetaClick(this, EventArgs.Empty);
             return true;
@@ -164,6 +216,3 @@ public partial class CadastroForm : UserControl
         return base.ProcessCmdKey(ref msg, keyData);
     }
 }
-
-
-
