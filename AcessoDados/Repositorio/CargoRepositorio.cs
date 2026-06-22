@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
-public sealed class CargoRepositorio : RepositorioBase
+public class CargoRepositorio : RepositorioBase
 {
     public CargoRepositorio(IFabricaConexaoBanco fabricaConexaoBanco) : base(fabricaConexaoBanco)
     {
@@ -39,7 +39,7 @@ public sealed class CargoRepositorio : RepositorioBase
         return cargos;
     }
 
-    public async Task<CargoCadastro?> ObterPorIdAsync(long codigoCargo, CancellationToken cancellationToken = default)
+    public virtual async Task<CargoCadastro?> ObterPorIdAsync(long codigoCargo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT codigo_cargo, nome_cargo, descricao_cargo, situacao_cargo, cargo_criado_em
@@ -64,7 +64,7 @@ public sealed class CargoRepositorio : RepositorioBase
         };
     }
 
-    public async Task<long> InserirAsync(CargoCadastro cargo, CancellationToken cancellationToken = default)
+    public virtual async Task<long> InserirAsync(CargoCadastro cargo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             INSERT INTO cargo (nome_cargo, descricao_cargo, situacao_cargo, cargo_criado_por)
@@ -85,7 +85,7 @@ public sealed class CargoRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public async Task<bool> ExisteNomeAsync(string nomeCargo, long? ignorarCodigo = null, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> ExisteNomeAsync(string nomeCargo, long? ignorarCodigo = null, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT EXISTS (
@@ -106,13 +106,14 @@ public sealed class CargoRepositorio : RepositorioBase
         return retorno is bool existe && existe;
     }
 
-    public async Task<int> AtualizarAsync(CargoCadastro cargo, CancellationToken cancellationToken = default)
+    // AtualizarAsync edita SOMENTE dados cadastrais. A mudanca de situacao_cargo e exclusiva de
+    // ExcluirAsync (inativacao) e ReativarAsync (reativacao), por exigirem validacao de dependencias.
+    public virtual async Task<int> AtualizarAsync(CargoCadastro cargo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE cargo
             SET nome_cargo = @nome_cargo,
                 descricao_cargo = @descricao_cargo,
-                situacao_cargo = @situacao_cargo,
                 cargo_atualizado_por = @cargo_atualizado_por
             WHERE codigo_cargo = @codigo_cargo;
             """;
@@ -123,13 +124,33 @@ public sealed class CargoRepositorio : RepositorioBase
             comando.Parameters.Add(ParametroLongo("@codigo_cargo", cargo.IdCargo));
             comando.Parameters.Add(ParametroTexto("@nome_cargo", cargo.NomeCargo));
             comando.Parameters.Add(ParametroTexto("@descricao_cargo", cargo.DescricaoCargo));
-            comando.Parameters.Add(ParametroBooleano("@situacao_cargo", cargo.SituacaoCargo));
             comando.Parameters.Add(ParametroLongoNulo("@cargo_atualizado_por", cargo.CargoAtualizadoPor ?? ObterCodigoUsuarioSessao()));
             return await comando.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
     }
 
-    public async Task<int> ExcluirAsync(long id, CancellationToken cancellationToken = default)
+    // Usuarios ativos vinculados ao cargo bloqueiam a inativacao.
+    public virtual async Task<ResumoDependenciasCargo> ObterResumoDependenciasAtivasAsync(
+        long codigoCargo,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT count(*)::integer
+              FROM usuario
+             WHERE codigo_cargo = @codigo_cargo
+               AND situacao_usuario = true;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_cargo", codigoCargo));
+
+        object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
+        int usuariosAtivos = retorno is int total ? total : 0;
+        return new ResumoDependenciasCargo { UsuariosAtivos = usuariosAtivos };
+    }
+
+    public virtual async Task<int> ExcluirAsync(long id, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE cargo
@@ -148,7 +169,7 @@ public sealed class CargoRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public async Task<int> ReativarAsync(long id, CancellationToken cancellationToken = default)
+    public virtual async Task<int> ReativarAsync(long id, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE cargo

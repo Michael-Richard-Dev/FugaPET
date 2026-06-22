@@ -6,6 +6,7 @@ using FugaPET_Dev.Tela.Controls;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Tela.Cadastro;
@@ -26,8 +27,11 @@ public partial class CargoForm : Form
     private readonly List<CargoCadastro> _cargosCarregados = new();
     private readonly ToolTip _toolTipCargo = new();
     private readonly CargoController _cargoController;
+    private readonly AuditoriaServico _auditoriaServico;
     private long _idCargoAtual;
     private bool _edicaoCargoExistente;
+    private bool _operacaoEmAndamento;
+    private ModoAcaoBotoes _modoAcaoBotoesAtual = ModoAcaoBotoes.Nenhum;
     private ModoCard _modoCard = ModoCard.Novo;
     private static readonly Color StatusAtivoFundo = Color.FromArgb(220, 252, 231);
     private static readonly Color StatusAtivoTexto = Color.FromArgb(22, 163, 74);
@@ -39,9 +43,12 @@ public partial class CargoForm : Form
     private static readonly Color ResumoSituacaoInativoTexto = Color.FromArgb(220, 38, 38);
     private static readonly Color ResumoSituacaoNeutroTexto = Color.FromArgb(100, 116, 139);
 
-    public CargoForm(CargoController? cargoController = null)
+    public CargoForm(
+        CargoController? cargoController = null,
+        AuditoriaServico? auditoriaServico = null)
     {
         _cargoController = cargoController ?? FabricaControladoresCadastro.CriarCargoController();
+        _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
@@ -64,18 +71,97 @@ public partial class CargoForm : Form
         AtualizarTipCadastroCargo(null);
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
         ConfigurarCard(ModoCard.Bloqueado);
+        nomePerfilTextBox.MaxLength = CargoCadastro.TamanhoMaximoNome;
+        descricaoTextBox.MaxLength = CargoCadastro.TamanhoMaximoDescricao;
+        searchTextBox.MaxLength = 120;
         ConectarAcoesCadastro();
+        Shown += async (_, _) => await InicializarTelaAsync();
+    }
+
+    private async Task InicializarTelaAsync()
+    {
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Cadastro,
+                PermissoesSistema.Rotinas.Cargo))
+        {
+            long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+            if (codigoUsuario.HasValue)
+            {
+                await RegistrarAcessoDiretoNegadoSeguroAsync(codigoUsuario.Value);
+            }
+
+            MessageBox.Show(
+                "Você não possui permissão para acessar esta rotina.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            Close();
+            return;
+        }
+
         if (_integracaoBancoHabilitada)
         {
-            Shown += async (_, _) => await CarregarCargosAsync();
+            await CarregarCargosAsync();
+        }
+    }
+
+    private async Task RegistrarAcessoDiretoNegadoSeguroAsync(long codigoUsuario)
+    {
+        try
+        {
+            await _auditoriaServico.RegistrarAcessoNegadoAsync(
+                codigoUsuario,
+                $"Acesso direto negado a Cadastro de Cargo ({PermissoesSistema.Modulos.Cadastro}/{PermissoesSistema.Rotinas.Cargo}/CONSULTAR ou VISUALIZAR).",
+                nameof(CargoForm));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError(
+                $"Falha ao registrar acesso direto negado ao CargoForm: {ex}");
         }
     }
 
     private void ConectarAcoesCadastro()
     {
-        salvarButton.Click += async (_, _) => await SalvarCargoAsync();
-        novoButton.Click += async (_, _) => await EditarCargoAsync();
-        excluirButton.Click += async (_, _) => await AlternarSituacaoCargoAsync();
+        salvarButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(SalvarCargoAsync, "CARGO_SALVAR_ERRO");
+        novoButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(EditarCargoAsync, "CARGO_ATUALIZAR_ERRO");
+        excluirButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(AlternarSituacaoCargoAsync, "CARGO_ALTERAR_SITUACAO_ERRO");
+    }
+
+    private async Task ExecutarOperacaoProtegidaAsync(Func<Task> operacao, string acaoErro)
+    {
+        if (_operacaoEmAndamento)
+        {
+            return;
+        }
+
+        _operacaoEmAndamento = true;
+        AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+
+        try
+        {
+            await operacao();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                await global::FugaPET_Dev.Tela.Comum.ErroUsuarioHelper.TratarAsync(
+                    acaoErro,
+                    ex,
+                    nameof(CargoForm),
+                    "Não foi possível concluir a operação de cargo. Acione o suporte."),
+                "Cadastro de Cargo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+        }
     }
 
     // Atalhos de teclado: F5 Salvar, F6 Editar, F8 Inativar/Reativar.
@@ -226,12 +312,33 @@ public partial class CargoForm : Form
 
     private async Task CarregarCargosAsync()
     {
-        IReadOnlyList<CargoCadastro> cargos = await _cargoController.ListarAsync();
-        _cargosCarregados.Clear();
-        _cargosCarregados.AddRange(cargos);
-        RecriarLinhasPerfis();
-        PopularLinhasComCargos(_cargosCarregados);
-        ApplyProfilesFilter();
+        try
+        {
+            IReadOnlyList<CargoCadastro> cargos = await _cargoController.ListarAsync();
+            _cargosCarregados.Clear();
+            _cargosCarregados.AddRange(cargos);
+            RecriarLinhasPerfis();
+            PopularLinhasComCargos(_cargosCarregados);
+            ClearRowSelection();
+            ApplyProfilesFilter();
+        }
+        catch (Exception ex)
+        {
+            _cargosCarregados.Clear();
+            RemoverLinhasPerfisExistentes();
+            ClearRowSelection();
+            AtualizarRodapePerfis(0);
+
+            MessageBox.Show(
+                await global::FugaPET_Dev.Tela.Comum.ErroUsuarioHelper.TratarAsync(
+                    "CARGO_CARREGAR_ERRO",
+                    ex,
+                    nameof(CargoForm),
+                    "Não foi possível carregar os cargos. Acione o suporte."),
+                "Cadastro de Cargo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private void ConfigureProfilesSearchFilter()
@@ -391,19 +498,16 @@ public partial class CargoForm : Form
         AtualizarAreaRolagem(visibleIndex);
         AtualizarRodapePerfis(visibleIndex);
 
-        if (string.IsNullOrWhiteSpace(query))
+        // A busca apenas filtra. A selecao (destaque + marcador + resumo) ocorre somente quando
+        // o usuario clica numa linha. Se a linha selecionada saiu do filtro, limpamos a selecao.
+        Panel? linhaSelecionada = _idCargoPorLinha
+            .FirstOrDefault(item => item.Value == _idCargoAtual)
+            .Key;
+
+        if (linhaSelecionada is not null && !linhaSelecionada.Visible)
         {
             ClearRowSelection();
-            return;
         }
-
-        if (visibleIndex > 0)
-        {
-            SetFilteredRowsSelected();
-            return;
-        }
-
-        HideAllMarkers();
     }
 
     private void AtualizarAreaRolagem(int quantidadeLinhasVisiveis)
@@ -430,41 +534,14 @@ public partial class CargoForm : Form
 
     private void ClearRowSelection()
     {
+        _idCargoAtual = 0;
+
         foreach (RowSelection row in _rowSelections)
         {
             row.RowPanel.BackColor = row.NormalBackColor;
         }
 
         HideAllMarkers();
-        ClearSummarySelectionValues();
-    }
-
-    private void SetFilteredRowsSelected()
-    {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-        Panel? firstVisibleRow = null;
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isVisible = row.RowPanel.Visible;
-            row.RowPanel.BackColor = isVisible ? selectedBackColor : row.NormalBackColor;
-            if (isVisible)
-            {
-                ShowMarkerForRow(row.RowPanel);
-                firstVisibleRow ??= row.RowPanel;
-            }
-            else
-            {
-                HideMarkerForRow(row.RowPanel);
-            }
-        }
-
-        if (firstVisibleRow is null)
-        {
-            HideAllMarkers();
-            ClearSummarySelectionValues();
-            return;
-        }
         ClearSummarySelectionValues();
     }
 
@@ -518,7 +595,7 @@ public partial class CargoForm : Form
 
     private void PrepareNewCargo()
     {
-        _idCargoAtual = 0;
+        ClearRowSelection();
         ConfigurarCard(ModoCard.Novo);
         nomePerfilTextBox.Text = string.Empty;
         descricaoTextBox.Text = string.Empty;
@@ -983,12 +1060,16 @@ public partial class CargoForm : Form
     }
     private void AtualizarBotoesAcao(ModoAcaoBotoes modo)
     {
+        _modoAcaoBotoesAtual = modo;
+
         bool podeCriar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Cargo, PermissoesSistema.Acoes.Criar);
         bool podeEditar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Cargo, PermissoesSistema.Acoes.Editar);
         bool podeExcluir = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Cargo, PermissoesSistema.Acoes.Excluir);
 
         salvarButton.Visible = modo == ModoAcaoBotoes.SomenteSalvar && podeCriar;
         novoButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeEditar;
+        // No modo edicao, o botao salva apenas dados cadastrais; a situacao muda por Inativar/Reativar.
+        novoButton.Text = "Salvar Alterações          F6";
 
         // Botao unico de status: alterna entre Inativar (cargo ativo) e Reativar (cargo inativo).
         if (modo == ModoAcaoBotoes.EditarExcluir)
@@ -1012,6 +1093,12 @@ public partial class CargoForm : Form
         {
             excluirButton.Visible = false;
         }
+
+        // Bloqueia duplo-clique / reentrancia enquanto uma operacao esta em andamento.
+        bool habilitar = !_operacaoEmAndamento;
+        salvarButton.Enabled = habilitar;
+        novoButton.Enabled = habilitar;
+        excluirButton.Enabled = habilitar;
     }
 
     private enum ModoAcaoBotoes

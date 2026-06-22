@@ -19,15 +19,6 @@ partial class CargoForm
     private Label closeWindowLabel;
     private Panel contentPanel;
     private TableLayoutPanel contentLayout;
-    private RoundedPanel heroPanel;
-    private PictureBox heroLogoPictureBox;
-    private Label heroTitleLabel;
-    private Label heroSubtitleLabel;
-    private Panel heroIllustrationPanel;
-    private RoundedPanel heroShieldPanel;
-    private Label heroShieldLabel;
-    private RoundedPanel heroLockPanel;
-    private Label heroLockLabel;
     private TableLayoutPanel bodyLayout;
     private RoundedPanel profilesCard;
     private RoundedPanel summaryCard;
@@ -38,10 +29,7 @@ partial class CargoForm
     private Label profilesHeaderProfileLabel;
     private Label profilesHeaderUsersLabel;
     private Label profilesHeaderStatusLabel;
-    private DataGridView profilesDataGridView;
     private TextBox searchTextBox;
-    private Button novoPerfilButton;
-    private Button duplicarButton;
     private RoundedPanel novoPerfilButtonPanel;
     private Label novoPerfilIconLabel;
     private Label novoPerfilTextLabel;
@@ -89,7 +77,6 @@ partial class CargoForm
     private Panel cellData;
     private Label cellDataIcon;
     private Label cellDataText;
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn4;
 
     protected override void Dispose(bool disposing)
     {
@@ -104,10 +91,6 @@ partial class CargoForm
     private void InitializeComponent()
     {
         System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(CargoForm));
-        DataGridViewCellStyle dataGridViewCellStyle21 = new DataGridViewCellStyle();
-        DataGridViewCellStyle dataGridViewCellStyle24 = new DataGridViewCellStyle();
-        DataGridViewCellStyle dataGridViewCellStyle22 = new DataGridViewCellStyle();
-        DataGridViewCellStyle dataGridViewCellStyle23 = new DataGridViewCellStyle();
         rootLayout = new TableLayoutPanel();
         contentPanel = new Panel();
         contentLayout = new TableLayoutPanel();
@@ -196,22 +179,6 @@ partial class CargoForm
         minimizeWindowLabel = new Label();
         maximizeWindowLabel = new Label();
         closeWindowLabel = new Label();
-        novoPerfilButton = new Button();
-        duplicarButton = new Button();
-        profilesDataGridView = new DataGridView();
-        dataGridViewTextBoxColumn1 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn2 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn3 = new DataGridViewTextBoxColumn();
-        dataGridViewTextBoxColumn4 = new DataGridViewTextBoxColumn();
-        heroPanel = new RoundedPanel();
-        heroLogoPictureBox = new PictureBox();
-        heroTitleLabel = new Label();
-        heroSubtitleLabel = new Label();
-        heroIllustrationPanel = new Panel();
-        heroShieldPanel = new RoundedPanel();
-        heroShieldLabel = new Label();
-        heroLockPanel = new RoundedPanel();
-        heroLockLabel = new Label();
         rootLayout.SuspendLayout();
         contentPanel.SuspendLayout();
         contentLayout.SuspendLayout();
@@ -237,12 +204,6 @@ partial class CargoForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).BeginInit();
         headerTitleIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
-        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).BeginInit();
-        heroPanel.SuspendLayout();
-        ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).BeginInit();
-        heroIllustrationPanel.SuspendLayout();
-        heroShieldPanel.SuspendLayout();
-        heroLockPanel.SuspendLayout();
         SuspendLayout();
         // 
         // rootLayout
@@ -1346,216 +1307,6 @@ partial class CargoForm
         closeWindowLabel.Text = "×";
         closeWindowLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // novoPerfilButton
-        // 
-        novoPerfilButton.BackColor = Color.White;
-        novoPerfilButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        novoPerfilButton.FlatStyle = FlatStyle.Flat;
-        novoPerfilButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        novoPerfilButton.ForeColor = Color.FromArgb(15, 23, 42);
-        novoPerfilButton.Location = new Point(224, 18);
-        novoPerfilButton.Name = "novoPerfilButton";
-        novoPerfilButton.Size = new Size(92, 28);
-        novoPerfilButton.TabIndex = 2;
-        novoPerfilButton.Text = "＋  Novo Cargo";
-        novoPerfilButton.UseVisualStyleBackColor = false;
-        // 
-        // duplicarButton
-        // 
-        duplicarButton.BackColor = Color.White;
-        duplicarButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        duplicarButton.FlatStyle = FlatStyle.Flat;
-        duplicarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        duplicarButton.ForeColor = Color.FromArgb(15, 23, 42);
-        duplicarButton.Location = new Point(323, 18);
-        duplicarButton.Name = "duplicarButton";
-        duplicarButton.Size = new Size(92, 28);
-        duplicarButton.TabIndex = 3;
-        duplicarButton.Text = "⧉  Duplicar";
-        duplicarButton.UseVisualStyleBackColor = false;
-        // 
-        // profilesDataGridView
-        // 
-        profilesDataGridView.AllowUserToAddRows = false;
-        profilesDataGridView.AllowUserToDeleteRows = false;
-        profilesDataGridView.AllowUserToResizeColumns = false;
-        profilesDataGridView.AllowUserToResizeRows = false;
-        profilesDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        profilesDataGridView.BackgroundColor = Color.White;
-        profilesDataGridView.BorderStyle = BorderStyle.None;
-        profilesDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        profilesDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dataGridViewCellStyle21.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridViewCellStyle21.BackColor = Color.White;
-        dataGridViewCellStyle21.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        dataGridViewCellStyle21.ForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle21.SelectionBackColor = Color.White;
-        dataGridViewCellStyle21.SelectionForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle21.WrapMode = DataGridViewTriState.False;
-        profilesDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle21;
-        profilesDataGridView.ColumnHeadersHeight = 31;
-        profilesDataGridView.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4 });
-        dataGridViewCellStyle24.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridViewCellStyle24.BackColor = Color.White;
-        dataGridViewCellStyle24.Font = new Font("Segoe UI", 8F);
-        dataGridViewCellStyle24.ForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle24.SelectionBackColor = Color.FromArgb(254, 242, 242);
-        dataGridViewCellStyle24.SelectionForeColor = Color.FromArgb(51, 65, 85);
-        dataGridViewCellStyle24.WrapMode = DataGridViewTriState.False;
-        profilesDataGridView.DefaultCellStyle = dataGridViewCellStyle24;
-        profilesDataGridView.EnableHeadersVisualStyles = false;
-        profilesDataGridView.GridColor = Color.FromArgb(229, 231, 235);
-        profilesDataGridView.Location = new Point(20, 107);
-        profilesDataGridView.Name = "profilesDataGridView";
-        profilesDataGridView.ReadOnly = true;
-        profilesDataGridView.RowHeadersVisible = false;
-        profilesDataGridView.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
-        profilesDataGridView.RowTemplate.Height = 42;
-        profilesDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        profilesDataGridView.Size = new Size(372, 448);
-        profilesDataGridView.TabIndex = 5;
-        // 
-        // dataGridViewTextBoxColumn1
-        // 
-        dataGridViewTextBoxColumn1.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-        dataGridViewCellStyle22.Alignment = DataGridViewContentAlignment.MiddleCenter;
-        dataGridViewCellStyle22.Font = new Font("Segoe MDL2 Assets", 11F);
-        dataGridViewTextBoxColumn1.DefaultCellStyle = dataGridViewCellStyle22;
-        dataGridViewTextBoxColumn1.HeaderText = "";
-        dataGridViewTextBoxColumn1.Name = "dataGridViewTextBoxColumn1";
-        dataGridViewTextBoxColumn1.ReadOnly = true;
-        dataGridViewTextBoxColumn1.Width = 42;
-        // 
-        // dataGridViewTextBoxColumn2
-        // 
-        dataGridViewTextBoxColumn2.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-        dataGridViewTextBoxColumn2.HeaderText = "Cargo";
-        dataGridViewTextBoxColumn2.Name = "dataGridViewTextBoxColumn2";
-        dataGridViewTextBoxColumn2.ReadOnly = true;
-        dataGridViewTextBoxColumn2.Width = 162;
-        // 
-        // dataGridViewTextBoxColumn3
-        // 
-        dataGridViewTextBoxColumn3.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-        dataGridViewCellStyle23.Alignment = DataGridViewContentAlignment.MiddleCenter;
-        dataGridViewTextBoxColumn3.DefaultCellStyle = dataGridViewCellStyle23;
-        dataGridViewTextBoxColumn3.HeaderText = "Referência";
-        dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
-        dataGridViewTextBoxColumn3.ReadOnly = true;
-        // 
-        // dataGridViewTextBoxColumn4
-        // 
-        dataGridViewTextBoxColumn4.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        dataGridViewTextBoxColumn4.FillWeight = 80F;
-        dataGridViewTextBoxColumn4.HeaderText = "Situação";
-        dataGridViewTextBoxColumn4.Name = "dataGridViewTextBoxColumn4";
-        dataGridViewTextBoxColumn4.ReadOnly = true;
-        // 
-        // heroPanel
-        // 
-        heroPanel.BackColor = Color.Transparent;
-        heroPanel.BorderColor = Color.FromArgb(226, 232, 240);
-        heroPanel.BorderRadius = 9;
-        heroPanel.Controls.Add(heroLogoPictureBox);
-        heroPanel.Controls.Add(heroTitleLabel);
-        heroPanel.Controls.Add(heroSubtitleLabel);
-        heroPanel.Controls.Add(heroIllustrationPanel);
-        heroPanel.Dock = DockStyle.Fill;
-        heroPanel.Location = new Point(0, 0);
-        heroPanel.Margin = new Padding(0, 0, 0, 12);
-        heroPanel.Name = "heroPanel";
-        heroPanel.ShadowBlur = 0;
-        heroPanel.ShadowOffsetY = 0;
-        heroPanel.Size = new Size(1330, 120);
-        heroPanel.TabIndex = 0;
-        // 
-        // heroLogoPictureBox
-        // 
-        heroLogoPictureBox.BackColor = Color.FromArgb(254, 226, 226);
-        heroLogoPictureBox.Image = (Image)resources.GetObject("heroLogoPictureBox.Image");
-        heroLogoPictureBox.Location = new Point(28, 20);
-        heroLogoPictureBox.Name = "heroLogoPictureBox";
-        heroLogoPictureBox.Size = new Size(118, 80);
-        heroLogoPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-        heroLogoPictureBox.TabIndex = 0;
-        heroLogoPictureBox.TabStop = false;
-        // 
-        // heroTitleLabel
-        // 
-        heroTitleLabel.Font = new Font("Segoe UI", 18F, FontStyle.Bold);
-        heroTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
-        heroTitleLabel.Location = new Point(178, 28);
-        heroTitleLabel.Name = "heroTitleLabel";
-        heroTitleLabel.Size = new Size(430, 34);
-        heroTitleLabel.TabIndex = 1;
-        heroTitleLabel.Text = "Gestão de Cargos";
-        // 
-        // heroSubtitleLabel
-        // 
-        heroSubtitleLabel.Font = new Font("Segoe UI", 10F);
-        heroSubtitleLabel.ForeColor = Color.FromArgb(71, 85, 105);
-        heroSubtitleLabel.Location = new Point(180, 65);
-        heroSubtitleLabel.Name = "heroSubtitleLabel";
-        heroSubtitleLabel.Size = new Size(420, 42);
-        heroSubtitleLabel.TabIndex = 2;
-        heroSubtitleLabel.Text = "Cadastre e mantenha os cargos utilizados\r\nna operação do sistema.";
-        // 
-        // heroIllustrationPanel
-        // 
-        heroIllustrationPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        heroIllustrationPanel.Controls.Add(heroShieldPanel);
-        heroIllustrationPanel.Controls.Add(heroLockPanel);
-        heroIllustrationPanel.Location = new Point(1804, 8);
-        heroIllustrationPanel.Name = "heroIllustrationPanel";
-        heroIllustrationPanel.Size = new Size(620, 104);
-        heroIllustrationPanel.TabIndex = 3;
-        // 
-        // heroShieldPanel
-        // 
-        heroShieldPanel.BackColor = Color.Transparent;
-        heroShieldPanel.BorderColor = Color.FromArgb(203, 213, 225);
-        heroShieldPanel.BorderRadius = 14;
-        heroShieldPanel.Controls.Add(heroShieldLabel);
-        heroShieldPanel.FillColor = Color.FromArgb(30, 41, 59);
-        heroShieldPanel.Location = new Point(250, 12);
-        heroShieldPanel.Name = "heroShieldPanel";
-        heroShieldPanel.Size = new Size(132, 86);
-        heroShieldPanel.TabIndex = 0;
-        // 
-        // heroShieldLabel
-        // 
-        heroShieldLabel.Dock = DockStyle.Fill;
-        heroShieldLabel.Font = new Font("Segoe MDL2 Assets", 38F);
-        heroShieldLabel.ForeColor = Color.FromArgb(239, 68, 68);
-        heroShieldLabel.Location = new Point(0, 0);
-        heroShieldLabel.Name = "heroShieldLabel";
-        heroShieldLabel.Size = new Size(132, 86);
-        heroShieldLabel.TabIndex = 0;
-        heroShieldLabel.Text = "";
-        heroShieldLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // heroLockPanel
-        // 
-        heroLockPanel.BackColor = Color.Transparent;
-        heroLockPanel.Controls.Add(heroLockLabel);
-        heroLockPanel.FillColor = Color.FromArgb(229, 27, 43);
-        heroLockPanel.Location = new Point(386, 58);
-        heroLockPanel.Name = "heroLockPanel";
-        heroLockPanel.Size = new Size(42, 38);
-        heroLockPanel.TabIndex = 1;
-        // 
-        // heroLockLabel
-        // 
-        heroLockLabel.Dock = DockStyle.Fill;
-        heroLockLabel.Font = new Font("Segoe MDL2 Assets", 17F);
-        heroLockLabel.ForeColor = Color.White;
-        heroLockLabel.Location = new Point(0, 0);
-        heroLockLabel.Name = "heroLockLabel";
-        heroLockLabel.Size = new Size(42, 38);
-        heroLockLabel.TabIndex = 0;
-        heroLockLabel.Text = "";
-        heroLockLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
         // CargoForm
         // 
         AutoScaleDimensions = new SizeF(7F, 16F);
@@ -1598,12 +1349,6 @@ partial class CargoForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).EndInit();
         headerTitleIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
-        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).EndInit();
-        heroPanel.ResumeLayout(false);
-        ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).EndInit();
-        heroIllustrationPanel.ResumeLayout(false);
-        heroShieldPanel.ResumeLayout(false);
-        heroLockPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 
@@ -1661,9 +1406,6 @@ partial class CargoForm
         label.TextAlign = ContentAlignment.MiddleCenter;
     }
 
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn1;
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn2;
-    private DataGridViewTextBoxColumn dataGridViewTextBoxColumn3;
     private Label profilesCheckMarkLabel;
     private RoundedPanel detailsCard;
     private Label detailsTitleIconLabel;
@@ -1681,7 +1423,6 @@ partial class CargoForm
     private TextBox descricaoTextBox;
     private ComboBox situacaoComboBox;
 }
-
 
 
 

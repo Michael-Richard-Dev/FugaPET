@@ -28,12 +28,8 @@ public sealed class CargoServico
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarAsync(Entidade, PermissoesSistema.Acoes.Criar, _auditoriaServico, Tela, cancellationToken);
         if (bloqueio is not null) return bloqueio;
 
-        if (string.IsNullOrWhiteSpace(cargo.NomeCargo))
-        {
-            return ResultadoOperacao.Falha("Nome do cargo e obrigatorio.");
-        }
-
-        cargo.NomeCargo = cargo.NomeCargo.Trim();
+        ResultadoOperacao? validacao = ValidarENormalizar(cargo);
+        if (validacao is not null) return validacao;
 
         try
         {
@@ -68,46 +64,38 @@ public sealed class CargoServico
             return ResultadoOperacao.Falha("Id do cargo invalido para edicao.");
         }
 
-        if (string.IsNullOrWhiteSpace(cargo.NomeCargo))
-        {
-            return ResultadoOperacao.Falha("Nome do cargo e obrigatorio.");
-        }
-
-        cargo.NomeCargo = cargo.NomeCargo.Trim();
+        ResultadoOperacao? validacao = ValidarENormalizar(cargo);
+        if (validacao is not null) return validacao;
 
         try
         {
-            if (await _cargoRepositorio.ExisteNomeAsync(cargo.NomeCargo, cargo.IdCargo, cancellationToken))
-            {
-                return ResultadoOperacao.Falha("Ja existe outro cargo ativo com este nome.");
-            }
-
-            // Carrega estado anterior para emitir o evento de auditoria correto
-            // (ATUALIZADO vs EXCLUIDO vs REATIVADO) coerente com o trigger do banco.
             CargoCadastro? anterior = await _cargoRepositorio.ObterPorIdAsync(cargo.IdCargo, cancellationToken);
             if (anterior is null)
             {
                 return ResultadoOperacao.Falha("Cargo nao encontrado para edicao.");
             }
 
-            int atualizados = await _cargoRepositorio.AtualizarAsync(cargo, cancellationToken);
-            if (atualizados <= 0) return ResultadoOperacao.Falha("Cargo nao encontrado para edicao.");
-
-            string descricao = $"Cargo '{cargo.NomeCargo}'";
+            // AtualizarAsync edita apenas dados cadastrais; status so muda por Inativar/Reativar.
             if (anterior.SituacaoCargo && !cargo.SituacaoCargo)
             {
-                // Ativo -> Inativo: trigger registra DELETE_LOGICO.
-                await _auditoriaServico.RegistrarCadastroExcluidoAsync(Entidade, cargo.IdCargo, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Cargo inativado com sucesso.");
+                return ResultadoOperacao.Falha(
+                    "A inativação do cargo deve ser feita pela ação Inativar, pois exige validação de dependências.");
             }
 
             if (!anterior.SituacaoCargo && cargo.SituacaoCargo)
             {
-                // Inativo -> Ativo: trigger registra REATIVACAO.
-                await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, cargo.IdCargo, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Cargo reativado com sucesso.");
+                return ResultadoOperacao.Falha("A reativação do cargo deve ser feita pela ação Reativar.");
             }
 
+            if (await _cargoRepositorio.ExisteNomeAsync(cargo.NomeCargo, cargo.IdCargo, cancellationToken))
+            {
+                return ResultadoOperacao.Falha("Ja existe outro cargo ativo com este nome.");
+            }
+
+            int atualizados = await _cargoRepositorio.AtualizarAsync(cargo, cancellationToken);
+            if (atualizados <= 0) return ResultadoOperacao.Falha("Cargo nao encontrado para edicao.");
+
+            string descricao = $"Cargo '{cargo.NomeCargo}'";
             await _auditoriaServico.RegistrarCadastroAtualizadoAsync(Entidade, cargo.IdCargo, descricao, Tela, cancellationToken);
             return ResultadoOperacao.Ok("Edicao concluida com sucesso.");
         }
@@ -130,8 +118,23 @@ public sealed class CargoServico
 
         try
         {
+            ResumoDependenciasCargo dependencias = await _cargoRepositorio.ObterResumoDependenciasAtivasAsync(id, cancellationToken);
+            if (dependencias.PossuiDependenciasAtivas)
+            {
+                return ResultadoOperacao.Falha(dependencias.ObterMensagemBloqueio());
+            }
+
             int excluidos = await _cargoRepositorio.ExcluirAsync(id, cancellationToken);
-            if (excluidos <= 0) return ResultadoOperacao.Falha("Cargo nao encontrado ou ja estava inativo.");
+            if (excluidos <= 0)
+            {
+                ResumoDependenciasCargo dependenciasConcorrentes = await _cargoRepositorio.ObterResumoDependenciasAtivasAsync(id, cancellationToken);
+                if (dependenciasConcorrentes.PossuiDependenciasAtivas)
+                {
+                    return ResultadoOperacao.Falha(dependenciasConcorrentes.ObterMensagemBloqueio());
+                }
+
+                return ResultadoOperacao.Falha("Cargo nao encontrado ou ja estava inativo.");
+            }
 
             await _auditoriaServico.RegistrarCadastroExcluidoAsync(Entidade, id, tela: Tela, cancellationToken: cancellationToken);
             return ResultadoOperacao.Ok("Cargo inativado com sucesso.");
@@ -151,16 +154,55 @@ public sealed class CargoServico
 
         try
         {
+            CargoCadastro? cargo = await _cargoRepositorio.ObterPorIdAsync(id, cancellationToken);
+            if (cargo is null)
+            {
+                return ResultadoOperacao.Falha("Cargo nao encontrado para reativacao.");
+            }
+
+            if (cargo.SituacaoCargo)
+            {
+                return ResultadoOperacao.Falha("Cargo ja esta ativo.");
+            }
+
+            if (await _cargoRepositorio.ExisteNomeAsync(cargo.NomeCargo, ignorarCodigo: cargo.IdCargo, cancellationToken))
+            {
+                return ResultadoOperacao.Falha("Já existe um cargo ativo com este nome. Não é possível reativar este cargo.");
+            }
+
             int reativados = await _cargoRepositorio.ReativarAsync(id, cancellationToken);
             if (reativados <= 0) return ResultadoOperacao.Falha("Cargo nao encontrado ou ja estava ativo.");
 
             await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, id, tela: Tela, cancellationToken: cancellationToken);
             return ResultadoOperacao.Ok("Cargo reativado com sucesso.");
         }
+        catch (PostgresException ex) when (ex.SqlState == "23505")
+        {
+            return ResultadoOperacao.Falha("Já existe um cargo ativo com este nome. Não é possível reativar este cargo.");
+        }
         catch (Exception ex)
         {
             return await TratamentoErroCadastroServico.TratarFalhaAsync(_auditoriaServico, Entidade + "_ERRO", ex, Tela, cancellationToken);
         }
+    }
+
+    private static ResultadoOperacao? ValidarENormalizar(CargoCadastro cargo)
+    {
+        cargo.NomeCargo = cargo.NomeCargo?.Trim() ?? string.Empty;
+        cargo.DescricaoCargo = cargo.DescricaoCargo?.Trim() ?? string.Empty;
+
+        if (cargo.NomeCargo.Length < CargoCadastro.TamanhoMinimoNome
+            || cargo.NomeCargo.Length > CargoCadastro.TamanhoMaximoNome)
+        {
+            return ResultadoOperacao.Falha("Nome do cargo deve ter entre 2 e 80 caracteres.");
+        }
+
+        if (cargo.DescricaoCargo.Length > CargoCadastro.TamanhoMaximoDescricao)
+        {
+            return ResultadoOperacao.Falha("Descrição do cargo deve ter no máximo 255 caracteres.");
+        }
+
+        return null;
     }
 }
 
