@@ -207,6 +207,7 @@ public sealed class BalancaServico
         balanca.Paridade = (balanca.Paridade ?? string.Empty).Trim().ToUpperInvariant();
         balanca.FlowControl = (balanca.FlowControl ?? string.Empty).Trim().ToUpperInvariant();
         balanca.Protocolo = balanca.Protocolo?.Trim() ?? string.Empty;
+        balanca.ParametrosTecnicos = balanca.ParametrosTecnicos?.Trim() ?? string.Empty;
         balanca.Observacao = balanca.Observacao?.Trim() ?? string.Empty;
 
         if (balanca.CodigoSetor <= 0)
@@ -236,6 +237,9 @@ public sealed class BalancaServico
 
         if (string.IsNullOrWhiteSpace(balanca.TipoConexao))
             return ResultadoOperacao.Falha("Tipo de conexao da balanca e obrigatorio.");
+
+        if (balanca.TipoConexao.Length > BalancaCadastro.TamanhoMaximoTipoConexao)
+            return ResultadoOperacao.Falha("Tipo de conexão deve ter no máximo 20 caracteres.");
 
         if (!TiposConexaoValidos.Contains(balanca.TipoConexao))
             return ResultadoOperacao.Falha($"Tipo de conexao invalido. Use: {string.Join(", ", TiposConexaoValidos)}.");

@@ -1,4 +1,5 @@
-﻿using FugaPET_Dev.AcessoDados.Banco;
+using System.Runtime.ExceptionServices;
+using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Servicos.Seguranca;
 using Npgsql;
 
@@ -36,9 +37,20 @@ public abstract class RepositorioBase
             await transacao.CommitAsync(cancellationToken);
             return resultado;
         }
-        catch
+        catch (Exception ex)
         {
-            await transacao.RollbackAsync(cancellationToken);
+            ExceptionDispatchInfo excecaoOriginal = ExceptionDispatchInfo.Capture(ex);
+            try
+            {
+                await transacao.RollbackAsync(cancellationToken);
+            }
+            catch
+            {
+                // Preserva a excecao original da operacao; rollback pode falhar se o provedor
+                // ja descartou a transacao apos erro de escrita.
+            }
+
+            excecaoOriginal.Throw();
             throw;
         }
     }
@@ -50,7 +62,7 @@ public abstract class RepositorioBase
 
     /// <summary>
     /// Define app.usuario_id na transacao informada (zera se nao houver sessao), para os triggers
-    /// de log_alteracao_cadastral identificarem o usuario corrente. Exige transacao explicita —
+    /// de log_alteracao_cadastral identificarem o usuario corrente. Exige transacao explicita â€”
     /// o set_config(..., true) e local a ela.
     /// </summary>
     protected static async Task DefinirUsuarioAppAsync(

@@ -2232,11 +2232,11 @@ partial class ProcessoEntradaProdutoForm
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
         sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(910, 10);
+        sapStatusPanel.Location = new Point(748, 10);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
         sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(190, 27);
+        sapStatusPanel.Size = new Size(452, 27);
         sapStatusPanel.TabIndex = 9;
         // 
         // sapStatusDotLabel
@@ -2258,7 +2258,7 @@ partial class ProcessoEntradaProdutoForm
         sapStatusLabel.ForeColor = Color.White;
         sapStatusLabel.Location = new Point(27, 5);
         sapStatusLabel.Name = "sapStatusLabel";
-        sapStatusLabel.Size = new Size(151, 17);
+        sapStatusLabel.Size = new Size(411, 17);
         sapStatusLabel.TabIndex = 1;
         sapStatusLabel.Text = "SAP: não configurado";
         sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -3109,7 +3109,6 @@ partial class ProcessoEntradaProdutoForm
     private FugaPET_Dev.Tela.ActionPillButton lerEtiquetaButton;
     private FugaPET_Dev.Tela.ActionPillButton leituraManualButton;
 }
-
 
 
 

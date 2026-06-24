@@ -57,6 +57,7 @@ public partial class TaraForm : Form
         _setorController = setorController ?? FabricaControladoresCadastro.CriarSetorController();
 
         InitializeComponent();
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";

@@ -17,6 +17,7 @@ public sealed class SelecaoTaraPesagemForm : Form
     {
         _taras = taras;
         Text = "Selecionar Tara";
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

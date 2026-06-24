@@ -27,6 +27,7 @@ public partial class EtiquetaForm : Form
     {
         _etiquetaController = etiquetaController ?? FabricaControladoresCadastro.CriarEtiquetaController();
         InitializeComponent();
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";

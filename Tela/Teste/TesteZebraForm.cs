@@ -11,6 +11,7 @@ public partial class TesteZebraForm : Form
     public TesteZebraForm()
     {
         InitializeComponent();
+        IconeJanelaHelper.AplicarIconePadrao(this);
     }
 
     private async void printTestButton_Click(object sender, EventArgs e)

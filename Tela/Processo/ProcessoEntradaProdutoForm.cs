@@ -27,8 +27,16 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private enum EstadoVisualIntegracaoSap
     {
-        Pendente,
-        Enviada,
+        AguardandoGravacaoLocal,
+        BloqueadoSemPermissao,
+        BloqueadoAmbiente,
+        BloqueadoSapNaoConfigurado,
+        BloqueadoIntegracaoInativa,
+        BloqueadoEscritaDesabilitada,
+        BloqueadoSemItens,
+        LiberadoParaEnvio,
+        Enviando,
+        Enviado,
         Falha,
         Parcial
     }
@@ -82,6 +90,8 @@ public partial class ProcessoEntradaProdutoForm : Form
     private readonly CancellationTokenSource _fechamentoTelaCts = new();
     private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController;
     private Task _envioSapTask = Task.CompletedTask;
+    private readonly ToolTip _envioSapToolTip = new();
+    private bool _acessoDiretoValidado;
 
     public ProcessoEntradaProdutoForm()
         : this(new global::FugaPET_Dev.Controle.Processo.EntradaProdutoController())
@@ -112,7 +122,9 @@ public partial class ProcessoEntradaProdutoForm : Form
         AplicarContextoTerminalAutomatico();
         LoadWindowIcon();
         ConfigureCustomTitleBar();
-        AtualizarStatusSap();
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
+            "aguardando gravação local");
         ConfigureResponsiveSummaryCards();
         ConfigureProductionSearchBox();
         ConfigurarComboPedidos();
@@ -278,15 +290,6 @@ public partial class ProcessoEntradaProdutoForm : Form
         ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
     }
 
-    private void AtualizarStatusSap()
-    {
-        AtualizarEstadoVisualIntegracaoSap(
-            EstadoVisualIntegracaoSap.Pendente,
-            _controller.Sap.SapConfigurado
-                ? "aguardando envio autorizado"
-                : "configuração indisponível");
-    }
-
     private void AtualizarEstadoVisualLocal(EstadoVisualLocalEntrada estado, string detalhe)
     {
         statusLabel.ForeColor = estado == EstadoVisualLocalEntrada.Gravado
@@ -303,21 +306,27 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         (string texto, Color cor) = estado switch
         {
-            EstadoVisualIntegracaoSap.Enviada =>
-                ("INTEGRAÇÃO SAP HML: ENVIADA", Color.FromArgb(34, 197, 94)),
+            EstadoVisualIntegracaoSap.LiberadoParaEnvio =>
+                ("SAP HML: LIBERADO PARA ENVIO", Color.FromArgb(34, 197, 94)),
+            EstadoVisualIntegracaoSap.Enviando =>
+                ("SAP HML: ENVIANDO", Color.FromArgb(59, 130, 246)),
+            EstadoVisualIntegracaoSap.Enviado =>
+                ("SAP HML: ENVIADO", Color.FromArgb(34, 197, 94)),
             EstadoVisualIntegracaoSap.Falha =>
-                ("INTEGRAÇÃO SAP HML: FALHA", Color.FromArgb(239, 68, 68)),
+                ("SAP HML: FALHA", Color.FromArgb(239, 68, 68)),
             EstadoVisualIntegracaoSap.Parcial =>
-                ("INTEGRAÇÃO SAP HML: PARCIAL", Color.FromArgb(249, 115, 22)),
+                ("SAP HML: PARCIAL", Color.FromArgb(249, 115, 22)),
+            EstadoVisualIntegracaoSap.AguardandoGravacaoLocal =>
+                ("SAP HML: AGUARDANDO GRAVAÇÃO LOCAL", Color.FromArgb(250, 204, 21)),
             _ =>
-                ("INTEGRAÇÃO SAP HML: PENDENTE", Color.FromArgb(250, 204, 21))
+                ("SAP HML: BLOQUEADO", Color.FromArgb(239, 68, 68))
         };
 
         sapStatusDotLabel.ForeColor = cor;
         sapStatusLabel.Text = string.IsNullOrWhiteSpace(detalhe)
             ? texto
             : $"{texto} — {detalhe}";
-        sapStatusLabel.AutoSize = true;
+        sapStatusLabel.AutoSize = false;
     }
 
     private void ReturnToLeituraProducao()
@@ -633,10 +642,56 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         bool podeEnviarSap = PossuiPermissaoEntrada(PermissoesSistema.Acoes.EnviarSap);
         productionActionsButton.Visible = podeEnviarSap;
-        productionActionsButton.Enabled = podeEnviarSap;
+        productionActionsButton.Enabled = false;
         productionActionsButton.Text = "Enviar SAP HML";
         productionActionsButton.AccessibleName = "Enviar lançamento para SAP de homologação";
+        _envioSapToolTip.SetToolTip(
+            productionActionsButton,
+            podeEnviarSap
+                ? "Finalize e grave o lançamento para validar a prontidão do envio SAP."
+                : "Usuário sem permissão ENVIAR_SAP.");
         productionActionsButton.Click += EnviarSapHomologacao_Click;
+    }
+
+    private async Task AtualizarProntidaoEnvioSapAsync()
+    {
+        DiagnosticoEnvioSapEntrada diagnostico =
+            await _controller.DiagnosticarEnvioSapEntradaAsync(
+                _codigoLancamentoPersistido,
+                _fechamentoTelaCts.Token);
+
+        productionActionsButton.Visible = diagnostico.UsuarioTemPermissao;
+        productionActionsButton.Enabled =
+            diagnostico.PodeEnviar
+            && _envioSapTask.IsCompleted
+            && !_isProductionStarted;
+
+        string motivo = diagnostico.MotivoBloqueio ?? "Lançamento apto para envio controlado.";
+        _envioSapToolTip.SetToolTip(productionActionsButton, motivo);
+
+        if (diagnostico.PodeEnviar)
+        {
+            AtualizarEstadoVisualIntegracaoSap(
+                EstadoVisualIntegracaoSap.LiberadoParaEnvio,
+                $"{diagnostico.TotalItensPersistidos} item(ns) apto(s)");
+            return;
+        }
+
+        EstadoVisualIntegracaoSap estado = diagnostico.CodigoLancamento is null
+            ? EstadoVisualIntegracaoSap.AguardandoGravacaoLocal
+            : !diagnostico.AmbienteHomologacao
+                ? EstadoVisualIntegracaoSap.BloqueadoAmbiente
+                : !diagnostico.UsuarioTemPermissao
+                ? EstadoVisualIntegracaoSap.BloqueadoSemPermissao
+                : !diagnostico.IntegracaoSapAtiva
+                    ? EstadoVisualIntegracaoSap.BloqueadoIntegracaoInativa
+                    : !diagnostico.SapConfigurado
+                        ? EstadoVisualIntegracaoSap.BloqueadoSapNaoConfigurado
+                        : !diagnostico.EscritaSapHabilitada
+                            ? EstadoVisualIntegracaoSap.BloqueadoEscritaDesabilitada
+                            : EstadoVisualIntegracaoSap.BloqueadoSemItens;
+
+        AtualizarEstadoVisualIntegracaoSap(estado, motivo);
     }
 
     private async void EnviarSapHomologacao_Click(object? sender, EventArgs e)
@@ -710,14 +765,14 @@ public partial class ProcessoEntradaProdutoForm : Form
         if (confirmacao != DialogResult.Yes)
         {
             AtualizarEstadoVisualIntegracaoSap(
-                EstadoVisualIntegracaoSap.Pendente,
+                EstadoVisualIntegracaoSap.LiberadoParaEnvio,
                 "envio não confirmado");
             return;
         }
 
         productionActionsButton.Enabled = false;
         AtualizarEstadoVisualIntegracaoSap(
-            EstadoVisualIntegracaoSap.Pendente,
+            EstadoVisualIntegracaoSap.Enviando,
             "envio autorizado em processamento");
 
         try
@@ -726,25 +781,28 @@ public partial class ProcessoEntradaProdutoForm : Form
                 await _controller.EnviarPesoEntradaParaSapHomologacaoAsync(
                     codigoLancamento,
                     _fechamentoTelaCts.Token);
-            ApresentarResultadoEnvioSapHomologacao(resultado);
+            await ApresentarResultadoEnvioSapHomologacaoAsync(resultado);
         }
         finally
         {
             if (PodeAtualizarTela())
             {
-                productionActionsButton.Enabled =
-                    PossuiPermissaoEntrada(PermissoesSistema.Acoes.EnviarSap);
+                productionActionsButton.Enabled = false;
             }
         }
     }
 
-    private void ApresentarResultadoEnvioSapHomologacao(ResultadoEnvioSapEntrada resultado)
+    private async Task ApresentarResultadoEnvioSapHomologacaoAsync(
+        ResultadoEnvioSapEntrada resultado)
     {
         switch (resultado.Cenario)
         {
             case CenarioEnvioSapEntrada.Enviado:
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Gravado,
+                    $"lançamento {_codigoLancamentoPersistido} confirmado no SAP");
                 AtualizarEstadoVisualIntegracaoSap(
-                    EstadoVisualIntegracaoSap.Enviada,
+                    EstadoVisualIntegracaoSap.Enviado,
                     $"{resultado.Enviados} de {resultado.Total} item(ns)");
                 MessageBox.Show(
                     $"Envio controlado ao SAP de homologação concluído para {resultado.Enviados} item(ns).",
@@ -754,6 +812,9 @@ public partial class ProcessoEntradaProdutoForm : Form
                 break;
 
             case CenarioEnvioSapEntrada.Parcial:
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Gravado,
+                    "itens atualizados; lançamento mantido FINALIZADO_LOCAL");
                 AtualizarEstadoVisualIntegracaoSap(
                     EstadoVisualIntegracaoSap.Parcial,
                     $"{resultado.Enviados} de {resultado.Total} item(ns)");
@@ -765,9 +826,18 @@ public partial class ProcessoEntradaProdutoForm : Form
                     MessageBoxIcon.Warning);
                 break;
 
+            case CenarioEnvioSapEntrada.Falha:
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Gravado,
+                    "falha SAP registrada localmente como ERRO_SAP");
+                ApresentarFalhaEnvioSap(
+                    "O SAP não confirmou a atualização dos itens. "
+                    + "A falha foi registrada no lançamento local.");
+                break;
+
             case CenarioEnvioSapEntrada.SemPermissao:
                 AtualizarEstadoVisualIntegracaoSap(
-                    EstadoVisualIntegracaoSap.Pendente,
+                    EstadoVisualIntegracaoSap.BloqueadoSemPermissao,
                     "usuário sem permissão ENVIAR_SAP");
                 break;
 
@@ -781,16 +851,57 @@ public partial class ProcessoEntradaProdutoForm : Form
                     "O envio foi bloqueado porque a escrita SAP está desabilitada.");
                 break;
 
+            case CenarioEnvioSapEntrada.IntegracaoInativa:
+                ApresentarFalhaEnvioSap(
+                    "O envio foi bloqueado porque a integração SAP está inativa.");
+                break;
+
+            case CenarioEnvioSapEntrada.SapNaoConfigurado:
+                ApresentarFalhaEnvioSap(
+                    "O envio foi bloqueado porque a configuração SAP está indisponível.");
+                break;
+
             case CenarioEnvioSapEntrada.LancamentoSemItens:
                 ApresentarFalhaEnvioSap(
                     "O lançamento local não possui itens persistidos elegíveis para envio.");
                 break;
 
+            case CenarioEnvioSapEntrada.FalhaPersistenciaLocal:
+                await ApresentarFalhaCriticaPersistenciaLocalAsync(resultado);
+                break;
+
             default:
                 ApresentarFalhaEnvioSap(
                     "O envio controlado ao SAP de homologação não foi concluído.");
+                await AtualizarProntidaoEnvioSapAsync();
                 break;
         }
+    }
+
+    private async Task ApresentarFalhaCriticaPersistenciaLocalAsync(
+        ResultadoEnvioSapEntrada resultado)
+    {
+        AtualizarEstadoVisualLocal(
+            EstadoVisualLocalEntrada.Pendente,
+            "divergência crítica entre resposta SAP e status local");
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.Falha,
+            "SAP respondeu, mas o status local não foi atualizado");
+
+        string mensagem = await ErroUsuarioHelper.TratarAsync(
+            "ENVIO_SAP_STATUS_LOCAL_CRITICO",
+            new InvalidOperationException(
+                resultado.MensagemCritica
+                ?? "Falha ao persistir o status local após resposta do SAP."),
+            "ProcessoEntradaProdutoForm",
+            "O SAP respondeu ao envio, mas o status local não foi atualizado. "
+            + "Não repita a operação antes da análise do suporte.");
+
+        MessageBox.Show(
+            mensagem,
+            "Divergência crítica SAP x FugaPET",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Error);
     }
 
     private void ApresentarFalhaEnvioSap(string mensagem)
@@ -1063,7 +1174,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         _isProductionStarted = true;
         UpdateProductionState(true);
-        statusLabel.Text = "Producao iniciada. Clique em Ler Peso para adicionar uma leitura.";
+        statusLabel.Text = "Leitura iniciada. Selecione o item e registre uma leitura.";
         StartProductionDevicesWarmUp();
     }
 
@@ -1136,6 +1247,15 @@ public partial class ProcessoEntradaProdutoForm : Form
             _finalizandoPesagem = false;
             UpdateProductionState(false);
         }
+
+        // Producao ja parada: revalida a prontidao de envio para liberar o botao
+        // "Enviar SAP HML". A 1a validacao acontece dentro de GravarPesagensAsync, quando
+        // _isProductionStarted ainda era true, o que mantinha o botao desabilitado mesmo
+        // com o estado visual "LIBERADO PARA ENVIO".
+        if (_codigoLancamentoPersistido is not null)
+        {
+            await AtualizarProntidaoEnvioSapAsync();
+        }
     }
 
     // Captura as leituras do grid e delega somente a persistencia LOCAL ao controller.
@@ -1149,9 +1269,22 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
 
         EntradaProdutoLancamento lancamento = MontarLancamentoDoGrid();
+        if (lancamento.Itens.Count == 0 && ExistePesoVisualSemLeituraRastreavel())
+        {
+            AtualizarEstadoVisualLocal(
+                EstadoVisualLocalEntrada.Pendente,
+                "peso visual sem leitura rastreável");
+            MessageBox.Show(
+                "Há peso visual na grade, mas não há leitura rastreável vinculada. Refaça a leitura.",
+                "Finalização da pesagem",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         ResultadoFinalizacaoEntrada resultado =
             await _controller.FinalizarLeituraAsync(lancamento, _fechamentoTelaCts.Token);
-        ApresentarResultadoFinalizacao(resultado);
+        await ApresentarResultadoFinalizacaoAsync(resultado);
     }
 
     // Le o grid de producao e monta o lancamento (captura de selecao da tela).
@@ -1208,8 +1341,34 @@ public partial class ProcessoEntradaProdutoForm : Form
         };
     }
 
+    private bool ExistePesoVisualSemLeituraRastreavel()
+    {
+        foreach (DataGridViewRow row in productionDataGridView.Rows)
+        {
+            if (row.IsNewRow)
+            {
+                continue;
+            }
+
+            if (!TryParsePesoKg(GetCellValue(row, "productionPesoLidoColumn"), out decimal pesoVisual)
+                || pesoVisual <= 0m)
+            {
+                continue;
+            }
+
+            if (!long.TryParse(GetCellValue(row, "productionItemIdColumn"), out long codigoItem)
+                || codigoItem <= 0
+                || ObterLeiturasItem(codigoItem).Count == 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Apresenta o resultado da finalizacao (somente UI: status + dialogo).
-    private void ApresentarResultadoFinalizacao(ResultadoFinalizacaoEntrada resultado)
+    private async Task ApresentarResultadoFinalizacaoAsync(ResultadoFinalizacaoEntrada resultado)
     {
         switch (resultado.Cenario)
         {
@@ -1218,7 +1377,7 @@ public partial class ProcessoEntradaProdutoForm : Form
                     EstadoVisualLocalEntrada.Pendente,
                     "nenhuma leitura para gravar");
                 MessageBox.Show(
-                    "Nenhuma leitura foi encontrada para finalizar.\n\nConfirme se o item possui leituras ou cancelamentos registrados.",
+                    "Nenhuma leitura foi registrada. Clique em Iniciar Leitura e use Ler Peso, Leitura Manual ou Pesagem Múltipla antes de finalizar.",
                     "Finalização da pesagem",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -1242,8 +1401,9 @@ public partial class ProcessoEntradaProdutoForm : Form
                     EstadoVisualLocalEntrada.Gravado,
                     $"lançamento {resultado.CodigoLancamento} com {resultado.Gravados} item(ns)");
                 AtualizarEstadoVisualIntegracaoSap(
-                    EstadoVisualIntegracaoSap.Pendente,
-                    "aguardando rotina autorizada");
+                    EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
+                    "validando prontidão do envio");
+                await AtualizarProntidaoEnvioSapAsync();
                 MessageBox.Show(
                     $"Lançamento local {resultado.CodigoLancamento} gravado com sucesso "
                     + $"com {resultado.Gravados} item(ns).\n\n"
@@ -1312,13 +1472,10 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         _isReadingWeight = true;
         SetReadWeightEnabled(false);
-        statusLabel.Text = "Verificando impressora padrao...";
+        statusLabel.Text = "Lendo peso da balanca...";
 
         try
         {
-            await _impressaoEntrada.GarantirImpressoraDisponivelAsync();
-            statusLabel.Text = "Lendo peso da balanca...";
-
             ResultadoLeituraPeso leitura = await _balancaLeituraServico.LerPesoAsync();
             if (!leitura.Sucesso)
             {
@@ -1336,8 +1493,19 @@ public partial class ProcessoEntradaProdutoForm : Form
             {
                 return;
             }
+
+            statusLabel.Text = "Peso registrado localmente. Finalize a leitura para gravar o lançamento.";
             DadosEtiquetaMateriaPrima label = ConstruirDadosEtiquetaMateriaPrima(linhaItem);
-            await _impressaoEntrada.ImprimirEtiquetaMateriaPrimaAsync(label);
+            if (!await TentarImprimirEtiquetaAposLeituraAsync(label))
+            {
+                MessageBox.Show(
+                    "Peso registrado, mas a etiqueta não foi impressa.",
+                    "Etiqueta não impressa",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
             statusLabel.Text = $"Peso {weight} registrado no item {GetCellValue(linhaItem, "productionCodeColumn")} e etiqueta {label.CodigoProduto} enviada para impressao.";
         }
         catch (Exception ex)
@@ -1368,6 +1536,32 @@ public partial class ProcessoEntradaProdutoForm : Form
         return ex is ErroOperacionalEsperadoException
             ? ex.Message
             : "Nao foi possivel concluir a operacao. Acione o suporte.";
+    }
+
+    private async Task<bool> TentarImprimirEtiquetaAposLeituraAsync(DadosEtiquetaMateriaPrima label)
+    {
+        if (!AutorizacaoEntradaProdutoServico.PossuiPermissaoImpressao(PermissoesSistema.Acoes.Imprimir))
+        {
+            statusLabel.Text = "Peso registrado, mas a etiqueta não foi impressa.";
+            return false;
+        }
+
+        try
+        {
+            await _impressaoEntrada.GarantirImpressoraDisponivelAsync();
+            await _impressaoEntrada.ImprimirEtiquetaMateriaPrimaAsync(label);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            await ErroUsuarioHelper.TratarAsync(
+                "IMPRESSAO_ETIQUETA_APOS_LEITURA_ERRO",
+                ex,
+                "ProcessoEntradaProdutoForm",
+                "Peso registrado, mas a etiqueta não foi impressa.");
+            statusLabel.Text = "Peso registrado, mas a etiqueta não foi impressa.";
+            return false;
+        }
     }
 
     // Grava o peso lido da balanca na coluna Peso da linha do item selecionado.
@@ -1670,28 +1864,27 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void SetReadWeightEnabled(bool enabled)
     {
-        enabled = enabled
-            && PossuiPermissaoEntrada(PermissoesSistema.Acoes.Executar)
-            && AutorizacaoEntradaProdutoServico.PossuiPermissaoImpressao(
-                PermissoesSistema.Acoes.Imprimir);
+        bool leituraBalancaHabilitada =
+            enabled && PossuiPermissaoEntrada(PermissoesSistema.Acoes.Executar);
+        bool leituraManualHabilitada =
+            enabled && PossuiPermissaoEntrada(PermissoesSistema.Acoes.PesoManual);
 
-        if (!enabled)
+        if (!leituraBalancaHabilitada)
         {
             _isReadWeightHovering = false;
             readWeightLegendPanel.Invalidate();
         }
 
-        readWeightLegendPanel.Enabled = enabled;
-        readWeightLegendIconLabel.Enabled = enabled;
-        readWeightLegendTextLabel.Enabled = enabled;
-        readWeightLegendPanel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        readWeightLegendIconLabel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        readWeightLegendTextLabel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        readWeightLegendTextLabel.ForeColor = enabled ? EnabledLegendTextColor : DisabledLegendTextColor;
-        readWeightLegendIconLabel.Visible = enabled;
-        lerEtiquetaButton.Enabled = enabled;
-        leituraManualButton.Enabled =
-            enabled && PossuiPermissaoEntrada(PermissoesSistema.Acoes.PesoManual);
+        readWeightLegendPanel.Enabled = leituraBalancaHabilitada;
+        readWeightLegendIconLabel.Enabled = leituraBalancaHabilitada;
+        readWeightLegendTextLabel.Enabled = leituraBalancaHabilitada;
+        readWeightLegendPanel.Cursor = leituraBalancaHabilitada ? Cursors.Hand : Cursors.Default;
+        readWeightLegendIconLabel.Cursor = leituraBalancaHabilitada ? Cursors.Hand : Cursors.Default;
+        readWeightLegendTextLabel.Cursor = leituraBalancaHabilitada ? Cursors.Hand : Cursors.Default;
+        readWeightLegendTextLabel.ForeColor = leituraBalancaHabilitada ? EnabledLegendTextColor : DisabledLegendTextColor;
+        readWeightLegendIconLabel.Visible = leituraBalancaHabilitada;
+        lerEtiquetaButton.Enabled = leituraBalancaHabilitada;
+        leituraManualButton.Enabled = leituraManualHabilitada;
     }
 
     private void SetDeleteActionsEnabled(bool enabled)
@@ -1788,7 +1981,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         selectedRow.Selected = true;
         SetCurrentProductionCell(selectedRow, "productionPesoLidoColumn");
         UpdateProductionCounters();
-        statusLabel.Text = $"Peso manual adicionado a linha {GetCellValue(selectedRow, "productionCodeColumn")}.";
+        statusLabel.Text = "Peso registrado localmente. Finalize a leitura para gravar o lançamento.";
     }
 
     private void UpdateProductionState(bool started)
@@ -2572,8 +2765,29 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
     }
 
-    private void ProcessoProdutoAcabadoForm_Shown(object? sender, EventArgs e)
+    private async void ProcessoProdutoAcabadoForm_Shown(object? sender, EventArgs e)
     {
+        if (!_acessoDiretoValidado)
+        {
+            _acessoDiretoValidado = true;
+            if (!PossuiPermissaoEntrada(PermissoesSistema.Acoes.Consultar))
+            {
+                await AcaoNegadaHelper.RegistrarAcaoNegadaSeguroAsync(
+                    PermissoesSistema.Modulos.ProcessoProducao,
+                    PermissoesSistema.Rotinas.EntradaProduto,
+                    PermissoesSistema.Acoes.Consultar,
+                    "abrir diretamente a Entrada de Produto",
+                    "ProcessoEntradaProdutoForm");
+                MessageBox.Show(
+                    "Você não possui permissão para acessar a Entrada de Produto.",
+                    "Acesso negado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                Close();
+                return;
+            }
+        }
+
         BeginInvoke(ClearGridSelections);
         StartProductionDevicesWarmUp();
     }
@@ -2828,8 +3042,9 @@ public partial class ProcessoEntradaProdutoForm : Form
             EstadoVisualLocalEntrada.Pendente,
             "aguardando finalização do lançamento");
         AtualizarEstadoVisualIntegracaoSap(
-            EstadoVisualIntegracaoSap.Pendente,
+            EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
             "aguardando gravação local");
+        productionActionsButton.Enabled = false;
         productionDataGridView.Rows.Clear();
         UpdateProductionCounters();
         UpdateProductionGridFooter();
@@ -2843,8 +3058,9 @@ public partial class ProcessoEntradaProdutoForm : Form
             EstadoVisualLocalEntrada.Pendente,
             "pedido carregado; lançamento ainda não gravado");
         AtualizarEstadoVisualIntegracaoSap(
-            EstadoVisualIntegracaoSap.Pendente,
+            EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
             "aguardando gravação local");
+        productionActionsButton.Enabled = false;
         productionDataGridView.Rows.Clear();
         var cultura = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
         foreach (PedidoCompraSapItem item in itens)

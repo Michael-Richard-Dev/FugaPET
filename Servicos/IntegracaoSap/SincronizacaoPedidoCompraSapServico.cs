@@ -492,6 +492,19 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
         }
     }
 
+    internal Task RegistrarFalhaStatusLocalAposSapAsync(
+        long codigoLancamento,
+        string mensagem,
+        CancellationToken cancellationToken = default)
+        => RegistrarLogAsync(
+            "ATUALIZAR_STATUS_LOCAL_POS_SAP",
+            codigoLancamento.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Guid.NewGuid(),
+            Stopwatch.StartNew(),
+            "ERRO",
+            null,
+            mensagem);
+
     private async Task RegistrarLogAsync(
         string operacao,
         string? chaveNegocio,

@@ -21,6 +21,21 @@ internal sealed class PedidoCompraSapGovernadoServico : IPedidoCompraSapServico
     public bool SapConfigurado => _servicoInterno.SapConfigurado;
     public bool EscritaSapHabilitada => _servicoInterno.EscritaSapHabilitada;
 
+    public Task<DiagnosticoEstadoIntegracaoSap> DiagnosticarAsync(
+        CancellationToken cancellationToken = default)
+        => _estadoIntegracaoSapServico.DiagnosticarAsync(cancellationToken);
+
+    public Task RegistrarFalhaStatusLocalAposSapAsync(
+        long codigoLancamento,
+        string mensagem,
+        CancellationToken cancellationToken = default)
+        => _servicoInterno is SincronizacaoPedidoCompraSapServico servico
+            ? servico.RegistrarFalhaStatusLocalAposSapAsync(
+                codigoLancamento,
+                mensagem,
+                cancellationToken)
+            : Task.CompletedTask;
+
     public async Task<ResultadoOperacao> SincronizarPedidoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default)

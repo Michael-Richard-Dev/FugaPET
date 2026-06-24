@@ -32,6 +32,25 @@ public sealed class IntegracaoEntradaSapServico
     /// <summary>Escrita SAP habilitada (chave FUGAPET_SAP_WRITE_ENABLED / Sap:EscritaHabilitada).</summary>
     public bool EscritaSapHabilitada => _pedidoCompra.EscritaSapHabilitada;
 
+    public async Task<DiagnosticoProntidaoIntegracaoSap> DiagnosticarProntidaoEscritaAsync(
+        CancellationToken cancellationToken = default)
+    {
+        DiagnosticoEstadoIntegracaoSap estado = _pedidoCompra is PedidoCompraSapGovernadoServico governado
+            ? await governado.DiagnosticarAsync(cancellationToken)
+            : new DiagnosticoEstadoIntegracaoSap(
+                AmbienteOperacional: true,
+                IntegracaoAtiva: true,
+                SapConfigurado: _pedidoCompra.SapConfigurado,
+                MotivoBloqueio: null);
+
+        return new DiagnosticoProntidaoIntegracaoSap(
+            estado.AmbienteOperacional,
+            estado.IntegracaoAtiva,
+            estado.SapConfigurado,
+            _pedidoCompra.EscritaSapHabilitada,
+            estado.MotivoBloqueio);
+    }
+
     public Task<ResultadoOperacao> SincronizarPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)
         => _pedidoCompra.SincronizarPedidoAsync(numeroPedido, cancellationToken);
 
@@ -46,7 +65,25 @@ public sealed class IntegracaoEntradaSapServico
         CancellationToken cancellationToken = default)
         => _pedidoCompra.AtualizarPesoItemSapAsync(numeroPedido, numeroItem, pesoLiquido, pesoBruto, cancellationToken);
 
+    public Task RegistrarFalhaStatusLocalAposSapAsync(
+        long codigoLancamento,
+        string mensagem,
+        CancellationToken cancellationToken = default)
+        => _pedidoCompra is PedidoCompraSapGovernadoServico governado
+            ? governado.RegistrarFalhaStatusLocalAposSapAsync(
+                codigoLancamento,
+                mensagem,
+                cancellationToken)
+            : Task.CompletedTask;
+
     /// <summary>Registro de diagnostico (best-effort) da integracao SAP.</summary>
     public void RegistrarDiagnostico(string mensagem)
         => SincronizacaoPedidoCompraSapServico.RegistrarDiagnostico(mensagem);
 }
+
+public sealed record DiagnosticoProntidaoIntegracaoSap(
+    bool AmbienteOperacional,
+    bool IntegracaoAtiva,
+    bool SapConfigurado,
+    bool EscritaSapHabilitada,
+    string? MotivoBloqueio);

@@ -12,6 +12,7 @@ public partial class BalanceTestForm : Form
     public BalanceTestForm()
     {
         InitializeComponent();
+        IconeJanelaHelper.AplicarIconePadrao(this);
     }
 
     private async void readWeightButton_Click(object sender, EventArgs e)

@@ -118,6 +118,35 @@ public sealed class BalancaServicoTests : IDisposable
     }
 
     [Fact]
+    public async Task InserirAsync_DeveBloquearTipoConexaoAcimaDoLimite()
+    {
+        DefinirPermissao(PermissoesSistema.Acoes.Criar);
+        RepositorioFake repositorio = new();
+        BalancaCadastro balanca = Manual();
+        balanca.TipoConexao = new string('A', 21);
+
+        ResultadoOperacao resultado = await CriarServico(repositorio).InserirAsync(balanca);
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal("Tipo de conexão deve ter no máximo 20 caracteres.", resultado.Mensagem);
+        Assert.Null(repositorio.BalancaInserida);
+    }
+
+    [Fact]
+    public async Task InserirAsync_DeveNormalizarParametrosTecnicos()
+    {
+        DefinirPermissao(PermissoesSistema.Acoes.Criar);
+        RepositorioFake repositorio = new();
+        BalancaCadastro balanca = Manual();
+        balanca.ParametrosTecnicos = "  {\"modo\":\"teste\"}  ";
+
+        ResultadoOperacao resultado = await CriarServico(repositorio).InserirAsync(balanca);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal("{\"modo\":\"teste\"}", repositorio.BalancaInserida?.ParametrosTecnicos);
+    }
+
+    [Fact]
     public async Task InserirAsync_DeveBloquearTcpSemIp()
     {
         DefinirPermissao(PermissoesSistema.Acoes.Criar);

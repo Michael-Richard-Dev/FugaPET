@@ -12,6 +12,7 @@ public partial class TrocaSenhaObrigatoriaForm : Form
     {
         _idUsuario = idUsuario;
         InitializeComponent();
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         loginValueLabel.Text = loginUsuario;
     }
 

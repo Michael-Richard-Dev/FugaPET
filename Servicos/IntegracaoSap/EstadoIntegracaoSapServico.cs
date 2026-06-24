@@ -99,6 +99,41 @@ internal sealed class EstadoIntegracaoSapServico
         return ResultadoOperacao.Ok();
     }
 
+    public async Task<DiagnosticoEstadoIntegracaoSap> DiagnosticarAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!_ambientePermitido)
+        {
+            return new DiagnosticoEstadoIntegracaoSap(
+                AmbienteOperacional: false,
+                IntegracaoAtiva: false,
+                SapConfigurado: _configuracaoSap.Configurado,
+                MotivoBloqueio: "Integração SAP indisponível neste ambiente.");
+        }
+
+        bool? integracaoAtiva;
+        try
+        {
+            integracaoAtiva = await _obterIntegracaoAtivaAsync(cancellationToken);
+        }
+        catch
+        {
+            return new DiagnosticoEstadoIntegracaoSap(
+                AmbienteOperacional: true,
+                IntegracaoAtiva: false,
+                SapConfigurado: _configuracaoSap.Configurado,
+                MotivoBloqueio: "Não foi possível validar a ativação central da integração SAP.");
+        }
+
+        return new DiagnosticoEstadoIntegracaoSap(
+            AmbienteOperacional: true,
+            IntegracaoAtiva: integracaoAtiva == true,
+            SapConfigurado: _configuracaoSap.Configurado,
+            MotivoBloqueio: integracaoAtiva == true
+                ? null
+                : "Integração SAP desativada pela configuração central.");
+    }
+
     private async Task<ResultadoOperacao> BloquearAsync(
         OperacaoIntegracaoSap operacao,
         string mensagem,
@@ -132,3 +167,9 @@ internal sealed class EstadoIntegracaoSapServico
             _ => false
         };
 }
+
+public sealed record DiagnosticoEstadoIntegracaoSap(
+    bool AmbienteOperacional,
+    bool IntegracaoAtiva,
+    bool SapConfigurado,
+    string? MotivoBloqueio);

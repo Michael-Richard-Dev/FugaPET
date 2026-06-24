@@ -71,6 +71,7 @@ public sealed class CamposEtiquetaForm : Form
         _mapeamentoController = mapeamentoController ?? FabricaControladoresCadastro.CriarMapeamentoCampoEtiquetaController();
 
         ConstruirUi();
+        IconeJanelaHelper.AplicarIconePadrao(this);
         FormClosed += (_, _) => CancelarConsultasPendentes();
 
         if (_integracaoBancoHabilitada)

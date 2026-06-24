@@ -5,6 +5,7 @@ public sealed class ConfirmarReimpressaoEtiquetaForm : Form
     public ConfirmarReimpressaoEtiquetaForm(string itemPedido)
     {
         Text = "Confirmar Reimpressão";
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

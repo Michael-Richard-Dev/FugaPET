@@ -146,7 +146,7 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
         comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
         comando.Parameters.Add(new NpgsqlParameter("@pesado_em", NpgsqlDbType.TimestampTz)
         {
-            Value = pesagem.PesadoEm
+            Value = pesagem.PesadoEm.ToUniversalTime()
         });
         await comando.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -309,6 +309,87 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
         }
 
         return itens;
+    }
+
+    public async Task AtualizarStatusAposEnvioSapAsync(
+        long codigoLancamento,
+        IReadOnlyList<ResultadoItemEnvioSap> resultados,
+        CenarioEnvioSapEntrada cenario,
+        CancellationToken cancellationToken = default)
+    {
+        if (codigoLancamento <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(codigoLancamento));
+        }
+
+        if (resultados.Count == 0)
+        {
+            throw new ArgumentException("Informe os resultados dos itens enviados.", nameof(resultados));
+        }
+
+        if (cenario is not CenarioEnvioSapEntrada.Enviado
+            and not CenarioEnvioSapEntrada.Parcial
+            and not CenarioEnvioSapEntrada.Falha)
+        {
+            throw new ArgumentException("Cenário de envio SAP inválido para atualização local.", nameof(cenario));
+        }
+
+        long? usuario = ObterCodigoUsuarioSessao();
+        await ExecutarEmTransacaoAuditavelAsync(async (conexao, transacao) =>
+        {
+            foreach (ResultadoItemEnvioSap resultado in resultados)
+            {
+                const string sqlItem = """
+                    UPDATE entrada_produto_item
+                       SET status_item = @status_item,
+                           entrada_produto_item_atualizado_por = @usuario
+                     WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                       AND numero_item = @numero_item
+                       AND situacao_entrada_produto_item = true;
+                    """;
+
+                await using NpgsqlCommand comandoItem = new(sqlItem, conexao, transacao);
+                comandoItem.Parameters.Add(ParametroTexto(
+                    "@status_item",
+                    resultado.Sucesso ? "CONFIRMADO_SAP" : "ERRO_SAP"));
+                comandoItem.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
+                comandoItem.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+                comandoItem.Parameters.Add(ParametroTexto("@numero_item", resultado.NumeroItem));
+                int itensAtualizados = await comandoItem.ExecuteNonQueryAsync(cancellationToken);
+                if (itensAtualizados != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Não foi possível atualizar o status local do item {resultado.NumeroItem}.");
+                }
+            }
+
+            if (cenario is CenarioEnvioSapEntrada.Enviado or CenarioEnvioSapEntrada.Falha)
+            {
+                const string sqlLancamento = """
+                    UPDATE entrada_produto_lancamento
+                       SET status_lancamento = @status_lancamento,
+                           entrada_produto_lancamento_atualizado_por = @usuario
+                     WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                       AND situacao_entrada_produto_lancamento = true;
+                    """;
+
+                await using NpgsqlCommand comandoLancamento = new(sqlLancamento, conexao, transacao);
+                comandoLancamento.Parameters.Add(ParametroTexto(
+                    "@status_lancamento",
+                    cenario == CenarioEnvioSapEntrada.Enviado ? "CONFIRMADO_SAP" : "ERRO_SAP"));
+                comandoLancamento.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
+                comandoLancamento.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+                int lancamentosAtualizados =
+                    await comandoLancamento.ExecuteNonQueryAsync(cancellationToken);
+                if (lancamentosAtualizados != 1)
+                {
+                    throw new InvalidOperationException(
+                        "Não foi possível atualizar o status local do lançamento.");
+                }
+            }
+
+            return true;
+        }, cancellationToken);
     }
 
     private static NpgsqlParameter ParametroTextoNulo(string nome, string? valor)

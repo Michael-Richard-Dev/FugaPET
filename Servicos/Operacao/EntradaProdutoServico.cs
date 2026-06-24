@@ -147,6 +147,28 @@ public sealed class EntradaProdutoServico
         CancellationToken cancellationToken = default)
         => _repositorio.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken);
 
+    public async Task<ResultadoOperacao> AtualizarStatusAposEnvioSapAsync(
+        long codigoLancamento,
+        IReadOnlyList<ResultadoItemEnvioSap> resultados,
+        CenarioEnvioSapEntrada cenario,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _repositorio.AtualizarStatusAposEnvioSapAsync(
+                codigoLancamento,
+                resultados,
+                cenario,
+                cancellationToken);
+            return ResultadoOperacao.Ok("Status local do envio SAP atualizado.");
+        }
+        catch
+        {
+            return ResultadoOperacao.Falha(
+                "O SAP respondeu ao envio, mas o status local não pôde ser atualizado.");
+        }
+    }
+
     private async Task ValidarItemAsync(
         long usuario, long? codigoSetor, EntradaProdutoItem item,
         IReadOnlySet<long> tarasDoSetor, CancellationToken cancellationToken)

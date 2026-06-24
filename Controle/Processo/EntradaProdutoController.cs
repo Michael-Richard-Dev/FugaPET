@@ -30,6 +30,13 @@ public sealed class EntradaProdutoController
 
     private readonly Func<bool> _ehAmbienteHomologacao;
     private readonly Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>> _carregarItensParaEnvio;
+    private readonly Func<CancellationToken, Task<DiagnosticoProntidaoIntegracaoSap>> _diagnosticarIntegracaoSap;
+    private readonly Func<
+        long,
+        IReadOnlyList<ResultadoItemEnvioSap>,
+        CenarioEnvioSapEntrada,
+        CancellationToken,
+        Task<ResultadoOperacao>> _atualizarStatusAposEnvioSap;
 
     // Ctor padrao: a fabrica decide mock/real (a tela nao decide nem instancia servico SAP concreto).
     public EntradaProdutoController()
@@ -51,7 +58,14 @@ public sealed class EntradaProdutoController
         AutorizacaoCentroDepositoEntrada autorizacaoCentroDeposito,
         TaraController taraController,
         Func<bool>? ehAmbienteHomologacao = null,
-        Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>>? carregarItensParaEnvio = null)
+        Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>>? carregarItensParaEnvio = null,
+        Func<CancellationToken, Task<DiagnosticoProntidaoIntegracaoSap>>? diagnosticarIntegracaoSap = null,
+        Func<
+            long,
+            IReadOnlyList<ResultadoItemEnvioSap>,
+            CenarioEnvioSapEntrada,
+            CancellationToken,
+            Task<ResultadoOperacao>>? atualizarStatusAposEnvioSap = null)
     {
         Sap = sap ?? throw new ArgumentNullException(nameof(sap));
         EntradaProduto = entradaProdutoServico ?? throw new ArgumentNullException(nameof(entradaProdutoServico));
@@ -64,6 +78,76 @@ public sealed class EntradaProdutoController
         _carregarItensParaEnvio = carregarItensParaEnvio
             ?? ((codigoLancamento, cancellationToken) =>
                 EntradaProduto.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken));
+        _diagnosticarIntegracaoSap =
+            diagnosticarIntegracaoSap ?? Sap.DiagnosticarProntidaoEscritaAsync;
+        _atualizarStatusAposEnvioSap =
+            atualizarStatusAposEnvioSap ?? EntradaProduto.AtualizarStatusAposEnvioSapAsync;
+    }
+
+    public async Task<DiagnosticoEnvioSapEntrada> DiagnosticarEnvioSapEntradaAsync(
+        long? codigoLancamento,
+        CancellationToken cancellationToken = default)
+    {
+        bool ambienteHomologacao = _ehAmbienteHomologacao();
+        bool usuarioTemPermissao =
+            AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.EnviarSap);
+
+        DiagnosticoProntidaoIntegracaoSap integracao =
+            await _diagnosticarIntegracaoSap(cancellationToken);
+
+        int totalItensPersistidos = 0;
+        string? falhaItens = null;
+        if (codigoLancamento is long codigo
+            && codigo > 0
+            && ambienteHomologacao
+            && usuarioTemPermissao
+            && integracao.AmbienteOperacional
+            && integracao.IntegracaoAtiva
+            && integracao.SapConfigurado
+            && integracao.EscritaSapHabilitada)
+        {
+            try
+            {
+                totalItensPersistidos =
+                    (await _carregarItensParaEnvio(codigo, cancellationToken)).Count;
+            }
+            catch
+            {
+                falhaItens = "Não foi possível validar os itens persistidos do lançamento.";
+            }
+        }
+
+        string? motivoBloqueio = codigoLancamento is not long id || id <= 0
+            ? "Finalize e grave o lançamento local antes do envio."
+            : !ambienteHomologacao
+                ? "O ambiente atual não é homologação."
+                : !usuarioTemPermissao
+                    ? "Usuário sem permissão ENVIAR_SAP."
+                    : !integracao.AmbienteOperacional
+                        ? integracao.MotivoBloqueio ?? "Integração SAP indisponível neste ambiente."
+                        : !integracao.IntegracaoAtiva
+                            ? integracao.MotivoBloqueio ?? "Integração SAP inativa."
+                            : !integracao.SapConfigurado
+                                ? "Configuração SAP indisponível."
+                                : !integracao.EscritaSapHabilitada
+                                    ? "Escrita SAP desabilitada."
+                                    : falhaItens
+                                        ?? (totalItensPersistidos == 0
+                                            ? "O lançamento não possui itens persistidos elegíveis."
+                                            : null);
+
+        return new DiagnosticoEnvioSapEntrada
+        {
+            PodeEnviar = motivoBloqueio is null,
+            MotivoBloqueio = motivoBloqueio,
+            CodigoLancamento = codigoLancamento,
+            TotalItensPersistidos = totalItensPersistidos,
+            AmbienteHomologacao = ambienteHomologacao,
+            UsuarioTemPermissao = usuarioTemPermissao,
+            SapConfigurado = integracao.SapConfigurado,
+            EscritaSapHabilitada = integracao.EscritaSapHabilitada,
+            IntegracaoSapAtiva = integracao.IntegracaoAtiva
+        };
     }
 
     /// <summary>
@@ -118,22 +202,18 @@ public sealed class EntradaProdutoController
         long codigoLancamento,
         CancellationToken cancellationToken = default)
     {
-        if (!_ehAmbienteHomologacao())
+        DiagnosticoEnvioSapEntrada diagnostico =
+            await DiagnosticarEnvioSapEntradaAsync(codigoLancamento, cancellationToken);
+        if (!diagnostico.PodeEnviar)
         {
-            Sap.RegistrarDiagnostico($"Envio SAP bloqueado (lancamento {codigoLancamento}): ambiente nao e homologacao.");
-            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.AmbienteNaoHomologacao };
-        }
-
-        if (!AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.EnviarSap))
-        {
-            Sap.RegistrarDiagnostico($"Envio SAP bloqueado (lancamento {codigoLancamento}): sem permissao ENVIAR_SAP.");
-            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.SemPermissao };
-        }
-
-        if (!Sap.EscritaSapHabilitada)
-        {
-            Sap.RegistrarDiagnostico($"Envio SAP bloqueado (lancamento {codigoLancamento}): escrita SAP desabilitada.");
-            return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.EscritaDesabilitada };
+            CenarioEnvioSapEntrada cenarioBloqueio = ObterCenarioBloqueio(diagnostico);
+            Sap.RegistrarDiagnostico(
+                $"Envio SAP bloqueado (lancamento {codigoLancamento}): {diagnostico.MotivoBloqueio}");
+            return new ResultadoEnvioSapEntrada
+            {
+                Cenario = cenarioBloqueio,
+                Total = diagnostico.TotalItensPersistidos
+            };
         }
 
         IReadOnlyList<EntradaProdutoItemEnvioSap> itens;
@@ -182,13 +262,70 @@ public sealed class EntradaProdutoController
                 ? CenarioEnvioSapEntrada.Falha
                 : CenarioEnvioSapEntrada.Parcial;
 
+        ResultadoOperacao atualizacaoLocal = await _atualizarStatusAposEnvioSap(
+            codigoLancamento,
+            resultados,
+            cenario,
+            cancellationToken);
+        if (!atualizacaoLocal.Sucesso)
+        {
+            await Sap.RegistrarFalhaStatusLocalAposSapAsync(
+                codigoLancamento,
+                atualizacaoLocal.Mensagem,
+                CancellationToken.None);
+            Sap.RegistrarDiagnostico(
+                $"CRITICO envio SAP lancamento {codigoLancamento}: resposta SAP recebida, "
+                + "mas a atualizacao do status local falhou.");
+            return new ResultadoEnvioSapEntrada
+            {
+                Cenario = CenarioEnvioSapEntrada.FalhaPersistenciaLocal,
+                Enviados = enviados,
+                Total = itens.Count,
+                Itens = resultados,
+                StatusLocalAtualizado = false,
+                MensagemCritica = atualizacaoLocal.Mensagem
+            };
+        }
+
         return new ResultadoEnvioSapEntrada
         {
             Cenario = cenario,
             Enviados = enviados,
             Total = itens.Count,
-            Itens = resultados
+            Itens = resultados,
+            StatusLocalAtualizado = true
         };
+    }
+
+    private static CenarioEnvioSapEntrada ObterCenarioBloqueio(
+        DiagnosticoEnvioSapEntrada diagnostico)
+    {
+        if (!diagnostico.AmbienteHomologacao)
+        {
+            return CenarioEnvioSapEntrada.AmbienteNaoHomologacao;
+        }
+
+        if (!diagnostico.UsuarioTemPermissao)
+        {
+            return CenarioEnvioSapEntrada.SemPermissao;
+        }
+
+        if (!diagnostico.IntegracaoSapAtiva)
+        {
+            return CenarioEnvioSapEntrada.IntegracaoInativa;
+        }
+
+        if (!diagnostico.SapConfigurado)
+        {
+            return CenarioEnvioSapEntrada.SapNaoConfigurado;
+        }
+
+        if (!diagnostico.EscritaSapHabilitada)
+        {
+            return CenarioEnvioSapEntrada.EscritaDesabilitada;
+        }
+
+        return CenarioEnvioSapEntrada.LancamentoSemItens;
     }
 
     /// <summary>
@@ -257,21 +394,6 @@ public sealed class ResultadoFinalizacaoEntrada
     public string? MensagemFalhaLancamento { get; init; }
 }
 
-/// <summary>Cenarios do envio CONTROLADO de peso ao SAP (fluxo separado da finalizacao).</summary>
-public enum CenarioEnvioSapEntrada
-{
-    AmbienteNaoHomologacao,
-    SemPermissao,
-    EscritaDesabilitada,
-    LancamentoSemItens,
-    Enviado,
-    Parcial,
-    Falha
-}
-
-/// <summary>Resultado por item do envio de peso ao SAP (mensagem ja sanitizada pelo servico).</summary>
-public sealed record ResultadoItemEnvioSap(string NumeroItem, bool Sucesso, string Mensagem);
-
 /// <summary>Resultado do envio controlado de peso ao SAP de homologacao.</summary>
 public sealed class ResultadoEnvioSapEntrada
 {
@@ -279,6 +401,21 @@ public sealed class ResultadoEnvioSapEntrada
     public int Enviados { get; init; }
     public int Total { get; init; }
     public IReadOnlyList<ResultadoItemEnvioSap> Itens { get; init; } = [];
+    public bool StatusLocalAtualizado { get; init; }
+    public string? MensagemCritica { get; init; }
+}
+
+public sealed class DiagnosticoEnvioSapEntrada
+{
+    public bool PodeEnviar { get; init; }
+    public string? MotivoBloqueio { get; init; }
+    public long? CodigoLancamento { get; init; }
+    public int TotalItensPersistidos { get; init; }
+    public bool AmbienteHomologacao { get; init; }
+    public bool UsuarioTemPermissao { get; init; }
+    public bool SapConfigurado { get; init; }
+    public bool EscritaSapHabilitada { get; init; }
+    public bool IntegracaoSapAtiva { get; init; }
 }
 
 /// <summary>Resultado da consulta de um pedido (dados ja filtrados pelo escopo; a tela so apresenta).</summary>

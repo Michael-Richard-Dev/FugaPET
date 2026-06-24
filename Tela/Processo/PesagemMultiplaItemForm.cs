@@ -40,6 +40,7 @@ public sealed class PesagemMultiplaItemForm : Form
         _pesagens.AddRange(pesagensAtuais);
 
         Text = "Pesagens do Item";
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -81,11 +82,13 @@ public sealed class PesagemMultiplaItemForm : Form
         _statusLabel.ForeColor = Color.FromArgb(184, 18, 32);
         _statusLabel.Location = new Point(24, 404);
         _statusLabel.Size = new Size(470, 24);
+        _totalValueLabel.AutoSize = true;
         _totalValueLabel.Font = new Font("Segoe UI", 20F, FontStyle.Bold);
         _totalValueLabel.ForeColor = Color.FromArgb(184, 18, 32);
         _totalValueLabel.TextAlign = ContentAlignment.MiddleRight;
-        _totalValueLabel.Location = new Point(520, 390);
-        _totalValueLabel.Size = new Size(210, 44);
+        // Posicao recalculada a cada atualizacao do total (AlinharTotalADireita),
+        // para que valores grandes sempre apareçam inteiros, alinhados à direita.
+        _totalValueLabel.Location = new Point(520, 392);
 
         Controls.Add(tituloLabel);
         Controls.Add(itemLabel);
@@ -276,8 +279,19 @@ public sealed class PesagemMultiplaItemForm : Form
     private void AtualizarResumo()
     {
         _totalValueLabel.Text = $"Total bruto: {PesoTotalTexto}";
+        AlinharTotalADireita();
         _concluirButton.Enabled =
             EntradaProdutoPesagemCalculos.PossuiLeituraValida(_pesagens);
+    }
+
+    // Mantem o total colado na margem direita do dialogo; como o label e AutoSize,
+    // a largura acompanha o texto e numeros grandes nao sao mais cortados.
+    private void AlinharTotalADireita()
+    {
+        const int margemDireita = 24;
+        _totalValueLabel.Left = Math.Max(
+            200,
+            ClientSize.Width - margemDireita - _totalValueLabel.PreferredWidth);
     }
 
     private void Concluir()

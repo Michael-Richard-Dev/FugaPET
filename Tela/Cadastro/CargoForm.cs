@@ -50,6 +50,7 @@ public partial class CargoForm : Form
         _cargoController = cargoController ?? FabricaControladoresCadastro.CriarCargoController();
         _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";
