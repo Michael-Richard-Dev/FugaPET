@@ -644,7 +644,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         productionActionsButton.Visible = podeEnviarSap;
         productionActionsButton.Enabled = false;
         productionActionsButton.Text = "Enviar SAP HML";
-        productionActionsButton.AccessibleName = "Enviar lançamento para SAP de homologação";
+        productionActionsButton.AccessibleName = "Criar movimento 101 no SAP de homologação";
         _envioSapToolTip.SetToolTip(
             productionActionsButton,
             podeEnviarSap
@@ -756,9 +756,10 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
 
         DialogResult confirmacao = MessageBox.Show(
-            $"Confirma o envio do lançamento {codigoLancamento} para o SAP DE HOMOLOGAÇÃO?\n\n"
-            + "Esta é uma etapa separada da gravação local e será executada somente após esta confirmação.",
-            "Confirmar envio para SAP HML",
+            $"Confirma criar o movimento 101 no SAP DE HOMOLOGAÇÃO para o lançamento {codigoLancamento}?\n\n"
+            + "Será criado um documento de material (entrada) vinculado ao pedido. Esta é uma etapa "
+            + "separada da gravação local e só ocorre após esta confirmação.",
+            "Criar movimento 101 no SAP HML",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);
@@ -805,8 +806,9 @@ public partial class ProcessoEntradaProdutoForm : Form
                     EstadoVisualIntegracaoSap.Enviado,
                     $"{resultado.Enviados} de {resultado.Total} item(ns)");
                 MessageBox.Show(
-                    $"Envio controlado ao SAP de homologação concluído para {resultado.Enviados} item(ns).",
-                    "Envio SAP HML concluído",
+                    resultado.Mensagem
+                    ?? $"Documento de material criado no SAP de homologação para {resultado.Enviados} item(ns).",
+                    "Documento de material criado no SAP",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 break;
@@ -831,7 +833,8 @@ public partial class ProcessoEntradaProdutoForm : Form
                     EstadoVisualLocalEntrada.Gravado,
                     "falha SAP registrada localmente como ERRO_SAP");
                 ApresentarFalhaEnvioSap(
-                    "O SAP não confirmou a atualização dos itens. "
+                    resultado.Mensagem
+                    ?? "O SAP não criou o documento de material. "
                     + "A falha foi registrada no lançamento local.");
                 break;
 
@@ -864,6 +867,40 @@ public partial class ProcessoEntradaProdutoForm : Form
             case CenarioEnvioSapEntrada.LancamentoSemItens:
                 ApresentarFalhaEnvioSap(
                     "O lançamento local não possui itens persistidos elegíveis para envio.");
+                break;
+
+            case CenarioEnvioSapEntrada.MaterialDocumentNaoConfigurado:
+                ApresentarFalhaEnvioSap(
+                    resultado.Mensagem
+                    ?? "Integração SAP Material Document não configurada.");
+                break;
+
+            case CenarioEnvioSapEntrada.UnidadeNaoSuportada:
+            case CenarioEnvioSapEntrada.DadosIncompletos:
+                ApresentarFalhaEnvioSap(
+                    resultado.Mensagem
+                    ?? "Item não elegível para criar o movimento 101 no SAP.");
+                break;
+
+            case CenarioEnvioSapEntrada.LancamentoJaConfirmadoSap:
+                AtualizarEstadoVisualLocal(
+                    EstadoVisualLocalEntrada.Gravado,
+                    "lançamento já confirmado no SAP");
+                ApresentarFalhaEnvioSap(
+                    resultado.Mensagem
+                    ?? "Lançamento já confirmado no SAP. Reenvio bloqueado.");
+                break;
+
+            case CenarioEnvioSapEntrada.LancamentoCancelado:
+                ApresentarFalhaEnvioSap(
+                    resultado.Mensagem
+                    ?? "Lançamento cancelado. Envio bloqueado.");
+                break;
+
+            case CenarioEnvioSapEntrada.EnvioEmProcessamento:
+                ApresentarFalhaEnvioSap(
+                    resultado.Mensagem
+                    ?? "Envio já bloqueado ou em processamento. Aguarde a conclusão.");
                 break;
 
             case CenarioEnvioSapEntrada.FalhaPersistenciaLocal:

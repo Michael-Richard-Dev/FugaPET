@@ -3,8 +3,11 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 internal static class ValidadorUrlSap
 {
     public static Uri ValidarBaseUrl(ConfiguracaoSap configuracao)
+        => ValidarBaseUrl(configuracao.BaseUrl, configuracao.HostsPermitidos);
+
+    public static Uri ValidarBaseUrl(string baseUrl, IReadOnlyList<string> hostsPermitidos)
     {
-        if (!Uri.TryCreate(configuracao.BaseUrl, UriKind.Absolute, out Uri? uri))
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri))
         {
             throw new InvalidOperationException("A URL base do SAP e invalida.");
         }
@@ -16,7 +19,7 @@ internal static class ValidadorUrlSap
             throw new InvalidOperationException("A URL base do SAP nao pode conter query string ou fragmento.");
         }
 
-        if (!HostPermitido(uri, configuracao.HostsPermitidos))
+        if (!HostPermitido(uri, hostsPermitidos))
         {
             throw new InvalidOperationException("O host da URL base do SAP nao esta na allowlist.");
         }

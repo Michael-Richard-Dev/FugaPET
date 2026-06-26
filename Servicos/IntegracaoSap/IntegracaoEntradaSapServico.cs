@@ -13,10 +13,18 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 public sealed class IntegracaoEntradaSapServico
 {
     private readonly IPedidoCompraSapServico _pedidoCompra;
+    private readonly Lazy<IMaterialDocumentSapServico> _materialDocument;
 
-    public IntegracaoEntradaSapServico(IPedidoCompraSapServico pedidoCompra)
+    public IntegracaoEntradaSapServico(
+        IPedidoCompraSapServico pedidoCompra,
+        IMaterialDocumentSapServico? materialDocument = null)
     {
         _pedidoCompra = pedidoCompra ?? throw new ArgumentNullException(nameof(pedidoCompra));
+        // Lazy: a composicao real (fabrica) so e criada quando o envio/diagnostico de Material
+        // Document e exercido — testes injetam um fake e nao tocam a fabrica/banco.
+        _materialDocument = new Lazy<IMaterialDocumentSapServico>(
+            () => materialDocument ?? FabricaMaterialDocumentSapServico.Criar(),
+            LazyThreadSafetyMode.ExecutionAndPublication);
         if (_pedidoCompra.EhSimulado
             && !global::FugaPET_Dev.AcessoDados.Banco.EstadoIntegracaoBanco.PodeUsarDadosSimulados)
         {
@@ -31,6 +39,9 @@ public sealed class IntegracaoEntradaSapServico
 
     /// <summary>Escrita SAP habilitada (chave FUGAPET_SAP_WRITE_ENABLED / Sap:EscritaHabilitada).</summary>
     public bool EscritaSapHabilitada => _pedidoCompra.EscritaSapHabilitada;
+
+    /// <summary>True quando ha URL de Material Document para criar o movimento 101 da Entrada.</summary>
+    public bool MaterialDocumentConfigurado => _materialDocument.Value.MaterialDocumentConfigurado;
 
     public async Task<DiagnosticoProntidaoIntegracaoSap> DiagnosticarProntidaoEscritaAsync(
         CancellationToken cancellationToken = default)
@@ -48,6 +59,7 @@ public sealed class IntegracaoEntradaSapServico
             estado.IntegracaoAtiva,
             estado.SapConfigurado,
             _pedidoCompra.EscritaSapHabilitada,
+            MaterialDocumentConfigurado,
             estado.MotivoBloqueio);
     }
 
@@ -64,6 +76,18 @@ public sealed class IntegracaoEntradaSapServico
         decimal pesoBruto,
         CancellationToken cancellationToken = default)
         => _pedidoCompra.AtualizarPesoItemSapAsync(numeroPedido, numeroItem, pesoLiquido, pesoBruto, cancellationToken);
+
+    /// <summary>
+    /// Cria o documento de material (movimento 101) da Entrada de Produto via
+    /// API_MATERIAL_DOCUMENT_SRV. A governanca (ambiente, integracao ativa, configuracao, permissao
+    /// ENVIAR_SAP) e a escrita habilitada sao reaplicadas dentro do servico governado/real. Este
+    /// caminho NAO altera o Pedido de Compra (que permanece somente consulta/cache).
+    /// </summary>
+    public Task<ResultadoMaterialDocumentSap> CriarDocumentoMaterialEntradaAsync(
+        MaterialDocumentSapRequest requisicao,
+        string chaveNegocio,
+        CancellationToken cancellationToken = default)
+        => _materialDocument.Value.CriarDocumentoMaterial101Async(requisicao, chaveNegocio, cancellationToken);
 
     public Task RegistrarFalhaStatusLocalAposSapAsync(
         long codigoLancamento,
@@ -86,4 +110,5 @@ public sealed record DiagnosticoProntidaoIntegracaoSap(
     bool IntegracaoAtiva,
     bool SapConfigurado,
     bool EscritaSapHabilitada,
+    bool MaterialDocumentConfigurado,
     string? MotivoBloqueio);

@@ -56,19 +56,22 @@ public sealed class EscritaSapBloqueadaTests
     [Fact]
     public void Finalizacao_DeveSalvarLocalmenteAntesDeChamarEscritaSap()
     {
-        // H9 Etapa 2: a coordenacao (persistencia local + PATCH SAP) vive no controller.
+        // A coordenacao (persistencia local + criacao do documento de material 101) vive no controller.
         string controller = File.ReadAllText(Path.Combine(
             RaizProjeto(),
             "Controle",
             "Processo",
             "EntradaProdutoController.cs"));
         int salvarLocal = controller.IndexOf("EntradaProduto.RegistrarLancamentoAsync", StringComparison.Ordinal);
-        int atualizarSap = controller.IndexOf("AtualizarPesoItemSapAsync", StringComparison.Ordinal);
+        int criarDocumento = controller.IndexOf("CriarDocumentoMaterialEntradaAsync", StringComparison.Ordinal);
 
         Assert.True(salvarLocal >= 0);
-        Assert.True(atualizarSap > salvarLocal);
+        Assert.True(criarDocumento > salvarLocal);
 
-        // A tela nao executa mais o PATCH no SAP — quem coordena a escrita e o controller.
+        // A Entrada NAO usa mais PATCH no Pedido de Compra: o controller nao chama AtualizarPesoItemSapAsync.
+        Assert.DoesNotContain("AtualizarPesoItemSapAsync", controller, StringComparison.Ordinal);
+
+        // A tela tambem nao executa escrita SAP direta — quem coordena e o controller.
         string form = File.ReadAllText(Path.Combine(
             RaizProjeto(),
             "Tela",

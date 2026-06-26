@@ -147,10 +147,24 @@ public sealed class EntradaProdutoServico
         CancellationToken cancellationToken = default)
         => _repositorio.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken);
 
+    /// <summary>Status atual do lancamento (defesa de reenvio antes da criacao do documento de material).</summary>
+    public Task<string?> ObterStatusLancamentoAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ObterStatusLancamentoAsync(codigoLancamento, cancellationToken);
+
+    /// <summary>Reserva atomica do lancamento (FINALIZADO_LOCAL/ERRO_SAP -&gt; ENVIADO_SAP) antes do POST.
+    /// Retorna false quando outro envio ja reservou (concorrencia/idempotencia).</summary>
+    public Task<bool> TentarReservarLancamentoParaEnvioSapAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+        => _repositorio.TentarReservarLancamentoParaEnvioSapAsync(codigoLancamento, cancellationToken);
+
     public async Task<ResultadoOperacao> AtualizarStatusAposEnvioSapAsync(
         long codigoLancamento,
         IReadOnlyList<ResultadoItemEnvioSap> resultados,
         CenarioEnvioSapEntrada cenario,
+        RastreabilidadeDocumentoMaterialSap? rastreabilidade = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -159,6 +173,7 @@ public sealed class EntradaProdutoServico
                 codigoLancamento,
                 resultados,
                 cenario,
+                rastreabilidade,
                 cancellationToken);
             return ResultadoOperacao.Ok("Status local do envio SAP atualizado.");
         }

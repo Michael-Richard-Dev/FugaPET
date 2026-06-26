@@ -54,7 +54,7 @@ public sealed class EntradaProdutoMensagensH20Tests
             form,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Confirma o envio do lan\u00e7amento",
+            "Confirma criar o movimento 101 no SAP DE HOMOLOGA\u00c7\u00c3O",
             form,
             StringComparison.Ordinal);
         Assert.Contains(

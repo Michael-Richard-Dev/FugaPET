@@ -263,6 +263,8 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
         long codigoLancamento,
         CancellationToken cancellationToken = default)
     {
+        // Material/centro/deposito/unidade vem do proprio lancamento local (entrada_produto_item),
+        // gravados na finalizacao a partir do item do pedido/cache. Sao a fonte do payload 101.
         const string sql = """
             SELECT lancamento.numero_pedido,
                    item.numero_item,
@@ -273,7 +275,11 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
                    COALESCE(SUM(pesagem.peso_bruto_kg) FILTER (
                        WHERE pesagem.situacao_entrada_produto_pesagem = true
                          AND pesagem.status_pesagem = 'VALIDA'
-                   ), 0)::numeric(14,3) AS peso_bruto
+                   ), 0)::numeric(14,3) AS peso_bruto,
+                   item.material,
+                   item.centro,
+                   item.deposito,
+                   item.unidade
               FROM entrada_produto_lancamento lancamento
               JOIN entrada_produto_item item
                 ON item.codigo_entrada_produto_lancamento =
@@ -284,7 +290,11 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
              WHERE lancamento.codigo_entrada_produto_lancamento = @codigo_lancamento
                AND lancamento.situacao_entrada_produto_lancamento = true
                AND item.situacao_entrada_produto_item = true
-             GROUP BY lancamento.numero_pedido, item.numero_item
+               -- Bloqueia reenvio/duplicacao: so itens nao confirmados/cancelados entram no payload 101.
+               AND lancamento.status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
+               AND item.status_item IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
+             GROUP BY lancamento.numero_pedido, item.numero_item,
+                      item.material, item.centro, item.deposito, item.unidade
             HAVING COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
                        WHERE pesagem.situacao_entrada_produto_pesagem = true
                          AND pesagem.status_pesagem = 'VALIDA'
@@ -304,17 +314,74 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
                 NumeroPedido = leitor.GetString(0),
                 NumeroItem = leitor.GetString(1),
                 PesoLiquidoKg = leitor.GetDecimal(2),
-                PesoBrutoKg = leitor.GetDecimal(3)
+                PesoBrutoKg = leitor.GetDecimal(3),
+                Material = leitor.IsDBNull(4) ? null : leitor.GetString(4),
+                Centro = leitor.IsDBNull(5) ? null : leitor.GetString(5),
+                Deposito = leitor.IsDBNull(6) ? null : leitor.GetString(6),
+                Unidade = leitor.IsDBNull(7) ? null : leitor.GetString(7)
             });
         }
 
         return itens;
     }
 
+    /// <summary>
+    /// Status atual do lancamento ativo (status_lancamento). Usado como defesa de reenvio antes de
+    /// montar o documento de material. Retorna null quando o lancamento nao existe/ativo.
+    /// </summary>
+    public async Task<string?> ObterStatusLancamentoAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT status_lancamento
+              FROM entrada_produto_lancamento
+             WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND situacao_entrada_produto_lancamento = true
+             LIMIT 1;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
+        return retorno as string;
+    }
+
+    /// <summary>
+    /// Reserva/claim ATOMICO do lancamento para envio SAP: transiciona FINALIZADO_LOCAL/ERRO_SAP ->
+    /// ENVIADO_SAP em um unico UPDATE condicional. Retorna true se reservou (1 linha afetada); false
+    /// se outro envio ja reservou ou o status nao permite (concorrencia/idempotencia). Nao cria
+    /// documento de material — apenas marca a intencao de envio antes do POST.
+    /// </summary>
+    public async Task<bool> TentarReservarLancamentoParaEnvioSapAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+    {
+        long? usuario = ObterCodigoUsuarioSessao();
+
+        const string sql = """
+            UPDATE entrada_produto_lancamento
+               SET status_lancamento = 'ENVIADO_SAP',
+                   entrada_produto_lancamento_atualizado_por = @usuario
+             WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND situacao_entrada_produto_lancamento = true
+               AND status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP');
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
+        int afetadas = await comando.ExecuteNonQueryAsync(cancellationToken);
+        return afetadas == 1;
+    }
+
     public async Task AtualizarStatusAposEnvioSapAsync(
         long codigoLancamento,
         IReadOnlyList<ResultadoItemEnvioSap> resultados,
         CenarioEnvioSapEntrada cenario,
+        RastreabilidadeDocumentoMaterialSap? rastreabilidade = null,
         CancellationToken cancellationToken = default)
     {
         if (codigoLancamento <= 0)
@@ -334,24 +401,54 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
             throw new ArgumentException("Cenário de envio SAP inválido para atualização local.", nameof(cenario));
         }
 
+        // Grava a rastreabilidade do documento material SOMENTE no sucesso (Enviado) e quando o SAP
+        // devolveu o numero do documento. Vai na MESMA transacao que marca CONFIRMADO_SAP.
+        bool gravarRastreio =
+            cenario == CenarioEnvioSapEntrada.Enviado
+            && !string.IsNullOrWhiteSpace(rastreabilidade?.Documento)
+            && !string.IsNullOrWhiteSpace(rastreabilidade?.Exercicio);
+
         long? usuario = ObterCodigoUsuarioSessao();
         await ExecutarEmTransacaoAuditavelAsync(async (conexao, transacao) =>
         {
-            foreach (ResultadoItemEnvioSap resultado in resultados)
+            for (int indice = 0; indice < resultados.Count; indice++)
             {
-                const string sqlItem = """
-                    UPDATE entrada_produto_item
-                       SET status_item = @status_item,
-                           entrada_produto_item_atualizado_por = @usuario
-                     WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
-                       AND numero_item = @numero_item
-                       AND situacao_entrada_produto_item = true;
-                    """;
+                ResultadoItemEnvioSap resultado = resultados[indice];
+
+                // Item do documento material por ordem (best-effort), so quando ha sucesso/rastreio.
+                string? documentoItem = gravarRastreio
+                    && rastreabilidade!.ItensDocumento.Count > indice
+                        ? rastreabilidade.ItensDocumento[indice]
+                        : null;
+
+                string sqlItem = gravarRastreio
+                    ? """
+                        UPDATE entrada_produto_item
+                           SET status_item = @status_item,
+                               documento_material_item = @documento_material_item,
+                               entrada_produto_item_atualizado_por = @usuario
+                         WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                           AND numero_item = @numero_item
+                           AND situacao_entrada_produto_item = true;
+                        """
+                    : """
+                        UPDATE entrada_produto_item
+                           SET status_item = @status_item,
+                               entrada_produto_item_atualizado_por = @usuario
+                         WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                           AND numero_item = @numero_item
+                           AND situacao_entrada_produto_item = true;
+                        """;
 
                 await using NpgsqlCommand comandoItem = new(sqlItem, conexao, transacao);
                 comandoItem.Parameters.Add(ParametroTexto(
                     "@status_item",
                     resultado.Sucesso ? "CONFIRMADO_SAP" : "ERRO_SAP"));
+                if (gravarRastreio)
+                {
+                    comandoItem.Parameters.Add(ParametroTextoNulo("@documento_material_item", documentoItem));
+                }
+
                 comandoItem.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
                 comandoItem.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
                 comandoItem.Parameters.Add(ParametroTexto("@numero_item", resultado.NumeroItem));
@@ -365,18 +462,40 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
 
             if (cenario is CenarioEnvioSapEntrada.Enviado or CenarioEnvioSapEntrada.Falha)
             {
-                const string sqlLancamento = """
-                    UPDATE entrada_produto_lancamento
-                       SET status_lancamento = @status_lancamento,
-                           entrada_produto_lancamento_atualizado_por = @usuario
-                     WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
-                       AND situacao_entrada_produto_lancamento = true;
-                    """;
+                string sqlLancamento = gravarRastreio
+                    ? """
+                        UPDATE entrada_produto_lancamento
+                           SET status_lancamento = 'CONFIRMADO_SAP',
+                               documento_material_sap = @documento_material_sap,
+                               exercicio_documento_material_sap = @exercicio_documento_material_sap,
+                               enviado_sap_em = now(),
+                               entrada_produto_lancamento_atualizado_por = @usuario
+                         WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                           AND situacao_entrada_produto_lancamento = true;
+                        """
+                    : """
+                        UPDATE entrada_produto_lancamento
+                           SET status_lancamento = @status_lancamento,
+                               entrada_produto_lancamento_atualizado_por = @usuario
+                         WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                           AND situacao_entrada_produto_lancamento = true;
+                        """;
 
                 await using NpgsqlCommand comandoLancamento = new(sqlLancamento, conexao, transacao);
-                comandoLancamento.Parameters.Add(ParametroTexto(
-                    "@status_lancamento",
-                    cenario == CenarioEnvioSapEntrada.Enviado ? "CONFIRMADO_SAP" : "ERRO_SAP"));
+                if (gravarRastreio)
+                {
+                    comandoLancamento.Parameters.Add(
+                        ParametroTextoNulo("@documento_material_sap", rastreabilidade!.Documento));
+                    comandoLancamento.Parameters.Add(
+                        ParametroTextoNulo("@exercicio_documento_material_sap", rastreabilidade.Exercicio));
+                }
+                else
+                {
+                    comandoLancamento.Parameters.Add(ParametroTexto(
+                        "@status_lancamento",
+                        cenario == CenarioEnvioSapEntrada.Enviado ? "CONFIRMADO_SAP" : "ERRO_SAP"));
+                }
+
                 comandoLancamento.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
                 comandoLancamento.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
                 int lancamentosAtualizados =

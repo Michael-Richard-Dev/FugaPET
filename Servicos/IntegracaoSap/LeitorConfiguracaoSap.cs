@@ -11,6 +11,7 @@ public static class LeitorConfiguracaoSap
 {
     private const string NomeArquivoConfiguracao = "configuracao.sap.json";
     private const string VariavelAmbienteBaseUrl = "FUGAPET_SAP_BASE_URL";
+    private const string VariavelAmbienteMaterialDocumentBaseUrl = "FUGAPET_SAP_MATERIAL_DOCUMENT_BASE_URL";
     private const string VariavelAmbienteUsuario = "FUGAPET_SAP_USERNAME";
     private const string VariavelAmbienteSenha = "FUGAPET_SAP_PASSWORD";
     private const string VariavelAmbienteSapClient = "FUGAPET_SAP_CLIENT";
@@ -44,6 +45,7 @@ public static class LeitorConfiguracaoSap
         Func<string, string?> obterVariavelAmbiente)
     {
         string baseUrlArquivo = string.Empty;
+        string materialDocumentBaseUrlArquivo = string.Empty;
         string sapClientArquivo = string.Empty;
         IReadOnlyList<string> hostsPermitidosArquivo = [];
         bool escritaHabilitada = false;
@@ -69,6 +71,7 @@ public static class LeitorConfiguracaoSap
                 if (documento.RootElement.TryGetProperty("sap", out JsonElement sap))
                 {
                     baseUrlArquivo = LerTexto(sap, "base_url", string.Empty);
+                    materialDocumentBaseUrlArquivo = LerTexto(sap, "material_document_base_url", string.Empty);
                     sapClientArquivo = LerTexto(sap, "sap_client", string.Empty);
                     hostsPermitidosArquivo = LerListaTextos(sap, "hosts_permitidos");
                     escritaHabilitada = LerBooleano(sap, "escrita_habilitada", false);
@@ -80,6 +83,10 @@ public static class LeitorConfiguracaoSap
         return new ConfiguracaoSap
         {
             BaseUrl = ObterOuAmbiente(obterVariavelAmbiente, VariavelAmbienteBaseUrl, baseUrlArquivo),
+            MaterialDocumentBaseUrl = ObterOuAmbiente(
+                obterVariavelAmbiente,
+                VariavelAmbienteMaterialDocumentBaseUrl,
+                materialDocumentBaseUrlArquivo),
             Usuario = ObterSomenteAmbiente(obterVariavelAmbiente, VariavelAmbienteUsuario),
             Senha = ObterSomenteAmbiente(obterVariavelAmbiente, VariavelAmbienteSenha),
             SapClient = ObterOuAmbiente(obterVariavelAmbiente, VariavelAmbienteSapClient, sapClientArquivo),

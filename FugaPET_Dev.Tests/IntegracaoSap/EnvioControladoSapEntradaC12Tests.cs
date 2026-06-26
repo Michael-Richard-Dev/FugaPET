@@ -6,18 +6,21 @@ using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Servicos.Seguranca;
+using System.Globalization;
 
 namespace FugaPET_Dev.Tests.IntegracaoSap;
 
 /// <summary>
-/// C12 - finalizacao local separada do envio CONTROLADO ao SAP. Garante que o Finalizar nao chama
-/// PATCH e que o envio so executa PATCH com TODAS as travas (HOMOLOGACAO + permissao + escrita).
+/// Envio CONTROLADO da Entrada ao SAP via Material Document (movimento 101), separado da finalizacao
+/// local. Garante que o Finalizar nao chama SAP, que o envio NAO usa PATCH no Pedido de Compra, que
+/// cria um unico documento de material por lancamento com os itens elegiveis, e que as travas
+/// (HOMOLOGACAO + permissao + escrita + Material Document configurado + unidade KG + dados) sao
+/// reaplicadas antes do POST.
 /// </summary>
 public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
 {
     public EnvioControladoSapEntradaC12Tests()
     {
-        // Connection string habilita o banco -> PossuiPermissao passa a honrar a sessao.
         Environment.SetEnvironmentVariable(
             "FUGAPET_DEV_CONEXAO_POSTGRES",
             "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
@@ -27,243 +30,485 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     public void Dispose() => EstadoSessaoUsuarioAtual.Limpar();
 
     [Fact]
-    public async Task FinalizarLeitura_NaoDeveChamarPatchSap()
+    public async Task FinalizarLeitura_NaoDeveChamarSap()
     {
         DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new();
-        EntradaProdutoController controller = CriarController(sap, ehHomologacao: true, itens: [Item()]);
+        FakePedidoCompraSapServico pedido = new();
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller =
+            CriarController(pedido, materialDoc, ehHomologacao: true, itens: [Item()]);
 
         await controller.FinalizarLeituraAsync(Lancamento());
 
-        Assert.Equal(0, sap.PatchChamadas);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Equal(0, pedido.PatchChamadas);
     }
 
     [Fact]
-    public async Task Enviar_ComTodasAsTravas_DeveChamarPatchSomenteDosItens()
+    public async Task Enviar_ComTodasAsTravas_DeveCriarUmUnicoDocumentoMaterialSemPatch()
     {
         DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = true };
-        EntradaProdutoController controller = CriarController(sap, ehHomologacao: true, itens: [Item("10"), Item("20")]);
+        FakePedidoCompraSapServico pedido = new() { EscritaHabilitada = true };
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller =
+            CriarController(pedido, materialDoc, ehHomologacao: true, itens: [Item("10"), Item("20")]);
 
         ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
         Assert.Equal(CenarioEnvioSapEntrada.Enviado, resultado.Cenario);
-        Assert.Equal(2, sap.PatchChamadas);
-        Assert.Equal(2, resultado.Enviados);
+        Assert.Equal(1, materialDoc.Chamadas); // um unico documento por lancamento
+        Assert.Equal(0, pedido.PatchChamadas); // Entrada nao usa PATCH no Pedido de Compra
+        Assert.Equal(2, resultado.Total);
         Assert.True(resultado.StatusLocalAtualizado);
+        Assert.NotNull(materialDoc.UltimaRequisicao);
+        Assert.Equal(2, materialDoc.UltimaRequisicao!.Itens.Count);
     }
 
     [Fact]
-    public async Task Diagnosticar_ComTodasAsTravas_DeveLiberarEnvio()
+    public async Task Enviar_DeveMontarPayloadComMovimento101EItemNormalizado()
     {
         DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = true };
-        EntradaProdutoController controller =
-            CriarController(sap, ehHomologacao: true, itens: [Item()]);
-
-        DiagnosticoEnvioSapEntrada diagnostico =
-            await controller.DiagnosticarEnvioSapEntradaAsync(99);
-
-        Assert.True(diagnostico.PodeEnviar);
-        Assert.Null(diagnostico.MotivoBloqueio);
-        Assert.Equal(1, diagnostico.TotalItensPersistidos);
-        Assert.True(diagnostico.IntegracaoSapAtiva);
-    }
-
-    [Fact]
-    public async Task Diagnosticar_SemPermissao_DeveBloquear()
-    {
-        DefinirSessao(comEnviarSap: false);
+        FakeMaterialDocumentSapServico materialDoc = new();
         EntradaProdutoController controller = CriarController(
             new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
             ehHomologacao: true,
-            itens: [Item()]);
+            itens: [Item("10")]);
 
-        DiagnosticoEnvioSapEntrada diagnostico =
-            await controller.DiagnosticarEnvioSapEntradaAsync(99);
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
-        Assert.False(diagnostico.PodeEnviar);
-        Assert.False(diagnostico.UsuarioTemPermissao);
-        Assert.Contains("ENVIAR_SAP", diagnostico.MotivoBloqueio);
+        MaterialDocumentSapRequest req = materialDoc.UltimaRequisicao!;
+        Assert.Equal("01", req.GoodsMovementCode);
+        MaterialDocumentSapItemRequest item = Assert.Single(req.Itens);
+        Assert.Equal("101", item.GoodsMovementType);
+        Assert.Equal("B", item.GoodsMovementRefDocType);
+        Assert.Equal("4500000010", item.PurchaseOrder);
+        Assert.Equal("00010", item.PurchaseOrderItem); // 5 digitos
+        Assert.Equal("KG", item.EntryUnit);
+        Assert.Equal("3500027", item.Material);
+        Assert.Equal("3007", item.Plant);
+        Assert.Equal("PP01", item.StorageLocation);
+        // QuantityInEntryUnit = peso liquido em kg
+        Assert.Equal(
+            8m,
+            decimal.Parse(item.QuantityInEntryUnit, CultureInfo.InvariantCulture));
     }
 
     [Fact]
-    public async Task Diagnosticar_IntegracaoInativa_DeveBloquear()
+    public async Task Enviar_DeveMontarTextoCabecalhoCurtoMax25EAscii()
     {
         DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
         EntradaProdutoController controller = CriarController(
             new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item("10")]);
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        string texto = materialDoc.UltimaRequisicao!.MaterialDocumentHeaderText;
+        Assert.True(texto.Length <= 25, $"texto cabecalho excede 25: '{texto}' ({texto.Length})");
+        Assert.Contains("4500000010", texto);                 // numero do pedido
+        Assert.Contains("99", texto);                          // codigo do lancamento
+        Assert.Matches("^[A-Za-z0-9 ]+$", texto);              // ASCII, sem acentos/caracteres perigosos
+        Assert.DoesNotContain("Entrada", texto);               // nao envia mais o texto longo antigo
+    }
+
+    [Fact]
+    public async Task Enviar_TextoCabecalho_DeveRemoverAcentosECaracteresEspeciais()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap itemEstranho = Item("10") with { NumeroPedido = "45000-ção/01" };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [itemEstranho]);
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(77);
+
+        string texto = materialDoc.UltimaRequisicao!.MaterialDocumentHeaderText;
+        Assert.Matches("^[A-Za-z0-9 ]+$", texto);   // sem 'ç'/'ã' nem '-' '/'
+        Assert.True(texto.Length <= 25);
+        Assert.Contains("77", texto);
+    }
+
+    [Fact]
+    public async Task Enviar_ItemComUnidadeDiferenteDeKg_DeveBloquearSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item("10", unidade: "PC")]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.UnidadeNaoSuportada, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("Unidade", resultado.Mensagem);
+        Assert.Contains("PC", resultado.Mensagem);
+    }
+
+    [Fact]
+    public async Task Enviar_ItemSemDadosObrigatorios_DeveBloquearSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap semCentro = Item("10") with { Centro = null };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [semCentro]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public async Task Enviar_MaterialDocumentNaoConfigurado_DeveBloquearSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
             ehHomologacao: true,
             itens: [Item()],
-            integracaoAtiva: false);
+            materialDocumentConfigurado: false);
 
-        DiagnosticoEnvioSapEntrada diagnostico =
-            await controller.DiagnosticarEnvioSapEntradaAsync(99);
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
-        Assert.False(diagnostico.PodeEnviar);
-        Assert.False(diagnostico.IntegracaoSapAtiva);
-        Assert.Contains("inativa", diagnostico.MotivoBloqueio, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(CenarioEnvioSapEntrada.MaterialDocumentNaoConfigurado, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
     }
 
     [Fact]
-    public async Task Diagnosticar_SapNaoConfigurado_DeveBloquear()
+    public async Task Enviar_LancamentoJaConfirmadoSap_DeveBloquearSemChamarCriarDocumento()
     {
         DefinirSessao(comEnviarSap: true);
-        EntradaProdutoController controller = CriarController(
-            new FakePedidoCompraSapServico
-            {
-                Configurado = false,
-                EscritaHabilitada = true
-            },
-            ehHomologacao: true,
-            itens: [Item()]);
-
-        DiagnosticoEnvioSapEntrada diagnostico =
-            await controller.DiagnosticarEnvioSapEntradaAsync(99);
-
-        Assert.False(diagnostico.PodeEnviar);
-        Assert.False(diagnostico.SapConfigurado);
-        Assert.Contains("Configuração SAP", diagnostico.MotivoBloqueio);
-    }
-
-    [Fact]
-    public async Task Diagnosticar_SemLancamentoOuItens_DeveBloquear()
-    {
-        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
         EntradaProdutoController controller = CriarController(
             new FakePedidoCompraSapServico { EscritaHabilitada = true },
-            ehHomologacao: true,
-            itens: []);
-
-        DiagnosticoEnvioSapEntrada semLancamento =
-            await controller.DiagnosticarEnvioSapEntradaAsync(null);
-        DiagnosticoEnvioSapEntrada semItens =
-            await controller.DiagnosticarEnvioSapEntradaAsync(99);
-
-        Assert.False(semLancamento.PodeEnviar);
-        Assert.Contains("Finalize", semLancamento.MotivoBloqueio);
-        Assert.False(semItens.PodeEnviar);
-        Assert.Equal(0, semItens.TotalItensPersistidos);
-    }
-
-    [Fact]
-    public async Task Enviar_SemPermissaoEnviarSap_NaoDeveChamarPatch()
-    {
-        DefinirSessao(comEnviarSap: false);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = true };
-        EntradaProdutoController controller = CriarController(sap, ehHomologacao: true, itens: [Item()]);
-
-        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
-
-        Assert.Equal(CenarioEnvioSapEntrada.SemPermissao, resultado.Cenario);
-        Assert.Equal(0, sap.PatchChamadas);
-    }
-
-    [Fact]
-    public async Task Enviar_AmbienteDiferenteDeHomologacao_NaoDeveChamarPatch()
-    {
-        DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = true };
-        EntradaProdutoController controller = CriarController(sap, ehHomologacao: false, itens: [Item()]);
-
-        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
-
-        Assert.Equal(CenarioEnvioSapEntrada.AmbienteNaoHomologacao, resultado.Cenario);
-        Assert.Equal(0, sap.PatchChamadas);
-    }
-
-    [Fact]
-    public async Task Enviar_EscritaDesabilitada_NaoDeveChamarPatch()
-    {
-        // EscritaHabilitada=false equivale a FUGAPET_SAP_WRITE_ENABLED ausente/false.
-        DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = false };
-        EntradaProdutoController controller = CriarController(sap, ehHomologacao: true, itens: [Item()]);
-
-        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
-
-        Assert.Equal(CenarioEnvioSapEntrada.EscritaDesabilitada, resultado.Cenario);
-        Assert.Equal(0, sap.PatchChamadas);
-    }
-
-    [Fact]
-    public async Task Enviar_LancamentoSemItens_NaoDeveChamarPatch()
-    {
-        DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = true };
-        EntradaProdutoController controller = CriarController(sap, ehHomologacao: true, itens: []);
-
-        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
-
-        Assert.Equal(CenarioEnvioSapEntrada.LancamentoSemItens, resultado.Cenario);
-        Assert.Equal(0, sap.PatchChamadas);
-    }
-
-    [Fact]
-    public async Task Enviar_SucessoTotal_DeveAtualizarStatusLocal()
-    {
-        DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new() { EscritaHabilitada = true };
-        CenarioEnvioSapEntrada? cenarioPersistido = null;
-        EntradaProdutoController controller = CriarController(
-            sap,
+            materialDoc,
             ehHomologacao: true,
             itens: [Item()],
-            atualizarStatus: (_, _, cenario, _) =>
+            statusLancamento: "CONFIRMADO_SAP");
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.LancamentoJaConfirmadoSap, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas); // nao chamou CriarDocumentoMaterialEntradaAsync
+        Assert.Contains("confirmado", resultado.Mensagem!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Enviar_LancamentoCancelado_DeveBloquearSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item()],
+            statusLancamento: "CANCELADO");
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.LancamentoCancelado, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public async Task Enviar_ReservaNaoObtida_DeveAbortarSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item()],
+            reservaObtida: false);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.EnvioEmProcessamento, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas); // nao chamou o POST sem a reserva
+        Assert.Contains("processamento", resultado.Mensagem!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Enviar_ReservaObtida_DeveCriarDocumento()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item()],
+            reservaObtida: true);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, resultado.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public void TentarReservar_DeveSerUpdateAtomicoCondicionalAoStatus()
+    {
+        // Claim atomico: UPDATE ... -> ENVIADO_SAP WHERE status IN ('FINALIZADO_LOCAL','ERRO_SAP').
+        string repositorio = File.ReadAllText(Path.Combine(
+            RaizProjeto(),
+            "AcessoDados",
+            "Repositorio",
+            "EntradaProdutoRepositorio.cs"));
+
+        Assert.Contains("status_lancamento = 'ENVIADO_SAP'", repositorio, StringComparison.Ordinal);
+        Assert.Contains(
+            "AND status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')",
+            repositorio,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ListarItensParaEnvioSap_DevePossuirFiltroDeStatusContraReenvio()
+    {
+        // Itens CONFIRMADO_SAP/CANCELADO nao podem entrar no payload (defesa SQL de duplicacao).
+        string repositorio = File.ReadAllText(Path.Combine(
+            RaizProjeto(),
+            "AcessoDados",
+            "Repositorio",
+            "EntradaProdutoRepositorio.cs"));
+
+        Assert.Contains(
+            "lancamento.status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')",
+            repositorio,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "item.status_item IN ('FINALIZADO_LOCAL', 'ERRO_SAP')",
+            repositorio,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AtualizarStatusAposEnvioSap_DevePersistirRastreabilidadeDoDocumentoMaterial()
+    {
+        string repositorio = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "AcessoDados", "Repositorio", "EntradaProdutoRepositorio.cs"));
+
+        Assert.Contains("documento_material_sap = @documento_material_sap", repositorio, StringComparison.Ordinal);
+        Assert.Contains("exercicio_documento_material_sap = @exercicio_documento_material_sap", repositorio, StringComparison.Ordinal);
+        Assert.Contains("enviado_sap_em = now()", repositorio, StringComparison.Ordinal);
+        Assert.Contains("documento_material_item = @documento_material_item", repositorio, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LogDePayload_DeveUsarSituacaoParcialNaoPayload()
+    {
+        string servico = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Servicos", "IntegracaoSap", "MaterialDocumentSapServico.cs"));
+
+        Assert.Contains("\"PARCIAL\"", servico, StringComparison.Ordinal);
+        Assert.Contains("Etapa PAYLOAD: ", servico, StringComparison.Ordinal);
+        // A situacao "PAYLOAD" nao pode ser usada (constraint do log_integracao_sap pode recusar).
+        Assert.DoesNotContain("\"PAYLOAD\"", servico, StringComparison.Ordinal);
+    }
+
+    // Regex que cobre as formas de habilitar a escrita SAP em .cmd/.bat/.ps1 (com/sem aspas, $env:,
+    // SetEnvironmentVariable). Espelha Testar-ScriptHabilitaEscritaSap do GerarPacoteLimpo.ps1.
+    private const string PadraoHabilitaEscritaSap =
+        @"(FUGAPET_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true)"
+        + @"|(SetEnvironmentVariable\s*\(\s*[""']FUGAPET_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true)";
+
+    [Fact]
+    public void Projeto_NaoDeveConterScriptQueHabilitaEscritaSap()
+    {
+        string raiz = RaizProjeto();
+        string[] dirsIgnoradas = ["bin", "obj", "pacotes_limpos", ".git", ".vs", "_backup"];
+        string[] extensoes = [".cmd", ".bat", ".ps1"];
+
+        List<string> scriptsPerigosos = Directory
+            .EnumerateFiles(raiz, "*.*", SearchOption.AllDirectories)
+            .Where(arquivo => extensoes.Any(ext =>
+                arquivo.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+            .Where(arquivo => !string.Equals(
+                Path.GetFileName(arquivo), "GerarPacoteLimpo.ps1", StringComparison.OrdinalIgnoreCase))
+            .Where(arquivo => dirsIgnoradas.All(dir =>
+                !arquivo.Contains($"{Path.DirectorySeparatorChar}{dir}{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase)))
+            .Where(arquivo => System.Text.RegularExpressions.Regex.IsMatch(
+                File.ReadAllText(arquivo),
+                PadraoHabilitaEscritaSap,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .ToList();
+
+        Assert.True(
+            scriptsPerigosos.Count == 0,
+            "Script(s) (.cmd/.bat/.ps1) habilitando escrita SAP: "
+                + string.Join("; ", scriptsPerigosos.Select(Path.GetFileName)));
+    }
+
+    [Fact]
+    public void GerarPacoteLimpo_DeveBloquearScriptsQueHabilitamEscritaSap()
+    {
+        string script = File.ReadAllText(Path.Combine(RaizProjeto(), "Scripts", "GerarPacoteLimpo.ps1"));
+
+        Assert.Contains("function Testar-ScriptHabilitaEscritaSap", script, StringComparison.Ordinal);
+        // Cobre as formas alem do '=' direto: $env: e SetEnvironmentVariable.
+        Assert.Contains("$env:FUGAPET_SAP_WRITE_ENABLED", script, StringComparison.Ordinal);
+        Assert.Contains("SetEnvironmentVariable", script, StringComparison.Ordinal);
+        // Aplica a .cmd, .bat e .ps1.
+        Assert.Contains("'.cmd', '.bat', '.ps1'", script, StringComparison.Ordinal);
+
+        // A regex de deteccao realmente casa as variacoes pedidas.
+        string[] exemplosBloqueados =
+        [
+            "set FUGAPET_SAP_WRITE_ENABLED=true",
+            "$env:FUGAPET_SAP_WRITE_ENABLED = \"true\"",
+            "$env:FUGAPET_SAP_WRITE_ENABLED='true'",
+            "[Environment]::SetEnvironmentVariable(\"FUGAPET_SAP_WRITE_ENABLED\", \"true\", \"User\")"
+        ];
+        foreach (string exemplo in exemplosBloqueados)
+        {
+            Assert.True(
+                System.Text.RegularExpressions.Regex.IsMatch(
+                    exemplo, PadraoHabilitaEscritaSap,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase),
+                $"Deveria bloquear: {exemplo}");
+        }
+
+        // Conteudo inofensivo nao e bloqueado.
+        Assert.False(System.Text.RegularExpressions.Regex.IsMatch(
+            "Write-Host 'build ok'", PadraoHabilitaEscritaSap,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+    }
+
+    [Fact]
+    public void Controller_DeveSetarGoodsMovementRefDocTypeBExplicitoESemPatch()
+    {
+        string controller = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Controle", "Processo", "EntradaProdutoController.cs"));
+
+        // Padronizacao DEV/HML: nao depender apenas do default do modelo.
+        Assert.Contains("GoodsMovementRefDocType = \"B\"", controller, StringComparison.Ordinal);
+        // Entrada nao usa PATCH no Pedido de Compra.
+        Assert.DoesNotContain("AtualizarPesoItemSapAsync", controller, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Controller_NaoDeveConterMensagemAntigaDePendenciaGaia()
+    {
+        string controller = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Controle", "Processo", "EntradaProdutoController.cs"));
+
+        // A rastreabilidade agora e persistida; a mensagem de pendencia esta desatualizada.
+        Assert.DoesNotContain("PENDENCIA GAIA", controller, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Envio SAP confirmado: documento material", controller, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Enviar_Sap2xxSemDocumento_DeveSerCriticoSemConfirmarSemReenvio()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new() { RespostaSemDocumento = true };
+        bool atualizouStatus = false;
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item()],
+            atualizarStatus: (_, _, _, _, _) =>
             {
-                cenarioPersistido = cenario;
+                atualizouStatus = true;
                 return Task.FromResult(ResultadoOperacao.Ok());
             });
 
-        ResultadoEnvioSapEntrada resultado =
-            await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        // Nao confirma; trata como divergencia critica; nao atualiza status (nao marca ERRO_SAP nem
+        // CONFIRMADO_SAP) -> lancamento fica ENVIADO_SAP, bloqueando reenvio automatico.
+        Assert.Equal(CenarioEnvioSapEntrada.FalhaPersistenciaLocal, resultado.Cenario);
+        Assert.False(resultado.StatusLocalAtualizado);
+        Assert.False(atualizouStatus);
+        Assert.NotNull(resultado.MensagemCritica);
+    }
+
+    [Fact]
+    public async Task Enviar_SucessoSap_DeveConfirmarStatusLocalEGravarRastreabilidade()
+    {
+        DefinirSessao(comEnviarSap: true);
+        CenarioEnvioSapEntrada? cenarioPersistido = null;
+        RastreabilidadeDocumentoMaterialSap? rastreabilidadePersistida = null;
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            new FakeMaterialDocumentSapServico { Sucesso = true },
+            ehHomologacao: true,
+            itens: [Item()],
+            atualizarStatus: (_, _, cenario, rastreio, _) =>
+            {
+                cenarioPersistido = cenario;
+                rastreabilidadePersistida = rastreio;
+                return Task.FromResult(ResultadoOperacao.Ok());
+            });
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
         Assert.Equal(CenarioEnvioSapEntrada.Enviado, resultado.Cenario);
         Assert.Equal(CenarioEnvioSapEntrada.Enviado, cenarioPersistido);
         Assert.True(resultado.StatusLocalAtualizado);
+        Assert.Equal("5000000124", resultado.MaterialDocument);
+        // Persiste documento/exercicio na mesma transacao do CONFIRMADO_SAP.
+        Assert.NotNull(rastreabilidadePersistida);
+        Assert.Equal("5000000124", rastreabilidadePersistida!.Documento);
+        Assert.Equal("2026", rastreabilidadePersistida.Exercicio);
     }
 
     [Fact]
-    public async Task Enviar_FalhaTotal_DeveAtualizarStatusLocalComoErro()
+    public async Task Enviar_FalhaSap_DeveRegistrarErroLocal()
     {
         DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new()
-        {
-            EscritaHabilitada = true,
-            PatchSucesso = false
-        };
         CenarioEnvioSapEntrada? cenarioPersistido = null;
         EntradaProdutoController controller = CriarController(
-            sap,
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            new FakeMaterialDocumentSapServico { Sucesso = false },
             ehHomologacao: true,
             itens: [Item()],
-            atualizarStatus: (_, _, cenario, _) =>
+            atualizarStatus: (_, _, cenario, _, _) =>
             {
                 cenarioPersistido = cenario;
                 return Task.FromResult(ResultadoOperacao.Ok());
             });
 
-        ResultadoEnvioSapEntrada resultado =
-            await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
         Assert.Equal(CenarioEnvioSapEntrada.Falha, resultado.Cenario);
         Assert.Equal(CenarioEnvioSapEntrada.Falha, cenarioPersistido);
-        Assert.True(resultado.StatusLocalAtualizado);
     }
 
     [Fact]
-    public async Task Enviar_RespostaSapComFalhaPersistencia_DeveSinalizarDivergenciaCritica()
+    public async Task Enviar_FalhaPersistenciaAposSucessoSap_DeveSinalizarCritico()
     {
         DefinirSessao(comEnviarSap: true);
         EntradaProdutoController controller = CriarController(
             new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            new FakeMaterialDocumentSapServico { Sucesso = true },
             ehHomologacao: true,
             itens: [Item()],
-            atualizarStatus: (_, _, _, _) => Task.FromResult(
+            atualizarStatus: (_, _, _, _, _) => Task.FromResult(
                 ResultadoOperacao.Falha("Falha local.")));
 
-        ResultadoEnvioSapEntrada resultado =
-            await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
         Assert.Equal(CenarioEnvioSapEntrada.FalhaPersistenciaLocal, resultado.Cenario);
         Assert.False(resultado.StatusLocalAtualizado);
@@ -271,50 +516,128 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     }
 
     [Fact]
-    public async Task Enviar_Parcial_DevePersistirItensSemStatusParcialNoLancamento()
+    public async Task Enviar_SemPermissaoEnviarSap_NaoDeveChamarSap()
+    {
+        DefinirSessao(comEnviarSap: false);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item()]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.SemPermissao, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public async Task Enviar_AmbienteDiferenteDeHomologacao_NaoDeveChamarSap()
     {
         DefinirSessao(comEnviarSap: true);
-        FakePedidoCompraSapServico sap = new()
-        {
-            EscritaHabilitada = true,
-            ItensComFalha = new HashSet<string> { "20" }
-        };
-        CenarioEnvioSapEntrada? cenarioPersistido = null;
-        IReadOnlyList<ResultadoItemEnvioSap>? itensPersistidos = null;
+        FakeMaterialDocumentSapServico materialDoc = new();
         EntradaProdutoController controller = CriarController(
-            sap,
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: false,
+            itens: [Item()]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.AmbienteNaoHomologacao, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public async Task Enviar_EscritaDesabilitada_NaoDeveChamarSap()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = false },
+            materialDoc,
             ehHomologacao: true,
-            itens: [Item("10"), Item("20")],
-            atualizarStatus: (_, itens, cenario, _) =>
-            {
-                cenarioPersistido = cenario;
-                itensPersistidos = itens;
-                return Task.FromResult(ResultadoOperacao.Ok());
-            });
+            itens: [Item()]);
 
-        ResultadoEnvioSapEntrada resultado =
-            await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
-        Assert.Equal(CenarioEnvioSapEntrada.Parcial, resultado.Cenario);
-        Assert.Equal(CenarioEnvioSapEntrada.Parcial, cenarioPersistido);
-        Assert.NotNull(itensPersistidos);
-        Assert.Contains(itensPersistidos, item => item.NumeroItem == "10" && item.Sucesso);
-        Assert.Contains(itensPersistidos, item => item.NumeroItem == "20" && !item.Sucesso);
+        Assert.Equal(CenarioEnvioSapEntrada.EscritaDesabilitada, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public async Task Enviar_LancamentoSemItens_NaoDeveChamarSap()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: []);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.LancamentoSemItens, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact]
+    public async Task Diagnosticar_ComTodasAsTravas_DeveLiberarEnvio()
+    {
+        DefinirSessao(comEnviarSap: true);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            new FakeMaterialDocumentSapServico(),
+            ehHomologacao: true,
+            itens: [Item()]);
+
+        DiagnosticoEnvioSapEntrada diagnostico =
+            await controller.DiagnosticarEnvioSapEntradaAsync(99);
+
+        Assert.True(diagnostico.PodeEnviar);
+        Assert.Null(diagnostico.MotivoBloqueio);
+        Assert.True(diagnostico.MaterialDocumentConfigurado);
+    }
+
+    [Fact]
+    public async Task Diagnosticar_MaterialDocumentNaoConfigurado_DeveBloquear()
+    {
+        DefinirSessao(comEnviarSap: true);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            new FakeMaterialDocumentSapServico(),
+            ehHomologacao: true,
+            itens: [Item()],
+            materialDocumentConfigurado: false);
+
+        DiagnosticoEnvioSapEntrada diagnostico =
+            await controller.DiagnosticarEnvioSapEntradaAsync(99);
+
+        Assert.False(diagnostico.PodeEnviar);
+        Assert.False(diagnostico.MaterialDocumentConfigurado);
+        Assert.Contains("Material Document", diagnostico.MotivoBloqueio);
     }
 
     private static EntradaProdutoController CriarController(
-        FakePedidoCompraSapServico sap,
+        FakePedidoCompraSapServico pedido,
+        FakeMaterialDocumentSapServico materialDoc,
         bool ehHomologacao,
         IReadOnlyList<EntradaProdutoItemEnvioSap> itens,
         bool integracaoAtiva = true,
+        bool materialDocumentConfigurado = true,
+        string statusLancamento = "FINALIZADO_LOCAL",
+        bool reservaObtida = true,
         Func<
             long,
             IReadOnlyList<ResultadoItemEnvioSap>,
             CenarioEnvioSapEntrada,
+            RastreabilidadeDocumentoMaterialSap?,
             CancellationToken,
             Task<ResultadoOperacao>>? atualizarStatus = null)
         => new(
-            new IntegracaoEntradaSapServico(sap),
+            new IntegracaoEntradaSapServico(pedido, materialDoc),
             new EntradaProdutoServico(null!, null!, null!, null, new AutorizacaoCentroDepositoEntrada([], []), null),
             new BalancaLeituraServico(),
             new ImpressoraEtiquetaServico(),
@@ -322,17 +645,20 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             FabricaControladoresCadastro.CriarTaraController(),
             ehAmbienteHomologacao: () => ehHomologacao,
             carregarItensParaEnvio: (_, _) => Task.FromResult(itens),
+            obterStatusLancamento: (_, _) => Task.FromResult<string?>(statusLancamento),
+            reservarLancamentoParaEnvio: (_, _) => Task.FromResult(reservaObtida),
             diagnosticarIntegracaoSap: _ => Task.FromResult(
                 new DiagnosticoProntidaoIntegracaoSap(
                     AmbienteOperacional: true,
                     IntegracaoAtiva: integracaoAtiva,
-                    SapConfigurado: sap.SapConfigurado,
-                    EscritaSapHabilitada: sap.EscritaSapHabilitada,
+                    SapConfigurado: pedido.SapConfigurado,
+                    EscritaSapHabilitada: pedido.EscritaSapHabilitada,
+                    MaterialDocumentConfigurado: materialDocumentConfigurado,
                     MotivoBloqueio: integracaoAtiva
                         ? null
                         : "Integração SAP inativa.")),
             atualizarStatusAposEnvioSap: atualizarStatus
-                ?? ((_, _, _, _) => Task.FromResult(ResultadoOperacao.Ok())));
+                ?? ((_, _, _, _, _) => Task.FromResult(ResultadoOperacao.Ok())));
 
     private static void DefinirSessao(bool comEnviarSap)
     {
@@ -356,8 +682,18 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         });
     }
 
-    private static EntradaProdutoItemEnvioSap Item(string numeroItem = "10")
-        => new() { NumeroPedido = "4500000010", NumeroItem = numeroItem, PesoLiquidoKg = 8m, PesoBrutoKg = 10m };
+    private static EntradaProdutoItemEnvioSap Item(string numeroItem = "10", string unidade = "KG")
+        => new()
+        {
+            NumeroPedido = "4500000010",
+            NumeroItem = numeroItem,
+            PesoLiquidoKg = 8m,
+            PesoBrutoKg = 10m,
+            Material = "3500027",
+            Centro = "3007",
+            Deposito = "PP01",
+            Unidade = unidade
+        };
 
     private static EntradaProdutoLancamento Lancamento()
         => new()
@@ -373,12 +709,73 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             }]
         };
 
+    private static string RaizProjeto()
+    {
+        string? diretorio = AppContext.BaseDirectory;
+        while (!string.IsNullOrWhiteSpace(diretorio))
+        {
+            if (File.Exists(Path.Combine(diretorio, "FugaPET_Dev.csproj")))
+            {
+                return diretorio;
+            }
+
+            diretorio = Directory.GetParent(diretorio)?.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
+    }
+
+    private sealed class FakeMaterialDocumentSapServico : IMaterialDocumentSapServico
+    {
+        public bool Sucesso { get; init; } = true;
+
+        /// <summary>Simula HTTP 2xx porem sem MaterialDocument/MaterialDocumentYear (etapa PARSE_RESPOSTA).</summary>
+        public bool RespostaSemDocumento { get; init; }
+
+        public bool MaterialDocumentConfigurado => true;
+        public bool EhSimulado => false;
+        public int Chamadas { get; private set; }
+        public MaterialDocumentSapRequest? UltimaRequisicao { get; private set; }
+        public string? UltimaChave { get; private set; }
+
+        public Task<ResultadoMaterialDocumentSap> CriarDocumentoMaterial101Async(
+            MaterialDocumentSapRequest requisicao,
+            string chaveNegocio,
+            CancellationToken cancellationToken = default)
+        {
+            Chamadas++;
+            UltimaRequisicao = requisicao;
+            UltimaChave = chaveNegocio;
+
+            if (RespostaSemDocumento)
+            {
+                return Task.FromResult(new ResultadoMaterialDocumentSap
+                {
+                    Sucesso = false,
+                    StatusHttp = 201,
+                    Etapa = "PARSE_RESPOSTA",
+                    MensagemSanitizada =
+                        "Etapa PARSE_RESPOSTA: SAP retornou sucesso HTTP 201, mas sem MaterialDocument/MaterialDocumentYear na resposta."
+                });
+            }
+
+            return Task.FromResult(Sucesso
+                ? new ResultadoMaterialDocumentSap
+                {
+                    Sucesso = true,
+                    StatusHttp = 201,
+                    MaterialDocument = "5000000124",
+                    MaterialDocumentYear = "2026",
+                    MensagemSanitizada = "Documento de material 5000000124/2026 criado no SAP."
+                }
+                : ResultadoMaterialDocumentSap.Falha(400, "O SAP recusou a criacao do documento de material."));
+        }
+    }
+
     private sealed class FakePedidoCompraSapServico : IPedidoCompraSapServico
     {
         public bool Configurado { get; init; } = true;
         public bool EscritaHabilitada { get; init; }
-        public bool PatchSucesso { get; init; } = true;
-        public IReadOnlySet<string> ItensComFalha { get; init; } = new HashSet<string>();
         public int PatchChamadas { get; private set; }
 
         public bool EhSimulado => false;
@@ -389,11 +786,7 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             string numeroPedido, string numeroItem, decimal pesoLiquido, decimal pesoBruto, CancellationToken cancellationToken = default)
         {
             PatchChamadas++;
-            bool sucesso = PatchSucesso && !ItensComFalha.Contains(numeroItem);
-            return Task.FromResult(
-                sucesso
-                    ? ResultadoOperacao.Ok("Peso atualizado no SAP.")
-                    : ResultadoOperacao.Falha("SAP recusou o peso."));
+            return Task.FromResult(ResultadoOperacao.Ok("Peso atualizado no SAP."));
         }
 
         public Task<ResultadoOperacao> SincronizarPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)

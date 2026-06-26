@@ -1,6 +1,7 @@
 {
   "sap": {
     "base_url": "https://servidor-sap.exemplo.local/odata/v4/servico",
+    "material_document_base_url": "https://servidor-sap.exemplo.local/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
     "sap_client": "000",
     "hosts_permitidos": [
       "servidor-sap.exemplo.local"

@@ -59,6 +59,31 @@ function Testar-DiretorioBloqueado {
         [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Testar-ScriptHabilitaEscritaSap {
+    param([string]$Conteudo)
+
+    if ([string]::IsNullOrWhiteSpace($Conteudo)) {
+        return $false
+    }
+
+    # Cobre: FUGAPET_SAP_WRITE_ENABLED=true / set ... / $env: ... / [Environment]::SetEnvironmentVariable(...),
+    # com ou sem aspas (" ou '), espacos e variacoes de caixa (-match e case-insensitive).
+    $padroes = @(
+        'FUGAPET_SAP_WRITE_ENABLED\s*=\s*["'']?\s*true',
+        'set\s+FUGAPET_SAP_WRITE_ENABLED\s*=\s*["'']?\s*true',
+        '\$env:FUGAPET_SAP_WRITE_ENABLED\s*=\s*["'']?\s*true',
+        'SetEnvironmentVariable\s*\(\s*["'']FUGAPET_SAP_WRITE_ENABLED["'']\s*,\s*["'']?\s*true'
+    )
+
+    foreach ($padrao in $padroes) {
+        if ($Conteudo -match $padrao) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Testar-ArquivoBloqueado {
     param([Parameter(Mandatory)] [System.IO.FileInfo]$Arquivo)
 
@@ -68,6 +93,17 @@ function Testar-ArquivoBloqueado {
 
     if ($Arquivo.Extension -in @('.log', '.user')) {
         return $true
+    }
+
+    # Seguranca: nunca empacotar atalho/script (.cmd/.bat/.ps1) que habilite a escrita SAP.
+    if ($Arquivo.Extension -in @('.cmd', '.bat', '.ps1')) {
+        try {
+            $ConteudoScript = Get-Content -LiteralPath $Arquivo.FullName -Raw -ErrorAction Stop
+            if (Testar-ScriptHabilitaEscritaSap -Conteudo $ConteudoScript) {
+                return $true
+            }
+        }
+        catch { }
     }
 
     $ProjetoRaizCompleto = [System.IO.Path]::GetFullPath($ProjetoRaiz).TrimEnd('\', '/')
