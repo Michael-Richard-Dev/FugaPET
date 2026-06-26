@@ -202,6 +202,18 @@ public sealed class PedidoCompraSapHttpSegurancaTests
             "_PurchaseOrderItem/any(d:d/Plant eq '3007' and d/IsCompletelyDelivered eq false)",
             filtro,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "$expand=_PurchaseOrderItem($filter=Plant eq '3007' and IsCompletelyDelivered eq false;",
+            filtro,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "$filter=Plant eq '3007' and IsCompletelyDelivered eq false&$select",
+            filtro,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$select=PurchaseOrderItem,Material,PurchaseOrderItemText,OrderQuantity,PurchaseOrderQuantityUnit,ItemNetWeight,Plant,StorageLocation,MaterialGroup,IsCompletelyDelivered",
+            filtro,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -225,7 +237,16 @@ public sealed class PedidoCompraSapHttpSegurancaTests
             "PurchaseOrder('4500000010')",
             handler.Destinos[0].AbsoluteUri,
             StringComparison.Ordinal);
-        Assert.Contains("$expand=_PurchaseOrderItem", handler.Destinos[0].Query);
+        string query = Uri.UnescapeDataString(handler.Destinos[0].Query);
+        Assert.Contains("$expand=_PurchaseOrderItem", query);
+        Assert.Contains(
+            "$expand=_PurchaseOrderItem($filter=Plant eq '3007' and IsCompletelyDelivered eq false;",
+            query,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "$filter=Plant eq '3007' and IsCompletelyDelivered eq false&$select",
+            query,
+            StringComparison.Ordinal);
     }
 
     [Fact]

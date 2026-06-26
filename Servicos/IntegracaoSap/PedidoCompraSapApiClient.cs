@@ -251,7 +251,7 @@ public sealed class PedidoCompraSapApiClient
     private Uri MontarUrlPedido(string numeroPedido)
     {
         string pedido = numeroPedido.Trim().Replace("'", "''");
-        string query = $"{SelectCabecalho}&{ExpandItens}";
+        string query = $"{SelectCabecalho}&{MontarExpandItens()}";
         if (!string.IsNullOrWhiteSpace(_configuracao.SapClient))
         {
             query = $"sap-client={Uri.EscapeDataString(_configuracao.SapClient.Trim())}&{query}";
@@ -300,15 +300,14 @@ public sealed class PedidoCompraSapApiClient
         return "O SAP recusou a alteracao do peso.";
     }
 
-    // Cabecalho inclui PurchasingGroup (escopo Jales). Plant e IsCompletelyDelivered sao de ITEM
-    // e vem no $select do _PurchaseOrderItem; a selecao final dos itens elegiveis e feita em C#.
+    // Cabecalho inclui PurchasingGroup (escopo Jales). Plant e IsCompletelyDelivered sao de ITEM:
+    // filtramos tambem dentro do $expand para reduzir volume no SAP; a guarda final segue em C#.
     private const string SelectCabecalho = "$select=PurchaseOrder,Supplier,PurchaseOrderDate,DocumentCurrency,PurchaseOrderType,PurchasingGroup,IncotermsClassification,IncotermsTransferLocation,IncotermsLocation1";
-    private const string ExpandItens = "$expand=_PurchaseOrderItem($select=PurchaseOrderItem,Material,PurchaseOrderItemText,OrderQuantity,PurchaseOrderQuantityUnit,ItemNetWeight,Plant,StorageLocation,MaterialGroup,IsCompletelyDelivered)";
 
     private Uri MontarUrlInicial()
     {
         string filtro = MontarFiltroEscopoJales();
-        string query = $"{filtro}&{SelectCabecalho}&{ExpandItens}";
+        string query = $"{filtro}&{SelectCabecalho}&{MontarExpandItens()}";
         if (!string.IsNullOrWhiteSpace(_configuracao.SapClient))
         {
             query = $"sap-client={Uri.EscapeDataString(_configuracao.SapClient.Trim())}&{query}";
@@ -321,6 +320,16 @@ public sealed class PedidoCompraSapApiClient
     // percent-encoded. A selecao dos itens elegiveis (centro/entrega) e concluida em C#.
     private static string MontarFiltroEscopoJales()
         => "$filter=" + EscopoPedidoSapJales.ExpressaoFiltroPedido().Replace(" ", "%20");
+
+    private static string MontarExpandItens()
+    {
+        string filtroItem = Uri.EscapeDataString(EscopoPedidoSapJales.ExpressaoFiltroItem());
+
+        return "$expand=_PurchaseOrderItem("
+            + $"$filter={filtroItem};"
+            + "$select=PurchaseOrderItem,Material,PurchaseOrderItemText,OrderQuantity,PurchaseOrderQuantityUnit,ItemNetWeight,Plant,StorageLocation,MaterialGroup,IsCompletelyDelivered"
+            + ")";
+    }
 
     // O @odata.nextLink pode vir absoluto (http...) ou relativo a raiz do servico (.../0001).
     private Uri? ResolverNextLink(string? nextLink)
