@@ -630,24 +630,43 @@ public sealed class EntradaProdutoController
         string numeroPedido,
         CancellationToken cancellationToken = default)
     {
-        ResultadoOperacao sincronizacao = await Sap.SincronizarPedidoAsync(numeroPedido, cancellationToken);
-        if (!sincronizacao.Sucesso)
-        {
-            return new ResultadoConsultaPedido { Sucesso = false, Mensagem = sincronizacao.Mensagem };
-        }
-
+        // 1. CACHE LOCAL primeiro: resposta rapida e SEM chamar o SAP quando o pedido ja foi
+        //    pre-carregado em segundo plano (PreCarregamentoPedidosEntradaServico).
         PedidoCompraSapAgregado? pedido =
             await Sap.ObterPedidoAgregadoAsync(
                 numeroPedido,
                 cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+
+        string mensagemSucesso = "Pedido carregado do cache local.";
+
+        // 2. CACHE MISS / pedido ausente: fallback de GET ESPECIFICO no SAP e nova leitura do cache.
         if (pedido is null)
         {
-            return new ResultadoConsultaPedido
+            ResultadoOperacao sincronizacao =
+                await Sap.SincronizarPedidoAsync(numeroPedido, cancellationToken);
+            if (!sincronizacao.Sucesso)
             {
-                Sucesso = false,
-                Mensagem = "Pedido sincronizado, mas nao encontrado no cache local."
-            };
+                return new ResultadoConsultaPedido
+                {
+                    Sucesso = false,
+                    Mensagem = "Pedido não encontrado no cache local e SAP indisponível no momento."
+                };
+            }
+
+            mensagemSucesso = sincronizacao.Mensagem;
+            pedido = await Sap.ObterPedidoAgregadoAsync(
+                numeroPedido,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pedido is null)
+            {
+                return new ResultadoConsultaPedido
+                {
+                    Sucesso = false,
+                    Mensagem = "Pedido sincronizado, mas nao encontrado no cache local."
+                };
+            }
         }
 
         // Escopo Jales (H5): exibe apenas itens dentro do centro/deposito autorizado.
@@ -658,7 +677,7 @@ public sealed class EntradaProdutoController
         return new ResultadoConsultaPedido
         {
             Sucesso = true,
-            Mensagem = sincronizacao.Mensagem,
+            Mensagem = mensagemSucesso,
             NumeroPedido = pedido.NumeroPedido,
             Fornecedor = pedido.Fornecedor,
             DataPedido = pedido.DataPedido,

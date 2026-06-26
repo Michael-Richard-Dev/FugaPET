@@ -36,6 +36,28 @@ internal sealed class PedidoCompraSapGovernadoServico : IPedidoCompraSapServico
                 cancellationToken)
             : Task.CompletedTask;
 
+    /// <summary>
+    /// Pre-carregamento (background) do cache de pedidos da Entrada: carga COMPLETA porem FILTRADA pelo
+    /// escopo (grupo de compras / centro / itens recebiveis) e PAGINADA (segue o @odata.nextLink).
+    /// Tarefa de SISTEMA disparada apos o login: gateada por ambiente + integracao ativa + configuracao
+    /// (via DiagnosticarAsync, que NAO audita), para nao poluir o log com bloqueios a cada login.
+    /// </summary>
+    public async Task<ResultadoOperacao> PreCarregarCacheEntradaAsync(
+        CancellationToken cancellationToken = default)
+    {
+        DiagnosticoEstadoIntegracaoSap estado =
+            await _estadoIntegracaoSapServico.DiagnosticarAsync(cancellationToken);
+        if (!estado.AmbienteOperacional || !estado.IntegracaoAtiva || !estado.SapConfigurado)
+        {
+            return ResultadoOperacao.Falha(
+                estado.MotivoBloqueio ?? "Integracao SAP indisponivel para pre-carregamento.");
+        }
+
+        return _servicoInterno is SincronizacaoPedidoCompraSapServico servicoReal
+            ? await servicoReal.SincronizarCargaCompletaAsync(cancellationToken)
+            : ResultadoOperacao.Ok("Pre-carregamento nao aplicavel (servico simulado).");
+    }
+
     public async Task<ResultadoOperacao> SincronizarPedidoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default)

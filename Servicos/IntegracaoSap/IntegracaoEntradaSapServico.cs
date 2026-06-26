@@ -66,6 +66,16 @@ public sealed class IntegracaoEntradaSapServico
     public Task<ResultadoOperacao> SincronizarPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)
         => _pedidoCompra.SincronizarPedidoAsync(numeroPedido, cancellationToken);
 
+    /// <summary>
+    /// Pre-carrega o cache local dos pedidos relevantes da Entrada (carga filtrada + paginada),
+    /// usado pelo servico de pre-carregamento em segundo plano apos o login. Sem servico governado
+    /// (mock), e um no-op de sucesso para nao exigir SAP em ambiente demonstrativo.
+    /// </summary>
+    public Task<ResultadoOperacao> PreCarregarCacheEntradaAsync(CancellationToken cancellationToken = default)
+        => _pedidoCompra is PedidoCompraSapGovernadoServico governado
+            ? governado.PreCarregarCacheEntradaAsync(cancellationToken)
+            : Task.FromResult(ResultadoOperacao.Ok("Pre-carregamento nao aplicavel (servico simulado)."));
+
     public Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(string numeroPedido, CancellationToken cancellationToken = default)
         => _pedidoCompra.ObterPedidoAgregadoAsync(numeroPedido, cancellationToken);
 

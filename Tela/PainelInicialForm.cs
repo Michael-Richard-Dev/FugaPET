@@ -5,6 +5,7 @@ using Processo = FugaPET_Dev.Tela.Processo;
 
 using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Modelo.Status;
+using FugaPET_Dev.Servicos.Entrada;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Servicos.Status;
 
@@ -30,6 +31,11 @@ public partial class PainelInicialForm : Form
     private readonly FugaPET_Dev.Servicos.Auditoria.AuditoriaServico _auditoriaServico =
         FugaPET_Dev.Controle.FabricaControladoresCadastro.CriarAuditoriaServico();
 
+    // Pre-carregamento assincrono dos pedidos da Entrada (aquecimento do cache apos o login).
+    private readonly PreCarregamentoPedidosEntradaServico _preCarregamentoPedidos = new();
+    private readonly CancellationTokenSource _fechamentoPreCarregamentoCts = new();
+    private Label? _preCarregamentoStatusLabel;
+
     public PainelInicialForm()
     {
         InitializeComponent();
@@ -45,10 +51,87 @@ public partial class PainelInicialForm : Form
         ConfigureFooterDate();
         _currentContentView = contentLayout;
         KeyPreview = true;
+        CriarStatusPreCarregamentoPedidos();
         Shown += (_, _) => ApplyRuntimeVisuals();
         Shown += (_, _) => AplicarPermissoesPorPerfil();
         Shown += async (_, _) => await AtualizarStatusIndustrialAsync();
+        // Apos o MainForm aparecer (usuario ja autenticado), aquece o cache de pedidos da Entrada
+        // em segundo plano. Nao bloqueia a UI nem o login.
+        Shown += (_, _) => IniciarPreCarregamentoPedidosEntrada();
+        FormClosing += (_, _) => _fechamentoPreCarregamentoCts.Cancel();
         KeyDown += PainelInicialForm_KeyDown;
+    }
+
+    /// <summary>Dispara o pre-carregamento dos pedidos da Entrada sem bloquear a UI (fire-and-forget).</summary>
+    private void IniciarPreCarregamentoPedidosEntrada()
+    {
+        AtualizarStatusPreCarregamentoPedidos("Sincronizando pedidos de entrada...");
+
+        // Task.Run: tira do thread da UI ate a montagem da fabrica/IO; nada de .Wait()/.Result.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                ResultadoPreCarregamentoEntrada resultado =
+                    await _preCarregamentoPedidos.ExecutarAsync(_fechamentoPreCarregamentoCts.Token);
+
+                AtualizarStatusPreCarregamentoPedidos(resultado.Cenario switch
+                {
+                    CenarioPreCarregamentoEntrada.Concluido =>
+                        $"Pedidos de entrada atualizados às {resultado.ConcluidoEm:HH:mm}",
+                    CenarioPreCarregamentoEntrada.JaEmAndamento => "Sincronizando pedidos de entrada...",
+                    CenarioPreCarregamentoEntrada.Cancelado => string.Empty,
+                    _ => "Pedidos de entrada: usando cache local"
+                });
+            }
+            catch
+            {
+                // Background nunca derruba o sistema; apenas limpa o status.
+                AtualizarStatusPreCarregamentoPedidos(string.Empty);
+            }
+        });
+    }
+
+    private void CriarStatusPreCarregamentoPedidos()
+    {
+        _preCarregamentoStatusLabel = new Label
+        {
+            Name = "preCarregamentoStatusLabel",
+            AutoSize = true,
+            BackColor = Color.Transparent,
+            ForeColor = Color.FromArgb(148, 163, 184),
+            Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            Visible = false
+        };
+        Controls.Add(_preCarregamentoStatusLabel);
+        _preCarregamentoStatusLabel.Location = new Point(16, ClientSize.Height - 22);
+        _preCarregamentoStatusLabel.BringToFront();
+    }
+
+    private void AtualizarStatusPreCarregamentoPedidos(string texto)
+    {
+        if (IsDisposed || _preCarregamentoStatusLabel is null)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            try
+            {
+                BeginInvoke(() => AtualizarStatusPreCarregamentoPedidos(texto));
+            }
+            catch (ObjectDisposedException)
+            {
+                // Form fechando; ignora.
+            }
+
+            return;
+        }
+
+        _preCarregamentoStatusLabel.Visible = !string.IsNullOrEmpty(texto);
+        _preCarregamentoStatusLabel.Text = texto;
     }
 
     private async Task AtualizarStatusIndustrialAsync()
