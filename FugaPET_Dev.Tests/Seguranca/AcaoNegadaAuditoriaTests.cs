@@ -54,7 +54,7 @@ public sealed class AcaoNegadaAuditoriaTests : IDisposable
             PermissoesSistema.Rotinas.LeituraProducao,
             PermissoesSistema.Acoes.Cancelar,
             "cancelar leitura",
-            "ProcessoPesagemApontamentoForm",
+            "ProcessoConsumoMaterialForm",
             spy);
 
         Assert.Empty(spy.AcessosNegados);
@@ -75,3 +75,4 @@ public sealed class AcaoNegadaAuditoriaTests : IDisposable
         }
     }
 }
+

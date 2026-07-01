@@ -22,7 +22,11 @@ public sealed class ImpressaoEntradaServico
 
     public Task AquecerAsync() => _impressora.AquecerAsync();
 
+    public Task AquecerSeImpressoraDisponivelAsync() => _impressora.AquecerSeDisponivelAsync();
+
     public Task GarantirImpressoraDisponivelAsync() => _impressora.GarantirImpressoraDisponivelAsync();
+
+    public Task<string> DescreverImpressoraAtualAsync() => _impressora.DescreverImpressoraAtualAsync();
 
     public Task ImprimirEtiquetaMateriaPrimaAsync(DadosEtiquetaMateriaPrima etiqueta)
         => _impressora.ImprimirEtiquetaMateriaPrimaAsync(etiqueta);

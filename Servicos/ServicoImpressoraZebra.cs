@@ -26,11 +26,11 @@ public sealed class ServicoImpressoraZebra
     private const int MateriaPrimaLandscapeHeightDots = MateriaPrimaLabelWidthDots;
     private static readonly string[] MarcadoresNomeZebra = ["ZEBRA", "ZDESIGNER"];
 
-    public void ImprimirTexto(string nomeImpressora, string texto)
+    public ResultadoEnvioZebra ImprimirTexto(string nomeImpressora, string texto)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(nomeImpressora);
         string zpl = ConstruirZplTexto(texto);
-        RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
+        return RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
     }
 
     public void GarantirImpressoraDisponivel(string nomeImpressora)
@@ -39,27 +39,41 @@ public sealed class ServicoImpressoraZebra
         RawPrinterHelper.EnsurePrinterReady(nomeImpressora);
     }
 
-    public void AquecerImpressora(string nomeImpressora)
+    public bool TryImpressoraPronta(string nomeImpressora, out ErroImpressaoZebraException? erro)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(nomeImpressora);
-        RawPrinterHelper.SendStringToPrinter(nomeImpressora, "^XA^XZ");
+        erro = null;
+        if (string.IsNullOrWhiteSpace(nomeImpressora))
+        {
+            erro = new ErroImpressaoZebraException(
+                CategoriaErroImpressaoZebra.ImpressoraNaoConfigurada,
+                "Impressora Zebra não configurada para este terminal.");
+            return false;
+        }
+
+        return RawPrinterHelper.TryEnsurePrinterReady(nomeImpressora, out erro);
     }
 
-    public void ImprimirEtiquetaProducao(string nomeImpressora, DadosEtiquetaProducao etiqueta)
+    public ResultadoEnvioZebra AquecerImpressora(string nomeImpressora)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nomeImpressora);
+        return RawPrinterHelper.SendStringToPrinter(nomeImpressora, "^XA^XZ");
+    }
+
+    public ResultadoEnvioZebra ImprimirEtiquetaProducao(string nomeImpressora, DadosEtiquetaProducao etiqueta)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(nomeImpressora);
         RawPrinterHelper.EnsurePrinterReady(nomeImpressora);
         string zpl = ConstruirZplEtiquetaProducao(etiqueta);
-        RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
+        return RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
     }
 
 
-    public void ImprimirEtiquetaMateriaPrima(string nomeImpressora, DadosEtiquetaMateriaPrima etiqueta)
+    public ResultadoEnvioZebra ImprimirEtiquetaMateriaPrima(string nomeImpressora, DadosEtiquetaMateriaPrima etiqueta)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(nomeImpressora);
         RawPrinterHelper.EnsurePrinterReady(nomeImpressora);
         string zpl = ConstruirZplEtiquetaMateriaPrimaGrafica(etiqueta);
-        RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
+        return RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
     }
 
     public bool ImpressoraInstalada(string nomeImpressora)
@@ -231,15 +245,47 @@ public sealed class ServicoImpressoraZebra
 
     private static void DesenharTextoCentralizado(Graphics graphics, string value, Font font, Brush brush, RectangleF bounds)
     {
+        RectangleF boundsSeguros = NormalizarBoundsTexto(graphics, bounds);
+        if (boundsSeguros.Width <= 0 || boundsSeguros.Height <= 0)
+        {
+            return;
+        }
+
         using StringFormat format = new()
         {
             Alignment = StringAlignment.Center,
             LineAlignment = StringAlignment.Center,
             Trimming = StringTrimming.EllipsisCharacter,
-            FormatFlags = StringFormatFlags.NoClip
+            FormatFlags = StringFormatFlags.NoClip | StringFormatFlags.LineLimit
         };
 
-        graphics.DrawString(value ?? string.Empty, font, brush, bounds, format);
+        graphics.DrawString(SanitizarTextoGrafico(value), font, brush, boundsSeguros, format);
+    }
+
+    private static RectangleF NormalizarBoundsTexto(Graphics graphics, RectangleF bounds)
+    {
+        float x = MathF.Max(0, bounds.X);
+        float y = MathF.Max(0, bounds.Y);
+        float width = MathF.Min(bounds.Width - MathF.Max(0, -bounds.X), graphics.VisibleClipBounds.Width - x);
+        float height = MathF.Min(bounds.Height - MathF.Max(0, -bounds.Y), graphics.VisibleClipBounds.Height - y);
+
+        return new RectangleF(x, y, MathF.Max(0, width), MathF.Max(0, height));
+    }
+
+    private static string SanitizarTextoGrafico(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        string texto = value
+            .Replace("\r\n", " ", StringComparison.Ordinal)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+
+        return texto.Length <= 180 ? texto : texto[..180];
     }
 
     private static Font CriarFonteEtiqueta(float size, FontStyle style)
@@ -248,7 +294,10 @@ public sealed class ServicoImpressoraZebra
     private static Bitmap GerarQrCodeBitmap(string value)
     {
         using QRCodeGenerator generator = new();
-        using QRCodeData data = generator.CreateQrCode(value, QRCodeGenerator.ECCLevel.Q);
+        string valorSeguro = SanitizarTextoGrafico(value);
+        using QRCodeData data = generator.CreateQrCode(
+            string.IsNullOrWhiteSpace(valorSeguro) ? "FugaPET" : valorSeguro,
+            QRCodeGenerator.ECCLevel.Q);
         using QRCode qrCode = new(data);
         return qrCode.GetGraphic(4, Color.Black, Color.White, drawQuietZones: true);
     }
@@ -381,7 +430,7 @@ public sealed class ServicoImpressoraZebra
         private static extern bool ClosePrinter(IntPtr printerHandle);
 
         [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Ansi)]
-        private static extern bool StartDocPrinter(IntPtr printerHandle, int level, [In] DocInfo docInfo);
+        private static extern int StartDocPrinter(IntPtr printerHandle, int level, [In] DocInfo docInfo);
 
         [DllImport("winspool.drv", SetLastError = true)]
         private static extern bool EndDocPrinter(IntPtr printerHandle);
@@ -454,7 +503,9 @@ public sealed class ServicoImpressoraZebra
         {
             if (!OpenPrinter(printerName, out IntPtr printerHandle, IntPtr.Zero))
             {
-                ThrowLastWin32Error($"Nao foi possivel abrir a impressora '{printerName}'");
+                ThrowLastWin32Error(
+                    CategoriaErroImpressaoZebra.FalhaAbrirImpressora,
+                    $"Não foi possível abrir a impressora Zebra '{printerName}'. Verifique se ela está instalada e acessível.");
             }
 
             try
@@ -465,8 +516,49 @@ public sealed class ServicoImpressoraZebra
 
                 if (isWorkOffline || hasBlockingStatus)
                 {
-                    throw new ErroOperacionalEsperadoException("Verifique se a impressora Zebra padrao esta conectada e pronta para impressao.");
+                    throw new ErroImpressaoZebraException(
+                        CategoriaErroImpressaoZebra.ImpressoraOfflinePausada,
+                        "A impressora Zebra está offline, pausada ou com erro. Verifique a fila de impressão e a conexão física.");
                 }
+            }
+            finally
+            {
+                ClosePrinter(printerHandle);
+            }
+        }
+
+        public static bool TryEnsurePrinterReady(
+            string printerName,
+            out ErroImpressaoZebraException? erro)
+        {
+            erro = null;
+            if (!OpenPrinter(printerName, out IntPtr printerHandle, IntPtr.Zero))
+            {
+                erro = CreateLastWin32Error(
+                    CategoriaErroImpressaoZebra.FalhaAbrirImpressora,
+                    $"Não foi possível abrir a impressora Zebra '{printerName}'. Verifique se ela está instalada e acessível.");
+                return false;
+            }
+
+            try
+            {
+                if (!TryGetPrinterInfo(printerHandle, out PrinterInfo2 printerInfo, out erro))
+                {
+                    return false;
+                }
+
+                bool isWorkOffline = (printerInfo.Attributes & PrinterAttributeWorkOffline) != 0;
+                bool hasBlockingStatus = (printerInfo.Status & BlockingPrinterStatuses) != 0;
+
+                if (isWorkOffline || hasBlockingStatus)
+                {
+                    erro = new ErroImpressaoZebraException(
+                        CategoriaErroImpressaoZebra.ImpressoraOfflinePausada,
+                        "A impressora Zebra está offline, pausada ou com erro. Verifique a fila de impressão e a conexão física.");
+                    return false;
+                }
+
+                return true;
             }
             finally
             {
@@ -479,7 +571,9 @@ public sealed class ServicoImpressoraZebra
             GetPrinter(printerHandle, 2, IntPtr.Zero, 0, out int needed);
             if (needed <= 0)
             {
-                ThrowLastWin32Error("Nao foi possivel consultar o status da impressora");
+                ThrowLastWin32Error(
+                    CategoriaErroImpressaoZebra.ImpressoraOfflinePausada,
+                    "Não foi possível consultar o status da impressora Zebra.");
             }
 
             IntPtr printerInfoBuffer = Marshal.AllocHGlobal(needed);
@@ -488,7 +582,9 @@ public sealed class ServicoImpressoraZebra
             {
                 if (!GetPrinter(printerHandle, 2, printerInfoBuffer, needed, out _))
                 {
-                    ThrowLastWin32Error("Nao foi possivel consultar o status da impressora");
+                    ThrowLastWin32Error(
+                        CategoriaErroImpressaoZebra.ImpressoraOfflinePausada,
+                        "Não foi possível consultar o status da impressora Zebra.");
                 }
 
                 return Marshal.PtrToStructure<PrinterInfo2>(printerInfoBuffer);
@@ -499,52 +595,84 @@ public sealed class ServicoImpressoraZebra
             }
         }
 
-        public static void SendStringToPrinter(string printerName, string text)
+        private static bool TryGetPrinterInfo(
+            IntPtr printerHandle,
+            out PrinterInfo2 printerInfo,
+            out ErroImpressaoZebraException? erro)
         {
-            EnsurePrinterReady(printerName);
-            byte[] bytes = Encoding.UTF8.GetBytes(text);
-            IntPtr unmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
+            printerInfo = default;
+            erro = null;
+
+            GetPrinter(printerHandle, 2, IntPtr.Zero, 0, out int needed);
+            if (needed <= 0)
+            {
+                erro = CreateLastWin32Error(
+                    CategoriaErroImpressaoZebra.ImpressoraOfflinePausada,
+                    "Não foi possível consultar o status da impressora Zebra.");
+                return false;
+            }
+
+            IntPtr printerInfoBuffer = Marshal.AllocHGlobal(needed);
 
             try
             {
-                Marshal.Copy(bytes, 0, unmanagedBytes, bytes.Length);
-                SendBytesToPrinter(printerName, unmanagedBytes, bytes.Length);
+                if (!GetPrinter(printerHandle, 2, printerInfoBuffer, needed, out _))
+                {
+                    erro = CreateLastWin32Error(
+                        CategoriaErroImpressaoZebra.ImpressoraOfflinePausada,
+                        "Não foi possível consultar o status da impressora Zebra.");
+                    return false;
+                }
+
+                printerInfo = Marshal.PtrToStructure<PrinterInfo2>(printerInfoBuffer);
+                return true;
             }
             finally
             {
-                Marshal.FreeCoTaskMem(unmanagedBytes);
+                Marshal.FreeHGlobal(printerInfoBuffer);
             }
         }
 
-        private static void SendBytesToPrinter(string printerName, IntPtr bytes, int count)
+        public static ResultadoEnvioZebra SendStringToPrinter(string printerName, string text)
+        {
+            EnsurePrinterReady(printerName);
+            byte[] bytes = Encoding.UTF8.GetBytes(text);
+            return SendBytesToPrinter(printerName, bytes);
+        }
+
+        private static ResultadoEnvioZebra SendBytesToPrinter(string printerName, byte[] bytes)
         {
             if (!OpenPrinter(printerName, out IntPtr printerHandle, IntPtr.Zero))
             {
-                ThrowLastWin32Error($"Nao foi possivel abrir a impressora '{printerName}'");
+                ThrowLastWin32Error(
+                    CategoriaErroImpressaoZebra.FalhaAbrirImpressora,
+                    $"Não foi possível abrir a impressora Zebra '{printerName}'. Verifique se ela está instalada e acessível.");
             }
 
             try
             {
                 var docInfo = new DocInfo();
 
-                if (!StartDocPrinter(printerHandle, 1, docInfo))
+                if (StartDocPrinter(printerHandle, 1, docInfo) <= 0)
                 {
-                    ThrowLastWin32Error("Nao foi possivel iniciar o documento de impressao");
+                    ThrowLastWin32Error(
+                        CategoriaErroImpressaoZebra.FalhaIniciarDocumento,
+                        "Não foi possível iniciar o documento de impressão na Zebra.");
                 }
 
                 try
                 {
                     if (!StartPagePrinter(printerHandle))
                     {
-                        ThrowLastWin32Error("Nao foi possivel iniciar a pagina de impressao");
+                        ThrowLastWin32Error(
+                            CategoriaErroImpressaoZebra.FalhaIniciarDocumento,
+                            "Não foi possível iniciar a página de impressão na Zebra.");
                     }
 
                     try
                     {
-                        if (!WritePrinter(printerHandle, bytes, count, out int written) || written != count)
-                        {
-                            ThrowLastWin32Error("Nao foi possivel enviar todos os dados para a impressora");
-                        }
+                        int blocosEnviados = WritePrinterEmBlocos(printerHandle, bytes);
+                        return new ResultadoEnvioZebra(bytes.Length, blocosEnviados);
                     }
                     finally
                     {
@@ -562,18 +690,88 @@ public sealed class ServicoImpressoraZebra
             }
         }
 
-        private static void ThrowLastWin32Error(string message)
+        private static int WritePrinterEmBlocos(IntPtr printerHandle, byte[] bytes)
+        {
+            const int tamanhoBloco = 16 * 1024;
+            IntPtr buffer = Marshal.AllocCoTaskMem(tamanhoBloco);
+            int blocosEnviados = 0;
+
+            try
+            {
+                for (int offset = 0; offset < bytes.Length; offset += tamanhoBloco)
+                {
+                    int count = Math.Min(tamanhoBloco, bytes.Length - offset);
+                    Marshal.Copy(bytes, offset, buffer, count);
+                    if (!WritePrinter(printerHandle, buffer, count, out int written))
+                    {
+                        ThrowLastWin32Error(
+                            CategoriaErroImpressaoZebra.FalhaEnviarDados,
+                            "Não foi possível enviar dados RAW para a impressora Zebra.");
+                    }
+
+                    if (written != count)
+                    {
+                        throw new ErroImpressaoZebraException(
+                            CategoriaErroImpressaoZebra.EscritaParcial,
+                            $"Escrita parcial na impressora Zebra. Esperado {count} bytes, enviado {written} bytes.",
+                            Marshal.GetLastWin32Error());
+                    }
+
+                    blocosEnviados++;
+                }
+
+                return blocosEnviados;
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(buffer);
+            }
+        }
+
+        private static void ThrowLastWin32Error(CategoriaErroImpressaoZebra categoria, string message)
+            => throw CreateLastWin32Error(categoria, message);
+
+        private static ErroImpressaoZebraException CreateLastWin32Error(CategoriaErroImpressaoZebra categoria, string message)
         {
             int errorCode = Marshal.GetLastWin32Error();
-            throw new Win32Exception(errorCode, $"{message}. Codigo Windows: {errorCode}");
+            return new ErroImpressaoZebraException(categoria, $"{message} Código Windows: {errorCode}.", errorCode);
         }
     }
 }
 
+public sealed record ResultadoEnvioZebra(int TamanhoBytes, int BlocosEnviados)
+{
+    public static ResultadoEnvioZebra Vazio { get; } = new(0, 0);
+}
 
+public enum CategoriaErroImpressaoZebra
+{
+    ImpressoraNaoConfigurada,
+    ImpressoraNaoInstalada,
+    ImpressoraOfflinePausada,
+    FalhaAbrirImpressora,
+    FalhaIniciarDocumento,
+    FalhaEnviarDados,
+    EscritaParcial,
+    UsuarioSemPermissao
+}
 
+public sealed class ErroImpressaoZebraException : Exception
+{
+    public ErroImpressaoZebraException(
+        CategoriaErroImpressaoZebra categoria,
+        string mensagem,
+        int? codigoWin32 = null,
+        Exception? innerException = null)
+        : base(mensagem, innerException)
+    {
+        Categoria = categoria;
+        CodigoWin32 = codigoWin32;
+    }
 
-
+    public CategoriaErroImpressaoZebra Categoria { get; }
+    public int? CodigoWin32 { get; }
+}
 
 
 

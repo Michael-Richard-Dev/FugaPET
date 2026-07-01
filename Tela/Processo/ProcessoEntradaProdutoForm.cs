@@ -1238,7 +1238,7 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         try
         {
-            await _impressaoEntrada.AquecerAsync();
+            await _impressaoEntrada.AquecerSeImpressoraDisponivelAsync();
         }
         catch (Exception)
         {
@@ -1570,21 +1570,29 @@ public partial class ProcessoEntradaProdutoForm : Form
             return GetFriendlyErrorMessage(ex.InnerException);
         }
 
-        return ex is ErroOperacionalEsperadoException
+        return ex is ErroOperacionalEsperadoException or ErroImpressaoZebraException
             ? ex.Message
             : "Nao foi possivel concluir a operacao. Acione o suporte.";
     }
 
-    private async Task<bool> TentarImprimirEtiquetaAposLeituraAsync(DadosEtiquetaMateriaPrima label)
+    private Task<bool> TentarImprimirEtiquetaAposLeituraAsync(DadosEtiquetaMateriaPrima label)
+        => TentarImprimirEtiquetaAutomaticaAsync(label, "leitura de peso");
+
+    private async Task<bool> TentarImprimirEtiquetaAutomaticaAsync(
+        DadosEtiquetaMateriaPrima label,
+        string operacao)
     {
         if (!AutorizacaoEntradaProdutoServico.PossuiPermissaoImpressao(PermissoesSistema.Acoes.Imprimir))
         {
-            statusLabel.Text = "Peso registrado, mas a etiqueta não foi impressa.";
+            statusLabel.Text =
+                $"Peso registrado, mas etiqueta não impressa via {operacao}: usuário sem permissão de impressão.";
             return false;
         }
 
+        string impressora = "não identificada";
         try
         {
+            impressora = await _impressaoEntrada.DescreverImpressoraAtualAsync();
             await _impressaoEntrada.GarantirImpressoraDisponivelAsync();
             await _impressaoEntrada.ImprimirEtiquetaMateriaPrimaAsync(label);
             return true;
@@ -1592,11 +1600,14 @@ public partial class ProcessoEntradaProdutoForm : Form
         catch (Exception ex)
         {
             await ErroUsuarioHelper.TratarAsync(
-                "IMPRESSAO_ETIQUETA_APOS_LEITURA_ERRO",
+                "IMPRESSAO_ETIQUETA_AUTOMATICA_ERRO",
                 ex,
                 "ProcessoEntradaProdutoForm",
                 "Peso registrado, mas a etiqueta não foi impressa.");
-            statusLabel.Text = "Peso registrado, mas a etiqueta não foi impressa.";
+            string mensagemAmigavel = GetFriendlyErrorMessage(ex);
+            statusLabel.Text =
+                $"Peso registrado via {operacao}, mas a etiqueta não foi impressa na Zebra '{impressora}'. "
+                + $"{mensagemAmigavel} Use a reimpressão após corrigir a impressora.";
             return false;
         }
     }
@@ -2298,9 +2309,24 @@ public partial class ProcessoEntradaProdutoForm : Form
         linhaAlvo.Selected = true;
         SetCurrentProductionCell(linhaAlvo, "productionPesoLidoColumn");
         UpdateProductionCounters();
-        statusLabel.Text = $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}.";
+        DadosEtiquetaMateriaPrima etiqueta = ConstruirDadosEtiquetaMateriaPrima(linhaAlvo);
+        bool etiquetaImpressa = await TentarImprimirEtiquetaAutomaticaAsync(etiqueta, "pesagem múltipla");
+        if (!etiquetaImpressa)
+        {
+            statusLabel.Text =
+                $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}, mas a etiqueta não foi impressa. Use a reimpressão após corrigir a impressora.";
+            MessageBox.Show(
+                statusLabel.Text,
+                "Etiqueta não impressa",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        statusLabel.Text =
+            $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}. Etiqueta enviada para impressão.";
         MessageBox.Show(
-            $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}.",
+            statusLabel.Text,
             "Pesagem múltipla",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);

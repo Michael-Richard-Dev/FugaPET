@@ -1,6 +1,6 @@
 ﻿namespace FugaPET_Dev.Tela.Processo;
 
-partial class ProcessoPesagemApontamentoForm
+partial class ProcessoConsumoMaterialForm
 {
     private System.ComponentModel.IContainer components = null;
     private TableLayoutPanel rootTableLayoutPanel;
@@ -50,8 +50,14 @@ partial class ProcessoPesagemApontamentoForm
     private DataGridViewTextBoxColumn materialBalanceColumn;
     private DataGridViewTextBoxColumn productionCodeColumn;
     private DataGridViewTextBoxColumn productionProductColumn;
+    private DataGridViewTextBoxColumn productionReservaColumn;
+    private DataGridViewTextBoxColumn productionItemColumn;
+    private DataGridViewTextBoxColumn productionDepositoColumn;
+    private DataGridViewTextBoxColumn productionLoteColumn;
+    private DataGridViewTextBoxColumn productionTipoSapColumn;
     private DataGridViewTextBoxColumn productionQuantityColumn;
     private DataGridViewTextBoxColumn productionWeightColumn;
+    private DataGridViewTextBoxColumn productionSaldoColumn;
     private Panel weightSummaryAccentBar;
     private Label weightSummaryTitleLabel;
     private Label weightSummarySubtitleLabel;
@@ -71,7 +77,7 @@ partial class ProcessoPesagemApontamentoForm
 
     private void InitializeComponent()
     {
-        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProcessoPesagemApontamentoForm));
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProcessoConsumoMaterialForm));
         DataGridViewCellStyle dataGridViewCellStyle12 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle16 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle13 = new DataGridViewCellStyle();
@@ -88,7 +94,7 @@ partial class ProcessoPesagemApontamentoForm
         tableLayoutPanel3 = new TableLayoutPanel();
         productionOrderShadowPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         productionOrderCaptionLabel = new Label();
-        productionOrderTextBox = new TextBox();
+        productionOrderComboBox = new ComboBox();
         productionOrderIconPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         productionOrderSearchLabel = new PictureBox();
         lotCardPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
@@ -103,6 +109,9 @@ partial class ProcessoPesagemApontamentoForm
         finishedProductCardPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         finishedProductCaptionLabel = new Label();
         finishedProductCodeTextBox = new TextBox();
+        plantaCardPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
+        plantaCaptionLabel = new Label();
+        plantaValueLabel = new Label();
         finishedProductTextBox = new TextBox();
         finishedProductIconPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         finishedProductIconPictureBox = new PictureBox();
@@ -119,8 +128,14 @@ partial class ProcessoPesagemApontamentoForm
         productionDataGridView = new DataGridView();
         productionCodeColumn = new DataGridViewTextBoxColumn();
         productionProductColumn = new DataGridViewTextBoxColumn();
+        productionReservaColumn = new DataGridViewTextBoxColumn();
+        productionItemColumn = new DataGridViewTextBoxColumn();
+        productionDepositoColumn = new DataGridViewTextBoxColumn();
+        productionLoteColumn = new DataGridViewTextBoxColumn();
+        productionTipoSapColumn = new DataGridViewTextBoxColumn();
         productionQuantityColumn = new DataGridViewTextBoxColumn();
         productionWeightColumn = new DataGridViewTextBoxColumn();
+        productionSaldoColumn = new DataGridViewTextBoxColumn();
         productionFooterLabel = new Label();
         productionPageLabel = new Label();
         productionPreviousPageButton = new Button();
@@ -380,15 +395,17 @@ partial class ProcessoPesagemApontamentoForm
         // tableLayoutPanel3
         // 
         tableLayoutPanel3.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        tableLayoutPanel3.ColumnCount = 4;
+        tableLayoutPanel3.ColumnCount = 5;
         tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19F));
         tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20F));
         tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22F));
-        tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 39F));
+        tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F));
+        tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27F));
         tableLayoutPanel3.Controls.Add(productionOrderShadowPanel, 0, 0);
         tableLayoutPanel3.Controls.Add(lotCardPanel, 1, 0);
         tableLayoutPanel3.Controls.Add(stepCardPanel, 2, 0);
-        tableLayoutPanel3.Controls.Add(finishedProductCardPanel, 3, 0);
+        tableLayoutPanel3.Controls.Add(plantaCardPanel, 3, 0);
+        tableLayoutPanel3.Controls.Add(finishedProductCardPanel, 4, 0);
         tableLayoutPanel3.Location = new Point(0, 3);
         tableLayoutPanel3.Margin = new Padding(0, 3, 0, 3);
         tableLayoutPanel3.Name = "tableLayoutPanel3";
@@ -403,7 +420,7 @@ partial class ProcessoPesagemApontamentoForm
         // 
         productionOrderShadowPanel.BackColor = Color.Transparent;
         productionOrderShadowPanel.Controls.Add(productionOrderCaptionLabel);
-        productionOrderShadowPanel.Controls.Add(productionOrderTextBox);
+        productionOrderShadowPanel.Controls.Add(productionOrderComboBox);
         productionOrderShadowPanel.Controls.Add(productionOrderIconPanel);
         productionOrderShadowPanel.Dock = DockStyle.Fill;
         productionOrderShadowPanel.Location = new Point(0, 2);
@@ -427,19 +444,18 @@ partial class ProcessoPesagemApontamentoForm
         productionOrderCaptionLabel.TabIndex = 0;
         productionOrderCaptionLabel.Text = "ORDEM DE PRODUÇÃO";
         // 
-        // productionOrderTextBox
-        // 
-        productionOrderTextBox.BackColor = Color.White;
-        productionOrderTextBox.BorderStyle = BorderStyle.None;
-        productionOrderTextBox.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionOrderTextBox.ForeColor = Color.FromArgb(229, 27, 43);
-        productionOrderTextBox.Location = new Point(16, 25);
-        productionOrderTextBox.Multiline = true;
-        productionOrderTextBox.Name = "productionOrderTextBox";
-        productionOrderTextBox.ReadOnly = true;
-        productionOrderTextBox.Size = new Size(112, 25);
-        productionOrderTextBox.TabIndex = 1;
-        productionOrderTextBox.Text = "58422";
+        // productionOrderComboBox (mesmo padrao do pedidoComboBox da Entrada: ComboBox editavel)
+        //
+        productionOrderComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        productionOrderComboBox.BackColor = Color.White;
+        productionOrderComboBox.DropDownWidth = 220;
+        productionOrderComboBox.FlatStyle = FlatStyle.Flat;
+        productionOrderComboBox.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        productionOrderComboBox.ForeColor = Color.FromArgb(229, 27, 43);
+        productionOrderComboBox.Location = new Point(16, 24);
+        productionOrderComboBox.Name = "productionOrderComboBox";
+        productionOrderComboBox.Size = new Size(112, 29);
+        productionOrderComboBox.TabIndex = 1;
         // 
         // productionOrderIconPanel
         // 
@@ -489,9 +505,10 @@ partial class ProcessoPesagemApontamentoForm
         lotCaptionLabel.ForeColor = Color.FromArgb(55, 65, 81);
         lotCaptionLabel.Location = new Point(16, 6);
         lotCaptionLabel.Name = "lotCaptionLabel";
+        lotCaptionLabel.AutoSize = false;
         lotCaptionLabel.Size = new Size(80, 14);
         lotCaptionLabel.TabIndex = 3;
-        lotCaptionLabel.Text = "LOTE";
+        lotCaptionLabel.Text = "LOTE PRODUTO";
         // 
         // lotTextBox
         // 
@@ -505,7 +522,6 @@ partial class ProcessoPesagemApontamentoForm
         lotTextBox.ReadOnly = true;
         lotTextBox.Size = new Size(143, 29);
         lotTextBox.TabIndex = 4;
-        lotTextBox.Text = "119 26";
         // 
         // lotIconPanel
         // 
@@ -557,7 +573,7 @@ partial class ProcessoPesagemApontamentoForm
         stepCaptionLabel.Name = "stepCaptionLabel";
         stepCaptionLabel.Size = new Size(80, 14);
         stepCaptionLabel.TabIndex = 0;
-        stepCaptionLabel.Text = "DATA";
+        stepCaptionLabel.Text = "DATA OP";
         // 
         // stepLabel
         // 
@@ -581,9 +597,46 @@ partial class ProcessoPesagemApontamentoForm
         stepDescriptionLabel.TabIndex = 6;
         stepDescriptionLabel.Text = "Apontamento atual";
         stepDescriptionLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
+        //
+        // plantaCardPanel
+        //
+        plantaCardPanel.BackColor = Color.Transparent;
+        plantaCardPanel.Controls.Add(plantaCaptionLabel);
+        plantaCardPanel.Controls.Add(plantaValueLabel);
+        plantaCardPanel.Dock = DockStyle.Fill;
+        plantaCardPanel.Margin = new Padding(3, 2, 3, 2);
+        plantaCardPanel.Name = "plantaCardPanel";
+        tableLayoutPanel3.SetRowSpan(plantaCardPanel, 2);
+        plantaCardPanel.ShadowBlur = 0;
+        plantaCardPanel.ShadowOffsetY = 0;
+        plantaCardPanel.Size = new Size(120, 65);
+        plantaCardPanel.TabIndex = 10;
+        //
+        // plantaCaptionLabel
+        //
+        plantaCaptionLabel.BackColor = Color.Transparent;
+        plantaCaptionLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        plantaCaptionLabel.ForeColor = Color.FromArgb(55, 65, 81);
+        plantaCaptionLabel.Location = new Point(16, 6);
+        plantaCaptionLabel.Name = "plantaCaptionLabel";
+        plantaCaptionLabel.Size = new Size(100, 14);
+        plantaCaptionLabel.TabIndex = 0;
+        plantaCaptionLabel.Text = "PLANTA";
+        //
+        // plantaValueLabel
+        //
+        plantaValueLabel.AutoSize = false;
+        plantaValueLabel.BackColor = Color.Transparent;
+        plantaValueLabel.Font = new Font("Segoe UI", 12.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        plantaValueLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        plantaValueLabel.Location = new Point(16, 30);
+        plantaValueLabel.Name = "plantaValueLabel";
+        plantaValueLabel.Size = new Size(100, 24);
+        plantaValueLabel.TabIndex = 1;
+        plantaValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+        //
         // finishedProductCardPanel
-        // 
+        //
         finishedProductCardPanel.BackColor = Color.Transparent;
         finishedProductCardPanel.Controls.Add(finishedProductCaptionLabel);
         finishedProductCardPanel.Controls.Add(finishedProductCodeTextBox);
@@ -608,7 +661,7 @@ partial class ProcessoPesagemApontamentoForm
         finishedProductCaptionLabel.Name = "finishedProductCaptionLabel";
         finishedProductCaptionLabel.Size = new Size(160, 14);
         finishedProductCaptionLabel.TabIndex = 6;
-        finishedProductCaptionLabel.Text = "PRODUTO SEMI ACABADO";
+        finishedProductCaptionLabel.Text = "PRODUTO";
         // 
         // finishedProductCodeTextBox
         // 
@@ -616,13 +669,12 @@ partial class ProcessoPesagemApontamentoForm
         finishedProductCodeTextBox.BorderStyle = BorderStyle.None;
         finishedProductCodeTextBox.Font = new Font("Segoe UI", 12.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
         finishedProductCodeTextBox.ForeColor = Color.FromArgb(17, 24, 39);
-        finishedProductCodeTextBox.Location = new Point(16, 23);
+        finishedProductCodeTextBox.Location = new Point(16, 31);
         finishedProductCodeTextBox.Multiline = true;
         finishedProductCodeTextBox.Name = "finishedProductCodeTextBox";
         finishedProductCodeTextBox.ReadOnly = true;
-        finishedProductCodeTextBox.Size = new Size(80, 20);
+        finishedProductCodeTextBox.Size = new Size(220, 22);
         finishedProductCodeTextBox.TabIndex = 7;
-        finishedProductCodeTextBox.Text = "27771";
         // 
         // finishedProductTextBox
         // 
@@ -635,8 +687,8 @@ partial class ProcessoPesagemApontamentoForm
         finishedProductTextBox.Name = "finishedProductTextBox";
         finishedProductTextBox.ReadOnly = true;
         finishedProductTextBox.Size = new Size(363, 20);
+        finishedProductTextBox.Visible = false;
         finishedProductTextBox.TabIndex = 8;
-        finishedProductTextBox.Text = "TWIST STIX CARNE 24X50PCS";
         // 
         // finishedProductIconPanel
         // 
@@ -722,7 +774,7 @@ partial class ProcessoPesagemApontamentoForm
         productionReadingsTitleLabel.Name = "productionReadingsTitleLabel";
         productionReadingsTitleLabel.Size = new Size(160, 16);
         productionReadingsTitleLabel.TabIndex = 1;
-        productionReadingsTitleLabel.Text = "PRODUTOS DA ORDEM";
+        productionReadingsTitleLabel.Text = "COMPONENTES DA ORDEM";
         productionReadingsTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // productionReadingsUnderlineLabel
@@ -820,7 +872,7 @@ partial class ProcessoPesagemApontamentoForm
         dataGridViewCellStyle12.SelectionForeColor = Color.White;
         productionDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle12;
         productionDataGridView.ColumnHeadersHeight = 24;
-        productionDataGridView.Columns.AddRange(new DataGridViewColumn[] { productionCodeColumn, productionProductColumn, productionQuantityColumn, productionWeightColumn });
+        productionDataGridView.Columns.AddRange(new DataGridViewColumn[] { productionCodeColumn, productionProductColumn, productionReservaColumn, productionItemColumn, productionDepositoColumn, productionLoteColumn, productionTipoSapColumn, productionQuantityColumn, productionWeightColumn, productionSaldoColumn });
         dataGridViewCellStyle16.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dataGridViewCellStyle16.BackColor = Color.FromArgb(250, 251, 252);
         dataGridViewCellStyle16.Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -850,10 +902,10 @@ partial class ProcessoPesagemApontamentoForm
         productionCodeColumn.Name = "productionCodeColumn";
         productionCodeColumn.ReadOnly = true;
         productionCodeColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        productionCodeColumn.Width = 150;
-        // 
+        productionCodeColumn.Width = 110;
+        //
         // productionProductColumn
-        // 
+        //
         productionProductColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
         productionProductColumn.FillWeight = 210F;
         productionProductColumn.HeaderText = "Descrição Produto";
@@ -861,9 +913,54 @@ partial class ProcessoPesagemApontamentoForm
         productionProductColumn.Name = "productionProductColumn";
         productionProductColumn.ReadOnly = true;
         productionProductColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        // 
+        //
+        // productionReservaColumn
+        //
+        productionReservaColumn.HeaderText = "Reserva";
+        productionReservaColumn.MinimumWidth = 6;
+        productionReservaColumn.Name = "productionReservaColumn";
+        productionReservaColumn.ReadOnly = true;
+        productionReservaColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionReservaColumn.Width = 95;
+        //
+        // productionItemColumn
+        //
+        productionItemColumn.HeaderText = "Item";
+        productionItemColumn.MinimumWidth = 6;
+        productionItemColumn.Name = "productionItemColumn";
+        productionItemColumn.ReadOnly = true;
+        productionItemColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionItemColumn.Width = 55;
+        //
+        // productionDepositoColumn
+        //
+        productionDepositoColumn.HeaderText = "Depósito";
+        productionDepositoColumn.MinimumWidth = 6;
+        productionDepositoColumn.Name = "productionDepositoColumn";
+        productionDepositoColumn.ReadOnly = true;
+        productionDepositoColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionDepositoColumn.Width = 80;
+        //
+        // productionLoteColumn
+        //
+        productionLoteColumn.HeaderText = "Lote Componente";
+        productionLoteColumn.MinimumWidth = 6;
+        productionLoteColumn.Name = "productionLoteColumn";
+        productionLoteColumn.ReadOnly = true;
+        productionLoteColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionLoteColumn.Width = 130;
+        //
+        // productionTipoSapColumn
+        //
+        productionTipoSapColumn.HeaderText = "Tipo SAP";
+        productionTipoSapColumn.MinimumWidth = 6;
+        productionTipoSapColumn.Name = "productionTipoSapColumn";
+        productionTipoSapColumn.ReadOnly = true;
+        productionTipoSapColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionTipoSapColumn.Width = 95;
+        //
         // productionQuantityColumn
-        // 
+        //
         dataGridViewCellStyle14.Font = new Font("Segoe UI", 9F);
         productionQuantityColumn.DefaultCellStyle = dataGridViewCellStyle14;
         productionQuantityColumn.HeaderText = "Peso Previsto";
@@ -872,9 +969,9 @@ partial class ProcessoPesagemApontamentoForm
         productionQuantityColumn.ReadOnly = true;
         productionQuantityColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
         productionQuantityColumn.Width = 95;
-        // 
+        //
         // productionWeightColumn
-        // 
+        //
         dataGridViewCellStyle15.Font = new Font("Segoe UI", 9F);
         productionWeightColumn.DefaultCellStyle = dataGridViewCellStyle15;
         productionWeightColumn.HeaderText = "Peso Utilizado";
@@ -882,7 +979,16 @@ partial class ProcessoPesagemApontamentoForm
         productionWeightColumn.Name = "productionWeightColumn";
         productionWeightColumn.ReadOnly = true;
         productionWeightColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        productionWeightColumn.Width = 110;
+        productionWeightColumn.Width = 100;
+        //
+        // productionSaldoColumn
+        //
+        productionSaldoColumn.HeaderText = "Saldo Restante";
+        productionSaldoColumn.MinimumWidth = 6;
+        productionSaldoColumn.Name = "productionSaldoColumn";
+        productionSaldoColumn.ReadOnly = true;
+        productionSaldoColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionSaldoColumn.Width = 100;
         // 
         // productionFooterLabel
         // 
@@ -894,7 +1000,7 @@ partial class ProcessoPesagemApontamentoForm
         productionFooterLabel.Name = "productionFooterLabel";
         productionFooterLabel.Size = new Size(220, 18);
         productionFooterLabel.TabIndex = 8;
-        productionFooterLabel.Text = "Exibindo 1 a 6 de 120 leituras";
+        productionFooterLabel.Text = "Nenhum componente carregado";
         productionFooterLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // productionPageLabel
@@ -1000,7 +1106,7 @@ partial class ProcessoPesagemApontamentoForm
         apontamentoInfoValueLabel.Name = "apontamentoInfoValueLabel";
         apontamentoInfoValueLabel.Size = new Size(160, 16);
         apontamentoInfoValueLabel.TabIndex = 2;
-        apontamentoInfoValueLabel.Text = "Apontamento Nº 70530";
+        apontamentoInfoValueLabel.Text = "--";
         // 
         // apontamentoChipPanel
         // 
@@ -1046,7 +1152,7 @@ partial class ProcessoPesagemApontamentoForm
         apontamentoChipValueLabel.Name = "apontamentoChipValueLabel";
         apontamentoChipValueLabel.Size = new Size(88, 22);
         apontamentoChipValueLabel.TabIndex = 2;
-        apontamentoChipValueLabel.Text = "Nº 70530";
+        apontamentoChipValueLabel.Text = "--";
         apontamentoChipValueLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // tableLayoutPanel5
@@ -1222,7 +1328,6 @@ partial class ProcessoPesagemApontamentoForm
         ovenExitTextBox.ReadOnly = true;
         ovenExitTextBox.Size = new Size(95, 14);
         ovenExitTextBox.TabIndex = 10;
-        ovenExitTextBox.Text = "04/05/2026";
         // 
         // classificationDateTextBox
         // 
@@ -1237,7 +1342,6 @@ partial class ProcessoPesagemApontamentoForm
         classificationDateTextBox.ReadOnly = true;
         classificationDateTextBox.Size = new Size(95, 14);
         classificationDateTextBox.TabIndex = 12;
-        classificationDateTextBox.Text = "04/05/2026";
         // 
         // manufacturingDateTextBox
         // 
@@ -1252,7 +1356,6 @@ partial class ProcessoPesagemApontamentoForm
         manufacturingDateTextBox.ReadOnly = true;
         manufacturingDateTextBox.Size = new Size(95, 14);
         manufacturingDateTextBox.TabIndex = 14;
-        manufacturingDateTextBox.Text = "29/04/2026";
         // 
         // expirationDateTextBox
         // 
@@ -1267,7 +1370,6 @@ partial class ProcessoPesagemApontamentoForm
         expirationDateTextBox.ReadOnly = true;
         expirationDateTextBox.Size = new Size(98, 14);
         expirationDateTextBox.TabIndex = 16;
-        expirationDateTextBox.Text = "28/04/2029";
         // 
         // Gpb_PrevisaoLeitura
         // 
@@ -1380,7 +1482,6 @@ partial class ProcessoPesagemApontamentoForm
         readForecastPackagesTextBox.ReadOnly = true;
         readForecastPackagesTextBox.Size = new Size(211, 17);
         readForecastPackagesTextBox.TabIndex = 21;
-        readForecastPackagesTextBox.Text = "840";
         // 
         // readForecastBoxesCaptionLabel
         // 
@@ -1408,7 +1509,6 @@ partial class ProcessoPesagemApontamentoForm
         readForecastBoxesTextBox.ReadOnly = true;
         readForecastBoxesTextBox.Size = new Size(211, 17);
         readForecastBoxesTextBox.TabIndex = 20;
-        readForecastBoxesTextBox.Text = "35";
         // 
         // balanceCaptionLabel
         // 
@@ -1436,7 +1536,6 @@ partial class ProcessoPesagemApontamentoForm
         balanceTextBox.ReadOnly = true;
         balanceTextBox.Size = new Size(211, 17);
         balanceTextBox.TabIndex = 24;
-        balanceTextBox.Text = "5,568";
         // 
         // headerPanel
         // 
@@ -1705,7 +1804,7 @@ partial class ProcessoPesagemApontamentoForm
         statusLabel.Name = "statusLabel";
         statusLabel.Size = new Size(478, 38);
         statusLabel.TabIndex = 0;
-        statusLabel.Text = "?  Leitura OK !";
+        statusLabel.Text = "Informe a Ordem de Produção para carregar os componentes.";
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // footerBar
@@ -2184,7 +2283,7 @@ partial class ProcessoPesagemApontamentoForm
         headerTitleLabel.Name = "headerTitleLabel";
         headerTitleLabel.Size = new Size(260, 23);
         headerTitleLabel.TabIndex = 7;
-        headerTitleLabel.Text = "Pesagem Apontamento";
+        headerTitleLabel.Text = "Consumo de Matéria-Prima";
         headerTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // sapStatusPanel
@@ -2425,7 +2524,7 @@ partial class ProcessoPesagemApontamentoForm
         boxesCounterLabel.Name = "boxesCounterLabel";
         boxesCounterLabel.Size = new Size(177, 28);
         boxesCounterLabel.TabIndex = 6;
-        boxesCounterLabel.Text = "035";
+        boxesCounterLabel.Text = "000";
         boxesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // weightSummaryUsedPanel
@@ -2461,7 +2560,7 @@ partial class ProcessoPesagemApontamentoForm
         packagesCounterLabel.Name = "packagesCounterLabel";
         packagesCounterLabel.Size = new Size(177, 28);
         packagesCounterLabel.TabIndex = 8;
-        packagesCounterLabel.Text = "840";
+        packagesCounterLabel.Text = "000";
         packagesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // weightSummaryAccentBar
@@ -2844,7 +2943,7 @@ partial class ProcessoPesagemApontamentoForm
         tableLayoutPanel2.Size = new Size(1366, 720);
         tableLayoutPanel2.TabIndex = 1;
         // 
-        // ProcessoPesagemApontamentoForm
+        // ProcessoConsumoMaterialForm
         // 
         AutoScaleDimensions = new SizeF(7F, 16F);
         AutoScaleMode = AutoScaleMode.Font;
@@ -2854,7 +2953,7 @@ partial class ProcessoPesagemApontamentoForm
         Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         FormBorderStyle = FormBorderStyle.None;
         MinimumSize = new Size(1180, 648);
-        Name = "ProcessoPesagemApontamentoForm";
+        Name = "ProcessoConsumoMaterialForm";
         StartPosition = FormStartPosition.CenterScreen;
         Text = "CI - Leitura de Producao";
         WindowState = FormWindowState.Maximized;
@@ -2952,7 +3051,7 @@ partial class ProcessoPesagemApontamentoForm
     private FugaPET_Dev.Tela.Controls.RoundedPanel productionOrderShadowPanel;
     private FugaPET_Dev.Tela.Controls.RoundedPanel productionOrderIconPanel;
     private Label productionOrderCaptionLabel;
-    private TextBox productionOrderTextBox;
+    private ComboBox productionOrderComboBox;
     private PictureBox productionOrderSearchLabel;
     private FugaPET_Dev.Tela.Controls.RoundedPanel stepCardPanel;
     private Label stepCaptionLabel;
@@ -2982,6 +3081,9 @@ partial class ProcessoPesagemApontamentoForm
     private Label finishedProductCaptionLabel;
     private TextBox finishedProductCodeTextBox;
     private TextBox finishedProductTextBox;
+    private FugaPET_Dev.Tela.Controls.RoundedPanel plantaCardPanel;
+    private Label plantaCaptionLabel;
+    private Label plantaValueLabel;
     private Label ovenExitCaptionLabel;
     private TextBox ovenExitTextBox;
     private Label classificationDateCaptionLabel;
@@ -3075,6 +3177,7 @@ partial class ProcessoPesagemApontamentoForm
     private FugaPET_Dev.Tela.ActionPillButton lerEtiquetaButton;
     private FugaPET_Dev.Tela.ActionPillButton leituraManualButton;
 }
+
 
 
 

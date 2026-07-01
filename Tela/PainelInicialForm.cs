@@ -818,7 +818,9 @@ public partial class PainelInicialForm : Form
 
         view.EntradaProdutoRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync();
         view.ProcessoProdutoAcabadoRequested += async (_, _) => await OpenProcessoProdutoAcabadoAsync();
-        view.ProcessoPesagemApontamentoRequested += async (_, _) => await OpenProcessoPesagemApontamentoAsync();
+        view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync();
+        view.HistoricoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialHistoricoAsync();
+        view.DiagnosticoConsumoSap261Requested += async (_, _) => await OpenDiagnosticoConsumoSap261Async();
         view.OrdensAndamentoRequested += async (_, _) => await OpenConsultaOrdemProducaoAsync();
 
         return view;
@@ -872,20 +874,58 @@ public partial class PainelInicialForm : Form
         form.Show(this);
     }
 
-    private async Task OpenProcessoPesagemApontamentoAsync()
+    private async Task OpenProcessoConsumoMaterialAsync()
     {
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Processo Pesagem Apontamento")) return;
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Consumo de Matéria-Prima")) return;
 
         if (!PodeAbrirProcesso())
         {
             return;
         }
 
-        Processo.ProcessoPesagemApontamentoForm form = new();
+        Processo.ProcessoConsumoMaterialForm form = new();
         form.FormClosed += (_, _) => Show();
 
         Hide();
         form.Show(this);
+    }
+
+    private async Task OpenProcessoConsumoMaterialHistoricoAsync()
+    {
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Histórico de Consumo de Matéria-Prima")) return;
+
+        using Processo.ProcessoConsumoMaterialHistoricoForm form = new();
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            Activate();
+            NavigateToProcessoProducao();
+        }
+    }
+
+    private async Task OpenDiagnosticoConsumoSap261Async()
+    {
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Diagnóstico Consumo SAP 261")) return;
+
+        using Processo.DiagnosticoConsumoSap261Form form = new();
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            Activate();
+            NavigateToProcessoProducao();
+        }
     }
 
     private async Task OpenConsultaOrdemProducaoAsync()
@@ -1091,6 +1131,18 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
+            await OpenProcessoConsumoMaterialAsync();
+            e.Handled = true;
+        }
+
+        if (e.KeyCode == Keys.F3 && _currentContentView == _processoProducaoForm)
+        {
+            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
+            {
+                e.Handled = true;
+                return;
+            }
+
             await OpenProcessoProdutoAcabadoAsync();
             e.Handled = true;
         }
@@ -1103,7 +1155,7 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
-            await OpenProcessoPesagemApontamentoAsync();
+            await OpenConsultaOrdemProducaoAsync();
             e.Handled = true;
         }
     }
@@ -1215,6 +1267,7 @@ public partial class PainelInicialForm : Form
         cellHoraText.Text = now.ToString("HH:mm", ptBr);
     }
 }
+
 
 
 

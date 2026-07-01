@@ -15,7 +15,7 @@ partial class ProcessoProducaoForm
     private Label processStatusLabel;
     private Label processShortcutLabel;
     private Label processArrowLabel;
-    private RoundedPanel processoPesagemApontamentoCard;
+    private RoundedPanel processoConsumoMaterialCard;
     private RoundedPanel pesagemIconPanel;
     private Label pesagemIconLabel;
     private Label pesagemTitleLabel;
@@ -62,7 +62,7 @@ partial class ProcessoProducaoForm
         processStatusLabel = new Label();
         processShortcutLabel = new Label();
         processArrowLabel = new Label();
-        processoPesagemApontamentoCard = new RoundedPanel();
+        processoConsumoMaterialCard = new RoundedPanel();
         pesagemIconPanel = new RoundedPanel();
         pesagemIconLabel = new Label();
         pesagemTitleLabel = new Label();
@@ -89,7 +89,7 @@ partial class ProcessoProducaoForm
         contentPanel.SuspendLayout();
         processoProdutoAcabadoCard.SuspendLayout();
         processIconPanel.SuspendLayout();
-        processoPesagemApontamentoCard.SuspendLayout();
+        processoConsumoMaterialCard.SuspendLayout();
         pesagemIconPanel.SuspendLayout();
         ordensAndamentoCard.SuspendLayout();
         ordensIconPanel.SuspendLayout();
@@ -103,7 +103,7 @@ partial class ProcessoProducaoForm
         contentPanel.Controls.Add(sectionTitleLabel);
         contentPanel.Controls.Add(entradaProdutoCard);
         contentPanel.Controls.Add(processoProdutoAcabadoCard);
-        contentPanel.Controls.Add(processoPesagemApontamentoCard);
+        contentPanel.Controls.Add(processoConsumoMaterialCard);
         contentPanel.Controls.Add(ordensAndamentoCard);
         contentPanel.Dock = DockStyle.Fill;
         contentPanel.Location = new Point(0, 0);
@@ -135,7 +135,7 @@ partial class ProcessoProducaoForm
         processoProdutoAcabadoCard.Controls.Add(processShortcutLabel);
         processoProdutoAcabadoCard.Controls.Add(processArrowLabel);
         processoProdutoAcabadoCard.Cursor = Cursors.Hand;
-        processoProdutoAcabadoCard.Location = new Point(284, 70);
+        processoProdutoAcabadoCard.Location = new Point(540, 70);
         processoProdutoAcabadoCard.Name = "processoProdutoAcabadoCard";
         processoProdutoAcabadoCard.ShadowBlur = 0;
         processoProdutoAcabadoCard.ShadowOffsetY = 0;
@@ -221,7 +221,7 @@ partial class ProcessoProducaoForm
         processShortcutLabel.Name = "processShortcutLabel";
         processShortcutLabel.Size = new Size(38, 28);
         processShortcutLabel.TabIndex = 4;
-        processShortcutLabel.Text = "F2";
+        processShortcutLabel.Text = "F3";
         processShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // processArrowLabel
@@ -237,23 +237,23 @@ partial class ProcessoProducaoForm
         processArrowLabel.Text = "→";
         processArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // processoPesagemApontamentoCard
+        // processoConsumoMaterialCard
         // 
-        processoPesagemApontamentoCard.BackColor = Color.Transparent;
-        processoPesagemApontamentoCard.BorderColor = Color.FromArgb(226, 232, 240);
-        processoPesagemApontamentoCard.Controls.Add(pesagemIconPanel);
-        processoPesagemApontamentoCard.Controls.Add(pesagemTitleLabel);
-        processoPesagemApontamentoCard.Controls.Add(pesagemDescriptionLabel);
-        processoPesagemApontamentoCard.Controls.Add(pesagemStatusLabel);
-        processoPesagemApontamentoCard.Controls.Add(pesagemShortcutLabel);
-        processoPesagemApontamentoCard.Controls.Add(pesagemArrowLabel);
-        processoPesagemApontamentoCard.Cursor = Cursors.Hand;
-        processoPesagemApontamentoCard.Location = new Point(796, 70);
-        processoPesagemApontamentoCard.Name = "processoPesagemApontamentoCard";
-        processoPesagemApontamentoCard.ShadowBlur = 0;
-        processoPesagemApontamentoCard.ShadowOffsetY = 0;
-        processoPesagemApontamentoCard.Size = new Size(240, 250);
-        processoPesagemApontamentoCard.TabIndex = 2;
+        processoConsumoMaterialCard.BackColor = Color.Transparent;
+        processoConsumoMaterialCard.BorderColor = Color.FromArgb(226, 232, 240);
+        processoConsumoMaterialCard.Controls.Add(pesagemIconPanel);
+        processoConsumoMaterialCard.Controls.Add(pesagemTitleLabel);
+        processoConsumoMaterialCard.Controls.Add(pesagemDescriptionLabel);
+        processoConsumoMaterialCard.Controls.Add(pesagemStatusLabel);
+        processoConsumoMaterialCard.Controls.Add(pesagemShortcutLabel);
+        processoConsumoMaterialCard.Controls.Add(pesagemArrowLabel);
+        processoConsumoMaterialCard.Cursor = Cursors.Hand;
+        processoConsumoMaterialCard.Location = new Point(284, 70);
+        processoConsumoMaterialCard.Name = "processoConsumoMaterialCard";
+        processoConsumoMaterialCard.ShadowBlur = 0;
+        processoConsumoMaterialCard.ShadowOffsetY = 0;
+        processoConsumoMaterialCard.Size = new Size(240, 250);
+        processoConsumoMaterialCard.TabIndex = 2;
         // 
         // pesagemIconPanel
         // 
@@ -295,7 +295,7 @@ partial class ProcessoProducaoForm
         pesagemTitleLabel.Name = "pesagemTitleLabel";
         pesagemTitleLabel.Size = new Size(202, 62);
         pesagemTitleLabel.TabIndex = 1;
-        pesagemTitleLabel.Text = "Pesagem\r\nApontamento";
+        pesagemTitleLabel.Text = "Consumo de\r\nMaterial";
         pesagemTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // pesagemDescriptionLabel
@@ -308,7 +308,7 @@ partial class ProcessoProducaoForm
         pesagemDescriptionLabel.Name = "pesagemDescriptionLabel";
         pesagemDescriptionLabel.Size = new Size(175, 46);
         pesagemDescriptionLabel.TabIndex = 2;
-        pesagemDescriptionLabel.Text = "Leitura e apontamento da\r\npesagem operacional.";
+        pesagemDescriptionLabel.Text = "Consumo de matéria-prima\r\npor ordem / Integração SAP.";
         pesagemDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // pesagemStatusLabel
@@ -334,7 +334,7 @@ partial class ProcessoProducaoForm
         pesagemShortcutLabel.Name = "pesagemShortcutLabel";
         pesagemShortcutLabel.Size = new Size(38, 28);
         pesagemShortcutLabel.TabIndex = 4;
-        pesagemShortcutLabel.Text = "F4";
+        pesagemShortcutLabel.Text = "F2";
         pesagemShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // pesagemArrowLabel
@@ -361,7 +361,7 @@ partial class ProcessoProducaoForm
         ordensAndamentoCard.Controls.Add(ordensShortcutLabel);
         ordensAndamentoCard.Controls.Add(ordensArrowLabel);
         ordensAndamentoCard.Cursor = Cursors.Hand;
-        ordensAndamentoCard.Location = new Point(540, 70);
+        ordensAndamentoCard.Location = new Point(796, 70);
         ordensAndamentoCard.Name = "ordensAndamentoCard";
         ordensAndamentoCard.ShadowBlur = 0;
         ordensAndamentoCard.ShadowOffsetY = 0;
@@ -446,7 +446,7 @@ partial class ProcessoProducaoForm
         ordensShortcutLabel.Name = "ordensShortcutLabel";
         ordensShortcutLabel.Size = new Size(38, 28);
         ordensShortcutLabel.TabIndex = 4;
-        ordensShortcutLabel.Text = "F3";
+        ordensShortcutLabel.Text = "F4";
         ordensShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // ordensArrowLabel
@@ -585,7 +585,7 @@ partial class ProcessoProducaoForm
         contentPanel.ResumeLayout(false);
         processoProdutoAcabadoCard.ResumeLayout(false);
         processIconPanel.ResumeLayout(false);
-        processoPesagemApontamentoCard.ResumeLayout(false);
+        processoConsumoMaterialCard.ResumeLayout(false);
         pesagemIconPanel.ResumeLayout(false);
         ordensAndamentoCard.ResumeLayout(false);
         ordensIconPanel.ResumeLayout(false);

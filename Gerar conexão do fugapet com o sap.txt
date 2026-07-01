@@ -116,6 +116,30 @@ finally {
 	Confirme a sincronização dos pedidos.
 	Faça uma pesagem e finalize para validar o PATCH dos pesos.
 
+9. URLs de serviços adicionais (Material Document 101 e Ordem de Produção)
+	Além da FUGAPET_SAP_BASE_URL (Pedido de Compra), há dois serviços OData usados por outras telas:
+
+	- Entrada → criação do Documento de Material (movimento 101):
+		FUGAPET_SAP_MATERIAL_DOCUMENT_BASE_URL
+		Ex.: https://SEU_HOST:44300/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/
+
+	- Consumo de Matéria-Prima → GET da Ordem de Produção:
+		FUGAPET_SAP_PRODUCTION_ORDER_BASE_URL
+		Ex.: https://SEU_HOST:44300/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/
+
+	A URL da Ordem de Produção é OPCIONAL: se não for definida, o sistema a deriva automaticamente da
+	FUGAPET_SAP_MATERIAL_DOCUMENT_BASE_URL (mesmo host/caminho, trocando o nome do serviço). Em HML, o
+	RECOMENDADO é configurá-la explicitamente:
+
+	[Environment]::SetEnvironmentVariable(
+	    "FUGAPET_SAP_PRODUCTION_ORDER_BASE_URL",
+	    "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/",
+	    "User"
+	)
+
+	Essas URLs também podem ficar em configuracao.sap.json (chaves material_document_base_url e
+	production_order_base_url). Credenciais (usuário/senha) continuam SOMENTE em variáveis de ambiente.
+
 Observações de segurança
 	Nunca grave usuário ou senha em arquivos .json.
 	Nunca coloque a senha neste arquivo de instruções.

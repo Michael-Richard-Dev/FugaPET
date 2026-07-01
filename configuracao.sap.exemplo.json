@@ -2,6 +2,8 @@
   "sap": {
     "base_url": "https://servidor-sap.exemplo.local/odata/v4/servico",
     "material_document_base_url": "https://servidor-sap.exemplo.local/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
+    "production_order_base_url": "https://servidor-sap.exemplo.local/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/",
+    "_production_order_opcional": "Opcional: se vazia, e derivada de material_document_base_url (mesmo host/caminho, trocando o servico).",
     "sap_client": "000",
     "hosts_permitidos": [
       "servidor-sap.exemplo.local"

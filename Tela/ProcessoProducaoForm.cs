@@ -6,14 +6,60 @@ public partial class ProcessoProducaoForm : UserControl
 
     public event EventHandler? EntradaProdutoRequested;
     public event EventHandler? ProcessoProdutoAcabadoRequested;
-    public event EventHandler? ProcessoPesagemApontamentoRequested;
+    public event EventHandler? ProcessoConsumoMaterialRequested;
+    public event EventHandler? HistoricoConsumoMaterialRequested;
+    public event EventHandler? DiagnosticoConsumoSap261Requested;
     public event EventHandler? OrdensAndamentoRequested;
 
     public ProcessoProducaoForm()
     {
         InitializeComponent();
         ApplyProductionIcons();
+        AddHistoricoConsumoButton();
+        AddDiagnosticoConsumoButton();
         WireCardClickEvents();
+    }
+
+    private void AddHistoricoConsumoButton()
+    {
+        Button historicoConsumoButton = new()
+        {
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            BackColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(31, 41, 55),
+            Location = new Point(Math.Max(16, Width - 214), 26),
+            Name = "historicoConsumoButton",
+            Size = new Size(186, 30),
+            Text = "Histórico de Consumo",
+            UseVisualStyleBackColor = false
+        };
+        historicoConsumoButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
+        historicoConsumoButton.Click += OnHistoricoConsumoMaterialClick;
+        contentPanel.Controls.Add(historicoConsumoButton);
+        historicoConsumoButton.BringToFront();
+    }
+
+    private void AddDiagnosticoConsumoButton()
+    {
+        Button diagnosticoConsumoButton = new()
+        {
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            BackColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(31, 41, 55),
+            Location = new Point(Math.Max(16, Width - 214), 60),
+            Name = "diagnosticoConsumoButton",
+            Size = new Size(186, 30),
+            Text = "Diagnóstico Consumo 261",
+            UseVisualStyleBackColor = false
+        };
+        diagnosticoConsumoButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
+        diagnosticoConsumoButton.Click += OnDiagnosticoConsumoSap261Click;
+        contentPanel.Controls.Add(diagnosticoConsumoButton);
+        diagnosticoConsumoButton.BringToFront();
     }
 
     private void ApplyProductionIcons()
@@ -82,14 +128,14 @@ public partial class ProcessoProducaoForm : UserControl
         processShortcutLabel.Click += OnProcessoProdutoAcabadoClick;
         processArrowLabel.Click += OnProcessoProdutoAcabadoClick;
 
-        processoPesagemApontamentoCard.Click += OnProcessoPesagemApontamentoClick;
-        pesagemIconPanel.Click += OnProcessoPesagemApontamentoClick;
-        pesagemIconLabel.Click += OnProcessoPesagemApontamentoClick;
-        pesagemTitleLabel.Click += OnProcessoPesagemApontamentoClick;
-        pesagemDescriptionLabel.Click += OnProcessoPesagemApontamentoClick;
-        pesagemStatusLabel.Click += OnProcessoPesagemApontamentoClick;
-        pesagemShortcutLabel.Click += OnProcessoPesagemApontamentoClick;
-        pesagemArrowLabel.Click += OnProcessoPesagemApontamentoClick;
+        processoConsumoMaterialCard.Click += OnProcessoConsumoMaterialClick;
+        pesagemIconPanel.Click += OnProcessoConsumoMaterialClick;
+        pesagemIconLabel.Click += OnProcessoConsumoMaterialClick;
+        pesagemTitleLabel.Click += OnProcessoConsumoMaterialClick;
+        pesagemDescriptionLabel.Click += OnProcessoConsumoMaterialClick;
+        pesagemStatusLabel.Click += OnProcessoConsumoMaterialClick;
+        pesagemShortcutLabel.Click += OnProcessoConsumoMaterialClick;
+        pesagemArrowLabel.Click += OnProcessoConsumoMaterialClick;
 
         ordensAndamentoCard.Click += OnOrdensAndamentoClick;
         ordensIconPanel.Click += OnOrdensAndamentoClick;
@@ -111,9 +157,19 @@ public partial class ProcessoProducaoForm : UserControl
         ProcessoProdutoAcabadoRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnProcessoPesagemApontamentoClick(object? sender, EventArgs e)
+    private void OnProcessoConsumoMaterialClick(object? sender, EventArgs e)
     {
-        ProcessoPesagemApontamentoRequested?.Invoke(this, EventArgs.Empty);
+        ProcessoConsumoMaterialRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnHistoricoConsumoMaterialClick(object? sender, EventArgs e)
+    {
+        HistoricoConsumoMaterialRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnDiagnosticoConsumoSap261Click(object? sender, EventArgs e)
+    {
+        DiagnosticoConsumoSap261Requested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnOrdensAndamentoClick(object? sender, EventArgs e)
@@ -121,6 +177,4 @@ public partial class ProcessoProducaoForm : UserControl
         OrdensAndamentoRequested?.Invoke(this, EventArgs.Empty);
     }
 }
-
-
 

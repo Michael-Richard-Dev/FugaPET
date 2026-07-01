@@ -109,6 +109,24 @@ public class AuditoriaServico
             cancellationToken: cancellationToken));
     }
 
+    public virtual Task RegistrarEventoOperacionalAsync(
+        string acao,
+        string resultado,
+        string mensagem,
+        string? tela = null,
+        CancellationToken cancellationToken = default)
+    {
+        long? operador = Seguranca.EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+        return ExecutarSeguroAsync(() => _acaoUsuarioServico.RegistrarAsync(
+            acao: acao,
+            resultado: resultado,
+            codigoUsuario: operador,
+            mensagem: mensagem,
+            modulo: ModuloCadastro,
+            tela: tela,
+            cancellationToken: cancellationToken));
+    }
+
     public virtual Task RegistrarBloqueioIntegracaoSapAsync(
         string acao,
         string mensagem,

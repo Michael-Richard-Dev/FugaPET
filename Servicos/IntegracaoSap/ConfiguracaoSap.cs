@@ -1,4 +1,6 @@
-﻿namespace FugaPET_Dev.Servicos.IntegracaoSap;
+﻿using System.Text.RegularExpressions;
+
+namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
 /// <summary>
 /// Configuracao de conexao com a API SAP (OData V4, Basic Authentication).
@@ -15,6 +17,19 @@ public sealed class ConfiguracaoSap
     /// do pedido de compra; quando vazia, o envio de entrada e bloqueado.
     /// </summary>
     public string MaterialDocumentBaseUrl { get; init; } = string.Empty;
+
+    /// <summary>
+    /// URL base do servico OData de Ordens de Producao (API_PRODUCTION_ORDER_2_SRV), usada para o GET
+    /// da Ordem de Producao na Tela de Consumo de Materia-Prima. Independente da BaseUrl do pedido de
+    /// compra; quando vazia, a consulta da OP fica indisponivel.
+    /// </summary>
+    public string ProductionOrderBaseUrl { get; init; } = string.Empty;
+
+    /// <summary>
+    /// URL base do servico OData de Confirmacao de Producao (API_PROD_ORDER_CONFIRMATION_2_SRV).
+    /// Usada para POST em ProdnOrdConf2 no fluxo Backflush.
+    /// </summary>
+    public string ProductionOrderConfirmationBaseUrl { get; init; } = string.Empty;
 
     public string Usuario { get; init; } = string.Empty;
 
@@ -51,6 +66,99 @@ public sealed class ConfiguracaoSap
         && !string.IsNullOrWhiteSpace(Usuario)
         && !string.IsNullOrWhiteSpace(Senha)
         && HostsPermitidos.Count > 0;
+
+    /// <summary>
+    /// URL base efetiva do servico de Ordens de Producao. Usa <see cref="ProductionOrderBaseUrl"/>
+    /// quando definida; caso contrario, REAPROVEITA o padrao SAP ja configurado derivando do
+    /// <see cref="MaterialDocumentBaseUrl"/> (e, em ultimo caso, do <see cref="BaseUrl"/>) — troca o
+    /// segmento de servico OData (API_*_SRV) por API_PRODUCTION_ORDER_2_SRV, mantendo host/caminho.
+    /// </summary>
+    public string ProductionOrderBaseUrlEfetiva
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(ProductionOrderBaseUrl))
+            {
+                return ProductionOrderBaseUrl;
+            }
+
+            string derivadoDoMaterialDocument = DerivarUrlProductionOrder(MaterialDocumentBaseUrl);
+            return !string.IsNullOrWhiteSpace(derivadoDoMaterialDocument)
+                ? derivadoDoMaterialDocument
+                : DerivarUrlProductionOrder(BaseUrl);
+        }
+    }
+
+    public string ProductionOrderConfirmationBaseUrlEfetiva
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(ProductionOrderConfirmationBaseUrl))
+            {
+                return ProductionOrderConfirmationBaseUrl;
+            }
+
+            string derivadoDoMaterialDocument = DerivarUrlServicoSap(
+                MaterialDocumentBaseUrl,
+                "API_PROD_ORDER_CONFIRMATION_2_SRV");
+            return !string.IsNullOrWhiteSpace(derivadoDoMaterialDocument)
+                ? derivadoDoMaterialDocument
+                : DerivarUrlServicoSap(BaseUrl, "API_PROD_ORDER_CONFIRMATION_2_SRV");
+        }
+    }
+
+    private static string DerivarUrlProductionOrder(string urlServicoSap)
+    {
+        if (string.IsNullOrWhiteSpace(urlServicoSap))
+        {
+            return string.Empty;
+        }
+
+        // Caminho OData padrao SAP: .../sap/opu/odata/sap/API_<SERVICO>_SRV[/...]. Troca so o servico.
+        Match correspondencia = Regex.Match(
+            urlServicoSap,
+            @"^(?<prefixo>.*/)API_[A-Za-z0-9_]+_SRV(?<sufixo>(/.*)?)$");
+        return correspondencia.Success
+            ? $"{correspondencia.Groups["prefixo"].Value}API_PRODUCTION_ORDER_2_SRV{correspondencia.Groups["sufixo"].Value}"
+            : string.Empty;
+    }
+
+    private static string DerivarUrlServicoSap(string urlServicoSap, string nomeServico)
+    {
+        if (string.IsNullOrWhiteSpace(urlServicoSap))
+        {
+            return string.Empty;
+        }
+
+        Match correspondencia = Regex.Match(
+            urlServicoSap,
+            @"^(?<prefixo>.*/)API_[A-Za-z0-9_]+_SRV(?<sufixo>(/.*)?)$");
+        return correspondencia.Success
+            ? $"{correspondencia.Groups["prefixo"].Value}{nomeServico}{correspondencia.Groups["sufixo"].Value}"
+            : string.Empty;
+    }
+
+    /// <summary>
+    /// True quando, alem das credenciais + allowlist, ha URL (explicita OU derivada) do servico de
+    /// Ordens de Producao (API_PRODUCTION_ORDER_2_SRV) para o GET da OP na Tela de Consumo.
+    /// </summary>
+    public bool ProductionOrderConfigurado =>
+        !string.IsNullOrWhiteSpace(ProductionOrderBaseUrlEfetiva)
+        && !string.IsNullOrWhiteSpace(Usuario)
+        && !string.IsNullOrWhiteSpace(Senha)
+        && HostsPermitidos.Count > 0;
+
+    public bool ProductionOrderConfirmationConfigurado =>
+        !string.IsNullOrWhiteSpace(ProductionOrderConfirmationBaseUrlEfetiva)
+        && !string.IsNullOrWhiteSpace(Usuario)
+        && !string.IsNullOrWhiteSpace(Senha)
+        && HostsPermitidos.Count > 0;
+
+    public const string MensagemProductionOrderNaoConfigurado =
+        "Integração SAP de Ordem de Produção não configurada.";
+
+    public const string MensagemProductionOrderConfirmationNaoConfigurado =
+        "Integração SAP de Confirmação de Produção não configurada.";
 
     public const string MensagemConfiguracaoAusente =
         "Integracao SAP nao configurada. Defina URL, credenciais e FUGAPET_SAP_ALLOWED_HOSTS.";
