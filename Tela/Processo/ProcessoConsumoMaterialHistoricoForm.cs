@@ -13,6 +13,7 @@ public partial class ProcessoConsumoMaterialHistoricoForm : Form
     public ProcessoConsumoMaterialHistoricoForm()
     {
         InitializeComponent();
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this); // Tarefa 20.6 (Ajuste 3): icone padrao
         ConfigurarTela();
     }
 

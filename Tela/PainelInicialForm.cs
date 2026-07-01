@@ -818,7 +818,9 @@ public partial class PainelInicialForm : Form
 
         view.EntradaProdutoRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync();
         view.ProcessoProdutoAcabadoRequested += async (_, _) => await OpenProcessoProdutoAcabadoAsync();
-        view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync();
+        view.ProcessoSemiAcabadoRequested += async (_, _) => await OpenProcessoSemiAcabadoAsync();
+        view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima);
+        view.ProcessoConsumoQuimicosRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico);
         view.HistoricoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialHistoricoAsync();
         view.DiagnosticoConsumoSap261Requested += async (_, _) => await OpenDiagnosticoConsumoSap261Async();
         view.OrdensAndamentoRequested += async (_, _) => await OpenConsultaOrdemProducaoAsync();
@@ -874,17 +876,53 @@ public partial class PainelInicialForm : Form
         form.Show(this);
     }
 
-    private async Task OpenProcessoConsumoMaterialAsync()
+    private async Task OpenProcessoSemiAcabadoAsync()
     {
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Consumo de Matéria-Prima")) return;
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Produto Semi-Acabado")) return;
 
         if (!PodeAbrirProcesso())
         {
             return;
         }
 
-        Processo.ProcessoConsumoMaterialForm form = new();
-        form.FormClosed += (_, _) => Show();
+        using Processo.ProcessoSemiAcabadoForm form = new();
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            Activate();
+            NavigateToProcessoProducao();
+        }
+    }
+
+    private async Task OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial modo = global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima)
+    {
+        string nomeTela = modo == global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico ? "Consumo de Químicos" : "Consumo de Matéria-Prima";
+        // TODO Permissões:
+        // Quando a matriz de permissões for atualizada, separar acesso/execução de Consumo de Químicos.
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, nomeTela)) return;
+
+        if (!PodeAbrirProcesso())
+        {
+            return;
+        }
+
+        Processo.ProcessoConsumoMaterialForm form = new(modo);
+        // Ao voltar: reexibe, reativa e renavega o painel; Invalidate(true)+Update() forcam o repaint de
+        // TODA a janela (cabecalho + menu lateral + conteudo), evitando o painel "sumindo" ate mover o mouse.
+        form.FormClosed += (_, _) =>
+        {
+            Show();
+            Activate();
+            NavigateToProcessoProducao();
+            Invalidate(true);
+            Update();
+        };
 
         Hide();
         form.Show(this);
@@ -1143,11 +1181,35 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
-            await OpenProcessoProdutoAcabadoAsync();
+            await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico);
             e.Handled = true;
         }
 
         if (e.KeyCode == Keys.F4 && _currentContentView == _processoProducaoForm)
+        {
+            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            await OpenProcessoSemiAcabadoAsync();
+            e.Handled = true;
+        }
+
+        if (e.KeyCode == Keys.F5 && _currentContentView == _processoProducaoForm)
+        {
+            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            await OpenProcessoProdutoAcabadoAsync();
+            e.Handled = true;
+        }
+
+        if (e.KeyCode == Keys.F6 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {

@@ -7,6 +7,14 @@ partial class ProcessoProducaoForm
     private System.ComponentModel.IContainer components = null;
     private Panel contentPanel;
     private Label sectionTitleLabel;
+    private RoundedPanel processoSemiAcabadoCard;
+    private RoundedPanel semiAcabadoIconPanel;
+    private Label semiAcabadoIconLabel;
+    private Label semiAcabadoTitleLabel;
+    private Label semiAcabadoDescriptionLabel;
+    private Label semiAcabadoStatusLabel;
+    private Label semiAcabadoShortcutLabel;
+    private Label semiAcabadoArrowLabel;
     private RoundedPanel processoProdutoAcabadoCard;
     private RoundedPanel processIconPanel;
     private Label processIconLabel;
@@ -23,6 +31,14 @@ partial class ProcessoProducaoForm
     private Label pesagemStatusLabel;
     private Label pesagemShortcutLabel;
     private Label pesagemArrowLabel;
+    private RoundedPanel processoConsumoQuimicosCard;
+    private RoundedPanel quimicosIconPanel;
+    private Label quimicosIconLabel;
+    private Label quimicosTitleLabel;
+    private Label quimicosDescriptionLabel;
+    private Label quimicosStatusLabel;
+    private Label quimicosShortcutLabel;
+    private Label quimicosArrowLabel;
     private RoundedPanel ordensAndamentoCard;
     private RoundedPanel ordensIconPanel;
     private Label ordensIconLabel;
@@ -54,6 +70,14 @@ partial class ProcessoProducaoForm
     {
         contentPanel = new Panel();
         sectionTitleLabel = new Label();
+        processoSemiAcabadoCard = new RoundedPanel();
+        semiAcabadoIconPanel = new RoundedPanel();
+        semiAcabadoIconLabel = new Label();
+        semiAcabadoTitleLabel = new Label();
+        semiAcabadoDescriptionLabel = new Label();
+        semiAcabadoStatusLabel = new Label();
+        semiAcabadoShortcutLabel = new Label();
+        semiAcabadoArrowLabel = new Label();
         processoProdutoAcabadoCard = new RoundedPanel();
         processIconPanel = new RoundedPanel();
         processIconLabel = new Label();
@@ -70,6 +94,14 @@ partial class ProcessoProducaoForm
         pesagemStatusLabel = new Label();
         pesagemShortcutLabel = new Label();
         pesagemArrowLabel = new Label();
+        processoConsumoQuimicosCard = new RoundedPanel();
+        quimicosIconPanel = new RoundedPanel();
+        quimicosIconLabel = new Label();
+        quimicosTitleLabel = new Label();
+        quimicosDescriptionLabel = new Label();
+        quimicosStatusLabel = new Label();
+        quimicosShortcutLabel = new Label();
+        quimicosArrowLabel = new Label();
         ordensAndamentoCard = new RoundedPanel();
         ordensIconPanel = new RoundedPanel();
         ordensIconLabel = new Label();
@@ -87,10 +119,14 @@ partial class ProcessoProducaoForm
         entradaShortcutLabel = new Label();
         entradaArrowLabel = new Label();
         contentPanel.SuspendLayout();
+        processoSemiAcabadoCard.SuspendLayout();
+        semiAcabadoIconPanel.SuspendLayout();
         processoProdutoAcabadoCard.SuspendLayout();
         processIconPanel.SuspendLayout();
         processoConsumoMaterialCard.SuspendLayout();
         pesagemIconPanel.SuspendLayout();
+        processoConsumoQuimicosCard.SuspendLayout();
+        quimicosIconPanel.SuspendLayout();
         ordensAndamentoCard.SuspendLayout();
         ordensIconPanel.SuspendLayout();
         entradaProdutoCard.SuspendLayout();
@@ -102,8 +138,10 @@ partial class ProcessoProducaoForm
         contentPanel.BackColor = Color.FromArgb(247, 248, 250);
         contentPanel.Controls.Add(sectionTitleLabel);
         contentPanel.Controls.Add(entradaProdutoCard);
+        contentPanel.Controls.Add(processoSemiAcabadoCard);
         contentPanel.Controls.Add(processoProdutoAcabadoCard);
         contentPanel.Controls.Add(processoConsumoMaterialCard);
+        contentPanel.Controls.Add(processoConsumoQuimicosCard);
         contentPanel.Controls.Add(ordensAndamentoCard);
         contentPanel.Dock = DockStyle.Fill;
         contentPanel.Location = new Point(0, 0);
@@ -124,6 +162,118 @@ partial class ProcessoProducaoForm
         sectionTitleLabel.Text = "Módulos de Leitura";
         sectionTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
+        // processoSemiAcabadoCard
+        // 
+        processoSemiAcabadoCard.BackColor = Color.Transparent;
+        processoSemiAcabadoCard.BorderColor = Color.FromArgb(226, 232, 240);
+        processoSemiAcabadoCard.Controls.Add(semiAcabadoIconPanel);
+        processoSemiAcabadoCard.Controls.Add(semiAcabadoTitleLabel);
+        processoSemiAcabadoCard.Controls.Add(semiAcabadoDescriptionLabel);
+        processoSemiAcabadoCard.Controls.Add(semiAcabadoStatusLabel);
+        processoSemiAcabadoCard.Controls.Add(semiAcabadoShortcutLabel);
+        processoSemiAcabadoCard.Controls.Add(semiAcabadoArrowLabel);
+        processoSemiAcabadoCard.Cursor = Cursors.Hand;
+        processoSemiAcabadoCard.Location = new Point(796, 70);
+        processoSemiAcabadoCard.Name = "processoSemiAcabadoCard";
+        processoSemiAcabadoCard.ShadowBlur = 0;
+        processoSemiAcabadoCard.ShadowOffsetY = 0;
+        processoSemiAcabadoCard.Size = new Size(240, 250);
+        processoSemiAcabadoCard.TabIndex = 6;
+        // 
+        // semiAcabadoIconPanel
+        // 
+        semiAcabadoIconPanel.BackColor = Color.Transparent;
+        semiAcabadoIconPanel.BorderRadius = 9;
+        semiAcabadoIconPanel.Controls.Add(semiAcabadoIconLabel);
+        semiAcabadoIconPanel.Cursor = Cursors.Hand;
+        semiAcabadoIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        semiAcabadoIconPanel.Location = new Point(92, 20);
+        semiAcabadoIconPanel.Name = "semiAcabadoIconPanel";
+        semiAcabadoIconPanel.ShadowBlur = 0;
+        semiAcabadoIconPanel.ShadowOffsetY = 0;
+        semiAcabadoIconPanel.Size = new Size(56, 56);
+        semiAcabadoIconPanel.TabIndex = 0;
+        // 
+        // semiAcabadoIconLabel
+        // 
+        semiAcabadoIconLabel.BackColor = Color.Transparent;
+        semiAcabadoIconLabel.Cursor = Cursors.Hand;
+        semiAcabadoIconLabel.Dock = DockStyle.Fill;
+        semiAcabadoIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        semiAcabadoIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        semiAcabadoIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
+        semiAcabadoIconLabel.Location = new Point(0, 0);
+        semiAcabadoIconLabel.Name = "semiAcabadoIconLabel";
+        semiAcabadoIconLabel.Size = new Size(56, 56);
+        semiAcabadoIconLabel.TabIndex = 0;
+        semiAcabadoIconLabel.Text = "";
+        semiAcabadoIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // semiAcabadoTitleLabel
+        // 
+        semiAcabadoTitleLabel.BackColor = Color.Transparent;
+        semiAcabadoTitleLabel.Cursor = Cursors.Hand;
+        semiAcabadoTitleLabel.Font = new Font("Segoe UI", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        semiAcabadoTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        semiAcabadoTitleLabel.Location = new Point(20, 92);
+        semiAcabadoTitleLabel.Name = "semiAcabadoTitleLabel";
+        semiAcabadoTitleLabel.Size = new Size(202, 62);
+        semiAcabadoTitleLabel.TabIndex = 1;
+        semiAcabadoTitleLabel.Text = "Produto\r\nSemi-Acabado";
+        semiAcabadoTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // semiAcabadoDescriptionLabel
+        // 
+        semiAcabadoDescriptionLabel.BackColor = Color.Transparent;
+        semiAcabadoDescriptionLabel.Cursor = Cursors.Hand;
+        semiAcabadoDescriptionLabel.Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        semiAcabadoDescriptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        semiAcabadoDescriptionLabel.Location = new Point(20, 156);
+        semiAcabadoDescriptionLabel.Name = "semiAcabadoDescriptionLabel";
+        semiAcabadoDescriptionLabel.Size = new Size(175, 46);
+        semiAcabadoDescriptionLabel.TabIndex = 2;
+        semiAcabadoDescriptionLabel.Text = "Entrada 101 por ordem\r\nde produção / SAP.";
+        semiAcabadoDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // semiAcabadoStatusLabel
+        // 
+        semiAcabadoStatusLabel.BackColor = Color.FromArgb(220, 252, 231);
+        semiAcabadoStatusLabel.Cursor = Cursors.Hand;
+        semiAcabadoStatusLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        semiAcabadoStatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        semiAcabadoStatusLabel.Location = new Point(20, 214);
+        semiAcabadoStatusLabel.Name = "semiAcabadoStatusLabel";
+        semiAcabadoStatusLabel.Size = new Size(82, 28);
+        semiAcabadoStatusLabel.TabIndex = 3;
+        semiAcabadoStatusLabel.Text = "Disponível";
+        semiAcabadoStatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // semiAcabadoShortcutLabel
+        // 
+        semiAcabadoShortcutLabel.BackColor = Color.FromArgb(243, 244, 246);
+        semiAcabadoShortcutLabel.Cursor = Cursors.Hand;
+        semiAcabadoShortcutLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        semiAcabadoShortcutLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        semiAcabadoShortcutLabel.Location = new Point(110, 214);
+        semiAcabadoShortcutLabel.Name = "semiAcabadoShortcutLabel";
+        semiAcabadoShortcutLabel.Size = new Size(38, 28);
+        semiAcabadoShortcutLabel.TabIndex = 4;
+        semiAcabadoShortcutLabel.Text = "F4";
+        semiAcabadoShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // semiAcabadoArrowLabel
+        // 
+        semiAcabadoArrowLabel.BackColor = Color.Transparent;
+        semiAcabadoArrowLabel.Cursor = Cursors.Hand;
+        semiAcabadoArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        semiAcabadoArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        semiAcabadoArrowLabel.Location = new Point(190, 207);
+        semiAcabadoArrowLabel.Name = "semiAcabadoArrowLabel";
+        semiAcabadoArrowLabel.Size = new Size(32, 36);
+        semiAcabadoArrowLabel.TabIndex = 5;
+        semiAcabadoArrowLabel.Text = "→";
+        semiAcabadoArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
         // processoProdutoAcabadoCard
         // 
         processoProdutoAcabadoCard.BackColor = Color.Transparent;
@@ -135,7 +285,7 @@ partial class ProcessoProducaoForm
         processoProdutoAcabadoCard.Controls.Add(processShortcutLabel);
         processoProdutoAcabadoCard.Controls.Add(processArrowLabel);
         processoProdutoAcabadoCard.Cursor = Cursors.Hand;
-        processoProdutoAcabadoCard.Location = new Point(540, 70);
+        processoProdutoAcabadoCard.Location = new Point(28, 336);
         processoProdutoAcabadoCard.Name = "processoProdutoAcabadoCard";
         processoProdutoAcabadoCard.ShadowBlur = 0;
         processoProdutoAcabadoCard.ShadowOffsetY = 0;
@@ -221,7 +371,7 @@ partial class ProcessoProducaoForm
         processShortcutLabel.Name = "processShortcutLabel";
         processShortcutLabel.Size = new Size(38, 28);
         processShortcutLabel.TabIndex = 4;
-        processShortcutLabel.Text = "F3";
+        processShortcutLabel.Text = "F5";
         processShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // processArrowLabel
@@ -295,7 +445,7 @@ partial class ProcessoProducaoForm
         pesagemTitleLabel.Name = "pesagemTitleLabel";
         pesagemTitleLabel.Size = new Size(202, 62);
         pesagemTitleLabel.TabIndex = 1;
-        pesagemTitleLabel.Text = "Consumo de\r\nMaterial";
+        pesagemTitleLabel.Text = "Consumo de\r\nMatéria-Prima";
         pesagemTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // pesagemDescriptionLabel
@@ -350,6 +500,118 @@ partial class ProcessoProducaoForm
         pesagemArrowLabel.Text = "→";
         pesagemArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
+        // processoConsumoQuimicosCard
+        //
+        processoConsumoQuimicosCard.BackColor = Color.Transparent;
+        processoConsumoQuimicosCard.BorderColor = Color.FromArgb(226, 232, 240);
+        processoConsumoQuimicosCard.Controls.Add(quimicosIconPanel);
+        processoConsumoQuimicosCard.Controls.Add(quimicosTitleLabel);
+        processoConsumoQuimicosCard.Controls.Add(quimicosDescriptionLabel);
+        processoConsumoQuimicosCard.Controls.Add(quimicosStatusLabel);
+        processoConsumoQuimicosCard.Controls.Add(quimicosShortcutLabel);
+        processoConsumoQuimicosCard.Controls.Add(quimicosArrowLabel);
+        processoConsumoQuimicosCard.Cursor = Cursors.Hand;
+        processoConsumoQuimicosCard.Location = new Point(540, 70);
+        processoConsumoQuimicosCard.Name = "processoConsumoQuimicosCard";
+        processoConsumoQuimicosCard.ShadowBlur = 0;
+        processoConsumoQuimicosCard.ShadowOffsetY = 0;
+        processoConsumoQuimicosCard.Size = new Size(240, 250);
+        processoConsumoQuimicosCard.TabIndex = 5;
+        //
+        // quimicosIconPanel
+        //
+        quimicosIconPanel.BackColor = Color.Transparent;
+        quimicosIconPanel.BorderRadius = 9;
+        quimicosIconPanel.Controls.Add(quimicosIconLabel);
+        quimicosIconPanel.Cursor = Cursors.Hand;
+        quimicosIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        quimicosIconPanel.Location = new Point(92, 20);
+        quimicosIconPanel.Name = "quimicosIconPanel";
+        quimicosIconPanel.ShadowBlur = 0;
+        quimicosIconPanel.ShadowOffsetY = 0;
+        quimicosIconPanel.Size = new Size(56, 56);
+        quimicosIconPanel.TabIndex = 0;
+        //
+        // quimicosIconLabel
+        //
+        quimicosIconLabel.BackColor = Color.Transparent;
+        quimicosIconLabel.Cursor = Cursors.Hand;
+        quimicosIconLabel.Dock = DockStyle.Fill;
+        quimicosIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        quimicosIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        quimicosIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
+        quimicosIconLabel.Location = new Point(0, 0);
+        quimicosIconLabel.Name = "quimicosIconLabel";
+        quimicosIconLabel.Size = new Size(56, 56);
+        quimicosIconLabel.TabIndex = 0;
+        quimicosIconLabel.Text = "";
+        quimicosIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // quimicosTitleLabel
+        //
+        quimicosTitleLabel.BackColor = Color.Transparent;
+        quimicosTitleLabel.Cursor = Cursors.Hand;
+        quimicosTitleLabel.Font = new Font("Segoe UI", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        quimicosTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        quimicosTitleLabel.Location = new Point(20, 92);
+        quimicosTitleLabel.Name = "quimicosTitleLabel";
+        quimicosTitleLabel.Size = new Size(202, 62);
+        quimicosTitleLabel.TabIndex = 1;
+        quimicosTitleLabel.Text = "Consumo de\r\nQuímicos";
+        quimicosTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // quimicosDescriptionLabel
+        //
+        quimicosDescriptionLabel.BackColor = Color.Transparent;
+        quimicosDescriptionLabel.Cursor = Cursors.Hand;
+        quimicosDescriptionLabel.Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        quimicosDescriptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        quimicosDescriptionLabel.Location = new Point(20, 156);
+        quimicosDescriptionLabel.Name = "quimicosDescriptionLabel";
+        quimicosDescriptionLabel.Size = new Size(175, 46);
+        quimicosDescriptionLabel.TabIndex = 2;
+        quimicosDescriptionLabel.Text = "Consumo de químicos\r\npor OP / SAP 261.";
+        quimicosDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // quimicosStatusLabel
+        //
+        quimicosStatusLabel.BackColor = Color.FromArgb(220, 252, 231);
+        quimicosStatusLabel.Cursor = Cursors.Hand;
+        quimicosStatusLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        quimicosStatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        quimicosStatusLabel.Location = new Point(20, 214);
+        quimicosStatusLabel.Name = "quimicosStatusLabel";
+        quimicosStatusLabel.Size = new Size(82, 28);
+        quimicosStatusLabel.TabIndex = 3;
+        quimicosStatusLabel.Text = "Disponível";
+        quimicosStatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // quimicosShortcutLabel
+        //
+        quimicosShortcutLabel.BackColor = Color.FromArgb(243, 244, 246);
+        quimicosShortcutLabel.Cursor = Cursors.Hand;
+        quimicosShortcutLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        quimicosShortcutLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        quimicosShortcutLabel.Location = new Point(110, 214);
+        quimicosShortcutLabel.Name = "quimicosShortcutLabel";
+        quimicosShortcutLabel.Size = new Size(38, 28);
+        quimicosShortcutLabel.TabIndex = 4;
+        quimicosShortcutLabel.Text = "F3";
+        quimicosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // quimicosArrowLabel
+        //
+        quimicosArrowLabel.BackColor = Color.Transparent;
+        quimicosArrowLabel.Cursor = Cursors.Hand;
+        quimicosArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        quimicosArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        quimicosArrowLabel.Location = new Point(190, 207);
+        quimicosArrowLabel.Name = "quimicosArrowLabel";
+        quimicosArrowLabel.Size = new Size(32, 36);
+        quimicosArrowLabel.TabIndex = 5;
+        quimicosArrowLabel.Text = "→";
+        quimicosArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
         // ordensAndamentoCard
         //
         ordensAndamentoCard.BackColor = Color.Transparent;
@@ -361,7 +623,7 @@ partial class ProcessoProducaoForm
         ordensAndamentoCard.Controls.Add(ordensShortcutLabel);
         ordensAndamentoCard.Controls.Add(ordensArrowLabel);
         ordensAndamentoCard.Cursor = Cursors.Hand;
-        ordensAndamentoCard.Location = new Point(796, 70);
+        ordensAndamentoCard.Location = new Point(284, 336);
         ordensAndamentoCard.Name = "ordensAndamentoCard";
         ordensAndamentoCard.ShadowBlur = 0;
         ordensAndamentoCard.ShadowOffsetY = 0;
@@ -446,7 +708,7 @@ partial class ProcessoProducaoForm
         ordensShortcutLabel.Name = "ordensShortcutLabel";
         ordensShortcutLabel.Size = new Size(38, 28);
         ordensShortcutLabel.TabIndex = 4;
-        ordensShortcutLabel.Text = "F4";
+        ordensShortcutLabel.Text = "F6";
         ordensShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // ordensArrowLabel
@@ -583,10 +845,14 @@ partial class ProcessoProducaoForm
         Name = "ProcessoProducaoForm";
         Size = new Size(900, 560);
         contentPanel.ResumeLayout(false);
+        processoSemiAcabadoCard.ResumeLayout(false);
+        semiAcabadoIconPanel.ResumeLayout(false);
         processoProdutoAcabadoCard.ResumeLayout(false);
         processIconPanel.ResumeLayout(false);
         processoConsumoMaterialCard.ResumeLayout(false);
         pesagemIconPanel.ResumeLayout(false);
+        processoConsumoQuimicosCard.ResumeLayout(false);
+        quimicosIconPanel.ResumeLayout(false);
         ordensAndamentoCard.ResumeLayout(false);
         ordensIconPanel.ResumeLayout(false);
         entradaProdutoCard.ResumeLayout(false);

@@ -1,4 +1,6 @@
-﻿namespace FugaPET_Dev.Tela;
+﻿using FugaPET_Dev.Modelo.Processo;
+
+namespace FugaPET_Dev.Tela;
 
 public partial class ProcessoProducaoForm : UserControl
 {
@@ -6,7 +8,9 @@ public partial class ProcessoProducaoForm : UserControl
 
     public event EventHandler? EntradaProdutoRequested;
     public event EventHandler? ProcessoProdutoAcabadoRequested;
+    public event EventHandler? ProcessoSemiAcabadoRequested;
     public event EventHandler? ProcessoConsumoMaterialRequested;
+    public event EventHandler? ProcessoConsumoQuimicosRequested;
     public event EventHandler? HistoricoConsumoMaterialRequested;
     public event EventHandler? DiagnosticoConsumoSap261Requested;
     public event EventHandler? OrdensAndamentoRequested;
@@ -74,10 +78,14 @@ public partial class ProcessoProducaoForm : UserControl
         entradaIconLabel.Image = new Bitmap(source);
         processIconLabel.Image = new Bitmap(source);
         pesagemIconLabel.Image = new Bitmap(source);
+        quimicosIconLabel.Image = new Bitmap(source);
+        semiAcabadoIconLabel.Image = new Bitmap(source);
         ordensIconLabel.Image = new Bitmap(source);
         entradaIconLabel.Text = string.Empty;
         processIconLabel.Text = string.Empty;
         pesagemIconLabel.Text = string.Empty;
+        quimicosIconLabel.Text = string.Empty;
+        semiAcabadoIconLabel.Text = string.Empty;
         ordensIconLabel.Text = string.Empty;
     }
 
@@ -119,6 +127,15 @@ public partial class ProcessoProducaoForm : UserControl
         entradaShortcutLabel.Click += OnEntradaProdutoClick;
         entradaArrowLabel.Click += OnEntradaProdutoClick;
 
+        processoSemiAcabadoCard.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoIconPanel.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoIconLabel.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoTitleLabel.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoDescriptionLabel.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoStatusLabel.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoShortcutLabel.Click += OnProcessoSemiAcabadoClick;
+        semiAcabadoArrowLabel.Click += OnProcessoSemiAcabadoClick;
+
         processoProdutoAcabadoCard.Click += OnProcessoProdutoAcabadoClick;
         processIconPanel.Click += OnProcessoProdutoAcabadoClick;
         processIconLabel.Click += OnProcessoProdutoAcabadoClick;
@@ -136,6 +153,15 @@ public partial class ProcessoProducaoForm : UserControl
         pesagemStatusLabel.Click += OnProcessoConsumoMaterialClick;
         pesagemShortcutLabel.Click += OnProcessoConsumoMaterialClick;
         pesagemArrowLabel.Click += OnProcessoConsumoMaterialClick;
+
+        processoConsumoQuimicosCard.Click += OnProcessoConsumoQuimicosClick;
+        quimicosIconPanel.Click += OnProcessoConsumoQuimicosClick;
+        quimicosIconLabel.Click += OnProcessoConsumoQuimicosClick;
+        quimicosTitleLabel.Click += OnProcessoConsumoQuimicosClick;
+        quimicosDescriptionLabel.Click += OnProcessoConsumoQuimicosClick;
+        quimicosStatusLabel.Click += OnProcessoConsumoQuimicosClick;
+        quimicosShortcutLabel.Click += OnProcessoConsumoQuimicosClick;
+        quimicosArrowLabel.Click += OnProcessoConsumoQuimicosClick;
 
         ordensAndamentoCard.Click += OnOrdensAndamentoClick;
         ordensIconPanel.Click += OnOrdensAndamentoClick;
@@ -157,9 +183,20 @@ public partial class ProcessoProducaoForm : UserControl
         ProcessoProdutoAcabadoRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnProcessoSemiAcabadoClick(object? sender, EventArgs e)
+    {
+        ProcessoSemiAcabadoRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OnProcessoConsumoMaterialClick(object? sender, EventArgs e)
     {
         ProcessoConsumoMaterialRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnProcessoConsumoQuimicosClick(object? sender, EventArgs e)
+    {
+        _ = ModoConsumoMaterial.Quimico;
+        ProcessoConsumoQuimicosRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnHistoricoConsumoMaterialClick(object? sender, EventArgs e)

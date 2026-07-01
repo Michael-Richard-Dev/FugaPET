@@ -375,7 +375,7 @@ public sealed class ProcessoConsumoMaterialFormTests
             componente, "1000909", 1m, 0m, PesagemConsumoMaterial.OrigemManual, 0m, 1);
 
         Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario);
-        Assert.Equal(ConsumoMaterialServico.MensagemExcedePendente, r.Mensagem);
+        Assert.Contains("ultrapassa o saldo previsto", r.Mensagem, StringComparison.Ordinal); // Tarefa 18.2: mensagem detalhada
     }
 
     [Fact]
@@ -387,7 +387,7 @@ public sealed class ProcessoConsumoMaterialFormTests
 
         Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario); // 45 + 10 = 55 > 50
         Assert.Null(r.Pesagem);
-        Assert.Equal(ConsumoMaterialServico.MensagemExcedePendente, r.Mensagem);
+        Assert.Contains("ultrapassa o saldo previsto", r.Mensagem, StringComparison.Ordinal); // Tarefa 18.2: mensagem detalhada
     }
 
     [Fact]
@@ -406,6 +406,45 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.True(primeira.Sucesso);
         Assert.True(segunda.Sucesso);                 // 12 + 8 = 20 == pendente: ok
         Assert.Equal(CenarioPesagemConsumo.ExcedePendente, terceira.Cenario); // ja no limite
+    }
+
+    [Fact]
+    public void PesagemLocal_18_2_LiquidoIgualSaldo_Permite()
+    {
+        // Ajuste 1 (Tarefa 18.2): comparacao pelo peso LIQUIDO; liquido == saldo previsto passa (limite).
+        ResultadoPesagemConsumo r = ServicoPesagem().RegistrarPesagemLocal(
+            Componente(pendente: 10m), "1000009", pesoBrutoKg: 12m, pesoTaraKg: 2m,
+            PesagemConsumoMaterial.OrigemBalanca, totalJaPesadoLocalKg: 0m, sequencia: 1);
+
+        Assert.True(r.Sucesso);              // liquido 10 == pendente 10
+        Assert.Equal(10m, r.Pesagem!.PesoLiquidoKg);
+    }
+
+    [Fact]
+    public void PesagemLocal_18_2_BrutoAcimaPrevistoMasLiquidoDentro_Permite()
+    {
+        // Ajuste 1: bruto (15) > previsto (10), porem apos a tara (6) o liquido (9) fica dentro do saldo.
+        ResultadoPesagemConsumo r = ServicoPesagem().RegistrarPesagemLocal(
+            Componente(pendente: 10m), "1000009", pesoBrutoKg: 15m, pesoTaraKg: 6m,
+            PesagemConsumoMaterial.OrigemBalanca, totalJaPesadoLocalKg: 0m, sequencia: 1);
+
+        Assert.True(r.Sucesso);              // liquido 9 <= pendente 10
+        Assert.Equal(9m, r.Pesagem!.PesoLiquidoKg);
+    }
+
+    [Fact]
+    public void PesagemLocal_18_2_LiquidoAcimaSaldo_BloqueiaComMensagemDetalhada()
+    {
+        // Ajuste 1: liquido (10.5) acima do saldo (5 restante) bloqueia com mensagem detalhada.
+        ResultadoPesagemConsumo r = ServicoPesagem().RegistrarPesagemLocal(
+            Componente(pendente: 10m), "1000009", pesoBrutoKg: 13m, pesoTaraKg: 2.5m,
+            PesagemConsumoMaterial.OrigemManual, totalJaPesadoLocalKg: 5m, sequencia: 2);
+
+        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario); // 5 + 10.5 = 15.5 > 10
+        Assert.Null(r.Pesagem);
+        Assert.Contains("ultrapassa o saldo previsto", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("Peso previsto:", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("Já utilizado:", r.Mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -751,12 +790,14 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("_salvandoConsumo", form, StringComparison.Ordinal);
         Assert.Contains("_consumoSalvoNaSessao", form, StringComparison.Ordinal);
         Assert.Contains("Deseja salvar localmente este consumo como pendente de envio ao SAP?", form, StringComparison.Ordinal);
-        // salvar local nao envia SAP nem cria documento/movimento
+        // Tarefa 18.2 (Ajuste 3): ConfirmarConsumo salva local primeiro e delega o envio ao orquestrador
+        // por rota; a propria ConfirmarConsumoAsync NAO cria documento/movimento de material (101).
         int inicio = form.IndexOf("private async Task ConfirmarConsumoAsync()", StringComparison.Ordinal);
         int fim = form.IndexOf("private static string GetFriendlyErrorMessage", StringComparison.Ordinal);
         string metodo = form[inicio..fim];
+        Assert.Contains("_controller.SalvarConsumoLocalAsync(", metodo, StringComparison.Ordinal);
+        Assert.Contains("OrquestrarEnvioAposConfirmarAsync(", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("MaterialDocument", metodo, StringComparison.Ordinal);
-        Assert.DoesNotContain("261", metodo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1163,8 +1204,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
         string metodo = ExtrairMetodo(form, "private void AtualizarLiberacaoInicioLeitura");
 
-        // Botao habilita com OP valida + componente pesavel (NAO exige selecao previa no grid).
-        Assert.Contains("PossuiOrdemComComponentePesavel()", metodo, StringComparison.Ordinal);
+        // Tarefa 18.2 (padrao Entrada): habilita com OP valida carregada (NAO exige selecao previa no grid).
+        Assert.Contains("PodeIniciarLeituraConsumo()", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("PossuiOrdemEComponenteValido()", metodo, StringComparison.Ordinal);
 
         // Ao iniciar sem selecao, auto-seleciona (de forma segura) o primeiro componente pesavel.
@@ -1421,12 +1462,12 @@ public sealed class ProcessoConsumoMaterialFormTests
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
 
-        Assert.Contains("Preview Confirmação", form, StringComparison.Ordinal);
+        // Tarefa 18.2 (Ajuste 2): botao tecnico de Preview Confirmacao permanece no codigo
+        // (uso interno/diagnostico/testes), porem OCULTO ao operador.
         Assert.Contains("CriarBotaoPreviewConfirmacao();", form, StringComparison.Ordinal);
-        // Tarefa 16: habilita p/ componente Backflush selecionado OU lancamento salvo de rota Backflush.
-        Assert.Contains("_previewConfirmacaoButton.Enabled = _componenteConsumoSelecionado?.BackflushSap == true", form, StringComparison.Ordinal);
-        Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao", form, StringComparison.Ordinal);
-        // Preview puro: nada de envio/POST/CSRF/PATCH no fluxo de confirmacao.
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
+        Assert.Contains("_previewConfirmacaoButton.Visible = false;", atualizar, StringComparison.Ordinal);
+        // Metodo de preview puro permanece disponivel internamente; nada de PATCH.
         Assert.Contains("GerarPreviewConfirmacaoProducao(", form, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpMethod.Patch", form, StringComparison.Ordinal);
     }
@@ -1526,7 +1567,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("productionOrderComboBox.Validated += ProductionOrderComboBox_Validated;", form, StringComparison.Ordinal);
         string validated = ExtrairMetodo(form, "private async void ProductionOrderComboBox_Validated");
         Assert.Contains("DeveIgnorarValidacaoOrdem()", validated, StringComparison.Ordinal);
-        Assert.Contains("ConsultarOrdemProducaoAsync()", validated, StringComparison.Ordinal);
+        // Tarefa 18.3: validacao passiva NAO exibe aviso de OP obrigatoria.
+        Assert.Contains("ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: false)", validated, StringComparison.Ordinal);
         // O guard de supressao agora vive no helper central.
         string guard = ExtrairMetodo(form, "private bool DeveIgnorarValidacaoOrdem");
         Assert.Contains("_suprimirEventoOrdem", guard, StringComparison.Ordinal);
@@ -1541,13 +1583,13 @@ public sealed class ProcessoConsumoMaterialFormTests
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
 
-        // Enter consulta.
+        // Enter consulta (Tarefa 18.3: mantem o aviso de OP obrigatoria).
         string keyDown = ExtrairMetodo(form, "private async void ProductionOrderComboBox_KeyDown");
         Assert.Contains("Keys.Enter", keyDown, StringComparison.Ordinal);
-        Assert.Contains("ConsultarOrdemProducaoAsync()", keyDown, StringComparison.Ordinal);
-        // Selecao na lista consulta.
+        Assert.Contains("ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true)", keyDown, StringComparison.Ordinal);
+        // Selecao na lista consulta (selecao real nunca esta vazia -> mantem o aviso).
         string selChanged = ExtrairMetodo(form, "private async void ProductionOrderComboBox_SelectedIndexChanged");
-        Assert.Contains("ConsultarOrdemProducaoAsync()", selChanged, StringComparison.Ordinal);
+        Assert.Contains("ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true)", selChanged, StringComparison.Ordinal);
         // Parte 3: OP consultada com sucesso entra na lista recente, sem bloquear digitacao manual.
         Assert.Contains("RegistrarOrdemRecente(resultado.NumeroOrdem)", form, StringComparison.Ordinal);
         string recente = ExtrairMetodo(form, "private void RegistrarOrdemRecente");
@@ -1889,14 +1931,16 @@ public sealed class ProcessoConsumoMaterialFormTests
     }
 
     [Fact]
-    public void Tara_SoAbreDepoisDeIniciarLeitura()
+    public void Clique_NoGrid_ApenasSeleciona_NaoAbreTara()
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
-        string cellClick = ExtrairMetodo(form, "private async void ProductionDataGridView_CellClick");
+        string cellClick = ExtrairMetodo(form, "private void ProductionDataGridView_CellClick");
 
-        Assert.Contains("_isProductionStarted && !_isReadingWeight && _componenteConsumoSelecionado is not null", cellClick, StringComparison.Ordinal);
-        Assert.Contains("SelecionarTaraParaComponenteAsync(_componenteConsumoSelecionado)", cellClick, StringComparison.Ordinal);
-        Assert.Contains("Inicie a leitura para selecionar tara e pesar.", cellClick, StringComparison.Ordinal);
+        // Ajuste 1 (Tarefa 18): clicar no grid apenas seleciona; NAO abre a tela de tara.
+        Assert.Contains("AtualizarComponenteSelecionadoDoGrid();", cellClick, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelecionarTaraParaComponenteAsync", cellClick, StringComparison.Ordinal);
+        Assert.Contains("Use LER PESO ou DIGITAR PESO para registrar a pesagem.", cellClick, StringComparison.Ordinal);
+        Assert.Contains("Inicie a leitura para pesar.", cellClick, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2008,10 +2052,13 @@ public sealed class ProcessoConsumoMaterialFormTests
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
 
-        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
-        Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.Direto261", atualizar, StringComparison.Ordinal);
+        // Tarefa 18.2 (Ajuste 3): a orquestracao por rota migrou para OrquestrarEnvioAposConfirmarAsync.
+        // Somente a rota Direto261 reaproveita o envio 261; Backflush/Misto/Bloqueado NAO enviam.
+        string orquestrar = ExtrairMetodo(form, "private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync");
+        Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.Direto261", orquestrar, StringComparison.Ordinal);
+        Assert.Contains("ExecutarEnvioSap261AposConfirmarAsync(", orquestrar, StringComparison.Ordinal);
 
-        // Tooltip por rota.
+        // Tooltip por rota (metodo tecnico mantido internamente).
         string tooltip = ExtrairMetodo(form, "private string ObterTooltipEnvio261");
         Assert.Contains("Backflush não usa 261 direto. Use Confirmação de Produção.", tooltip, StringComparison.Ordinal);
 
@@ -2020,9 +2067,6 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao", enviar, StringComparison.Ordinal);
         Assert.Contains("não deve ser enviado por movimento 261 direto", enviar, StringComparison.Ordinal);
         Assert.Contains("ClassificarRotaEnvio(consumidos)", form, StringComparison.Ordinal);
-        Assert.Contains("Aguardando envio por Confirmação de Produção.", form, StringComparison.Ordinal);
-        // Preview a partir do lancamento salvo.
-        Assert.Contains("GerarPreviewConfirmacaoProducaoRealAsync(", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2035,9 +2079,9 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("Text = \"Enviar Confirmação\"", form, StringComparison.Ordinal);
         Assert.Contains("_enviarConfirmacaoButton.Click += async (_, _) => await EnviarConfirmacaoProducaoAsync();", form, StringComparison.Ordinal);
 
+        // Tarefa 18.2 (Ajuste 2): botao dedicado permanece no codigo (uso interno/testes), porem OCULTO.
         string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
-        Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao", atualizar, StringComparison.Ordinal);
-        Assert.Contains("_enviandoConfirmacao", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_enviarConfirmacaoButton.Visible = false;", atualizar, StringComparison.Ordinal);
 
         string enviarConfirmacao = ExtrairMetodo(form, "private async Task EnviarConfirmacaoProducaoAsync");
         Assert.Contains("_controller.EnviarConfirmacaoProducaoAsync", enviarConfirmacao, StringComparison.Ordinal);
@@ -2072,6 +2116,51 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("_lancamentoComFalhaSap = true;", form, StringComparison.Ordinal);
     }
 
+    // ---------- Tarefa 18: tara só ao pesar, reindex de tara, botões LER/DIGITAR PESO ----------
+
+    [Fact]
+    public void AplicarLote_ReindexaTaraSelecionada()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string metodo = ExtrairMetodo(form, "private void AplicarLoteComponente");
+
+        Assert.Contains("_tarasPorComponente.TryGetValue(chaveAntiga", metodo, StringComparison.Ordinal);
+        Assert.Contains("_tarasPorComponente.Remove(chaveAntiga);", metodo, StringComparison.Ordinal);
+        Assert.Contains("_tarasPorComponente[chaveNova] = taraSelecionada;", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Pesagem_F9F12_AbremTaraSomenteAoPesar_EUmaVez()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        // A tara e escolhida nos fluxos de pesagem (F12/LER PESO e F9/DIGITAR PESO), nao no clique do grid.
+        string f12 = ExtrairMetodo(form, "private async void ReadWeightLegend_Click");
+        Assert.Contains("SelecionarTaraParaComponenteAsync(componenteF12!)", f12, StringComparison.Ordinal);
+        string f9 = ExtrairMetodo(form, "private async void LeituraManual_Click");
+        Assert.Contains("SelecionarTaraParaComponenteAsync(componenteF9!)", f9, StringComparison.Ordinal);
+
+        // SelecionarTara nao reabre quando ja existe tara (mesmo componente/lote).
+        string sel = ExtrairMetodo(form, "private async Task SelecionarTaraParaComponenteAsync");
+        Assert.Contains("if (ExisteTaraSelecionada(componente))", sel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BotoesPesagem_LerEDigitarPeso_LigadosAosHandlersF12F9()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.Designer.cs");
+
+        // Botoes existem no padrao da Entrada (LER PESO/F12, DIGITAR PESO/F9).
+        Assert.Contains("lerEtiquetaButton.PrimaryText = \"LER PESO\";", designer, StringComparison.Ordinal);
+        Assert.Contains("lerEtiquetaButton.KeyHint = \"F12\";", designer, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.PrimaryText = \"DIGITAR PESO\";", designer, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.KeyHint = \"F9\";", designer, StringComparison.Ordinal);
+        // Ligados aos mesmos handlers do F12/F9.
+        Assert.Contains("lerEtiquetaButton.Click += ReadWeightLegend_Click;", form, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.Click += LeituraManual_Click;", form, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Consumo_NaoDeveConterPostNemPatchNovo()
     {
@@ -2084,6 +2173,154 @@ public sealed class ProcessoConsumoMaterialFormTests
             Assert.DoesNotContain("HttpMethod.Post", fonte, StringComparison.Ordinal);
             Assert.DoesNotContain("HttpMethod.Patch", fonte, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Tela_18_2_TodosBotoesTecnicosOcultosAoOperador()
+    {
+        // Ajuste 2 (Tarefa 18.2): os 4 botoes tecnicos ficam sempre ocultos ao operador,
+        // porem os metodos permanecem no codigo para uso interno/diagnostico/testes.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
+
+        Assert.Contains("_previewSap261Button.Visible = false;", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_enviarSap261Button.Visible = false;", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_previewConfirmacaoButton.Visible = false;", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_enviarConfirmacaoButton.Visible = false;", atualizar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_2_ConfirmarConsumoEhFluxoUnicoQueOrquestraEnvioPorRota()
+    {
+        // Ajuste 3: Confirmar Consumo e o unico botao de fim de processo; apos salvar local,
+        // orquestra o envio por rota (Direto261 envia; Backflush/Misto/Bloqueado nao enviam).
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string orquestrar = ExtrairMetodo(form, "private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync");
+
+        Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.Direto261", orquestrar, StringComparison.Ordinal);
+        Assert.Contains("ExecutarEnvioSap261AposConfirmarAsync(", orquestrar, StringComparison.Ordinal);
+        Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao", orquestrar, StringComparison.Ordinal);
+        // Backflush respeita a Tarefa 17.11 (nao POSTa) e exibe mensagem funcional ao operador.
+        Assert.Contains("Backflush", orquestrar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_2_ComportamentoVisualIgualEntrada()
+    {
+        // Ajuste 4/5: INICIAR so libera com OP valida carregada; LER/DIGITAR PESO so aparecem em leitura;
+        // CONFIRMAR CONSUMO oculto ao abrir e durante a leitura, visivel apos parar com pesagem.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        Assert.Contains("private bool PodeIniciarLeituraConsumo()", form, StringComparison.Ordinal);
+        Assert.Contains("private bool OrdemConsumoSelecionadaValida()", form, StringComparison.Ordinal);
+
+        string update = ExtrairMetodo(form, "private void UpdateProductionState");
+        Assert.Contains("lerEtiquetaButton.Visible = started;", update, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.Visible = started;", update, StringComparison.Ordinal);
+
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
+        Assert.Contains("_confirmarConsumoButton.Visible = !_isProductionStarted", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_salvandoConsumo", atualizar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_3_ValidatedOpVazia_NaoExibeMessageBoxNemConsultaController()
+    {
+        // Testes 1 e 2: validacao passiva (perda de foco) chama a consulta SEM aviso,
+        // e o caminho de OP vazia retorna ANTES de chamar o controller.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        string validated = ExtrairMetodo(form, "private async void ProductionOrderComboBox_Validated");
+        Assert.Contains("exibirAvisoOrdemObrigatoria: false", validated, StringComparison.Ordinal);
+
+        string consultar = ExtrairMetodo(form, "private async Task ConsultarOrdemProducaoAsync(bool exibirAvisoOrdemObrigatoria");
+        // A guarda de OP vazia retorna antes do controller (a consulta SAP nao e chamada com OP vazia).
+        int guardaVazia = consultar.IndexOf("string.IsNullOrWhiteSpace(numeroOrdem)", StringComparison.Ordinal);
+        int chamadaController = consultar.IndexOf("_controller.ConsultarOrdemProducaoAsync", StringComparison.Ordinal);
+        Assert.True(guardaVazia >= 0 && chamadaController > guardaVazia);
+        Assert.Contains("if (exibirAvisoOrdemObrigatoria && !_fechandoTela && !Disposing && !IsDisposed)", consultar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_3_EnterEClickBuscaOpVazia_MantemAvisoObrigatorio()
+    {
+        // Teste 3: Enter (e clique de busca) com OP vazia mantem o aviso de OP obrigatoria.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        string keyDown = ExtrairMetodo(form, "private async void ProductionOrderComboBox_KeyDown");
+        Assert.Contains("exibirAvisoOrdemObrigatoria: true", keyDown, StringComparison.Ordinal);
+
+        string clickBusca = ExtrairMetodo(form, "private async void ConsultarOrdemProducao_Click");
+        Assert.Contains("exibirAvisoOrdemObrigatoria: true", clickBusca, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_3_FecharEVoltar_NaoValidamOrdem()
+    {
+        // Testes 4/5/10: fechar (X) e voltar (menu) usam o fechamento sem validacao de OP.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        // X fechar -> FecharTelaSemValidarOrdem.
+        Assert.Contains("closeWindowLabel.Click += (_, _) => FecharTelaSemValidarOrdem();", form, StringComparison.Ordinal);
+
+        string fechar = ExtrairMetodo(form, "private void FecharTelaSemValidarOrdem");
+        Assert.Contains("_fechandoTela = true;", fechar, StringComparison.Ordinal);
+        Assert.Contains("_acaoOperacionalEmAndamento = true;", fechar, StringComparison.Ordinal);
+        Assert.Contains("AutoValidate = AutoValidate.Disable;", fechar, StringComparison.Ordinal);
+        Assert.Contains("Close();", fechar, StringComparison.Ordinal);
+
+        // Voltar (menu) tambem marca o fechamento antes de navegar/fechar.
+        string voltar = ExtrairMetodo(form, "private void ReturnToLeituraProducao");
+        Assert.Contains("_fechandoTela = true;", voltar, StringComparison.Ordinal);
+        Assert.Contains("NavigateToProcessoProducao", voltar, StringComparison.Ordinal);
+
+        // Teste 10: DeveIgnorarValidacaoOrdem retorna true durante o fechamento.
+        string ignorar = ExtrairMetodo(form, "private bool DeveIgnorarValidacaoOrdem");
+        Assert.Contains("_fechandoTela", ignorar, StringComparison.Ordinal);
+        Assert.Contains("IsDisposed", ignorar, StringComparison.Ordinal);
+        Assert.Contains("Disposing", ignorar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_3_FormClosing_BloqueiaSoComLeituraAtiva()
+    {
+        // Testes 6/8: leitura inativa fecha normal (marca _fechandoTela, sem Cancel);
+        // leitura ativa cancela e restaura flags.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string closing = ExtrairMetodo(form, "private void ProcessoProdutoAcabadoForm_FormClosing");
+
+        Assert.Contains("if (!_isProductionStarted)", closing, StringComparison.Ordinal);
+        Assert.Contains("_fechandoTela = true;", closing, StringComparison.Ordinal);
+        Assert.Contains("e.Cancel = true;", closing, StringComparison.Ordinal);
+        Assert.Contains("AutoValidate = AutoValidate.EnableAllowFocusChange;", closing, StringComparison.Ordinal);
+        Assert.Contains("Finalize a leitura antes de sair da tela.", closing, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_3_VoltarComLeituraAtiva_ContinuaBloqueado()
+    {
+        // Teste 9: voltar com leitura ativa nao navega e mantem o status de bloqueio.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string voltar = ExtrairMetodo(form, "private void ReturnToLeituraProducao");
+
+        int guarda = voltar.IndexOf("if (_isProductionStarted)", StringComparison.Ordinal);
+        int navegar = voltar.IndexOf("NavigateToProcessoProducao", StringComparison.Ordinal);
+        Assert.True(guarda >= 0 && navegar > guarda); // a guarda de leitura ativa vem ANTES da navegacao
+        Assert.Contains("Finalize a leitura antes de sair da tela.", voltar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tela_18_3_ControlesNavegacao_NaoCausamValidacao()
+    {
+        // Teste 11: controles de navegacao/titulo entram em ConfigurarCausesValidacaoOperacional.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string config = ExtrairMetodo(form, "private void ConfigurarCausesValidacaoOperacional");
+
+        Assert.Contains("closeWindowLabel", config, StringComparison.Ordinal);
+        Assert.Contains("menuHeaderLabel", config, StringComparison.Ordinal);
+        Assert.Contains("minimizeWindowLabel", config, StringComparison.Ordinal);
+        Assert.Contains("maximizeWindowLabel", config, StringComparison.Ordinal);
+        Assert.Contains("controle.CausesValidation = false;", config, StringComparison.Ordinal);
     }
 
     private static string LerArquivoProjeto(params string[] partes)

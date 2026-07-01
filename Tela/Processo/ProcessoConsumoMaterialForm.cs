@@ -33,6 +33,9 @@ public partial class ProcessoConsumoMaterialForm : Form
     private static readonly Color ActionDisabledColor = Color.FromArgb(82, 87, 96);
     private static readonly Color ReadingStatusInactiveColor = Color.FromArgb(220, 53, 69);
     private static readonly Color ReadingStatusActiveColor = Color.FromArgb(34, 166, 82);
+    private const string MensagemConfirmacaoSalvarConsumoPadrao = "Deseja salvar localmente este consumo como pendente de envio ao SAP?";
+    private const string PermissaoConsumoMateriaPrima = "PROCESSO_CONSUMO_MATERIA_PRIMA";
+    private const string PermissaoConsumoQuimicos = "PROCESSO_CONSUMO_QUIMICOS";
     private readonly BalancaLeituraServico _balancaLeituraServico = new();
     private bool _isStartActionHovering;
     private bool _isReadWeightHovering;
@@ -45,6 +48,8 @@ public partial class ProcessoConsumoMaterialForm : Form
     private long? _idBalancaSelecionada;
     private long? _idTaraSelecionada;
     private readonly ProcessoConsumoMaterialController _controller = new();
+    private readonly ModoConsumoMaterial _modoConsumo;
+    private readonly ConfiguracaoTelaConsumoMaterial _configuracaoConsumo;
 
     // Estado da OP de consumo carregada e do componente selecionado no grid de componentes.
     private OrdemProducaoConsumo? _ordemConsumoAtual;
@@ -90,6 +95,9 @@ public partial class ProcessoConsumoMaterialForm : Form
     // Tarefa 15.1: enquanto true, o Validated do campo OP NAO reconsulta (acao operacional em andamento).
     private bool _acaoOperacionalEmAndamento;
 
+    // Tarefa 18.3: enquanto true, fechar/voltar a tela NAO dispara validacao/consulta de OP (evita alerta indevido).
+    private bool _fechandoTela;
+
     // Tarefa 16: rota do consumo SALVO (261 direto / Backflush-confirmacao / Misto / Bloqueado) — so habilita botoes.
     private RotaEnvioConsumo _rotaEnvioSalva = RotaEnvioConsumo.Bloqueado;
 
@@ -100,8 +108,16 @@ public partial class ProcessoConsumoMaterialForm : Form
     private const string MensagemPesoConsumoInvalido = "Informe o peso em KG. Exemplo: 0,400 ou 1,5.";
 
     public ProcessoConsumoMaterialForm()
+        : this(ModoConsumoMaterial.MateriaPrima)
     {
+    }
+
+    public ProcessoConsumoMaterialForm(ModoConsumoMaterial modo)
+    {
+        _modoConsumo = modo;
+        _configuracaoConsumo = ConfiguracaoTelaConsumoMaterialFactory.Criar(modo);
         InitializeComponent();
+        AplicarConfiguracaoModoConsumo();
         CriarBotaoConfirmarConsumo();
         CriarBotaoPreviewSap261();
         CriarBotaoEnviarSap261();
@@ -137,6 +153,18 @@ public partial class ProcessoConsumoMaterialForm : Form
         FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
     }
 
+    private void AplicarConfiguracaoModoConsumo()
+    {
+        Text = _configuracaoConsumo.TituloTela;
+        headerTitleLabel.Text = _configuracaoConsumo.TituloTela;
+        headerSubtitleLabel.Text = _configuracaoConsumo.SubtituloTela;
+    }
+
+    private string TituloMensagemConsumo => _configuracaoConsumo.TituloTela;
+
+    private string NomeOperacionalConsumo => _configuracaoConsumo.NomeModulo;
+
+
     /// <summary>
     /// Correcao 1 (Tarefa 15.1): controles OPERACIONAIS nao causam validacao do campo OP. Assim, clicar
     /// em Confirmar/Enviar/Preview/Iniciar Leitura/F9/F12/acoes laterais NAO dispara o Validated do ComboBox
@@ -150,7 +178,10 @@ public partial class ProcessoConsumoMaterialForm : Form
             iniciarLeituraButton, leituraManualButton, lerEtiquetaButton,
             startActionPanel, startActionIconLabel, startActionTextLabel,
             readWeightLegendPanel, readWeightLegendIconLabel, readWeightLegendTextLabel,
-            deleteLastLegendPanel, deleteByCodeLegendPanel
+            deleteLastLegendPanel, deleteByCodeLegendPanel,
+            // Tarefa 18.3: controles de navegacao/titulo NAO devem forcar o Validated do ComboBox de OP.
+            closeWindowLabel, minimizeWindowLabel, maximizeWindowLabel, menuHeaderLabel,
+            customTitleBarPanel, companyLogoPictureBox, headerTitleLabel, headerSubtitleLabel
         };
 
         foreach (Control? controle in controles)
@@ -275,7 +306,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
         maximizeWindowLabel.Click += (_, _) => ToggleWindowState();
-        closeWindowLabel.Click += (_, _) => Close();
+        closeWindowLabel.Click += (_, _) => FecharTelaSemValidarOrdem();
 
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
@@ -290,9 +321,15 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        if (Owner is PainelInicialForm painelInicialForm)
+        // Tarefa 18.3: marca o fechamento para nao disparar a validacao passiva de OP ao sair.
+        _fechandoTela = true;
+        _acaoOperacionalEmAndamento = true;
+        AutoValidate = AutoValidate.Disable;
+
+        // Padrao da Entrada (evita quebrar o menu): com Owner vivo, apenas fecha — o painel ja esta atras.
+        // NAO reativar a navegacao do owner aqui: re-navegar o painel enquanto a tela fecha quebra o menu.
+        if (Owner is PainelInicialForm)
         {
-            painelInicialForm.NavigateToProcessoProducao();
             Close();
             return;
         }
@@ -300,6 +337,19 @@ public partial class ProcessoConsumoMaterialForm : Form
         PainelInicialForm painel = new();
         painel.NavigateToProcessoProducao();
         painel.Show();
+        Close();
+    }
+
+    /// <summary>
+    /// Tarefa 18.3: fecha a tela sem disparar a validacao passiva do campo de OP. Usado por fechar (X)
+    /// e por voltar (menu), evitando o alerta indevido de "informe uma ordem de producao" ao sair sem OP.
+    /// </summary>
+    private void FecharTelaSemValidarOrdem()
+    {
+        _fechandoTela = true;
+        _acaoOperacionalEmAndamento = true;
+        AutoValidate = AutoValidate.Disable;
+
         Close();
     }
 
@@ -333,12 +383,19 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private void ProcessoProdutoAcabadoForm_FormClosing(object? sender, FormClosingEventArgs e)
     {
+        // Tarefa 18.3: leitura inativa -> fecha normalmente, marcando fechamento (sem validar OP).
         if (!_isProductionStarted)
         {
+            _fechandoTela = true;
             return;
         }
 
+        // Leitura ativa: bloqueia o fechamento e restaura as flags (a tela permanece aberta).
         e.Cancel = true;
+        _fechandoTela = false;
+        _acaoOperacionalEmAndamento = false;
+        AutoValidate = AutoValidate.EnableAllowFocusChange;
+
         statusLabel.Text = "Finalize a leitura antes de sair da tela.";
     }
 
@@ -568,7 +625,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private async void ConsultarOrdemProducao_Click(object? sender, EventArgs e)
     {
-        await ConsultarOrdemProducaoAsync();
+        await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true);
     }
 
     /// <summary>
@@ -609,7 +666,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
 
         e.SuppressKeyPress = true;
-        await ConsultarOrdemProducaoAsync();
+        await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true);
     }
 
     /// <summary>
@@ -657,7 +714,8 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        await ConsultarOrdemProducaoAsync();
+        // Selecao real na lista nunca esta vazia -> mantem o aviso de OP obrigatoria.
+        await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true);
     }
 
     /// <summary>Padrao da Entrada (PedidoComboBox_Validated): ao sair do campo (foco), consulta a OP.</summary>
@@ -666,7 +724,10 @@ public partial class ProcessoConsumoMaterialForm : Form
     /// leitura iniciada ou pesagens locais nao salvas). Troca de OP com pesagens passa pelo TextUpdate.
     /// </summary>
     private bool DeveIgnorarValidacaoOrdem()
-        => _suprimirEventoOrdem
+        => _fechandoTela
+           || IsDisposed
+           || Disposing
+           || _suprimirEventoOrdem
            || _consultandoOrdem
            || _salvandoConsumo
            || _enviandoSap
@@ -681,7 +742,8 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        await ConsultarOrdemProducaoAsync();
+        // Validacao passiva (perda de foco): OP vazia NAO deve exibir aviso — o usuario pode estar so saindo da tela.
+        await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: false);
     }
 
     private void DefinirTextoCampoOrdem(string texto)
@@ -717,7 +779,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     private static string NormalizarNumeroOrdem(string? valor)
         => (valor ?? string.Empty).Trim();
 
-    private async Task ConsultarOrdemProducaoAsync()
+    private async Task ConsultarOrdemProducaoAsync(bool exibirAvisoOrdemObrigatoria = true)
     {
         // Correcao 1 (Tarefa 15): nao reentrar (ex.: Validated disparando durante uma consulta em curso).
         if (_consultandoOrdem)
@@ -726,6 +788,24 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
 
         string numeroOrdem = NormalizarNumeroOrdem(productionOrderComboBox.Text);
+
+        // Tarefa 18.3: OP vazia — consulta explicita avisa; validacao passiva/fechamento NAO exibe MessageBox.
+        if (string.IsNullOrWhiteSpace(numeroOrdem))
+        {
+            LimparDadosOrdem(limparNumeroOrdem: false);
+            statusLabel.Text = "Informe uma ordem de produção para consultar.";
+
+            if (exibirAvisoOrdemObrigatoria && !_fechandoTela && !Disposing && !IsDisposed)
+            {
+                MessageBox.Show(
+                    "Informe uma ordem de produção para consultar.",
+                    "Ordem de Produção",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
+            return;
+        }
 
         // Mesma OP ja carregada: NAO reconsulta nem limpa pesagens (protege _pesagensPorComponente).
         if (_ordemConsumoAtual is not null
@@ -796,12 +876,14 @@ public partial class ProcessoConsumoMaterialForm : Form
             ? $"{ordem.QuantidadePrevista:0.###} {ordem.Unidade}".Trim()
             : string.Empty;
 
+        IReadOnlyList<ComponenteConsumoMaterial> componentesModo = FiltrarComponentesPorModo(ordem.Componentes);
+
         // Grid principal visivel: lista os componentes da OP. Guarda contra eventos de selecao durante
         // o preenchimento para nao habilitar leitura antes de clique do usuario.
         _atualizandoComponentes = true;
         materialDataGridView.Rows.Clear();
         productionDataGridView.Rows.Clear();
-        foreach (ComponenteConsumoMaterial componente in ordem.Componentes)
+        foreach (ComponenteConsumoMaterial componente in componentesModo)
         {
             string unidade = string.IsNullOrWhiteSpace(componente.UnidadeMedida) ? "KG" : componente.UnidadeMedida;
             string previsto = $"{componente.QuantidadePendente:0.###} {unidade}".Trim();
@@ -837,14 +919,60 @@ public partial class ProcessoConsumoMaterialForm : Form
         materialDataGridView.CurrentCell = null;
         _atualizandoComponentes = false;
 
-        if (ordem.Componentes.Count == 0)
+        if (componentesModo.Count == 0)
         {
-            statusLabel.Text = "A ordem de produção não possui componentes para consumo.";
+            statusLabel.Text = _modoConsumo == ModoConsumoMaterial.Quimico
+                ? "Nenhum componente químico liberado para consumo nesta ordem."
+                : "Nenhum componente de matéria-prima liberado para consumo nesta ordem.";
+
+            if (ordem.Componentes.Count == 0)
+            {
+                statusLabel.Text = "A ordem de produção não possui componentes para consumo.";
+            }
         }
 
         // OP carregada: inicio de leitura permanece BLOQUEADO ate selecionar um componente pesavel.
         AtualizarLiberacaoInicioLeitura();
         AtualizarApontamentoVisual(null);
+    }
+
+    private IReadOnlyList<ComponenteConsumoMaterial> FiltrarComponentesPorModo(
+        IReadOnlyList<ComponenteConsumoMaterial> componentes)
+    {
+        if (_modoConsumo == ModoConsumoMaterial.MateriaPrima)
+        {
+            return componentes
+                .Where(ComponenteEhMateriaPrima)
+                .ToList();
+        }
+
+        List<ComponenteConsumoMaterial> quimicos = componentes
+            .Where(ComponenteEhQuimico)
+            .ToList();
+
+        if (quimicos.Count > 0)
+        {
+            return quimicos;
+        }
+
+        // TODO SAP/Negócio:
+        // Confirmar campo oficial para identificação de químicos. O modelo de componente da OP ainda não
+        // expõe MaterialGroup; por isso o modo Químicos mantém os componentes visíveis temporariamente.
+        System.Diagnostics.Trace.TraceInformation(
+            "[Consumo][Modo] Filtro de químicos sem campo SAP confirmado; mantendo componentes da OP para teste estrutural.");
+        return componentes.ToList();
+    }
+
+    private static bool ComponenteEhMateriaPrima(ComponenteConsumoMaterial componente)
+        => !ComponenteEhQuimico(componente);
+
+    private static bool ComponenteEhQuimico(ComponenteConsumoMaterial componente)
+    {
+        _ = componente;
+        // TODO SAP/Negócio:
+        // Possíveis candidatos quando disponíveis no modelo: MaterialGroup = QUIMICO/LQ/L003, depósito,
+        // tipo de material ou grupo configurado localmente. Não inventar regra operacional sem confirmação.
+        return false;
     }
 
     // Descricao do produto SOMENTE (sem reserva/deposito/lote/motivo concatenados — cada um tem coluna).
@@ -1071,18 +1199,38 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Habilita assim que houver OP valida com componente pesavel (nao exige selecao previa de linha).
-        bool habilitar = PossuiOrdemComComponentePesavel()
-            && PossuiPermissaoLeituraProducao(AutorizacaoServico.AcaoExecutar);
+        // Tarefa 18.2 (padrao Entrada): habilita INICIAR com OP valida carregada (sem exigir clique em linha).
+        bool habilitar = PodeIniciarLeituraConsumo();
 
         startActionPanel.Enabled = habilitar;
+        startActionPanel.BackColor = habilitar ? ActionEnabledColor : ActionDisabledColor;
+        startActionTextLabel.ForeColor = habilitar ? EnabledLegendTextColor : DisabledLegendTextColor;
         startActionIconLabel.Enabled = habilitar;
         startActionTextLabel.Enabled = habilitar;
         startActionPanel.Cursor = habilitar ? Cursors.Hand : Cursors.Default;
         startActionIconLabel.Cursor = startActionPanel.Cursor;
         startActionTextLabel.Cursor = startActionPanel.Cursor;
+        iniciarLeituraButton.BaseBackColor = habilitar ? ReadingStatusActiveColor : ActionDisabledColor;
         iniciarLeituraButton.Enabled = habilitar;
         iniciarLeituraButton.Cursor = habilitar ? Cursors.Hand : Cursors.Default;
+        iniciarLeituraButton.Invalidate();
+    }
+
+    /// <summary>Tarefa 18.2 (padrao Entrada): pode iniciar leitura = permissao EXECUTAR + OP valida carregada.</summary>
+    private bool PodeIniciarLeituraConsumo()
+        => PossuiPermissaoLeituraProducao(AutorizacaoServico.AcaoExecutar)
+           && OrdemConsumoSelecionadaValida();
+
+    private bool OrdemConsumoSelecionadaValida()
+    {
+        string numeroOrdem = NormalizarNumeroOrdem(productionOrderComboBox.Text);
+        return _ordemConsumoAtual is not null
+            && !string.IsNullOrWhiteSpace(numeroOrdem)
+            && string.Equals(
+                NormalizarNumeroOrdem(_ordemConsumoAtual.NumeroOrdem),
+                numeroOrdem,
+                StringComparison.OrdinalIgnoreCase)
+            && _ordemConsumoAtual.Componentes.Any(c => c.PesagemLiberada);
     }
 
     private void LimparDadosOrdem(bool limparNumeroOrdem = true)
@@ -1522,12 +1670,65 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
         try
         {
-            await _balancaLeituraServico.AquecerAsync();
+            await AquecerBalancaOperacionalAsync();
         }
         catch (Exception)
         {
             // A validacao com mensagem amigavel continua acontecendo ao clicar em Ler Peso.
         }
+    }
+
+    private async Task AquecerBalancaOperacionalAsync()
+    {
+        await ResolverBalancaOperacionalAsync();
+        await _balancaLeituraServico.AquecerAsync();
+    }
+
+    private async Task<ResultadoLeituraPeso> LerPesoBalancaOperacionalAsync()
+    {
+        await ResolverBalancaOperacionalAsync();
+        ResultadoLeituraPeso leitura = await _balancaLeituraServico.LerPesoAsync();
+        if (!leitura.Sucesso && _modoConsumo == ModoConsumoMaterial.Quimico)
+        {
+            return ResultadoLeituraPeso.Falha(AjustarMensagemBalancaPorModo(leitura.Mensagem));
+        }
+
+        return leitura;
+    }
+
+    private Task<global::FugaPET_Dev.Modelo.Cadastro.BalancaCadastro?> ResolverBalancaOperacionalAsync()
+    {
+        if (_modoConsumo == ModoConsumoMaterial.Quimico)
+        {
+            return ResolverBalancaSaidaQuimicosAsync();
+        }
+
+        return ResolverBalancaConsumoMateriaPrimaAsync();
+    }
+
+    private Task<global::FugaPET_Dev.Modelo.Cadastro.BalancaCadastro?> ResolverBalancaConsumoMateriaPrimaAsync()
+        => Task.FromResult<global::FugaPET_Dev.Modelo.Cadastro.BalancaCadastro?>(null);
+
+    private Task<global::FugaPET_Dev.Modelo.Cadastro.BalancaCadastro?> ResolverBalancaSaidaQuimicosAsync()
+    {
+        // TODO Cadastro/Balança:
+        // Quando o tipo SAIDA_QUIMICOS existir no cadastro, resolver a balança por TipoBalancaPreferencial.
+        // Até lá, mantém fallback controlado para a balança padrão do terminal, sem permitir escolha manual.
+        System.Diagnostics.Trace.TraceInformation(
+            $"[Consumo][Balanca] Modo={_modoConsumo}; tipoPreferencial={_configuracaoConsumo.TipoBalancaPreferencial}; fallback=terminal.");
+        return Task.FromResult<global::FugaPET_Dev.Modelo.Cadastro.BalancaCadastro?>(null);
+    }
+
+    private string AjustarMensagemBalancaPorModo(string mensagem)
+    {
+        if (_modoConsumo == ModoConsumoMaterial.Quimico
+            && !string.IsNullOrWhiteSpace(_configuracaoConsumo.TextoSemBalancaConfigurada)
+            && mensagem.Contains("Balanca padrao", StringComparison.OrdinalIgnoreCase))
+        {
+            return _configuracaoConsumo.TextoSemBalancaConfigurada;
+        }
+
+        return mensagem;
     }
 
     private async void StopProduction_Click(object? sender, EventArgs e)
@@ -1593,7 +1794,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         try
         {
             // Tarefa 4: pesagem LOCAL de consumo — sem impressao de etiqueta.
-            ResultadoLeituraPeso leitura = await _balancaLeituraServico.LerPesoAsync();
+            ResultadoLeituraPeso leitura = await LerPesoBalancaOperacionalAsync();
             if (!leitura.Sucesso)
             {
                 statusLabel.Text = leitura.Mensagem;
@@ -1885,7 +2086,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             Name = "confirmarConsumoButton",
             Text = "Confirmar Consumo",
             Size = new Size(190, 36),
-            Location = new Point(12, 398),
+            Location = new Point(12, 488), // Tarefa 18.1: abaixo de LER/DIGITAR PESO (evita sobreposicao)
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(59, 130, 246),
             ForeColor = Color.White,
@@ -1903,45 +2104,69 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
         if (_confirmarConsumoButton is not null)
         {
-            // Correcao 1 (Tarefa 15.2): so habilita FORA da leitura ativa (Parar Leitura -> Confirmar Consumo).
-            _confirmarConsumoButton.Enabled = !_salvandoConsumo
-                && !_isProductionStarted
-                && !_consumoSalvoNaSessao
-                && _ordemConsumoAtual is not null
-                && _pesagensPorComponente.Values.Any(lista => lista.Count > 0);
-        }
-
-        if (_previewSap261Button is not null)
-        {
-            // Preview so apos salvar o consumo local (ha codigo de lancamento).
-            _previewSap261Button.Enabled = _ultimoCodigoLancamentoSalvo is not null;
-        }
-
-        if (_enviarSap261Button is not null)
-        {
-            // Tarefa 16: Enviar SAP 261 SO para rota 261_DIRETO (salvo + fora de envio). Backflush/Misto/Bloqueado
-            // ficam desabilitados com tooltip claro (Backflush usa Confirmacao de Producao).
-            bool salvo = _ultimoCodigoLancamentoSalvo is not null;
-            bool habilitado = !_enviandoSap && !_lancamentoComFalhaSap && salvo && _rotaEnvioSalva == RotaEnvioConsumo.Direto261;
-            _enviarSap261Button.Enabled = habilitado;
-            _envioSap261ToolTip?.SetToolTip(_enviarSap261Button, ObterTooltipEnvio261(salvo));
-        }
-
-        if (_previewConfirmacaoButton is not null)
-        {
-            // Preview Confirmacao: componente Backflush selecionado OU lancamento salvo de rota Backflush.
-            _previewConfirmacaoButton.Enabled = _componenteConsumoSelecionado?.BackflushSap == true
-                || _rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao;
-        }
-
-        if (_enviarConfirmacaoButton is not null)
-        {
-            // Correcao 4 (Tarefa 17.6): nao reenviar lancamento FALHA_SAP automaticamente.
-            _enviarConfirmacaoButton.Enabled = !_enviandoConfirmacao
+            // Ajuste 5 (Tarefa 18.2): CONFIRMAR CONSUMO visivel so FORA da leitura, com pesagem local e
+            // consumo ainda nao salvo (oculto ao abrir/durante leitura; some/desabilita apos salvar).
+            bool possuiPesagem = _pesagensPorComponente.Values.Any(lista => lista.Count > 0);
+            _confirmarConsumoButton.Visible = !_isProductionStarted
                 && !_lancamentoComFalhaSap
-                && _ultimoCodigoLancamentoSalvo is not null
-                && _rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao;
+                && _ordemConsumoAtual is not null
+                && possuiPesagem
+                && !_consumoSalvoNaSessao;
+            _confirmarConsumoButton.Enabled = _confirmarConsumoButton.Visible && !_salvandoConsumo;
         }
+
+        // Ajuste 2 (Tarefa 18.2): botoes tecnicos NUNCA visiveis ao operador (fluxo unico = Confirmar Consumo).
+        // As instancias/metodos permanecem para testes/diagnostico interno.
+        if (_previewSap261Button is not null) { _previewSap261Button.Visible = false; }
+        if (_enviarSap261Button is not null) { _enviarSap261Button.Visible = false; }
+        if (_previewConfirmacaoButton is not null) { _previewConfirmacaoButton.Visible = false; }
+        if (_enviarConfirmacaoButton is not null) { _enviarConfirmacaoButton.Visible = false; }
+    }
+
+    /// <summary>
+    /// Ajuste 3/6 (Tarefa 18.2): após salvar o consumo, orquestra o envio pela ROTA. 261 direto reaproveita
+    /// o envio existente; Backflush não envia (yield-zero da Tarefa 17.11 intacta); Misto/Bloqueado não enviam.
+    /// Não mostra preview JSON ao operador. Retorna (mensagem, ícone) para o MessageBox final.
+    /// </summary>
+    private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync(long codigoLancamento, string usuario)
+    {
+        if (_modoConsumo == ModoConsumoMaterial.Quimico)
+        {
+            ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
+            return envio is { Sucesso: true }
+                ? ("Consumo de químicos salvo localmente e enviado ao SAP por 261 direto com sucesso.", MessageBoxIcon.Information)
+                : ("Consumo de químicos salvo localmente, mas o envio SAP 261 direto não foi concluído. Verifique o histórico/diagnóstico antes de reenviar.", MessageBoxIcon.Warning);
+        }
+
+        if (_rotaEnvioSalva == RotaEnvioConsumo.Direto261)
+        {
+            ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
+            return envio is { Sucesso: true }
+                ? ("Consumo salvo localmente e enviado ao SAP com sucesso.", MessageBoxIcon.Information)
+                : ("Consumo salvo localmente, mas o envio ao SAP falhou. Verifique o histórico/diagnóstico antes de reenviar.", MessageBoxIcon.Warning);
+        }
+
+        if (_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao)
+        {
+            return ("Consumo salvo localmente. Envio SAP não executado: componente Backflush exige apontamento real de produção ou validação SAP para consumo manual via 261.",
+                MessageBoxIcon.Warning);
+        }
+
+        // Misto / Bloqueado: salva local, mas NAO tenta envio automatico.
+        return ("Consumo salvo localmente, mas o envio automático foi bloqueado (rota mista ou inconsistente). Verifique depósito, lote e componentes antes de enviar ao SAP.",
+            MessageBoxIcon.Warning);
+    }
+
+    /// <summary>Refatoração: envio 261 direto SEM depender de botão visual (reaproveita o método existente).</summary>
+    private async Task<ResultadoEnvioConsumoSap261?> ExecutarEnvioSap261AposConfirmarAsync(long codigoLancamento, string usuario)
+    {
+        ResultadoEnvioConsumoSap261 resultado = await _controller.EnviarConsumoSap261Async(codigoLancamento, usuario);
+        if (!resultado.Sucesso && resultado.StatusHttp.HasValue)
+        {
+            _lancamentoComFalhaSap = true;
+        }
+
+        return resultado;
     }
 
     private string ObterTooltipEnvio261(bool salvo)
@@ -2134,7 +2359,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             Name = "previewSap261Button",
             Text = "Preview SAP 261",
             Size = new Size(190, 32),
-            Location = new Point(12, 438),
+            Location = new Point(12, 534), // Tarefa 18.1: reposicionado abaixo de Confirmar Consumo
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(71, 85, 105),
             ForeColor = Color.White,
@@ -2183,7 +2408,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             Name = "previewConfirmacaoButton",
             Text = "Preview Confirmação",
             Size = new Size(190, 32),
-            Location = new Point(12, 514),
+            Location = new Point(12, 580), // Tarefa 18.1: reposicionado abaixo de Preview SAP 261
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(124, 58, 237),
             ForeColor = Color.White,
@@ -2204,7 +2429,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             Name = "enviarConfirmacaoButton",
             Text = "Enviar Confirmação",
             Size = new Size(190, 32),
-            Location = new Point(12, 550),
+            Location = new Point(12, 626), // Tarefa 18.1: reposicionado abaixo de Preview Confirmação
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(22, 163, 74),
             ForeColor = Color.White,
@@ -2504,14 +2729,14 @@ public partial class ProcessoConsumoMaterialForm : Form
             {
                 statusLabel.Text =
                     "Inconsistência interna: o grid mostra peso utilizado, mas a memória de pesagens está vazia. Recarregue a OP e refaça a pesagem.";
-                MessageBox.Show(statusLabel.Text, "Consumo de Matéria-Prima", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(statusLabel.Text, TituloMensagemConsumo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             if (_ordemConsumoAtual is null || totalPesagens == 0)
             {
                 statusLabel.Text = "Nenhuma pesagem de consumo registrada para salvar.";
-                MessageBox.Show(statusLabel.Text, "Consumo de Matéria-Prima", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(statusLabel.Text, TituloMensagemConsumo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -2521,7 +2746,9 @@ public partial class ProcessoConsumoMaterialForm : Form
             }
 
             if (MessageBox.Show(
-                    "Deseja salvar localmente este consumo como pendente de envio ao SAP?",
+                    _modoConsumo == ModoConsumoMaterial.MateriaPrima
+                        ? MensagemConfirmacaoSalvarConsumoPadrao
+                        : $"Deseja salvar localmente este {NomeOperacionalConsumo.ToLowerInvariant()} como pendente de envio ao SAP?",
                     "Confirmar Consumo",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question) != DialogResult.Yes)
@@ -2552,27 +2779,21 @@ public partial class ProcessoConsumoMaterialForm : Form
             {
                 statusLabel.Text =
                     "Pesagens registradas não foram vinculadas aos componentes da OP. Verifique lote/reserva/item/depósito e refaça a confirmação.";
-                MessageBox.Show(statusLabel.Text, "Consumo de Matéria-Prima", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(statusLabel.Text, TituloMensagemConsumo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             if (resultado.Sucesso)
             {
                 _consumoSalvoNaSessao = true;
-                _ultimoCodigoLancamentoSalvo = resultado.CodigoLancamento; // habilita o botao de preview do payload
+                _ultimoCodigoLancamentoSalvo = resultado.CodigoLancamento;
 
-                // Tarefa 16: classifica a rota do consumo salvo (a partir dos componentes consumidos) p/ os botoes.
+                // Classifica a rota do consumo salvo (a partir dos componentes consumidos).
                 List<ComponenteConsumoMaterial> consumidos = _ordemConsumoAtual.Componentes
                     .Where(c => _pesagensPorComponente.TryGetValue(
                         ProcessoConsumoMaterialController.ChaveComponente(c), out List<PesagemConsumoMaterial>? l) && l.Count > 0)
                     .ToList();
                 _rotaEnvioSalva = ProcessoConsumoMaterialController.ClassificarRotaEnvio(consumidos);
-
-                string mensagemSalvo = _rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao
-                    ? "Consumo salvo localmente. Aguardando envio por Confirmação de Produção."
-                    : resultado.Mensagem;
-                statusLabel.Text = mensagemSalvo;
-                MessageBox.Show(mensagemSalvo, "Consumo de Matéria-Prima", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 // Bloqueia regravacao: encerra a leitura ate uma nova OP / limpeza.
                 if (_isProductionStarted)
@@ -2580,11 +2801,17 @@ public partial class ProcessoConsumoMaterialForm : Form
                     _isProductionStarted = false;
                     UpdateProductionState(false);
                 }
+
+                // Ajuste 3/6 (Tarefa 18.2): CONFIRMAR CONSUMO e o fluxo UNICO — apos salvar, orquestra o envio
+                // pela rota (261 direto reaproveita o envio existente; Backflush/Misto/Bloqueado NAO enviam).
+                (string mensagemFinal, MessageBoxIcon icone) = await OrquestrarEnvioAposConfirmarAsync(resultado.CodigoLancamento.GetValueOrDefault(), usuario);
+                statusLabel.Text = mensagemFinal;
+                MessageBox.Show(mensagemFinal, TituloMensagemConsumo, MessageBoxButtons.OK, icone);
             }
             else
             {
                 statusLabel.Text = resultado.Mensagem;
-                MessageBox.Show(resultado.Mensagem, "Consumo de Matéria-Prima", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(resultado.Mensagem, TituloMensagemConsumo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
         finally
@@ -2742,6 +2969,14 @@ public partial class ProcessoConsumoMaterialForm : Form
             {
                 _pesagensPorComponente[chaveNova] = pesagens;
             }
+        }
+
+        // Ajuste 2 (Tarefa 18): preservar a TARA ja selecionada ao mudar o lote (chave inclui lote).
+        if (!string.Equals(chaveAntiga, chaveNova, StringComparison.Ordinal)
+            && _tarasPorComponente.TryGetValue(chaveAntiga, out global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro? taraSelecionada))
+        {
+            _tarasPorComponente.Remove(chaveAntiga);
+            _tarasPorComponente[chaveNova] = taraSelecionada;
         }
 
         foreach (DataGridViewRow linha in productionDataGridView.Rows)
@@ -3154,9 +3389,13 @@ public partial class ProcessoConsumoMaterialForm : Form
         sidePanel.BackColor = Color.White;
         sideReadingStatusLabel.Text = started ? "Ativo" : "Inativo";
         sideReadingStatusLabel.ForeColor = started ? ReadingStatusActiveColor : ReadingStatusInactiveColor;
-        bool podeAlternarLeitura = PossuiPermissaoLeituraProducao(started ? AutorizacaoServico.AcaoFinalizar : AutorizacaoServico.AcaoExecutar);
-        startActionPanel.BackColor = started ? ActionDisabledColor : ActionEnabledColor;
-        startActionTextLabel.ForeColor = started ? DisabledLegendTextColor : EnabledLegendTextColor;
+        // Tarefa 18.2 (padrao Entrada): INICIAR so libera com permissao + OP valida carregada (sem exigir
+        // clique previo em linha). Cinza/desabilitado ao abrir; verde quando a OP valida esta carregada.
+        bool podeAlternarLeitura = started
+            ? PossuiPermissaoLeituraProducao(AutorizacaoServico.AcaoFinalizar)
+            : PodeIniciarLeituraConsumo();
+        startActionPanel.BackColor = !started && podeAlternarLeitura ? ActionEnabledColor : ActionDisabledColor;
+        startActionTextLabel.ForeColor = !started && podeAlternarLeitura ? EnabledLegendTextColor : DisabledLegendTextColor;
         startActionPanel.Enabled = !started && podeAlternarLeitura;
         startActionIconLabel.Enabled = startActionPanel.Enabled;
         startActionTextLabel.Enabled = startActionPanel.Enabled;
@@ -3168,7 +3407,9 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         UpdateStatusCardState(started);
         UpdateTitleBarLockState(started);
-        iniciarLeituraButton.BaseBackColor = started ? Color.FromArgb(212, 37, 49) : ReadingStatusActiveColor;
+        iniciarLeituraButton.BaseBackColor = started
+            ? Color.FromArgb(212, 37, 49)
+            : podeAlternarLeitura ? ReadingStatusActiveColor : ActionDisabledColor;
         iniciarLeituraButton.BaseForeColor = Color.White;
         iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
         iniciarLeituraButton.IconGlyph = started ? "\uE71A" : "\uE768";
@@ -3176,6 +3417,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         iniciarLeituraButton.Enabled = podeAlternarLeitura;
         iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
         iniciarLeituraButton.Invalidate();
+        // Tarefa 18.2 (padrao Entrada): LER PESO / DIGITAR PESO so aparecem durante a leitura ativa.
         lerEtiquetaButton.Visible = started;
         leituraManualButton.Visible = started;
 
@@ -3222,24 +3464,24 @@ public partial class ProcessoConsumoMaterialForm : Form
         AtualizarComponenteSelecionadoDoGrid();
     }
 
-    private async void ProductionDataGridView_CellClick(object? sender, DataGridViewCellEventArgs e)
+    private void ProductionDataGridView_CellClick(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0)
         {
             return;
         }
 
+        // Ajuste 1 (Tarefa 18): clicar no grid APENAS seleciona a linha — NAO abre a tela de tara. A tara
+        // e escolhida somente ao pesar (F12/LER PESO em ReadWeightLegend_Click e F9/DIGITAR PESO em LeituraManual_Click).
         AtualizarComponenteSelecionadoDoGrid();
 
-        // Correcao 5 (Tarefa 15.1): a selecao de tara SO abre depois de "Iniciar Leitura". Antes disso,
-        // clicar no componente apenas seleciona a linha.
-        if (_isProductionStarted && !_isReadingWeight && _componenteConsumoSelecionado is not null)
+        if (_isProductionStarted && _componenteConsumoSelecionado is { PesagemLiberada: true })
         {
-            await SelecionarTaraParaComponenteAsync(_componenteConsumoSelecionado);
+            statusLabel.Text = "Componente selecionado. Use LER PESO ou DIGITAR PESO para registrar a pesagem.";
         }
         else if (!_isProductionStarted && _componenteConsumoSelecionado is { PesagemLiberada: true })
         {
-            statusLabel.Text = "Componente selecionado. Inicie a leitura para selecionar tara e pesar.";
+            statusLabel.Text = "Componente selecionado. Inicie a leitura para pesar.";
         }
     }
 

@@ -1,1407 +1,1273 @@
-﻿using FugaPET_Dev.Modelo;
-using FugaPET_Dev.Servicos;
-using FugaPET_Dev.Servicos.Terminal;
+﻿using System.Globalization;
+using FugaPET_Dev.Controle.Processo;
+using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Modelo.IntegracaoSap;
+using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Servicos.Seguranca;
-using FugaPET_Dev.Tela.Teste;
-using FugaPET_Dev.Tela;
+using FugaPET_Dev.Servicos.Terminal;
 using FugaPET_Dev.Tela.Comum;
-
-using System.Runtime.InteropServices;
 
 namespace FugaPET_Dev.Tela.Processo;
 
 public partial class ProcessoProdutoAcabadoForm : Form
 {
-    private const int WmNclButtonDown = 0xA1;
-    private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
-    private static readonly Color RowGreen = Color.FromArgb(238, 241, 245);
-    private static readonly Color RowLight = Color.FromArgb(250, 251, 252);
-    private static readonly Color StartActionHoverBorder = Color.FromArgb(34, 197, 94);
-    private static readonly Color ReadWeightHoverBorder = Color.FromArgb(59, 130, 246);
-    private static readonly Color DangerActionHoverBorder = Color.FromArgb(229, 27, 43);
-    private static readonly Color EnabledLegendTextColor = Color.FromArgb(229, 231, 235);
-    private static readonly Color DisabledLegendTextColor = Color.FromArgb(120, 126, 136);
-    private static readonly Color SidePanelDefaultColor = Color.FromArgb(45, 49, 56);
-    private static readonly Color SidePanelActiveColor = Color.FromArgb(22, 101, 52);
-    private static readonly Color ActionEnabledColor = Color.FromArgb(34, 166, 82);
-    private static readonly Color ActionDisabledColor = Color.FromArgb(82, 87, 96);
     private static readonly Color ReadingStatusInactiveColor = Color.FromArgb(220, 53, 69);
     private static readonly Color ReadingStatusActiveColor = Color.FromArgb(34, 166, 82);
+    private static readonly Color ActionDisabledColor = Color.FromArgb(156, 163, 175);
+
+    internal const string MensagemBalancaProdutoAcabadoNaoConfigurada =
+        "Balança de produto acabado não configurada para esta operação.";
+    internal const string MensagemPostSapDesativado =
+        "Produto acabado salvo localmente em memória. POST SAP automático está desativado nesta etapa.";
+
+    private readonly ProdutoAcabadoController _controller;
     private readonly BalancaLeituraServico _balancaLeituraServico = new();
-    private readonly ImpressoraEtiquetaServico _impressoraEtiquetaServico = new();
-    private bool _isStartActionHovering;
-    private bool _isReadWeightHovering;
-    private Panel? _hoveredDangerActionPanel;
-    private bool _isProductionStarted;
-    private bool _isReadingWeight;
-    private int _nextProductionCode = 1;
-    private Task? _productionDevicesWarmUpTask;
+    private readonly List<ProdutoAcabadoCaixa> _caixasPesadas = [];
+    private readonly List<ProdutoAcabadoPalete> _paletesMontados = [];
+    private ProdutoAcabadoOrdem? _ordemAtual;
+    private ProdutoAcabadoNormaEmbalagem? _normaEmbalagem;
+    private TaraCadastro? _taraCaixaSelecionada;
     private ContextoTerminalLocal? _contextoTerminal;
     private long? _idSetorSelecionado;
-    private long? _idBalancaSelecionada;
-    private long? _idTaraSelecionada;
-    private long? _idEtiquetaSelecionada;
-
-    // Enquanto a tela nao le dados reais. Ao integrar, troque para false: aviso, faixa e mock somem.
-    private const bool UsaDadosSimulados = true;
+    private bool _leituraIniciada;
+    private bool _operacaoEmAndamento;
+    private System.Windows.Forms.Timer? _footerClockTimer;
+    private TextBox primeiraCaixaTextBox = null!;
+    private TextBox ultimaCaixaTextBox = null!;
+    private TextBox materialEmbalagemPaleteTextBox = null!;
+    private DataGridView paletesDataGridView = null!;
 
     public ProcessoProdutoAcabadoForm()
+        : this(new ProdutoAcabadoController())
     {
-        InitializeComponent();
-        cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
-        cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
-        if (UsaDadosSimulados)
-        {
-            if (!global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.PodeUsarDadosSimulados())
-            {
-                global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.BloquearTelaSimulada(this);
-                return;
-            }
-            global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.Aplicar(headerSubtitleLabel);
-            global::FugaPET_Dev.Tela.Comum.AvisoDadosSimuladosHelper.AplicarFaixa(this);
-        }
-        AplicarContextoTerminalAutomatico();
-        LoadWindowIcon();
-        ConfigureCustomTitleBar();
-        ConfigureResponsiveSummaryCards();
-        ConfigureProductionSearchBox();
-        ConfigureSideActionButtonIcons();
-        if (UsaDadosSimulados)
-        {
-            LoadMockData();
-        }
-        ApplyGridStyle(materialDataGridView);
-        ApplyGridStyle(productionDataGridView);
-        ConfigureProductionGridFooter();
-        productionDataGridView.CellDoubleClick += ProductionDataGridView_CellDoubleClick;
-        ConfigureStartActionHoverEffect();
-        ConfigureProductionActions();
-        ConfigureFooterDate();
-        UpdateProductionCounters();
-        KeyPreview = true;
-        Shown += ProcessoProdutoAcabadoForm_Shown;
-        FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
     }
 
-    private void AplicarContextoTerminalAutomatico()
+    internal ProcessoProdutoAcabadoForm(ProdutoAcabadoController controller)
+    {
+        _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        InitializeComponent();
+        ConfigurarCampoOrdemProducaoProdutoAcabado();
+        AplicarModoProdutoAcabadoReal();
+        ConfigurarRodape();
+        ConfigurarEventos();
+        ConfigurarGridNormaEmbalagem();
+        ConfigurarGridCaixas();
+        ConfigurarPaletizacaoOperacional();
+        AtualizarEstadoLeitura(false);
+        AtualizarResumoOperacional();
+        KeyPreview = true;
+    }
+
+    private async void ProcessoProdutoAcabadoForm_Shown(object? sender, EventArgs e)
+    {
+        if (await BloquearAcaoSemPermissaoAsync(PermissoesSistema.Acoes.Executar, "executar produto acabado"))
+        {
+            Close();
+            return;
+        }
+
+        productionOrderTextBox.Focus();
+    }
+
+    private void ConfigurarCampoOrdemProducaoProdutoAcabado()
+    {
+        productionOrderTextBox.ReadOnly = false;
+        productionOrderTextBox.Text = string.Empty;
+        productionOrderTextBox.Multiline = false;
+        productionOrderTextBox.MaxLength = 20;
+        productionOrderTextBox.TextAlign = HorizontalAlignment.Left;
+        productionOrderTextBox.BorderStyle = BorderStyle.None;
+        productionOrderTextBox.BackColor = Color.White;
+        productionOrderTextBox.ForeColor = Color.FromArgb(229, 27, 43);
+        productionOrderTextBox.TabStop = true;
+        productionOrderSearchLabel.Enabled = true;
+        productionOrderSearchLabel.Cursor = Cursors.Hand;
+    }
+
+    private void AplicarModoProdutoAcabadoReal()
+    {
+        Text = "Produto Acabado";
+        headerTitleLabel.Text = "Produto Acabado";
+        headerSubtitleLabel.Text = "Pesagem de caixas e formação de palete por ordem de produção";
+        productionOrderCaptionLabel.Text = "OP";
+        stepCaptionLabel.Text = "Consulta de OP";
+        stepDescriptionLabel.Text = "OP selecionada";
+        finishedProductCaptionLabel.Text = "Produto acabado";
+        lotCaptionLabel.Text = "Lote";
+        ovenExitCaptionLabel.Text = "Depósito destino";
+        classificationDateCaptionLabel.Text = "Saldo pendente";
+        manufacturingDateCaptionLabel.Text = "Quantidade planejada";
+        expirationDateCaptionLabel.Text = "Quantidade entregue";
+        materialTitleLabel.Text = "Norma de Embalagem";
+        productionReadingsTitleLabel.Text = "Caixas Pesadas";
+        productionActionsButton.Text = "CRIAR PALETE";
+        productionActionsButton.Visible = false;
+        boxesCaptionLabel.Text = "Caixas";
+        packagesCaptionLabel.Text = "Peso líquido";
+        readWeightLegendTextLabel.Text = "F12 - Ler peso balança";
+        manualLotLegendTextLabel.Text = "F9 - Digitar peso";
+        deleteLastLegendTextLabel.Text = "Del - Cancelar última caixa";
+        deleteByCodeLegendTextLabel.Text = "Esc - Fechar";
+        lerEtiquetaButton.PrimaryText = "LER PESO";
+        lerEtiquetaButton.KeyHint = "F12";
+        leituraManualButton.PrimaryText = "DIGITAR PESO";
+        leituraManualButton.KeyHint = "F9";
+        statusValueLabel.Text = "INATIVA";
+        statusHintLabel.Text = "Informe uma OP para iniciar.";
+        sapStatusLabel.Text = _controller.SapSimulado ? "SAP OP: DEMONSTRAÇÃO" : "SAP OP: CONSULTA";
+        statusLabel.Text = "Informe uma OP para consulta.";
+        CarregarContextoTerminal();
+        balanceTextBox.Text = MensagemBalancaProdutoAcabadoNaoConfigurada;
+        cellUserText.Text = UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
+        cellBancoText.Text = RodapeBancoHelper.ObterTextoBancoDados();
+        string nomeTerminal = string.IsNullOrWhiteSpace(_contextoTerminal?.NomeTerminal)
+            ? Environment.MachineName
+            : _contextoTerminal!.NomeTerminal;
+        cellTerminalText.Text = $"Terminal:  {nomeTerminal}";
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
+    }
+
+    private void CarregarContextoTerminal()
     {
         try
         {
-            _contextoTerminal = EstadoTerminalLocalAtual.Contexto;
+            _contextoTerminal = EstadoTerminalLocalAtual.ObterContextoAtualizado();
         }
         catch
         {
             _contextoTerminal = null;
         }
 
-        long? idSetorUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdSetorPadrao;
-        _idSetorSelecionado = idSetorUsuario ?? _contextoTerminal?.IdSetorPadrao;
-        _idBalancaSelecionada = _contextoTerminal?.IdBalancaPadrao;
-        _idTaraSelecionada = _contextoTerminal?.IdTaraPadrao;
-        _idEtiquetaSelecionada = _contextoTerminal?.IdEtiquetaPadrao;
-
-        string nomeTerminal = string.IsNullOrWhiteSpace(_contextoTerminal?.NomeTerminal)
-            ? Environment.MachineName
-            : _contextoTerminal!.NomeTerminal;
-        cellTerminalText.Text = $"Terminal:  {nomeTerminal}";
-
-        if (_idBalancaSelecionada.HasValue)
-        {
-            balanceTextBox.Text = _idBalancaSelecionada.Value.ToString();
-        }
-
-        statusLabel.Text = MontarResumoSelecaoAutomatica();
+        _idSetorSelecionado = EstadoSessaoUsuarioAtual.SessaoAtual?.IdSetorPadrao
+            ?? _contextoTerminal?.IdSetorPadrao;
     }
 
-    private string MontarResumoSelecaoAutomatica()
+    private void ConfigurarEventos()
     {
-        return
-            $"Selecao automatica -> Setor: {FormatarId(_idSetorSelecionado)}, " +
-            $"Balanca: {FormatarId(_idBalancaSelecionada)}, " +
-            $"Tara: {FormatarId(_idTaraSelecionada)}, " +
-            $"Etiqueta: {FormatarId(_idEtiquetaSelecionada)}.";
-    }
-
-    private static string FormatarId(long? valor)
-    {
-        return valor.HasValue ? valor.Value.ToString() : "Nao definido";
-    }
-
-    private static bool PossuiPermissaoLeituraProducao(string acao)
-        => AutorizacaoServico.PossuiPermissao(AutorizacaoServico.ModuloProcesso, PermissoesSistema.Rotinas.LeituraProducao, acao);
-
-    // 1) verifica permissao; 2) se negado, AUDITA (await, seguro); 3) mostra mensagem amigavel;
-    // 4) retorna true para o chamador abortar a acao.
-    private async Task<bool> BloquearAcaoSemPermissaoAsync(string acao, string descricaoAcao)
-    {
-        if (PossuiPermissaoLeituraProducao(acao))
-        {
-            return false;
-        }
-
-        await global::FugaPET_Dev.Tela.Comum.AcaoNegadaHelper.RegistrarAcaoNegadaSeguroAsync(
-            AutorizacaoServico.ModuloProcesso, PermissoesSistema.Rotinas.LeituraProducao, acao, descricaoAcao, "ProcessoProdutoAcabadoForm");
-
-        string mensagem = $"Usuario sem permissao para {descricaoAcao.ToLowerInvariant()} na leitura de producao.";
-        statusLabel.Text = mensagem;
-        MessageBox.Show(mensagem, "Acesso negado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        return true;
-    }
-
-    private System.Windows.Forms.Timer? _footerClockTimer;
-
-    private void ConfigureFooterDate()
-    {
-        UpdateFooterDateTime();
-
-        _footerClockTimer = new System.Windows.Forms.Timer { Interval = 30000 };
-        _footerClockTimer.Tick += (_, _) => UpdateFooterDateTime();
-        _footerClockTimer.Start();
-    }
-
-    private void UpdateFooterDateTime()
-    {
-        var ptBr = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
-        DateTime now = DateTime.Now;
-        cellDataText.Text = now.ToString("dd/MM/yyyy", ptBr);
-        cellHoraText.Text = now.ToString("HH:mm", ptBr);
-    }
-
-
-    [DllImport("user32.dll")]
-    private static extern bool ReleaseCapture();
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
-
-    private void ConfigureCustomTitleBar()
-    {
-        customTitleBarPanel.MouseDown += CustomTitleBar_MouseDown;
-        companyLogoPictureBox.MouseDown += CustomTitleBar_MouseDown;
-        headerTitleLabel.MouseDown += CustomTitleBar_MouseDown;
-        headerSubtitleLabel.MouseDown += CustomTitleBar_MouseDown;
-        menuHeaderLabel.Click += (_, _) => ReturnToLeituraProducao();
-
-        minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        maximizeWindowLabel.Click += (_, _) => ToggleWindowState();
-        closeWindowLabel.Click += (_, _) => Close();
-
-        ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
-    }
-
-    private void ReturnToLeituraProducao()
-    {
-        if (_isProductionStarted)
-        {
-            statusLabel.Text = "Finalize a leitura antes de sair da tela.";
-            return;
-        }
-
-        if (Owner is PainelInicialForm painelInicialForm)
-        {
-            painelInicialForm.NavigateToProcessoProducao();
-            Close();
-            return;
-        }
-
-        PainelInicialForm painel = new();
-        painel.NavigateToProcessoProducao();
-        painel.Show();
-        Close();
-    }
-
-    private void CustomTitleBar_MouseDown(object? sender, MouseEventArgs e)
-    {
-        if (_isProductionStarted)
-        {
-            return;
-        }
-
-        if (e.Button != MouseButtons.Left)
-        {
-            return;
-        }
-
-        ReleaseCapture();
-        SendMessage(Handle, WmNclButtonDown, HtCaption, 0);
-    }
-
-    private void ToggleWindowState()
-    {
-        if (_isProductionStarted)
-        {
-            return;
-        }
-
-        WindowState = WindowState == FormWindowState.Maximized
-            ? FormWindowState.Normal
-            : FormWindowState.Maximized;
-    }
-
-    private void ProcessoProdutoAcabadoForm_FormClosing(object? sender, FormClosingEventArgs e)
-    {
-        if (!_isProductionStarted)
-        {
-            return;
-        }
-
-        e.Cancel = true;
-        statusLabel.Text = "Finalize a leitura antes de sair da tela.";
-    }
-
-    private static void ConfigureTitleButtonHover(Label button, Color hoverColor)
-    {
-        Color normalColor = button.BackColor;
-
-        button.MouseEnter += (_, _) => button.BackColor = hoverColor;
-        button.MouseLeave += (_, _) => button.BackColor = normalColor;
-    }
-
-    private void ConfigureResponsiveSummaryCards()
-    {
-        tableLayoutPanel5.Resize += (_, _) => RefreshSummaryCardDividers();
-        tableLayoutPanel6.Resize += (_, _) => AlignDateCardLayout(null, EventArgs.Empty);
-        tableLayoutPanel8.Resize += (_, _) => AlignPlannedProductionCardLayout(null, EventArgs.Empty);
-        Shown += (_, _) => RefreshSummaryCardDividers();
-        Layout += (_, _) => RefreshSummaryCardDividers();
-
-        RefreshSummaryCardDividers();
-    }
-
-    private void RefreshSummaryCardDividers()
-    {
-        AlignDateCardLayout(null, EventArgs.Empty);
-        AlignPlannedProductionCardLayout(null, EventArgs.Empty);
-    }
-
-    private void AlignDateCardLayout(object? sender, EventArgs e)
-    {
-        int dividerTop = tableLayoutPanel6.Top + 11;
-        int dividerHeight = Math.Max(18, tableLayoutPanel6.Height - 14);
-
-        AlignDateDividerBetweenColumns(dateDividerLabel1, 1, ovenExitCaptionLabel, ovenExitTextBox, classificationDateCaptionLabel, classificationDateTextBox, dividerTop, dividerHeight);
-        AlignDateDividerBetweenColumns(dateDividerLabel2, 2, classificationDateCaptionLabel, classificationDateTextBox, manufacturingDateCaptionLabel, manufacturingDateTextBox, dividerTop, dividerHeight);
-        AlignDateDividerBetweenColumns(dateDividerLabel3, 3, manufacturingDateCaptionLabel, manufacturingDateTextBox, expirationDateCaptionLabel, expirationDateTextBox, dividerTop, dividerHeight);
-    }
-
-    private void AlignPlannedProductionCardLayout(object? sender, EventArgs e)
-    {
-        int dividerTop = tableLayoutPanel8.Top + 13;
-        int dividerHeight = Math.Max(18, tableLayoutPanel8.Height - 17);
-
-        AlignDividerBetweenColumns(plannedProductionDividerLabel1, readForecastBoxesCaptionLabel, readForecastBoxesTextBox, readForecastPackagesCaptionLabel, readForecastPackagesTextBox, dividerTop, dividerHeight);
-        AlignDividerBetweenColumns(plannedProductionDividerLabel2, readForecastPackagesCaptionLabel, readForecastPackagesTextBox, balanceCaptionLabel, balanceTextBox, dividerTop, dividerHeight);
-    }
-
-    private void AlignDateDividerBetweenColumns(Label divider, int columnBoundaryIndex, Control previousCaption, Control previousValue, Control nextCaption, Control nextValue, int top, int height)
-    {
-        int tableLeft = tableLayoutPanel6.Left;
-        int previousRight = tableLeft + Math.Max(GetVisibleTextRight(previousCaption), GetVisibleTextRight(previousValue));
-        int nextLeft = tableLeft + Math.Min(GetVisibleTextLeft(nextCaption), GetVisibleTextLeft(nextValue));
-        int columnBoundary = tableLeft + (tableLayoutPanel6.Width * columnBoundaryIndex / 4);
-
-        int dividerX = nextLeft - previousRight >= 24
-            ? previousRight + ((nextLeft - previousRight) / 2)
-            : columnBoundary - 10;
-
-        divider.Location = new Point(dividerX, top);
-        divider.Size = new Size(1, height);
-    }
-
-    private void AlignDividerBetweenColumns(Label divider, Control previousCaption, Control previousValue, Control nextCaption, Control nextValue, int top, int height)
-    {
-        int previousRight = Math.Max(GetVisibleTextRight(previousCaption), GetVisibleTextRight(previousValue));
-        int nextLeft = Math.Min(GetVisibleTextLeft(nextCaption), GetVisibleTextLeft(nextValue));
-
-        int dividerX = previousRight < nextLeft
-            ? previousRight + ((nextLeft - previousRight) / 2)
-            : nextLeft - 12;
-
-        divider.Location = new Point(dividerX, top);
-        divider.Size = new Size(1, height);
-    }
-
-    private static int GetVisibleTextLeft(Control control)
-    {
-        return control.Left + control.Margin.Left;
-    }
-
-    private static int GetVisibleTextRight(Control control)
-    {
-        Size textSize = TextRenderer.MeasureText(control.Text, control.Font, control.Size, TextFormatFlags.NoPadding);
-        return control.Left + control.Margin.Left + textSize.Width;
-    }
-
-    private void ConfigureProductionSearchBox()
-    {
-        Color searchBackColor = Color.FromArgb(248, 250, 252);
-        Color searchIconColor = Color.FromArgb(148, 163, 184);
-
-        productionSearchPanel.FillColor = searchBackColor;
-        productionSearchTextBox.BackColor = searchBackColor;
-        productionSearchGlyphLabel.ForeColor = searchIconColor;
-        productionSearchGlyphLabel.Cursor = Cursors.IBeam;
-        productionSearchGlyphLabel.Click += (_, _) => productionSearchTextBox.Focus();
-        productionSearchPanel.Click += (_, _) => productionSearchTextBox.Focus();
-        productionSearchIconPictureBox.BackColor = searchBackColor;
-        productionSearchIconPictureBox.Image = CreateTintedIcon(global::FugaPET_Dev.Properties.Resources.search_red, searchIconColor);
-        productionSearchIconPictureBox.Cursor = Cursors.IBeam;
-        productionSearchIconPictureBox.Click += (_, _) => productionSearchTextBox.Focus();
-    }
-
-    private void ConfigureSideActionButtonIcons()
-    {
-        lerEtiquetaButton.IconGlyph = string.Empty;
-        lerEtiquetaButton.IconImage = CreateTintedIcon(
-            global::FugaPET_Dev.Properties.Resources.read_weight,
-            Color.FromArgb(17, 24, 39));
-    }
-
-    private void ConfigureProductionGridFooter()
-    {
-        productionDataGridView.RowsAdded += (_, _) => UpdateProductionGridFooter();
-        productionDataGridView.RowsRemoved += (_, _) => UpdateProductionGridFooter();
-        productionDataGridView.Scroll += (_, _) => UpdateProductionGridFooter();
-        productionDataGridView.SizeChanged += (_, _) => UpdateProductionGridFooter();
-        productionDataGridView.DataBindingComplete += (_, _) => UpdateProductionGridFooter();
-        Shown += (_, _) => BeginInvoke(UpdateProductionGridFooter);
-
-        UpdateProductionGridFooter();
-    }
-
-    private void UpdateProductionGridFooter()
-    {
-        int totalRows = productionDataGridView.Rows
-            .Cast<DataGridViewRow>()
-            .Count(row => !row.IsNewRow);
-
-        if (totalRows == 0)
-        {
-            productionFooterLabel.Text = "Exibindo 0 de 0 leituras";
-            productionPageLabel.Text = "Pagina 1 de 1";
-            productionPageTextBox.Text = "1";
-            productionPreviousPageButton.Enabled = false;
-            productionNextPageButton.Enabled = false;
-            return;
-        }
-
-        int firstVisibleRow = GetFirstVisibleProductionRowIndex();
-        int visibleRows = Math.Max(1, productionDataGridView.DisplayedRowCount(false));
-        int firstItem = Math.Min(totalRows, firstVisibleRow + 1);
-        int lastItem = Math.Min(totalRows, firstVisibleRow + visibleRows);
-        int totalPages = Math.Max(1, (int)Math.Ceiling(totalRows / (double)visibleRows));
-        int currentPage = Math.Min(totalPages, (firstVisibleRow / visibleRows) + 1);
-
-        productionFooterLabel.Text = $"Exibindo {firstItem} a {lastItem} de {totalRows} leituras";
-        productionPageLabel.Text = $"Pagina {currentPage} de {totalPages}";
-        productionPageTextBox.Text = currentPage.ToString();
-        productionPreviousPageButton.Enabled = currentPage > 1;
-        productionNextPageButton.Enabled = currentPage < totalPages;
-    }
-
-    private int GetFirstVisibleProductionRowIndex()
-    {
-        try
-        {
-            return productionDataGridView.FirstDisplayedScrollingRowIndex >= 0
-                ? productionDataGridView.FirstDisplayedScrollingRowIndex
-                : 0;
-        }
-        catch (InvalidOperationException)
-        {
-            return 0;
-        }
-    }
-
-    private static Bitmap CreateTintedIcon(Bitmap source, Color tintColor)
-    {
-        Bitmap tintedIcon = new(source.Width, source.Height);
-
-        for (int y = 0; y < source.Height; y++)
-        {
-            for (int x = 0; x < source.Width; x++)
-            {
-                Color pixel = source.GetPixel(x, y);
-                tintedIcon.SetPixel(x, y, Color.FromArgb(pixel.A, tintColor));
-            }
-        }
-
-        return tintedIcon;
-    }
-
-    private void ConfigureProductionActions()
-    {
-        startActionPanel.Click += StartProduction_Click;
-        startActionIconLabel.Click += StartProduction_Click;
-        startActionTextLabel.Click += StartProduction_Click;
-
+        Shown += ProcessoProdutoAcabadoForm_Shown;
+        FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
+        KeyDown += ProcessoProdutoAcabadoForm_KeyDown;
+        productionOrderTextBox.KeyDown += ProductionOrderTextBox_KeyDown;
+        productionOrderSearchLabel.Click += async (_, _) => await ConsultarOpAsync();
+        readForecastBoxesTextBox.KeyPress += ReadForecastBoxesTextBox_KeyPress;
+        iniciarLeituraButton.Click += ToggleProductionFromSideButton_Click;
+        startActionPanel.Click += ToggleProductionFromSideButton_Click;
+        stopActionPanel.Click += (_, _) => AtualizarEstadoLeitura(false);
+        lerEtiquetaButton.Click += ReadWeightLegend_Click;
         readWeightLegendPanel.Click += ReadWeightLegend_Click;
         readWeightLegendIconLabel.Click += ReadWeightLegend_Click;
         readWeightLegendTextLabel.Click += ReadWeightLegend_Click;
-        ConfigureReadWeightHoverEffect();
-
-        stopActionPanel.Click += StopProduction_Click;
-        stopActionIconLabel.Click += StopProduction_Click;
-        stopActionTextLabel.Click += StopProduction_Click;
-        ConfigureDangerActionHoverEffect(stopActionPanel, stopActionIconLabel, stopActionTextLabel);
-        ConfigureDangerActionHoverEffect(deleteLastLegendPanel, deleteLastLegendIconLabel, deleteLastLegendTextLabel);
-        ConfigureDangerActionHoverEffect(deleteByCodeLegendPanel, deleteByCodeLegendIconLabel, deleteByCodeLegendTextLabel);
-
-        deleteLastLegendPanel.Click += DeleteLastProductionRow_Click;
-        deleteLastLegendIconLabel.Click += DeleteLastProductionRow_Click;
-        deleteLastLegendTextLabel.Click += DeleteLastProductionRow_Click;
-        deleteByCodeLegendPanel.Click += DeleteProductionRowByCode_Click;
-        deleteByCodeLegendIconLabel.Click += DeleteProductionRowByCode_Click;
-        deleteByCodeLegendTextLabel.Click += DeleteProductionRowByCode_Click;
-
-        // Wire new sidePanel buttons to the same handlers as the legacy ones
-        iniciarLeituraButton.Click += ToggleProductionFromSideButton_Click;
-        lerEtiquetaButton.Click += ReadWeightLegend_Click;
         leituraManualButton.Click += LeituraManual_Click;
-        excluirUltimaButton.Click += DeleteLastProductionRow_Click;
-        excluirCodigoButton.Click += DeleteProductionRowByCode_Click;
-
-        UpdateProductionState(false);
-        SetReadWeightEnabled(false);
-        SetDeleteActionsEnabled(false);
-        UpdateProductionCounters();
-    }
-
-    private void ConfigureStartActionHoverEffect()
-    {
-        startActionPanel.Padding = new Padding(2);
-        startActionPanel.Paint += StartActionPanel_Paint;
-
-        startActionPanel.MouseEnter += StartActionHover_MouseEnter;
-        startActionIconLabel.MouseEnter += StartActionHover_MouseEnter;
-        startActionTextLabel.MouseEnter += StartActionHover_MouseEnter;
-
-        startActionPanel.MouseLeave += StartActionHover_MouseLeave;
-        startActionIconLabel.MouseLeave += StartActionHover_MouseLeave;
-        startActionTextLabel.MouseLeave += StartActionHover_MouseLeave;
-
-        startActionPanel.Resize += (_, _) => AlignStartActionChildren();
-        AlignStartActionChildren();
-    }
-
-    private void AlignStartActionChildren()
-    {
-        const int borderInset = 2;
-        const int iconSize = 24;
-        const int iconLeft = 4;
-
-        int contentHeight = Math.Max(0, startActionPanel.ClientSize.Height - (borderInset * 2));
-        int iconTop = borderInset + Math.Max(0, (contentHeight - iconSize) / 2);
-
-        startActionIconLabel.Size = new Size(iconSize, iconSize);
-        startActionIconLabel.Location = new Point(iconLeft, iconTop);
-
-        int textLeft = iconLeft + iconSize + 2;
-        startActionTextLabel.Location = new Point(textLeft, borderInset);
-        startActionTextLabel.Size = new Size(
-            Math.Max(0, startActionPanel.ClientSize.Width - textLeft - borderInset),
-            Math.Max(0, startActionPanel.ClientSize.Height - (borderInset * 2)));
-        startActionTextLabel.BackColor = Color.Transparent;
-        startActionTextLabel.BorderStyle = BorderStyle.None;
-        startActionIconLabel.BorderStyle = BorderStyle.None;
-    }
-
-    private void StartActionHover_MouseEnter(object? sender, EventArgs e)
-    {
-        if (_isProductionStarted)
+        manualLotLegendPanel.Click += LeituraManual_Click;
+        manualLotLegendIconLabel.Click += LeituraManual_Click;
+        manualLotLegendTextLabel.Click += LeituraManual_Click;
+        deleteLastLegendPanel.Click += (_, _) => CancelarUltimaCaixa();
+        productionActionsButton.Click += (_, _) => CriarPaleteLocal();
+        minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        maximizeWindowLabel.Click += (_, _) => WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+        closeWindowLabel.Click += (_, _) =>
         {
-            return;
-        }
-
-        _isStartActionHovering = true;
-        startActionPanel.Invalidate();
-    }
-
-    private void StartActionHover_MouseLeave(object? sender, EventArgs e)
-    {
-        Point cursorPosition = startActionPanel.PointToClient(Cursor.Position);
-        if (startActionPanel.ClientRectangle.Contains(cursorPosition))
-        {
-            return;
-        }
-
-        _isStartActionHovering = false;
-        startActionPanel.Invalidate();
-    }
-
-    private void StartActionPanel_Paint(object? sender, PaintEventArgs e)
-    {
-        if (!_isStartActionHovering || _isProductionStarted)
-        {
-            return;
-        }
-
-        using Pen pen = new(StartActionHoverBorder, 3);
-        Rectangle border = new(1, 1, startActionPanel.ClientSize.Width - 3, startActionPanel.ClientSize.Height - 3);
-        e.Graphics.DrawRectangle(pen, border);
-    }
-
-    private void ConfigureReadWeightHoverEffect()
-    {
-        readWeightLegendPanel.Padding = new Padding(2);
-        readWeightLegendPanel.Paint += ReadWeightLegendPanel_Paint;
-
-        readWeightLegendPanel.MouseEnter += ReadWeightHover_MouseEnter;
-        readWeightLegendIconLabel.MouseEnter += ReadWeightHover_MouseEnter;
-        readWeightLegendTextLabel.MouseEnter += ReadWeightHover_MouseEnter;
-
-        readWeightLegendPanel.MouseLeave += ReadWeightHover_MouseLeave;
-        readWeightLegendIconLabel.MouseLeave += ReadWeightHover_MouseLeave;
-        readWeightLegendTextLabel.MouseLeave += ReadWeightHover_MouseLeave;
-    }
-
-    private void ReadWeightHover_MouseEnter(object? sender, EventArgs e)
-    {
-        if (!readWeightLegendPanel.Enabled || !readWeightLegendPanel.Visible)
-        {
-            return;
-        }
-
-        _isReadWeightHovering = true;
-        readWeightLegendPanel.Invalidate();
-    }
-
-    private void ReadWeightHover_MouseLeave(object? sender, EventArgs e)
-    {
-        Point cursorPosition = readWeightLegendPanel.PointToClient(Cursor.Position);
-        if (readWeightLegendPanel.ClientRectangle.Contains(cursorPosition))
-        {
-            return;
-        }
-
-        _isReadWeightHovering = false;
-        readWeightLegendPanel.Invalidate();
-    }
-
-    private void ReadWeightLegendPanel_Paint(object? sender, PaintEventArgs e)
-    {
-        if (!_isReadWeightHovering || !readWeightLegendPanel.Enabled || !readWeightLegendPanel.Visible)
-        {
-            return;
-        }
-
-        using Pen pen = new(ReadWeightHoverBorder, 3);
-        Rectangle border = new(1, 1, readWeightLegendPanel.ClientSize.Width - 3, readWeightLegendPanel.ClientSize.Height - 3);
-        e.Graphics.DrawRectangle(pen, border);
-    }
-
-    private void ConfigureDangerActionHoverEffect(Panel panel, Control icon, Control text)
-    {
-        panel.Padding = new Padding(2);
-        panel.Paint += DangerActionPanel_Paint;
-
-        panel.MouseEnter += DangerActionHover_MouseEnter;
-        icon.MouseEnter += DangerActionHover_MouseEnter;
-        text.MouseEnter += DangerActionHover_MouseEnter;
-
-        panel.MouseLeave += DangerActionHover_MouseLeave;
-        icon.MouseLeave += DangerActionHover_MouseLeave;
-        text.MouseLeave += DangerActionHover_MouseLeave;
-    }
-
-    private void DangerActionHover_MouseEnter(object? sender, EventArgs e)
-    {
-        Panel? panel = GetDangerActionPanel(sender);
-        if (panel is null || !panel.Enabled || !panel.Visible)
-        {
-            return;
-        }
-
-        if (_hoveredDangerActionPanel != panel)
-        {
-            _hoveredDangerActionPanel?.Invalidate();
-            _hoveredDangerActionPanel = panel;
-        }
-
-        panel.Invalidate();
-    }
-
-    private void DangerActionHover_MouseLeave(object? sender, EventArgs e)
-    {
-        Panel? panel = GetDangerActionPanel(sender);
-        if (panel is null)
-        {
-            return;
-        }
-
-        Point cursorPosition = panel.PointToClient(Cursor.Position);
-        if (panel.ClientRectangle.Contains(cursorPosition))
-        {
-            return;
-        }
-
-        if (_hoveredDangerActionPanel == panel)
-        {
-            _hoveredDangerActionPanel = null;
-            panel.Invalidate();
-        }
-    }
-
-    private void DangerActionPanel_Paint(object? sender, PaintEventArgs e)
-    {
-        if (sender is not Panel panel || _hoveredDangerActionPanel != panel || !panel.Enabled || !panel.Visible)
-        {
-            return;
-        }
-
-        using Pen pen = new(DangerActionHoverBorder, 3);
-        Rectangle border = new(1, 1, panel.ClientSize.Width - 3, panel.ClientSize.Height - 3);
-        e.Graphics.DrawRectangle(pen, border);
-    }
-
-    private Panel? GetDangerActionPanel(object? sender)
-    {
-        return sender switch
-        {
-            Panel panel => panel,
-            Control { Parent: Panel panel } => panel,
-            _ => null
+            if (PodeFecharTela())
+            {
+                Close();
+            }
         };
     }
 
-    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    private void ConfigurarRodape()
     {
-        if (keyData == Keys.F9)
-        {
-            using TesteZebraForm printTestForm = new();
-            printTestForm.ShowDialog(this);
-            return true;
-        }
-
-        if (keyData == Keys.F12)
-        {
-            ReadWeightLegend_Click(readWeightLegendTextLabel, EventArgs.Empty);
-            return true;
-        }
-
-        if (keyData == Keys.F5)
-        {
-            ToggleProductionFromSideButton_Click(iniciarLeituraButton, EventArgs.Empty);
-            return true;
-        }
-
-        return base.ProcessCmdKey(ref msg, keyData);
+        AtualizarDataHoraRodape();
+        _footerClockTimer = new System.Windows.Forms.Timer { Interval = 30000 };
+        _footerClockTimer.Tick += (_, _) => AtualizarDataHoraRodape();
+        _footerClockTimer.Start();
     }
+
+    private void AtualizarDataHoraRodape()
+    {
+        DateTime agora = DateTime.Now;
+        cellHoraText.Text = agora.ToString("HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
+        cellDataText.Text = agora.ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("pt-BR"));
+    }
+
+    private void ConfigurarGridNormaEmbalagem()
+    {
+        materialDataGridView.AutoGenerateColumns = false;
+        materialDataGridView.ReadOnly = true;
+        materialDataGridView.MultiSelect = false;
+        materialStatusColumn.HeaderText = "Tipo";
+        materialCodeColumn.HeaderText = "Material";
+        materialDescriptionColumn.HeaderText = "Item";
+        materialLotColumn.HeaderText = "Qtd";
+        materialExpirationColumn.HeaderText = "Un.";
+        materialBalanceColumn.HeaderText = "Norma";
+    }
+
+    private void ConfigurarGridCaixas()
+    {
+        productionDataGridView.AutoGenerateColumns = false;
+        productionDataGridView.ReadOnly = true;
+        productionDataGridView.MultiSelect = false;
+        productionCodeColumn.HeaderText = "Caixa";
+        productionDateColumn.HeaderText = "Bruto";
+        productionProductColumn.HeaderText = "Tara/Líquido";
+        productionQuantityColumn.HeaderText = "Qtd";
+        productionWeightColumn.HeaderText = "Origem/Status";
+        productionPrintColumn.HeaderText = "HU";
+    }
+
+
+    private void ConfigurarPaletizacaoOperacional()
+    {
+        Label primeiraCaixaLabel = CriarLabelPaletizacao("Primeira caixa");
+        primeiraCaixaLabel.Location = new Point(205, 14);
+        productionReadingsPanel.Controls.Add(primeiraCaixaLabel);
+
+        primeiraCaixaTextBox = CriarTextBoxPaletizacao("primeiraCaixaTextBox");
+        primeiraCaixaTextBox.Location = new Point(205, 31);
+        productionReadingsPanel.Controls.Add(primeiraCaixaTextBox);
+
+        Label ultimaCaixaLabel = CriarLabelPaletizacao("Última caixa");
+        ultimaCaixaLabel.Location = new Point(300, 14);
+        productionReadingsPanel.Controls.Add(ultimaCaixaLabel);
+
+        ultimaCaixaTextBox = CriarTextBoxPaletizacao("ultimaCaixaTextBox");
+        ultimaCaixaTextBox.Location = new Point(300, 31);
+        productionReadingsPanel.Controls.Add(ultimaCaixaTextBox);
+
+        Label materialEmbalagemLabel = CriarLabelPaletizacao("Material embalagem");
+        materialEmbalagemLabel.Location = new Point(395, 14);
+        productionReadingsPanel.Controls.Add(materialEmbalagemLabel);
+
+        materialEmbalagemPaleteTextBox = CriarTextBoxPaletizacao("materialEmbalagemPaleteTextBox");
+        materialEmbalagemPaleteTextBox.Location = new Point(395, 31);
+        materialEmbalagemPaleteTextBox.Size = new Size(150, 20);
+        materialEmbalagemPaleteTextBox.Text = "PALLET01";
+        productionReadingsPanel.Controls.Add(materialEmbalagemPaleteTextBox);
+
+        productionDataGridView.Location = new Point(17, 60);
+        productionDataGridView.Size = new Size(1081, 112);
+        productionDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        paletesDataGridView = new DataGridView
+        {
+            Name = "paletesDataGridView",
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
+            AutoGenerateColumns = false,
+            BackgroundColor = Color.White,
+            BorderStyle = BorderStyle.None,
+            ColumnHeadersHeight = 20,
+            EnableHeadersVisualStyles = false,
+            GridColor = Color.FromArgb(226, 231, 238),
+            Location = new Point(17, 178),
+            MultiSelect = false,
+            ReadOnly = true,
+            RowHeadersVisible = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            Size = new Size(1081, 43),
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        };
+        paletesDataGridView.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(17, 24, 39);
+        paletesDataGridView.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        paletesDataGridView.ColumnHeadersDefaultCellStyle.Font = new Font("Cascadia Code", 6.5F, FontStyle.Bold);
+        paletesDataGridView.DefaultCellStyle.Font = new Font("Cascadia Code", 6.5F);
+        paletesDataGridView.Columns.Add("paleteLocalColumn", "Palete local");
+        paletesDataGridView.Columns.Add("paletePrimeiraCaixaColumn", "Primeira caixa");
+        paletesDataGridView.Columns.Add("paleteUltimaCaixaColumn", "Última caixa");
+        paletesDataGridView.Columns.Add("paleteQtdCaixasColumn", "Qtd caixas");
+        paletesDataGridView.Columns.Add("paletePesoBrutoColumn", "Peso bruto");
+        paletesDataGridView.Columns.Add("paletePesoLiquidoColumn", "Peso líquido");
+        paletesDataGridView.Columns.Add("paleteTaraColumn", "Tara");
+        paletesDataGridView.Columns.Add("paleteMaterialColumn", "Material embalagem");
+        paletesDataGridView.Columns.Add("paleteStatusColumn", "Status");
+        productionReadingsPanel.Controls.Add(paletesDataGridView);
+    }
+
+    private static Label CriarLabelPaletizacao(string texto)
+        => new()
+        {
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Font = new Font("Cascadia Code", 6.5F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(75, 85, 99),
+            Size = new Size(150, 14),
+            Text = texto,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+    private static TextBox CriarTextBoxPaletizacao(string nome)
+        => new()
+        {
+            Name = nome,
+            BackColor = Color.FromArgb(248, 250, 252),
+            BorderStyle = BorderStyle.FixedSingle,
+            Font = new Font("Cascadia Code", 7F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(17, 24, 39),
+            Size = new Size(82, 20),
+            MaxLength = 30
+        };
+
+    private async Task ConsultarOpAsync(bool exibirAvisoOpObrigatoria = true)
+    {
+        if (_operacaoEmAndamento)
+        {
+            return;
+        }
+
+        string numeroOp = productionOrderTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(numeroOp))
+        {
+            LimparOp();
+            statusLabel.Text = "Informe uma OP para consulta.";
+            if (exibirAvisoOpObrigatoria)
+            {
+                MessageBox.Show(
+                    "Informe uma OP para consulta.",
+                    "Produto Acabado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
+            return;
+        }
+
+        try
+        {
+            _operacaoEmAndamento = true;
+            AtualizarBotoesOperacao();
+            statusLabel.Text = $"Consultando OP {numeroOp} no SAP...";
+            ResultadoConsultaProdutoAcabado resultado =
+                await _controller.ConsultarOrdemProducaoAsync(numeroOp, CancellationToken.None);
+            if (!resultado.Sucesso || resultado.Ordem is null || resultado.NormaEmbalagem is null)
+            {
+                LimparOp();
+                statusLabel.Text = resultado.Mensagem;
+                MessageBox.Show(resultado.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _ordemAtual = resultado.Ordem;
+            _normaEmbalagem = resultado.NormaEmbalagem;
+            _caixasPesadas.Clear();
+            _paletesMontados.Clear();
+            AtualizarGridPaletes();
+            _taraCaixaSelecionada = null;
+            PreencherDadosOrdem();
+            PreencherNormaEmbalagem();
+            AtualizarCampoQuantidadePorCaixa();
+            AtualizarGridCaixas();
+            AtualizarResumoOperacional();
+            statusValueLabel.Text = "INATIVA";
+            statusHintLabel.Text = "OP carregada. Inicie a leitura para pesar caixas.";
+            if (NormaEmFallbackMemoria())
+            {
+                statusLabel.Text = "Norma SAP indisponível. Informe a QTD. POR CAIXA antes de iniciar a leitura.";
+                readForecastBoxesTextBox.Focus();
+                readForecastBoxesTextBox.SelectAll();
+            }
+            else
+            {
+                statusLabel.Text = $"OP {_ordemAtual.NumeroOrdem} carregada para produto acabado.";
+            }
+        }
+        catch (Exception ex)
+        {
+            LimparOp();
+            System.Diagnostics.Trace.TraceWarning($"[ProcessoProdutoAcabadoForm] Falha ao consultar OP: {ex.GetType().Name}");
+            MessageBox.Show("Não foi possível consultar a OP. Tente novamente.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoesOperacao();
+        }
+    }
+
+    private void PreencherDadosOrdem()
+    {
+        if (_ordemAtual is null)
+        {
+            return;
+        }
+
+        stepLabel.Text = _ordemAtual.NumeroOrdem;
+        finishedProductCodeTextBox.Text = _ordemAtual.MaterialProduzido;
+        finishedProductTextBox.Text = _ordemAtual.DescricaoMaterial;
+        lotTextBox.Text = _ordemAtual.Lote;
+        ovenExitTextBox.Text = _ordemAtual.DepositoDestino;
+        classificationDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadePendente);
+        manufacturingDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadePlanejada);
+        expirationDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadeEntregue);
+        readForecastBoxesTextBox.Text = _normaEmbalagem?.QuantidadeProdutosPorCaixa.ToString(CultureInfo.InvariantCulture) ?? "0";
+        readForecastPackagesTextBox.Text = _normaEmbalagem?.PackagingInstruction ?? string.Empty;
+    }
+
+    private void PreencherNormaEmbalagem()
+    {
+        materialDataGridView.Rows.Clear();
+        if (_normaEmbalagem is null)
+        {
+            AtualizarCampoQuantidadePorCaixa();
+            return;
+        }
+
+        if (_normaEmbalagem.Itens.Count == 0)
+        {
+            materialDataGridView.Rows.Add("P", _normaEmbalagem.Material, "0001", _normaEmbalagem.QuantidadeProdutosPorCaixa, _normaEmbalagem.Unidade, _normaEmbalagem.PackagingInstruction);
+            AtualizarCampoQuantidadePorCaixa();
+            return;
+        }
+
+        foreach (ProdutoAcabadoNormaItem item in _normaEmbalagem.Itens)
+        {
+            materialDataGridView.Rows.Add(item.TipoMaterial, item.Material, item.Item, item.Quantidade, item.Unidade, _normaEmbalagem.PackagingInstruction);
+        }
+
+        AtualizarCampoQuantidadePorCaixa();
+    }
+
+    private void AtualizarCampoQuantidadePorCaixa()
+    {
+        bool fallback = NormaEmFallbackMemoria();
+
+        readForecastBoxesCaptionLabel.Text = "QTD. POR CAIXA";
+        readForecastPackagesCaptionLabel.Text = "NORMA EMBALAGEM";
+        readForecastBoxesTextBox.ReadOnly = !fallback;
+        readForecastBoxesTextBox.Enabled = _ordemAtual is not null;
+        readForecastBoxesTextBox.Multiline = false;
+        readForecastBoxesTextBox.TextAlign = HorizontalAlignment.Left;
+        readForecastBoxesTextBox.BackColor = fallback ? Color.White : Color.FromArgb(248, 250, 252);
+        readForecastBoxesTextBox.ForeColor = Color.FromArgb(17, 24, 39);
+        readForecastBoxesTextBox.Cursor = fallback ? Cursors.IBeam : Cursors.Default;
+        readForecastBoxesTextBox.TabStop = fallback;
+    }
+
+    private bool NormaEmFallbackMemoria()
+        => _normaEmbalagem is not null
+            && string.Equals(_normaEmbalagem.PackagingInstruction, "FALLBACK_MEMORIA", StringComparison.OrdinalIgnoreCase);
 
     private void ToggleProductionFromSideButton_Click(object? sender, EventArgs e)
     {
-        if (_isProductionStarted)
+        if (_leituraIniciada)
         {
-            StopProduction_Click(sender, e);
+            AtualizarEstadoLeitura(false);
+            statusLabel.Text = "Leitura de produto acabado parada.";
             return;
         }
 
-        StartProduction_Click(sender, e);
-    }
-
-    private async void StartProduction_Click(object? sender, EventArgs e)
-    {
-        if (_isProductionStarted)
+        if (_ordemAtual is null)
         {
+            MessageBox.Show("Selecione uma OP antes de iniciar a leitura.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        if (await BloquearAcaoSemPermissaoAsync(AutorizacaoServico.AcaoExecutar, "executar leitura"))
-        {
-            return;
-        }
-
-        _isProductionStarted = true;
-        UpdateProductionState(true);
-        statusLabel.Text = "Producao iniciada. Clique em Ler Peso para adicionar uma leitura.";
-        StartProductionDevicesWarmUp();
-    }
-
-    private void StartProductionDevicesWarmUp()
-    {
-        if (_productionDevicesWarmUpTask is { IsCompleted: false })
+        if (!AtualizarNormaFallbackAntesDaLeitura())
         {
             return;
         }
 
-        _productionDevicesWarmUpTask = WarmUpProductionDevicesAsync();
-    }
-
-    private async Task WarmUpProductionDevicesAsync()
-    {
-        // Ambos os metodos ja sao assincronos e tratam excecao internamente;
-        // chamamos direto (sem Task.Run desnecessario empurrando para o thread pool).
-        await Task.WhenAll(
-            AquecerImpressoraComSegurancaAsync(),
-            WarmUpSaldoSafelyAsync());
-    }
-
-    private async Task AquecerImpressoraComSegurancaAsync()
-    {
-        try
-        {
-            await _impressoraEtiquetaServico.AquecerAsync();
-        }
-        catch (Exception)
-        {
-            // A validacao com mensagem amigavel continua acontecendo ao clicar em Ler Peso.
-        }
-    }
-
-    private async Task WarmUpSaldoSafelyAsync()
-    {
-        try
-        {
-            await _balancaLeituraServico.AquecerAsync();
-        }
-        catch (Exception)
-        {
-            // A validacao com mensagem amigavel continua acontecendo ao clicar em Ler Peso.
-        }
-    }
-
-    private async void StopProduction_Click(object? sender, EventArgs e)
-    {
-        if (!_isProductionStarted)
-        {
-            return;
-        }
-
-        if (await BloquearAcaoSemPermissaoAsync(AutorizacaoServico.AcaoFinalizar, "finalizar leitura"))
-        {
-            return;
-        }
-
-        _isProductionStarted = false;
-        UpdateProductionState(false);
-        statusLabel.Text = "Producao parada.";
+        AtualizarEstadoLeitura(true);
+        statusLabel.Text = "Leitura de caixas iniciada. Use F12 ou F9 para pesar.";
     }
 
     private async void ReadWeightLegend_Click(object? sender, EventArgs e)
     {
-        if (!_isProductionStarted || _isReadingWeight)
-        {
-            return;
-        }
-
-        if (await BloquearAcaoSemPermissaoAsync(AutorizacaoServico.AcaoExecutar, "executar leitura"))
-        {
-            return;
-        }
-
-        _isReadingWeight = true;
-        SetReadWeightEnabled(false);
-        statusLabel.Text = "Verificando impressora padrao...";
-
-        try
-        {
-            await _impressoraEtiquetaServico.GarantirImpressoraDisponivelAsync();
-            statusLabel.Text = "Lendo peso da balanca...";
-
-            ResultadoLeituraPeso leitura = await _balancaLeituraServico.LerPesoAsync();
-            if (!leitura.Sucesso)
-            {
-                statusLabel.Text = leitura.Mensagem;
-                MessageBox.Show(
-                    leitura.Mensagem,
-                    "Erro ao ler peso",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-                return;
-            }
-
-            string weight = leitura.Peso;
-            DataGridViewRow row = AddProductionReading(weight);
-            DadosEtiquetaProducao label = ConstruirDadosEtiquetaProducao(row);
-            await _impressoraEtiquetaServico.ImprimirEtiquetaProducaoAsync(label);
-            statusLabel.Text = $"Peso {weight} incluido e etiqueta {label.CodigoProducao} enviada para impressao.";
-        }
-        catch (Exception ex)
-        {
-            string message = GetFriendlyErrorMessage(ex);
-            statusLabel.Text = message;
-            MessageBox.Show(
-                message,
-                "Erro ao ler peso",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-        finally
-        {
-            _isReadingWeight = false;
-            SetReadWeightEnabled(_isProductionStarted);
-        }
-    }
-
-    private static string GetFriendlyErrorMessage(Exception ex)
-    {
-        if (ex.InnerException is not null &&
-            ex.Message.Contains("One or more errors occurred", StringComparison.OrdinalIgnoreCase))
-        {
-            return GetFriendlyErrorMessage(ex.InnerException);
-        }
-
-        return ex is ErroOperacionalEsperadoException
-            ? ex.Message
-            : "Nao foi possivel concluir a operacao. Acione o suporte.";
-    }
-
-    private DataGridViewRow AddProductionReading(string weight)
-    {
-        int rowIndex = productionDataGridView.Rows.Add(
-            _nextProductionCode.ToString(),
-            DateTime.Today.ToString("dd/MM/yyyy"),
-            finishedProductTextBox.Text,
-            "24",
-            weight,
-            global::FugaPET_Dev.Properties.Resources.print_green);
-
-        _nextProductionCode++;
-        ApplyProductionRowStyle(productionDataGridView.Rows[rowIndex], rowIndex);
-        ClearGridSelection(productionDataGridView);
-        UpdateProductionCounters();
-        return productionDataGridView.Rows[rowIndex];
-    }
-
-    private async void DeleteLastProductionRow_Click(object? sender, EventArgs e)
-    {
-        if (await BloquearAcaoSemPermissaoAsync(AutorizacaoServico.AcaoCancelar, "cancelar leitura"))
-        {
-            return;
-        }
-
-        if (!_isProductionStarted)
-        {
-            return;
-        }
-
-        DataGridViewRow? lastRow = productionDataGridView.Rows
-            .Cast<DataGridViewRow>()
-            .Where(row => !row.IsNewRow)
-            .LastOrDefault();
-
-        if (lastRow is null)
-        {
-            statusLabel.Text = "Nao ha linhas para excluir.";
-            return;
-        }
-
-        string productionCode = GetCellValue(lastRow, "productionCodeColumn");
-        if (!ConfirmDeleteLastProductionRow(productionCode))
-        {
-            statusLabel.Text = "Exclusao cancelada.";
-            return;
-        }
-
-        productionDataGridView.Rows.Remove(lastRow);
-        _nextProductionCode = Math.Max(1, _nextProductionCode - 1);
-        RestyleProductionRows();
-        UpdateProductionCounters();
-        ClearGridSelection(productionDataGridView);
-        statusLabel.Text = $"Ultima etiqueta {productionCode} excluida.";
-    }
-
-    private async void DeleteProductionRowByCode_Click(object? sender, EventArgs e)
-    {
-        if (await BloquearAcaoSemPermissaoAsync(AutorizacaoServico.AcaoCancelar, "cancelar leitura"))
-        {
-            return;
-        }
-
-        if (!_isProductionStarted)
-        {
-            return;
-        }
-
-        string? productionCode = PromptProductionCodeToDelete();
-        if (string.IsNullOrWhiteSpace(productionCode))
-        {
-            statusLabel.Text = "Exclusao cancelada.";
-            return;
-        }
-
-        DataGridViewRow? row = productionDataGridView.Rows
-            .Cast<DataGridViewRow>()
-            .Where(item => !item.IsNewRow)
-            .FirstOrDefault(item => string.Equals(
-                GetCellValue(item, "productionCodeColumn"),
-                productionCode,
-                StringComparison.OrdinalIgnoreCase));
-
-        if (row is null)
-        {
-            statusLabel.Text = $"Etiqueta {productionCode} nao encontrada.";
-            MessageBox.Show(
-                $"Nenhuma etiqueta com codigo {productionCode} foi encontrada.",
-                "Etiqueta nao encontrada",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-            return;
-        }
-
-        if (!ConfirmProductionRowDelete(productionCode, "Deseja realmente excluir a etiqueta informada?"))
-        {
-            statusLabel.Text = "Exclusao cancelada.";
-            return;
-        }
-
-        productionDataGridView.Rows.Remove(row);
-        RestyleProductionRows();
-        UpdateProductionCounters();
-        ClearGridSelection(productionDataGridView);
-        statusLabel.Text = $"Etiqueta {productionCode} excluida.";
-    }
-
-    private string? PromptProductionCodeToDelete()
-    {
-        using Form promptForm = new()
-        {
-            Text = "Excluir etiqueta por codigo",
-            StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = false,
-            ClientSize = new Size(380, 185),
-            BackColor = Color.FromArgb(247, 248, 250)
-        };
-
-        Label messageLabel = new()
-        {
-            Text = "Informe o codigo serial da etiqueta que deseja excluir.",
-            Dock = DockStyle.Top,
-            Height = 62,
-            Font = new Font("Cascadia Code", 10F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(45, 49, 56),
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(18, 10, 18, 4)
-        };
-
-        TextBox codeTextBox = new()
-        {
-            Font = new Font("Segoe UI", 13F, FontStyle.Bold),
-            Location = new Point(80, 76),
-            Size = new Size(220, 31),
-            TextAlign = HorizontalAlignment.Center
-        };
-
-        FlowLayoutPanel buttonsPanel = new()
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.LeftToRight,
-            Padding = new Padding(74, 8, 0, 14),
-            Height = 64
-        };
-
-        Button cancelButton = CreateDialogButton("Cancelar", Color.FromArgb(55, 60, 69), DialogResult.Cancel);
-        Button deleteButton = CreateDialogButton("Excluir", Color.FromArgb(184, 18, 32), DialogResult.OK);
-        cancelButton.Margin = new Padding(0, 0, 10, 0);
-
-        buttonsPanel.Controls.Add(cancelButton);
-        buttonsPanel.Controls.Add(deleteButton);
-        promptForm.Controls.Add(messageLabel);
-        promptForm.Controls.Add(codeTextBox);
-        promptForm.Controls.Add(buttonsPanel);
-        promptForm.AcceptButton = deleteButton;
-        promptForm.CancelButton = cancelButton;
-        promptForm.ActiveControl = codeTextBox;
-
-        return promptForm.ShowDialog(this) == DialogResult.OK
-            ? codeTextBox.Text.Trim()
-            : null;
-    }
-
-    private bool ConfirmDeleteLastProductionRow(string productionCode)
-    {
-        return ConfirmProductionRowDelete(productionCode, "Deseja realmente excluir a ultima etiqueta?");
-    }
-
-    private bool ConfirmProductionRowDelete(string productionCode, string message)
-    {
-        using Form confirmationForm = new()
-        {
-            Text = "Confirmar exclusao",
-            StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = false,
-            ClientSize = new Size(360, 150),
-            BackColor = Color.FromArgb(247, 248, 250)
-        };
-
-        Label messageLabel = new()
-        {
-            Text = $"{message}\r\nCodigo: {productionCode}",
-            Dock = DockStyle.Top,
-            Height = 86,
-            Font = new Font("Cascadia Code", 10F, FontStyle.Bold),
-            ForeColor = Color.FromArgb(45, 49, 56),
-            TextAlign = ContentAlignment.MiddleCenter,
-            Padding = new Padding(18, 10, 18, 4)
-        };
-
-        FlowLayoutPanel buttonsPanel = new()
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.LeftToRight,
-            Padding = new Padding(74, 8, 0, 14),
-            Height = 64
-        };
-
-        Button noButton = CreateDialogButton("Nao", Color.FromArgb(55, 60, 69), DialogResult.No);
-        Button yesButton = CreateDialogButton("Sim", Color.FromArgb(184, 18, 32), DialogResult.Yes);
-        noButton.Margin = new Padding(0, 0, 10, 0);
-
-        buttonsPanel.Controls.Add(noButton);
-        buttonsPanel.Controls.Add(yesButton);
-        confirmationForm.Controls.Add(messageLabel);
-        confirmationForm.Controls.Add(buttonsPanel);
-        confirmationForm.AcceptButton = noButton;
-        confirmationForm.CancelButton = noButton;
-        confirmationForm.ActiveControl = noButton;
-
-        return confirmationForm.ShowDialog(this) == DialogResult.Yes;
-    }
-
-    private static Button CreateDialogButton(string text, Color backColor, DialogResult dialogResult)
-    {
-        Button button = new()
-        {
-            Text = text,
-            DialogResult = dialogResult,
-            BackColor = backColor,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Cascadia Code", 9F, FontStyle.Bold),
-            ForeColor = Color.White,
-            Size = new Size(96, 34),
-            Margin = new Padding(0)
-        };
-
-        button.FlatAppearance.BorderSize = 0;
-        return button;
-    }
-
-    private void RestyleProductionRows()
-    {
-        for (int rowIndex = 0; rowIndex < productionDataGridView.Rows.Count; rowIndex++)
-        {
-            DataGridViewRow row = productionDataGridView.Rows[rowIndex];
-            if (!row.IsNewRow)
-            {
-                ApplyProductionRowStyle(row, rowIndex);
-            }
-        }
-    }
-
-    private void UpdateProductionCounters()
-    {
-        int boxes = productionDataGridView.Rows
-            .Cast<DataGridViewRow>()
-            .Count(row => !row.IsNewRow);
-
-        int packages = productionDataGridView.Rows
-            .Cast<DataGridViewRow>()
-            .Where(row => !row.IsNewRow)
-            .Sum(row => int.TryParse(GetCellValue(row, "productionQuantityColumn"), out int quantity) ? quantity : 0);
-
-        boxesCounterLabel.Text = boxes.ToString("000");
-        packagesCounterLabel.Text = packages.ToString("000");
-        boxesValueLabel.Text = boxes.ToString("000");
-        packagesValueLabel.Text = packages.ToString("000");
-        boxesTotalLabel.Text = $"de {NormalizeCounterTotal(readForecastBoxesTextBox.Text)}";
-        packagesTotalLabel.Text = $"de {NormalizeCounterTotal(readForecastPackagesTextBox.Text)}";
-        UpdateProductionGridFooter();
-    }
-
-    private static string NormalizeCounterTotal(string value)
-    {
-        string digits = new(value.Where(char.IsDigit).ToArray());
-        return int.TryParse(digits, out int total) ? total.ToString() : "0";
-    }
-
-    private void SetReadWeightEnabled(bool enabled)
-    {
-        enabled = enabled && PossuiPermissaoLeituraProducao(AutorizacaoServico.AcaoExecutar);
-
-        if (!enabled)
-        {
-            _isReadWeightHovering = false;
-            readWeightLegendPanel.Invalidate();
-        }
-
-        readWeightLegendPanel.Enabled = enabled;
-        readWeightLegendIconLabel.Enabled = enabled;
-        readWeightLegendTextLabel.Enabled = enabled;
-        readWeightLegendPanel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        readWeightLegendIconLabel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        readWeightLegendTextLabel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        readWeightLegendTextLabel.ForeColor = enabled ? EnabledLegendTextColor : DisabledLegendTextColor;
-        readWeightLegendIconLabel.Visible = enabled;
-        lerEtiquetaButton.Enabled = enabled;
-        leituraManualButton.Enabled = enabled;
-    }
-
-    private void SetDeleteActionsEnabled(bool enabled)
-    {
-        enabled = enabled && PossuiPermissaoLeituraProducao(AutorizacaoServico.AcaoCancelar);
-
-        deleteLastLegendPanel.Enabled = enabled;
-        deleteLastLegendIconLabel.Enabled = enabled;
-        deleteLastLegendTextLabel.Enabled = enabled;
-        deleteByCodeLegendPanel.Enabled = enabled;
-        deleteByCodeLegendIconLabel.Enabled = enabled;
-        deleteByCodeLegendTextLabel.Enabled = enabled;
-
-        deleteLastLegendPanel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        deleteLastLegendIconLabel.Cursor = deleteLastLegendPanel.Cursor;
-        deleteLastLegendTextLabel.Cursor = deleteLastLegendPanel.Cursor;
-        deleteByCodeLegendPanel.Cursor = enabled ? Cursors.Hand : Cursors.Default;
-        deleteByCodeLegendIconLabel.Cursor = deleteByCodeLegendPanel.Cursor;
-        deleteByCodeLegendTextLabel.Cursor = deleteByCodeLegendPanel.Cursor;
-
-        deleteLastLegendTextLabel.ForeColor = enabled ? EnabledLegendTextColor : DisabledLegendTextColor;
-        deleteByCodeLegendTextLabel.ForeColor = enabled ? EnabledLegendTextColor : DisabledLegendTextColor;
-        deleteLastLegendIconLabel.Visible = enabled;
-        deleteByCodeLegendIconLabel.Visible = enabled;
-        excluirUltimaButton.Enabled = enabled;
-        excluirCodigoButton.Enabled = enabled;
+        await RegistrarPesoBalancaAsync();
     }
 
     private async void LeituraManual_Click(object? sender, EventArgs e)
     {
-        if (await BloquearAcaoSemPermissaoAsync(AutorizacaoServico.AcaoExecutar, "executar leitura"))
+        await RegistrarPesoManualAsync();
+    }
+
+    private async Task RegistrarPesoBalancaAsync()
+    {
+        if (await BloquearAcaoSemPermissaoAsync(PermissoesSistema.Acoes.Executar, "ler peso de produto acabado"))
         {
             return;
         }
 
-        using TesteZebraForm printTestForm = new();
-        printTestForm.ShowDialog(this);
+        if (!ValidarPodePesar())
+        {
+            return;
+        }
+
+        if (!GarantirBalancaProdutoAcabadoConfigurada())
+        {
+            return;
+        }
+
+        TaraCadastro? tara = await GarantirTaraCaixaSelecionadaAsync();
+        if (tara is null)
+        {
+            return;
+        }
+
+        ResultadoLeituraPeso leitura = await _balancaLeituraServico.LerPesoAsync();
+        if (!leitura.Sucesso)
+        {
+            string mensagem = string.IsNullOrWhiteSpace(leitura.Mensagem) ? "Não foi possível ler o peso da balança." : leitura.Mensagem;
+            statusLabel.Text = mensagem;
+            MessageBox.Show(mensagem, "Balança", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!TryParsePesoKg(leitura.Peso, out decimal pesoBrutoKg))
+        {
+            MessageBox.Show("Peso retornado pela balança é inválido.", "Balança", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        RegistrarCaixaProdutoAcabado(pesoBrutoKg, tara.PesoKg, "BALANCA");
     }
 
-    private void UpdateProductionState(bool started)
+    private async Task RegistrarPesoManualAsync()
     {
-        ClearDangerActionHover();
-        sidePanel.BackColor = Color.White;
-        sideReadingStatusLabel.Text = started ? "Ativo" : "Inativo";
-        sideReadingStatusLabel.ForeColor = started ? ReadingStatusActiveColor : ReadingStatusInactiveColor;
-        bool podeAlternarLeitura = PossuiPermissaoLeituraProducao(started ? AutorizacaoServico.AcaoFinalizar : AutorizacaoServico.AcaoExecutar);
-        startActionPanel.BackColor = started ? ActionDisabledColor : ActionEnabledColor;
-        startActionTextLabel.ForeColor = started ? DisabledLegendTextColor : EnabledLegendTextColor;
-        startActionPanel.Enabled = !started && podeAlternarLeitura;
-        startActionIconLabel.Enabled = startActionPanel.Enabled;
-        startActionTextLabel.Enabled = startActionPanel.Enabled;
-        startActionPanel.Cursor = startActionPanel.Enabled ? Cursors.Hand : Cursors.Default;
-        startActionIconLabel.Cursor = startActionPanel.Cursor;
-        startActionTextLabel.Cursor = startActionPanel.Cursor;
-        _isStartActionHovering = false;
-        startActionPanel.Invalidate();
+        // TODO Permissões:
+        // Quando a matriz de permissões do Produto Acabado for criada,
+        // separar permissão de peso manual se o negócio exigir.
+        if (await BloquearAcaoSemPermissaoAsync(PermissoesSistema.Acoes.Executar, "informar peso manual de produto acabado"))
+        {
+            return;
+        }
 
-        UpdateStatusCardState(started);
-        UpdateTitleBarLockState(started);
-        iniciarLeituraButton.BaseBackColor = started ? Color.FromArgb(212, 37, 49) : ReadingStatusActiveColor;
-        iniciarLeituraButton.BaseForeColor = Color.White;
-        iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
-        iniciarLeituraButton.IconGlyph = started ? "\uE71A" : "\uE768";
-        iniciarLeituraButton.PrimaryText = started ? "PARAR LEITURA" : "INICIAR LEITURA";
-        iniciarLeituraButton.Enabled = podeAlternarLeitura;
-        iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
-        iniciarLeituraButton.Invalidate();
-        lerEtiquetaButton.Visible = started;
-        leituraManualButton.Visible = started;
-        excluirUltimaButton.Visible = started;
-        excluirCodigoButton.Visible = started;
+        if (!ValidarPodePesar())
+        {
+            return;
+        }
 
-        stopActionPanel.Visible = started;
-        stopActionPanel.Enabled = started && podeAlternarLeitura;
-        stopActionPanel.Cursor = stopActionPanel.Enabled ? Cursors.Hand : Cursors.Default;
-        stopActionIconLabel.Cursor = stopActionPanel.Cursor;
-        stopActionTextLabel.Cursor = stopActionPanel.Cursor;
+        TaraCadastro? tara = await GarantirTaraCaixaSelecionadaAsync();
+        if (tara is null)
+        {
+            return;
+        }
 
-        SetReadWeightEnabled(started);
-        SetDeleteActionsEnabled(started);
+        if (!SolicitarPesoManual(tara.PesoKg, out decimal pesoBrutoKg))
+        {
+            return;
+        }
+
+        RegistrarCaixaProdutoAcabado(pesoBrutoKg, tara.PesoKg, "MANUAL");
     }
 
-    private void UpdateTitleBarLockState(bool locked)
+    private bool RegistrarCaixaProdutoAcabado(decimal pesoBrutoKg, decimal taraKg, string origem)
     {
-        menuHeaderLabel.Visible = !locked;
-        minimizeWindowLabel.Visible = !locked;
-        maximizeWindowLabel.Visible = !locked;
-        closeWindowLabel.Visible = !locked;
+        if (_ordemAtual is null || _normaEmbalagem is null)
+        {
+            return false;
+        }
 
-        menuHeaderLabel.Enabled = !locked;
-        minimizeWindowLabel.Enabled = !locked;
-        maximizeWindowLabel.Enabled = !locked;
-        closeWindowLabel.Enabled = !locked;
+        decimal pesoLiquidoKg = pesoBrutoKg - taraKg;
+        if (pesoLiquidoKg <= 0m)
+        {
+            MessageBox.Show("Peso líquido da caixa deve ser maior que zero.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
 
-        customTitleBarPanel.Cursor = locked ? Cursors.Default : Cursors.SizeAll;
+        decimal totalNovo = _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg) + pesoLiquidoKg;
+        if (totalNovo > _ordemAtual.QuantidadePendente)
+        {
+            MessageBox.Show("Peso total das caixas ultrapassa o saldo pendente da OP.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        ProdutoAcabadoCaixa caixa;
+        try
+        {
+            caixa = _controller.MontarCaixa(
+                _ordemAtual,
+                _normaEmbalagem,
+                _caixasPesadas.Count + 1,
+                pesoBrutoKg,
+                taraKg,
+                origem);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        _caixasPesadas.Add(caixa);
+        ResultadoPreviewProdutoAcabado101 preview =
+            _controller.GerarPreviewMaterialDocument101(_ordemAtual, caixa, DateTime.UtcNow);
+        System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Preview Material Document 101 caixa {0}: {1}", caixa.NumeroCaixa, preview.PayloadJson);
+        AtualizarGridCaixas();
+        AtualizarCamposPaletizacaoPadrao();
+        AtualizarResumoOperacional();
+        statusLabel.Text = $"Caixa {caixa.NumeroCaixa:0000} registrada. Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
+        return true;
+    }
+
+    private bool ValidarPodePesar()
+    {
+        if (!_leituraIniciada)
+        {
+            MessageBox.Show("Inicie a leitura antes de registrar caixa.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if (_ordemAtual is null)
+        {
+            MessageBox.Show("Selecione uma OP antes de registrar caixa.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if (_normaEmbalagem is null || _normaEmbalagem.QuantidadeProdutosPorCaixa <= 0)
+        {
+            MessageBox.Show("Norma de embalagem não localizada para o produto informado.", "Norma de Embalagem", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool AtualizarNormaFallbackAntesDaLeitura()
+    {
+        if (_ordemAtual is null || _normaEmbalagem is null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(_normaEmbalagem.PackagingInstruction, "FALLBACK_MEMORIA", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!int.TryParse(readForecastBoxesTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int quantidadePorCaixa)
+            || quantidadePorCaixa <= 0)
+        {
+            string mensagem = "Informe a QTD. POR CAIXA para continuar. Enquanto a norma de embalagem SAP não estiver disponível, essa quantidade será usada em cada caixa pesada.";
+            statusLabel.Text = mensagem;
+            MessageBox.Show(mensagem, "Norma de Embalagem", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            readForecastBoxesTextBox.Focus();
+            readForecastBoxesTextBox.SelectAll();
+            return false;
+        }
+
+        _normaEmbalagem = _controller.ConsultarOuPrepararNormaEmbalagem(
+            _ordemAtual.MaterialProduzido,
+            quantidadePorCaixa,
+            _normaEmbalagem.PackagingInstruction);
+        PreencherNormaEmbalagem();
+        statusLabel.Text = $"Quantidade por caixa definida: {quantidadePorCaixa} produto(s) por caixa.";
+        return true;
+    }
+
+    private bool GarantirBalancaProdutoAcabadoConfigurada()
+    {
+        try
+        {
+            _contextoTerminal = EstadoTerminalLocalAtual.ObterContextoAtualizado();
+        }
+        catch
+        {
+            _contextoTerminal = null;
+        }
+
+        if (_contextoTerminal?.IdBalancaPadrao is not long idBalanca || idBalanca <= 0)
+        {
+            statusLabel.Text = MensagemBalancaProdutoAcabadoNaoConfigurada;
+            MessageBox.Show(MensagemBalancaProdutoAcabadoNaoConfigurada, "Balança", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<TaraCadastro?> GarantirTaraCaixaSelecionadaAsync()
+    {
+        if (_taraCaixaSelecionada is not null)
+        {
+            return _taraCaixaSelecionada;
+        }
+
+        if (_idSetorSelecionado is not long codigoSetor || codigoSetor <= 0)
+        {
+            string mensagem = "Usuário sem setor definido: não é possível selecionar a tara da caixa.";
+            statusLabel.Text = mensagem;
+            MessageBox.Show(mensagem, "Seleção de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+
+        IReadOnlyList<TaraCadastro> taras = await _controller.ListarTarasAtivasPorSetorAsync(codigoSetor);
+        if (taras.Count == 0)
+        {
+            string mensagem = "Nenhuma tara ativa para o setor do usuário. Cadastre uma tara antes de pesar.";
+            statusLabel.Text = mensagem;
+            MessageBox.Show(mensagem, "Seleção de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+
+        using SelecaoTaraPesagemForm form = new(taras, "CAIXA PRODUTO ACABADO");
+        if (form.ShowDialog(this) != DialogResult.OK || form.TaraSelecionada is null)
+        {
+            statusLabel.Text = "Seleção de tara cancelada.";
+            return null;
+        }
+
+        _taraCaixaSelecionada = form.TaraSelecionada;
+        statusLabel.Text = $"Tara '{form.TaraSelecionada.NomeTara}' selecionada para caixas de produto acabado.";
+        return _taraCaixaSelecionada;
+    }
+
+    private void AtualizarGridCaixas()
+    {
+        productionDataGridView.Rows.Clear();
+        foreach (ProdutoAcabadoCaixa caixa in _caixasPesadas)
+        {
+            productionDataGridView.Rows.Add(
+                caixa.NumeroCaixa.ToString("0000", CultureInfo.InvariantCulture),
+                FormatarKg(caixa.PesoBrutoKg),
+                $"Tara {FormatarKg(caixa.TaraKg)} / Liq {FormatarKg(caixa.PesoLiquidoKg)}",
+                caixa.QuantidadeProdutos.ToString(CultureInfo.InvariantCulture),
+                ObterStatusCaixa(caixa),
+                new Bitmap(1, 1));
+        }
+    }
+
+    private void CancelarUltimaCaixa()
+    {
+        if (_caixasPesadas.Count == 0)
+        {
+            return;
+        }
+
+        _caixasPesadas.RemoveAt(_caixasPesadas.Count - 1);
+        AtualizarGridCaixas();
+        AtualizarCamposPaletizacaoPadrao();
+        AtualizarResumoOperacional();
+        statusLabel.Text = "Última caixa de produto acabado cancelada.";
+    }
+
+    private static string ObterStatusCaixa(ProdutoAcabadoCaixa caixa)
+        => string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal)
+            ? $"{caixa.OrigemPesagem} / {caixa.StatusSap}"
+            : $"{caixa.OrigemPesagem} / PALETE {caixa.CodigoPaleteLocal}";
+
+    private void CriarPaleteLocal()
+    {
+        if (_ordemAtual is null || _caixasPesadas.Count == 0)
+        {
+            MessageBox.Show("Registre caixas antes de criar o palete.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!TryLerDadosPaletizacao(out int primeiraCaixa, out int ultimaCaixa, out string materialEmbalagem, out string mensagem))
+        {
+            statusLabel.Text = mensagem;
+            MessageBox.Show(mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            ProdutoAcabadoPalete palete = MontarPaletePorIntervalo(primeiraCaixa, ultimaCaixa, materialEmbalagem);
+            ResultadoPreviewProdutoAcabadoPalete preview = _controller.GerarPreviewPalete(palete);
+            if (!preview.Sucesso)
+            {
+                statusLabel.Text = preview.Mensagem;
+                MessageBox.Show(preview.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _paletesMontados.Add(palete);
+            AtualizarGridCaixas();
+            AtualizarGridPaletes();
+            AtualizarCamposPaletizacaoPadrao();
+            AtualizarResumoOperacional();
+            System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Payload Palete local {0}: {1}", palete.CodigoPaleteLocal, preview.PayloadJson);
+            statusLabel.Text = "Palete criado localmente. Envio SAP da HU/palete pendente de liberação da API.";
+            MessageBox.Show("Palete criado localmente. Envio SAP da HU/palete pendente de liberação da API.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            statusLabel.Text = ex.Message;
+            MessageBox.Show(ex.Message, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private bool TryLerDadosPaletizacao(out int primeiraCaixa, out int ultimaCaixa, out string materialEmbalagem, out string mensagem)
+    {
+        primeiraCaixa = 0;
+        ultimaCaixa = 0;
+        materialEmbalagem = materialEmbalagemPaleteTextBox.Text.Trim();
+        mensagem = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(primeiraCaixaTextBox.Text))
+        {
+            mensagem = "Informe a primeira caixa do palete.";
+            return false;
+        }
+
+        try
+        {
+            primeiraCaixa = LerPrimeiraCaixaInformada();
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensagem = ex.Message;
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(ultimaCaixaTextBox.Text))
+        {
+            mensagem = "Informe a última caixa do palete.";
+            return false;
+        }
+
+        try
+        {
+            ultimaCaixa = LerUltimaCaixaInformada();
+        }
+        catch (InvalidOperationException ex)
+        {
+            mensagem = ex.Message;
+            return false;
+        }
+
+        if (primeiraCaixa > ultimaCaixa)
+        {
+            mensagem = "A primeira caixa não pode ser maior que a última.";
+            return false;
+        }
+
+        int primeiraCaixaFiltro = primeiraCaixa;
+        int ultimaCaixaFiltro = ultimaCaixa;
+        ProdutoAcabadoCaixa[] caixasIntervalo = _caixasPesadas
+            .Where(caixa => caixa.NumeroCaixa >= primeiraCaixaFiltro && caixa.NumeroCaixa <= ultimaCaixaFiltro)
+            .OrderBy(caixa => caixa.NumeroCaixa)
+            .ToArray();
+        if (caixasIntervalo.Length == 0 || caixasIntervalo.Length != ultimaCaixa - primeiraCaixa + 1)
+        {
+            mensagem = "Nenhuma caixa encontrada no intervalo informado.";
+            return false;
+        }
+
+        ProdutoAcabadoCaixa[] caixasPaletizadas = caixasIntervalo
+            .Where(caixa => !string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal))
+            .ToArray();
+        if (caixasPaletizadas.Length > 0)
+        {
+            string lista = string.Join(
+                ", ",
+                caixasPaletizadas.Select(caixa => $"{caixa.NumeroCaixa:0000} ({caixa.CodigoPaleteLocal})"));
+            mensagem = $"Não é possível criar o palete. Caixa(s) já vinculada(s): {lista}.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(materialEmbalagem))
+        {
+            mensagem = "Informe o material de embalagem do palete.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private ProdutoAcabadoPalete MontarPaletePorIntervalo(int primeiraCaixa, int ultimaCaixa, string materialEmbalagem)
+    {
+        if (_ordemAtual is null)
+        {
+            throw new InvalidOperationException("OP não carregada para montar palete.");
+        }
+
+        return _controller.MontarPalete(
+            _ordemAtual,
+            _caixasPesadas,
+            primeiraCaixa,
+            ultimaCaixa,
+            materialEmbalagem);
+    }
+
+    private int LerPrimeiraCaixaInformada()
+    {
+        if (!int.TryParse(primeiraCaixaTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int primeiraCaixa))
+        {
+            throw new InvalidOperationException("Informe a primeira caixa do palete.");
+        }
+
+        return primeiraCaixa;
+    }
+
+    private int LerUltimaCaixaInformada()
+    {
+        if (!int.TryParse(ultimaCaixaTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int ultimaCaixa))
+        {
+            throw new InvalidOperationException("Informe a última caixa do palete.");
+        }
+
+        return ultimaCaixa;
+    }
+
+    private void AtualizarCamposPaletizacaoPadrao()
+    {
+        if (primeiraCaixaTextBox is null || ultimaCaixaTextBox is null || materialEmbalagemPaleteTextBox is null)
+        {
+            return;
+        }
+
+        ProdutoAcabadoCaixa[] caixasLivres = _caixasPesadas
+            .Where(caixa => string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal))
+            .OrderBy(caixa => caixa.NumeroCaixa)
+            .ToArray();
+
+        if (_caixasPesadas.Count > 0 && caixasLivres.Length == 0)
+        {
+            primeiraCaixaTextBox.Text = string.Empty;
+            ultimaCaixaTextBox.Text = string.Empty;
+            statusLabel.Text = "Todas as caixas pesadas já foram vinculadas a paletes.";
+        }
+        else
+        {
+            primeiraCaixaTextBox.Text = caixasLivres.FirstOrDefault()?.NumeroCaixa.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            ultimaCaixaTextBox.Text = caixasLivres.LastOrDefault()?.NumeroCaixa.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        }
+        if (string.IsNullOrWhiteSpace(materialEmbalagemPaleteTextBox.Text))
+        {
+            materialEmbalagemPaleteTextBox.Text = "PALLET01";
+        }
+    }
+
+    private void AtualizarGridPaletes()
+    {
+        if (paletesDataGridView is null)
+        {
+            return;
+        }
+
+        paletesDataGridView.Rows.Clear();
+        foreach (ProdutoAcabadoPalete palete in _paletesMontados)
+        {
+            paletesDataGridView.Rows.Add(
+                palete.CodigoPaleteLocal,
+                palete.PrimeiraCaixa.ToString("0000", CultureInfo.InvariantCulture),
+                palete.UltimaCaixa.ToString("0000", CultureInfo.InvariantCulture),
+                palete.Caixas.Count.ToString(CultureInfo.InvariantCulture),
+                FormatarKg(palete.PesoBrutoKg),
+                FormatarKg(palete.PesoLiquidoKg),
+                FormatarKg(palete.TaraKg),
+                palete.PackagingMaterial,
+                "PENDENTE SAP");
+        }
+    }
+
+    private async Task ImprimirEtiquetaCaixaAsync(ProdutoAcabadoCaixa caixa)
+    {
+        await Task.CompletedTask;
+        System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Ponto de extensão etiqueta caixa: {0}", caixa.CodigoCaixaLocal);
+    }
+
+    private async Task ImprimirEtiquetaPaleteAsync(ProdutoAcabadoPalete palete)
+    {
+        await Task.CompletedTask;
+        System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Ponto de extensão etiqueta palete: {0}", palete.CodigoPaleteLocal);
+    }
+
+    private void AtualizarEstadoLeitura(bool iniciada)
+    {
+        _leituraIniciada = iniciada;
+        sideReadingStatusLabel.Text = iniciada ? "Ativo" : "Inativo";
+        sideReadingStatusLabel.ForeColor = iniciada ? ReadingStatusActiveColor : ReadingStatusInactiveColor;
+        AtualizarStatusCardLeitura(iniciada);
+        AtualizarBloqueioCabecalho(iniciada);
+        productionOrderTextBox.Enabled = !iniciada;
+        productionOrderSearchLabel.Enabled = !iniciada;
+        AtualizarBotoesOperacao();
+    }
+
+    private void AtualizarStatusCardLeitura(bool iniciada)
+    {
+        Color statusColor = iniciada ? ReadingStatusActiveColor : ReadingStatusInactiveColor;
+        statusCard.BackColor = Color.Transparent;
+        statusCard.FillColor = iniciada
+            ? Color.FromArgb(229, 247, 234)
+            : Color.FromArgb(254, 232, 232);
+        statusCard.BorderColor = iniciada
+            ? Color.FromArgb(187, 229, 199)
+            : Color.FromArgb(248, 190, 190);
+        statusCardIcon.Text = iniciada ? "✓" : "!";
+        statusCardIcon.ForeColor = statusColor;
+        statusValueLabel.Text = iniciada ? "ATIVA" : "INATIVA";
+        statusValueLabel.ForeColor = statusColor;
+        statusHintLabel.Text = iniciada
+            ? "Leitura liberada para registro"
+            : "Leitura aguardando inicio";
+        statusHintLabel.ForeColor = Color.FromArgb(98, 108, 124);
+    }
+
+    private void AtualizarBloqueioCabecalho(bool bloqueado)
+    {
+        menuHeaderLabel.Visible = !bloqueado;
+        minimizeWindowLabel.Visible = !bloqueado;
+        maximizeWindowLabel.Visible = !bloqueado;
+        closeWindowLabel.Visible = !bloqueado;
+        menuHeaderLabel.Enabled = !bloqueado;
+        minimizeWindowLabel.Enabled = !bloqueado;
+        maximizeWindowLabel.Enabled = !bloqueado;
+        closeWindowLabel.Enabled = !bloqueado;
+        customTitleBarPanel.Cursor = bloqueado ? Cursors.Default : Cursors.SizeAll;
         companyLogoPictureBox.Cursor = customTitleBarPanel.Cursor;
         headerTitleLabel.Cursor = customTitleBarPanel.Cursor;
         headerSubtitleLabel.Cursor = customTitleBarPanel.Cursor;
     }
 
-    private void UpdateStatusCardState(bool started)
+    private void AtualizarBotoesOperacao()
     {
-        Color statusColor = started ? ReadingStatusActiveColor : ReadingStatusInactiveColor;
-
-        statusCard.BackColor = Color.Transparent;
-        statusCard.FillColor = started ? Color.FromArgb(229, 247, 234) : Color.FromArgb(254, 232, 232);
-        statusCard.BorderColor = started ? Color.FromArgb(187, 229, 199) : Color.FromArgb(248, 190, 190);
-
-        statusCardIcon.Text = started ? "\u2713" : "!";
-        statusCardIcon.ForeColor = statusColor;
-        statusValueLabel.Text = started ? "ATIVA" : "INATIVA";
-        statusValueLabel.ForeColor = statusColor;
-        statusHintLabel.Text = started ? "Leitura liberada para registro" : "Leitura aguardando inicio";
-        statusHintLabel.ForeColor = Color.FromArgb(98, 108, 124);
-
-        statusCard.Invalidate(true);
-        statusCardIcon.Invalidate();
-        statusValueLabel.Invalidate();
-        statusHintLabel.Invalidate();
+        bool livre = !_operacaoEmAndamento;
+        bool podeAlternarLeitura = livre && _ordemAtual is not null;
+        iniciarLeituraButton.PrimaryText = _leituraIniciada ? "PARAR LEITURA" : "INICIAR LEITURA";
+        iniciarLeituraButton.IconGlyph = _leituraIniciada ? "\uE71A" : "\uE768";
+        iniciarLeituraButton.BaseBackColor = _leituraIniciada
+            ? Color.FromArgb(212, 37, 49)
+            : podeAlternarLeitura ? ReadingStatusActiveColor : ActionDisabledColor;
+        iniciarLeituraButton.Enabled = podeAlternarLeitura;
+        iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
+        lerEtiquetaButton.Visible = _leituraIniciada;
+        leituraManualButton.Visible = _leituraIniciada;
+        lerEtiquetaButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null;
+        leituraManualButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null;
+        productionActionsButton.Visible = !_leituraIniciada && _caixasPesadas.Count > 0;
+        productionActionsButton.Enabled = productionActionsButton.Visible && livre;
     }
 
-    private void ClearDangerActionHover()
+    private void AtualizarResumoOperacional()
     {
-        Panel? hoveredPanel = _hoveredDangerActionPanel;
-        _hoveredDangerActionPanel = null;
-        hoveredPanel?.Invalidate();
+        boxesCounterLabel.Text = _caixasPesadas.Count.ToString("000", CultureInfo.InvariantCulture);
+        boxesValueLabel.Text = _caixasPesadas.Count.ToString("000", CultureInfo.InvariantCulture);
+        decimal liquido = _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg);
+        packagesCounterLabel.Text = FormatarKg(liquido);
+        packagesValueLabel.Text = FormatarKg(liquido);
+        productionFooterLabel.Text = $"{_caixasPesadas.Count} caixa(s) registrada(s). POST SAP desativado.";
     }
 
-    private async void ProductionDataGridView_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+    private void LimparOp()
     {
-        if (!_isProductionStarted)
-        {
-            statusLabel.Text = "Inicie a producao antes de imprimir etiquetas.";
-            return;
-        }
-
-        if (e.RowIndex < 0)
-        {
-            return;
-        }
-
-        DataGridViewRow row = productionDataGridView.Rows[e.RowIndex];
-        if (row.IsNewRow)
-        {
-            return;
-        }
-
-        try
-        {
-            DadosEtiquetaProducao label = ConstruirDadosEtiquetaProducao(row);
-            await _impressoraEtiquetaServico.ImprimirEtiquetaProducaoAsync(label);
-            statusLabel.Text = $"Etiqueta {label.CodigoProducao} enviada para impressao.";
-        }
-        catch (Exception ex)
-        {
-            string msg = await ErroUsuarioHelper.TratarAsync("IMPRESSAO_ETIQUETA_ERRO", ex, "ProcessoProdutoAcabadoForm",
-                "Não foi possível imprimir a etiqueta. Acione o suporte.");
-            statusLabel.Text = msg;
-            MessageBox.Show(
-                msg,
-                "Erro ao imprimir etiqueta",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-    }
-
-    private DadosEtiquetaProducao ConstruirDadosEtiquetaProducao(DataGridViewRow row)
-    {
-        return new DadosEtiquetaProducao
-        {
-            OrdemProducao = productionOrderTextBox.Text,
-            Lote = lotTextBox.Text,
-            CodigoProduto = finishedProductCodeTextBox.Text,
-            DescricaoProduto = GetCellValue(row, "productionProductColumn"),
-            DataSaidaEstufa = ovenExitTextBox.Text,
-            DataClassificacao = classificationDateTextBox.Text,
-            DataFabricacao = manufacturingDateTextBox.Text,
-            DataVencimento = expirationDateTextBox.Text,
-            CaixasPrevistas = readForecastBoxesTextBox.Text,
-            PacotesPrevistos = readForecastPackagesTextBox.Text,
-            Saldo = balanceTextBox.Text,
-            Quantidade = GetCellValue(row, "productionQuantityColumn"),
-            Peso = GetCellValue(row, "productionWeightColumn"),
-            CodigoProducao = GetCellValue(row, "productionCodeColumn")
-        };
-    }
-
-    private static string GetCellValue(DataGridViewRow row, string columnName)
-    {
-        return Convert.ToString(row.Cells[columnName].Value) ?? string.Empty;
-    }
-
-    private void ProcessoProdutoAcabadoForm_Shown(object? sender, EventArgs e)
-    {
-        BeginInvoke(ClearGridSelections);
-        StartProductionDevicesWarmUp();
-    }
-
-    private void LoadWindowIcon()
-    {
-        string iconPath = Path.Combine(AppContext.BaseDirectory, WindowIconPath);
-
-        if (File.Exists(iconPath))
-        {
-            Icon = new Icon(iconPath);
-        }
-    }
-
-    private void LoadMockData()
-    {
+        _ordemAtual = null;
+        _normaEmbalagem = null;
+        _taraCaixaSelecionada = null;
+        _caixasPesadas.Clear();
+        _paletesMontados.Clear();
         materialDataGridView.Rows.Clear();
-        materialDataGridView.Rows.Add("\u2022", "22273", "POLUCHINHA SMALL TWIST STIX BEEF 50PK", "07032302", "28/05/2026", "0");
-        materialDataGridView.Rows.Add("\u2022", "27215", "CX 01 MTHM - 450X300X65", "23012615", "22/01/2028", "808");
-        materialDataGridView.Rows.Add("\u2022", "27275", "ETIQ COUCHE ZEBRA 100X43 - PET", "09012607", "06/07/2026", "72");
-        materialDataGridView.Rows.Add("\u2022", "27277", "ETIQ COUCHE ZEBRA 80X50 - PET", "12032601", "09/09/2026", "6987");
-
         productionDataGridView.Rows.Clear();
+        AtualizarGridPaletes();
+        stepLabel.Text = "-";
+        finishedProductCodeTextBox.Clear();
+        finishedProductTextBox.Clear();
+        lotTextBox.Clear();
+        ovenExitTextBox.Clear();
+        classificationDateTextBox.Clear();
+        manufacturingDateTextBox.Clear();
+        expirationDateTextBox.Clear();
+        readForecastBoxesTextBox.Clear();
+        readForecastPackagesTextBox.Clear();
+        AtualizarCampoQuantidadePorCaixa();
+        AtualizarCamposPaletizacaoPadrao();
+        AtualizarEstadoLeitura(false);
+        AtualizarResumoOperacional();
     }
 
-    private static void ApplyGridStyle(DataGridView grid)
+    private async Task<bool> BloquearAcaoSemPermissaoAsync(string acao, string descricaoAcao)
     {
-        for (int rowIndex = 0; rowIndex < grid.Rows.Count; rowIndex++)
+        if (AutorizacaoServico.PossuiPermissao(AutorizacaoServico.ModuloProcesso, PermissoesSistema.Rotinas.LeituraProducao, acao))
         {
-            ApplyProductionRowStyle(grid.Rows[rowIndex], rowIndex);
+            return false;
         }
 
-        DataGridViewColumn? printColumn = grid.Columns["productionPrintColumn"];
-        if (printColumn is not null)
+        await AcaoNegadaHelper.RegistrarAcaoNegadaSeguroAsync(
+            AutorizacaoServico.ModuloProcesso,
+            PermissoesSistema.Rotinas.LeituraProducao,
+            acao,
+            descricaoAcao,
+            "ProcessoProdutoAcabadoForm");
+
+        string mensagem = "Usuário sem permissão para executar produto acabado.";
+        statusLabel.Text = mensagem;
+        MessageBox.Show(mensagem, "Acesso negado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        return true;
+    }
+
+    private void ProcessoProdutoAcabadoForm_FormClosing(object? sender, FormClosingEventArgs e)
+    {
+        if (!PodeFecharTela())
         {
-            printColumn.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            e.Cancel = true;
+            return;
         }
 
-        ClearGridSelection(grid);
+        _footerClockTimer?.Dispose();
     }
 
-    private static void ApplyProductionRowStyle(DataGridViewRow row, int rowIndex)
+    private bool PodeFecharTela()
     {
-        row.DefaultCellStyle.BackColor = rowIndex % 2 == 0 ? RowLight : RowGreen;
-        row.DefaultCellStyle.ForeColor = Color.FromArgb(45, 49, 56);
+        if (!_leituraIniciada)
+        {
+            return true;
+        }
+
+        statusLabel.Text = "Finalize a leitura antes de sair da tela.";
+        MessageBox.Show(
+            "Finalize a leitura antes de sair da tela.",
+            "Produto Acabado",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+        return false;
     }
 
-    private void ClearGridSelections()
+    private bool SolicitarPesoManual(decimal taraKg, out decimal pesoKg)
     {
-        ClearGridSelection(materialDataGridView);
-        ClearGridSelection(productionDataGridView);
+        pesoKg = 0m;
+        using Form prompt = new()
+        {
+            Text = "Peso manual - Produto Acabado",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            ClientSize = new Size(360, 160),
+            BackColor = Color.FromArgb(247, 248, 250)
+        };
+
+        Label label = new()
+        {
+            Text = $"Informe o peso bruto da caixa em KG.\r\nTara aplicada: {FormatarKg(taraKg)}.",
+            Dock = DockStyle.Top,
+            Height = 72,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Cascadia Code", 10F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(45, 49, 56)
+        };
+
+        TextBox pesoTextBox = new()
+        {
+            Location = new Point(80, 78),
+            Size = new Size(200, 31),
+            TextAlign = HorizontalAlignment.Center,
+            Font = new Font("Segoe UI", 13F, FontStyle.Bold)
+        };
+
+        Button confirmarButton = CriarBotaoDialogo("Confirmar", Color.FromArgb(34, 166, 82), DialogResult.OK);
+        Button cancelarButton = CriarBotaoDialogo("Cancelar", Color.FromArgb(82, 87, 96), DialogResult.Cancel);
+        FlowLayoutPanel buttons = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = 48,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(0, 6, 28, 6)
+        };
+        buttons.Controls.Add(confirmarButton);
+        buttons.Controls.Add(cancelarButton);
+        prompt.Controls.Add(label);
+        prompt.Controls.Add(pesoTextBox);
+        prompt.Controls.Add(buttons);
+        prompt.AcceptButton = confirmarButton;
+        prompt.CancelButton = cancelarButton;
+        prompt.ActiveControl = pesoTextBox;
+
+        if (prompt.ShowDialog(this) != DialogResult.OK)
+        {
+            return false;
+        }
+
+        return TryParsePesoKg(pesoTextBox.Text, out pesoKg) && pesoKg > 0m;
     }
 
-    private static void ClearGridSelection(DataGridView grid)
+    private static Button CriarBotaoDialogo(string texto, Color cor, DialogResult dialogResult)
     {
-        grid.ClearSelection();
-        grid.CurrentCell = null;
+        Button button = new()
+        {
+            Text = texto,
+            DialogResult = dialogResult,
+            BackColor = cor,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Cascadia Code", 9F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Size = new Size(108, 32),
+            Margin = new Padding(8, 0, 0, 0)
+        };
+        button.FlatAppearance.BorderSize = 0;
+        return button;
+    }
+
+    private static string FormatarKg(decimal valor)
+        => $"{valor.ToString("0.000", CultureInfo.GetCultureInfo("pt-BR"))} KG";
+
+    private static bool TryParsePesoKg(string texto, out decimal peso)
+    {
+        string normalizado = (texto ?? string.Empty)
+            .Trim()
+            .Replace("KG", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("kg", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(',', '.');
+        return decimal.TryParse(normalizado, NumberStyles.Number, CultureInfo.InvariantCulture, out peso);
+    }
+
+    private void ReadForecastBoxesTextBox_KeyPress(object? sender, KeyPressEventArgs e)
+    {
+        if (char.IsControl(e.KeyChar))
+        {
+            return;
+        }
+
+        if (!char.IsDigit(e.KeyChar))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private async void ProductionOrderTextBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Enter)
+        {
+            return;
+        }
+
+        e.SuppressKeyPress = true;
+        await ConsultarOpAsync();
+    }
+
+    private async void ProcessoProdutoAcabadoForm_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.F5)
+        {
+            e.SuppressKeyPress = true;
+            ToggleProductionFromSideButton_Click(iniciarLeituraButton, EventArgs.Empty);
+        }
+        else if (e.KeyCode == Keys.F12)
+        {
+            e.SuppressKeyPress = true;
+            await RegistrarPesoBalancaAsync();
+        }
+        else if (e.KeyCode == Keys.F9)
+        {
+            e.SuppressKeyPress = true;
+            await RegistrarPesoManualAsync();
+        }
+        else if (e.KeyCode == Keys.Delete)
+        {
+            e.SuppressKeyPress = true;
+            CancelarUltimaCaixa();
+        }
+        else if (e.KeyCode == Keys.Escape)
+        {
+            e.SuppressKeyPress = true;
+            if (PodeFecharTela())
+            {
+                Close();
+            }
+        }
+    }
+
+    private void AlignDateCardLayout(object? sender, EventArgs e)
+    {
+    }
+
+    private void AlignPlannedProductionCardLayout(object? sender, EventArgs e)
+    {
     }
 }
-
-
-
-
-
-
 
 

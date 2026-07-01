@@ -1367,12 +1367,16 @@ public sealed class ConsumoMaterialServico
                 CenarioPesagemConsumo.PesoLiquidoInvalido, MensagemPesoLiquidoInvalido);
         }
 
-        // Excesso contra a quantidade pendente do SAP (sem tolerancia inventada).
+        // Excesso contra a quantidade pendente do SAP (sem tolerancia inventada). Compara pelo LIQUIDO
+        // (ja descontada a tara). Tarefa 18.2: mensagem detalhada com saldo/previsto/utilizado.
+        decimal saldoDisponivel = componente.QuantidadePendente - totalJaPesadoLocalKg;
         decimal novoTotal = totalJaPesadoLocalKg + liquido;
         if (novoTotal > componente.QuantidadePendente)
         {
             return ResultadoPesagemConsumo.Bloqueada(
-                CenarioPesagemConsumo.ExcedePendente, MensagemExcedePendente);
+                CenarioPesagemConsumo.ExcedePendente,
+                $"Peso líquido informado ({liquido:0.###} KG) ultrapassa o saldo previsto do componente ({saldoDisponivel:0.###} KG). "
+                + $"Peso previsto: {componente.QuantidadePendente:0.###} KG. Já utilizado: {totalJaPesadoLocalKg:0.###} KG.");
         }
 
         string origemNormalizada = string.Equals(origem, PesagemConsumoMaterial.OrigemManual, StringComparison.OrdinalIgnoreCase)

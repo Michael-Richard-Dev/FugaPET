@@ -12,6 +12,7 @@ public partial class DiagnosticoConsumoSap261Form : Form
     public DiagnosticoConsumoSap261Form()
     {
         InitializeComponent();
+        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this); // Tarefa 20.6 (Ajuste 3): icone padrao
         ConfigurarTela();
     }
 

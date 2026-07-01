@@ -1,9 +1,17 @@
 ﻿namespace FugaPET_Dev.Tela.Processo;
 
-partial class ProcessoProdutoAcabadoForm
+partial class ProcessoSemiAcabadoForm
 {
     private System.ComponentModel.IContainer components = null;
     private TableLayoutPanel rootTableLayoutPanel;
+    private FugaPET_Dev.Tela.Controls.RoundedPanel apontamentoInfoPanel;
+    private Panel apontamentoInfoAccentBar;
+    private Label apontamentoInfoCaptionLabel;
+    private Label apontamentoInfoValueLabel;
+    private FugaPET_Dev.Tela.Controls.RoundedPanel apontamentoChipPanel;
+    private Panel apontamentoChipAccentBar;
+    private Label apontamentoChipCaptionLabel;
+    private Label apontamentoChipValueLabel;
     private Panel customTitleBarPanel;
     private FugaPET_Dev.Tela.Controls.RoundedPanel sidePanel;
     private TableLayoutPanel sidePanelLayout;
@@ -41,11 +49,19 @@ partial class ProcessoProdutoAcabadoForm
     private DataGridViewTextBoxColumn materialExpirationColumn;
     private DataGridViewTextBoxColumn materialBalanceColumn;
     private DataGridViewTextBoxColumn productionCodeColumn;
-    private DataGridViewTextBoxColumn productionDateColumn;
     private DataGridViewTextBoxColumn productionProductColumn;
     private DataGridViewTextBoxColumn productionQuantityColumn;
     private DataGridViewTextBoxColumn productionWeightColumn;
-    private DataGridViewImageColumn productionPrintColumn;
+    private DataGridViewTextBoxColumn productionPesoLidoColumn;
+    private DataGridViewTextBoxColumn productionItemIdColumn;
+    private DataGridViewTextBoxColumn productionPesoOrigemColumn;
+    private DataGridViewTextBoxColumn productionNumeroItemColumn;
+    private Panel weightSummaryAccentBar;
+    private Label weightSummaryTitleLabel;
+    private Label weightSummarySubtitleLabel;
+    private Label weightSummaryDividerLabel;
+    private Panel weightSummaryForecastPanel;
+    private Panel weightSummaryUsedPanel;
 
     protected override void Dispose(bool disposing)
     {
@@ -59,16 +75,24 @@ partial class ProcessoProdutoAcabadoForm
 
     private void InitializeComponent()
     {
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProcessoSemiAcabadoForm));
+        DataGridViewCellStyle dataGridViewCellStyle1 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle5 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle3 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle4 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle6 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle11 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle7 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle8 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle9 = new DataGridViewCellStyle();
+        DataGridViewCellStyle dataGridViewCellStyle10 = new DataGridViewCellStyle();
         rootTableLayoutPanel = new TableLayoutPanel();
         tableLayoutPanel1 = new TableLayoutPanel();
         tableLayoutPanel3 = new TableLayoutPanel();
         productionOrderShadowPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         productionOrderCaptionLabel = new Label();
-        productionOrderTextBox = new TextBox();
+        pedidoComboBox = new ComboBox();
         productionOrderIconPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         productionOrderSearchLabel = new PictureBox();
         lotCardPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
@@ -80,14 +104,44 @@ partial class ProcessoProdutoAcabadoForm
         stepCaptionLabel = new Label();
         stepLabel = new Label();
         stepDescriptionLabel = new Label();
-        stepIconPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
-        stepIconPictureBox = new PictureBox();
         finishedProductCardPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         finishedProductCaptionLabel = new Label();
         finishedProductCodeTextBox = new TextBox();
         finishedProductTextBox = new TextBox();
         finishedProductIconPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         finishedProductIconPictureBox = new PictureBox();
+        tableLayoutPanel11 = new TableLayoutPanel();
+        productionReadingsPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
+        productionReadingsTitleIconPictureBox = new PictureBox();
+        productionReadingsTitleLabel = new Label();
+        productionReadingsUnderlineLabel = new Label();
+        productionSearchPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
+        productionSearchTextBox = new TextBox();
+        productionSearchGlyphLabel = new Label();
+        productionFilterButton = new Button();
+        productionActionsButton = new Button();
+        productionDataGridView = new DataGridView();
+        productionCodeColumn = new DataGridViewTextBoxColumn();
+        productionProductColumn = new DataGridViewTextBoxColumn();
+        productionQuantityColumn = new DataGridViewTextBoxColumn();
+        productionWeightColumn = new DataGridViewTextBoxColumn();
+        productionPesoLidoColumn = new DataGridViewTextBoxColumn();
+        productionItemIdColumn = new DataGridViewTextBoxColumn();
+        productionPesoOrigemColumn = new DataGridViewTextBoxColumn();
+        productionNumeroItemColumn = new DataGridViewTextBoxColumn();
+        productionFooterLabel = new Label();
+        productionPageLabel = new Label();
+        productionPreviousPageButton = new Button();
+        productionPageTextBox = new TextBox();
+        productionNextPageButton = new Button();
+        apontamentoInfoPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
+        apontamentoInfoAccentBar = new Panel();
+        apontamentoInfoCaptionLabel = new Label();
+        apontamentoInfoValueLabel = new Label();
+        apontamentoChipPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
+        apontamentoChipAccentBar = new Panel();
+        apontamentoChipCaptionLabel = new Label();
+        apontamentoChipValueLabel = new Label();
         tableLayoutPanel5 = new TableLayoutPanel();
         groupBox2 = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         dateTitleIconPictureBox = new PictureBox();
@@ -131,28 +185,6 @@ partial class ProcessoProdutoAcabadoForm
         materialLotColumn = new DataGridViewTextBoxColumn();
         materialExpirationColumn = new DataGridViewTextBoxColumn();
         materialBalanceColumn = new DataGridViewTextBoxColumn();
-        tableLayoutPanel11 = new TableLayoutPanel();
-        productionReadingsPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
-        productionReadingsTitleIconPictureBox = new PictureBox();
-        productionReadingsTitleLabel = new Label();
-        productionReadingsUnderlineLabel = new Label();
-        productionSearchPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
-        productionSearchTextBox = new TextBox();
-        productionSearchGlyphLabel = new Label();
-        productionFilterButton = new Button();
-        productionActionsButton = new Button();
-        productionDataGridView = new DataGridView();
-        productionCodeColumn = new DataGridViewTextBoxColumn();
-        productionDateColumn = new DataGridViewTextBoxColumn();
-        productionProductColumn = new DataGridViewTextBoxColumn();
-        productionQuantityColumn = new DataGridViewTextBoxColumn();
-        productionWeightColumn = new DataGridViewTextBoxColumn();
-        productionPrintColumn = new DataGridViewImageColumn();
-        productionFooterLabel = new Label();
-        productionPageLabel = new Label();
-        productionPreviousPageButton = new Button();
-        productionPageTextBox = new TextBox();
-        productionNextPageButton = new Button();
         productionSearchIconPictureBox = new PictureBox();
         tableLayoutPanel7 = new TableLayoutPanel();
         label1 = new Label();
@@ -195,34 +227,34 @@ partial class ProcessoProdutoAcabadoForm
         headerTitleIconPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         headerTitleIconPictureBox = new PictureBox();
         headerTitleLabel = new Label();
-        headerSubtitleLabel = new Label();
         sapStatusPanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         sapStatusDotLabel = new Label();
         sapStatusLabel = new Label();
         minimizeWindowLabel = new Label();
         maximizeWindowLabel = new Label();
         closeWindowLabel = new Label();
+        headerSubtitleLabel = new Label();
         sidePanel = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         sideStatusTitleLabel = new Label();
         statusCard = new FugaPET_Dev.Tela.Controls.RoundedPanel();
         statusCardIcon = new Label();
         statusValueLabel = new Label();
         statusHintLabel = new Label();
-        boxesTitleLabel = new Label();
-        boxesValueLabel = new Label();
-        boxesProgressBg = new Panel();
-        boxesProgressFill = new Panel();
-        boxesTotalLabel = new Label();
-        packagesTitleLabel = new Label();
-        packagesValueLabel = new Label();
-        packagesProgressBg = new Panel();
-        packagesProgressFill = new Panel();
-        packagesTotalLabel = new Label();
-        iniciarLeituraButton = new FugaPET_Dev.Tela.ActionPillButton();
-        lerEtiquetaButton = new FugaPET_Dev.Tela.ActionPillButton();
-        leituraManualButton = new FugaPET_Dev.Tela.ActionPillButton();
-        excluirUltimaButton = new FugaPET_Dev.Tela.ActionPillButton();
-        excluirCodigoButton = new FugaPET_Dev.Tela.ActionPillButton();
+        groupBox4 = new FugaPET_Dev.Tela.Controls.RoundedPanel();
+        tableLayoutPanel12 = new TableLayoutPanel();
+        weightSummaryForecastPanel = new Panel();
+        boxesCaptionLabel = new Label();
+        boxesCounterLabel = new Label();
+        weightSummaryUsedPanel = new Panel();
+        packagesCaptionLabel = new Label();
+        packagesCounterLabel = new Label();
+        weightSummaryAccentBar = new Panel();
+        weightSummaryTitleLabel = new Label();
+        weightSummarySubtitleLabel = new Label();
+        weightSummaryDividerLabel = new Label();
+        iniciarLeituraButton = new ActionPillButton();
+        lerEtiquetaButton = new ActionPillButton();
+        leituraManualButton = new ActionPillButton();
         sidePanelLayout = new TableLayoutPanel();
         groupBox3 = new GroupBox();
         sideReadingStatusLabel = new Label();
@@ -240,12 +272,6 @@ partial class ProcessoProdutoAcabadoForm
         deleteByCodeLegendPanel = new Panel();
         deleteByCodeLegendIconLabel = new PictureBox();
         deleteByCodeLegendTextLabel = new Label();
-        groupBox4 = new GroupBox();
-        tableLayoutPanel12 = new TableLayoutPanel();
-        boxesCaptionLabel = new Label();
-        packagesCaptionLabel = new Label();
-        packagesCounterLabel = new Label();
-        boxesCounterLabel = new Label();
         readWeightLegendPanel = new Panel();
         readWeightLegendIconLabel = new PictureBox();
         readWeightLegendTextLabel = new Label();
@@ -263,11 +289,16 @@ partial class ProcessoProdutoAcabadoForm
         lotIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)lotIconPictureBox).BeginInit();
         stepCardPanel.SuspendLayout();
-        stepIconPanel.SuspendLayout();
-        ((System.ComponentModel.ISupportInitialize)stepIconPictureBox).BeginInit();
         finishedProductCardPanel.SuspendLayout();
         finishedProductIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)finishedProductIconPictureBox).BeginInit();
+        tableLayoutPanel11.SuspendLayout();
+        productionReadingsPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)productionReadingsTitleIconPictureBox).BeginInit();
+        productionSearchPanel.SuspendLayout();
+        ((System.ComponentModel.ISupportInitialize)productionDataGridView).BeginInit();
+        apontamentoInfoPanel.SuspendLayout();
+        apontamentoChipPanel.SuspendLayout();
         tableLayoutPanel5.SuspendLayout();
         groupBox2.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)dateTitleIconPictureBox).BeginInit();
@@ -280,11 +311,6 @@ partial class ProcessoProdutoAcabadoForm
         ((System.ComponentModel.ISupportInitialize)materialFilterIconPictureBox).BeginInit();
         tableLayoutPanel10.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)materialDataGridView).BeginInit();
-        tableLayoutPanel11.SuspendLayout();
-        productionReadingsPanel.SuspendLayout();
-        ((System.ComponentModel.ISupportInitialize)productionReadingsTitleIconPictureBox).BeginInit();
-        productionSearchPanel.SuspendLayout();
-        ((System.ComponentModel.ISupportInitialize)productionDataGridView).BeginInit();
         ((System.ComponentModel.ISupportInitialize)productionSearchIconPictureBox).BeginInit();
         tableLayoutPanel7.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)lotSearchIconLabel).BeginInit();
@@ -305,8 +331,10 @@ partial class ProcessoProdutoAcabadoForm
         sapStatusPanel.SuspendLayout();
         sidePanel.SuspendLayout();
         statusCard.SuspendLayout();
-        boxesProgressBg.SuspendLayout();
-        packagesProgressBg.SuspendLayout();
+        groupBox4.SuspendLayout();
+        tableLayoutPanel12.SuspendLayout();
+        weightSummaryForecastPanel.SuspendLayout();
+        weightSummaryUsedPanel.SuspendLayout();
         sidePanelLayout.SuspendLayout();
         groupBox3.SuspendLayout();
         sideActionsGroupBox.SuspendLayout();
@@ -319,8 +347,6 @@ partial class ProcessoProdutoAcabadoForm
         ((System.ComponentModel.ISupportInitialize)deleteLastLegendIconLabel).BeginInit();
         deleteByCodeLegendPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)deleteByCodeLegendIconLabel).BeginInit();
-        groupBox4.SuspendLayout();
-        tableLayoutPanel12.SuspendLayout();
         readWeightLegendPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)readWeightLegendIconLabel).BeginInit();
         manualLotLegendPanel.SuspendLayout();
@@ -334,15 +360,13 @@ partial class ProcessoProdutoAcabadoForm
         rootTableLayoutPanel.ColumnCount = 1;
         rootTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         rootTableLayoutPanel.Controls.Add(tableLayoutPanel1, 0, 0);
-        rootTableLayoutPanel.Controls.Add(headerPanel, 0, 1);
-        rootTableLayoutPanel.Controls.Add(tableLayoutPanel11, 0, 2);
+        rootTableLayoutPanel.Controls.Add(tableLayoutPanel11, 0, 1);
         rootTableLayoutPanel.Dock = DockStyle.Fill;
         rootTableLayoutPanel.Location = new Point(3, 55);
         rootTableLayoutPanel.Name = "rootTableLayoutPanel";
         rootTableLayoutPanel.Padding = new Padding(6, 6, 6, 0);
-        rootTableLayoutPanel.RowCount = 3;
-        rootTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 174F));
-        rootTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 167F));
+        rootTableLayoutPanel.RowCount = 2;
+        rootTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 86F));
         rootTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         rootTableLayoutPanel.Size = new Size(1133, 624);
         rootTableLayoutPanel.TabIndex = 0;
@@ -353,20 +377,17 @@ partial class ProcessoProdutoAcabadoForm
         tableLayoutPanel1.ColumnCount = 1;
         tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         tableLayoutPanel1.Controls.Add(tableLayoutPanel3, 0, 0);
-        tableLayoutPanel1.Controls.Add(tableLayoutPanel5, 0, 1);
         tableLayoutPanel1.Dock = DockStyle.Fill;
         tableLayoutPanel1.Location = new Point(9, 9);
         tableLayoutPanel1.Name = "tableLayoutPanel1";
-        tableLayoutPanel1.RowCount = 2;
-        tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 44.6428566F));
-        tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 55.3571434F));
-        tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Absolute, 96F));
-        tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
-        tableLayoutPanel1.Size = new Size(1115, 168);
+        tableLayoutPanel1.RowCount = 1;
+        tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tableLayoutPanel1.Size = new Size(1115, 80);
         tableLayoutPanel1.TabIndex = 3;
         // 
         // tableLayoutPanel3
         // 
+        tableLayoutPanel3.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         tableLayoutPanel3.ColumnCount = 4;
         tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19F));
         tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20F));
@@ -376,7 +397,6 @@ partial class ProcessoProdutoAcabadoForm
         tableLayoutPanel3.Controls.Add(lotCardPanel, 1, 0);
         tableLayoutPanel3.Controls.Add(stepCardPanel, 2, 0);
         tableLayoutPanel3.Controls.Add(finishedProductCardPanel, 3, 0);
-        tableLayoutPanel3.Dock = DockStyle.Fill;
         tableLayoutPanel3.Location = new Point(0, 3);
         tableLayoutPanel3.Margin = new Padding(0, 3, 0, 3);
         tableLayoutPanel3.Name = "tableLayoutPanel3";
@@ -391,7 +411,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         productionOrderShadowPanel.BackColor = Color.Transparent;
         productionOrderShadowPanel.Controls.Add(productionOrderCaptionLabel);
-        productionOrderShadowPanel.Controls.Add(productionOrderTextBox);
+        productionOrderShadowPanel.Controls.Add(pedidoComboBox);
         productionOrderShadowPanel.Controls.Add(productionOrderIconPanel);
         productionOrderShadowPanel.Dock = DockStyle.Fill;
         productionOrderShadowPanel.Location = new Point(0, 2);
@@ -413,22 +433,20 @@ partial class ProcessoProdutoAcabadoForm
         productionOrderCaptionLabel.Name = "productionOrderCaptionLabel";
         productionOrderCaptionLabel.Size = new Size(132, 14);
         productionOrderCaptionLabel.TabIndex = 0;
-        productionOrderCaptionLabel.Text = "ORDEM DE PRODUÇÃO";
+        productionOrderCaptionLabel.Text = "PEDIDO";
         // 
-        // productionOrderTextBox
+        // pedidoComboBox
         // 
-        productionOrderTextBox.BackColor = Color.White;
-        productionOrderTextBox.BorderStyle = BorderStyle.None;
-        productionOrderTextBox.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionOrderTextBox.ForeColor = Color.FromArgb(229, 27, 43);
-        productionOrderTextBox.Location = new Point(16, 25);
-        productionOrderTextBox.Multiline = false;
-        productionOrderTextBox.Name = "productionOrderTextBox";
-        productionOrderTextBox.MaxLength = 20;
-        productionOrderTextBox.ReadOnly = false;
-        productionOrderTextBox.Size = new Size(112, 25);
-        productionOrderTextBox.TabIndex = 1;
-        productionOrderTextBox.TextAlign = HorizontalAlignment.Left;
+        pedidoComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        pedidoComboBox.BackColor = Color.White;
+        pedidoComboBox.DropDownWidth = 220;
+        pedidoComboBox.FlatStyle = FlatStyle.Flat;
+        pedidoComboBox.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        pedidoComboBox.ForeColor = Color.FromArgb(229, 27, 43);
+        pedidoComboBox.Location = new Point(16, 24);
+        pedidoComboBox.Name = "pedidoComboBox";
+        pedidoComboBox.Size = new Size(173, 29);
+        pedidoComboBox.TabIndex = 1;
         // 
         // productionOrderIconPanel
         // 
@@ -446,9 +464,8 @@ partial class ProcessoProdutoAcabadoForm
         // productionOrderSearchLabel
         // 
         productionOrderSearchLabel.BackColor = Color.Transparent;
-        productionOrderSearchLabel.Cursor = Cursors.Hand;
         productionOrderSearchLabel.Dock = DockStyle.Fill;
-        productionOrderSearchLabel.Image = global::FugaPET_Dev.Properties.Resources.clipboard_red;
+        productionOrderSearchLabel.Image = (Image)resources.GetObject("productionOrderSearchLabel.Image");
         productionOrderSearchLabel.Location = new Point(0, 0);
         productionOrderSearchLabel.Name = "productionOrderSearchLabel";
         productionOrderSearchLabel.Size = new Size(38, 38);
@@ -481,7 +498,7 @@ partial class ProcessoProdutoAcabadoForm
         lotCaptionLabel.Name = "lotCaptionLabel";
         lotCaptionLabel.Size = new Size(80, 14);
         lotCaptionLabel.TabIndex = 3;
-        lotCaptionLabel.Text = "LOTE";
+        lotCaptionLabel.Text = "FORNECEDOR";
         // 
         // lotTextBox
         // 
@@ -495,7 +512,6 @@ partial class ProcessoProdutoAcabadoForm
         lotTextBox.ReadOnly = true;
         lotTextBox.Size = new Size(143, 29);
         lotTextBox.TabIndex = 4;
-        lotTextBox.Text = "119 26";
         // 
         // lotIconPanel
         // 
@@ -514,7 +530,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         lotIconPictureBox.BackColor = Color.Transparent;
         lotIconPictureBox.Dock = DockStyle.Fill;
-        lotIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.box_red;
+        lotIconPictureBox.Image = (Image)resources.GetObject("lotIconPictureBox.Image");
         lotIconPictureBox.Location = new Point(0, 0);
         lotIconPictureBox.Name = "lotIconPictureBox";
         lotIconPictureBox.Size = new Size(38, 38);
@@ -528,7 +544,6 @@ partial class ProcessoProdutoAcabadoForm
         stepCardPanel.Controls.Add(stepCaptionLabel);
         stepCardPanel.Controls.Add(stepLabel);
         stepCardPanel.Controls.Add(stepDescriptionLabel);
-        stepCardPanel.Controls.Add(stepIconPanel);
         stepCardPanel.Dock = DockStyle.Fill;
         stepCardPanel.Location = new Point(437, 2);
         stepCardPanel.Margin = new Padding(3, 2, 8, 2);
@@ -548,55 +563,30 @@ partial class ProcessoProdutoAcabadoForm
         stepCaptionLabel.Name = "stepCaptionLabel";
         stepCaptionLabel.Size = new Size(80, 14);
         stepCaptionLabel.TabIndex = 0;
-        stepCaptionLabel.Text = "PASSO";
+        stepCaptionLabel.Text = "DATA";
         // 
         // stepLabel
         // 
         stepLabel.BackColor = Color.Transparent;
-        stepLabel.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        stepLabel.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
         stepLabel.ForeColor = Color.FromArgb(229, 27, 43);
-        stepLabel.Location = new Point(16, 25);
+        stepLabel.Location = new Point(16, 24);
         stepLabel.Name = "stepLabel";
-        stepLabel.Size = new Size(42, 25);
+        stepLabel.Size = new Size(108, 18);
         stepLabel.TabIndex = 5;
-        stepLabel.Text = "12";
+        stepLabel.Text = "--/--/----";
         // 
         // stepDescriptionLabel
         // 
         stepDescriptionLabel.BackColor = Color.Transparent;
-        stepDescriptionLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        stepDescriptionLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
         stepDescriptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
-        stepDescriptionLabel.Location = new Point(64, 35);
+        stepDescriptionLabel.Location = new Point(16, 42);
         stepDescriptionLabel.Name = "stepDescriptionLabel";
-        stepDescriptionLabel.Size = new Size(116, 18);
+        stepDescriptionLabel.Size = new Size(170, 14);
         stepDescriptionLabel.TabIndex = 6;
-        stepDescriptionLabel.Text = "Depois de LEPESO";
+        stepDescriptionLabel.Text = "OP selecionada";
         stepDescriptionLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // stepIconPanel
-        // 
-        stepIconPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        stepIconPanel.BackColor = Color.Transparent;
-        stepIconPanel.Controls.Add(stepIconPictureBox);
-        stepIconPanel.FillColor = Color.FromArgb(253, 237, 240);
-        stepIconPanel.Location = new Point(186, 12);
-        stepIconPanel.Name = "stepIconPanel";
-        stepIconPanel.ShadowBlur = 0;
-        stepIconPanel.ShadowOffsetY = 0;
-        stepIconPanel.Size = new Size(38, 38);
-        stepIconPanel.TabIndex = 7;
-        // 
-        // stepIconPictureBox
-        // 
-        stepIconPictureBox.BackColor = Color.Transparent;
-        stepIconPictureBox.Dock = DockStyle.Fill;
-        stepIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.gear_red;
-        stepIconPictureBox.Location = new Point(0, 0);
-        stepIconPictureBox.Name = "stepIconPictureBox";
-        stepIconPictureBox.Size = new Size(38, 38);
-        stepIconPictureBox.SizeMode = PictureBoxSizeMode.CenterImage;
-        stepIconPictureBox.TabIndex = 0;
-        stepIconPictureBox.TabStop = false;
         // 
         // finishedProductCardPanel
         // 
@@ -624,7 +614,7 @@ partial class ProcessoProdutoAcabadoForm
         finishedProductCaptionLabel.Name = "finishedProductCaptionLabel";
         finishedProductCaptionLabel.Size = new Size(160, 14);
         finishedProductCaptionLabel.TabIndex = 6;
-        finishedProductCaptionLabel.Text = "PRODUTO ACABADO";
+        finishedProductCaptionLabel.Text = "TIPO DE PEDIDO";
         // 
         // finishedProductCodeTextBox
         // 
@@ -638,7 +628,6 @@ partial class ProcessoProdutoAcabadoForm
         finishedProductCodeTextBox.ReadOnly = true;
         finishedProductCodeTextBox.Size = new Size(80, 20);
         finishedProductCodeTextBox.TabIndex = 7;
-        finishedProductCodeTextBox.Text = "27771";
         // 
         // finishedProductTextBox
         // 
@@ -652,7 +641,6 @@ partial class ProcessoProdutoAcabadoForm
         finishedProductTextBox.ReadOnly = true;
         finishedProductTextBox.Size = new Size(363, 20);
         finishedProductTextBox.TabIndex = 8;
-        finishedProductTextBox.Text = "TWIST STIX CARNE 24X50PCS";
         // 
         // finishedProductIconPanel
         // 
@@ -671,13 +659,432 @@ partial class ProcessoProdutoAcabadoForm
         // 
         finishedProductIconPictureBox.BackColor = Color.Transparent;
         finishedProductIconPictureBox.Dock = DockStyle.Fill;
-        finishedProductIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.box_red;
+        finishedProductIconPictureBox.Image = (Image)resources.GetObject("finishedProductIconPictureBox.Image");
         finishedProductIconPictureBox.Location = new Point(0, 0);
         finishedProductIconPictureBox.Name = "finishedProductIconPictureBox";
         finishedProductIconPictureBox.Size = new Size(38, 38);
         finishedProductIconPictureBox.SizeMode = PictureBoxSizeMode.CenterImage;
         finishedProductIconPictureBox.TabIndex = 0;
         finishedProductIconPictureBox.TabStop = false;
+        // 
+        // tableLayoutPanel11
+        // 
+        tableLayoutPanel11.ColumnCount = 1;
+        tableLayoutPanel11.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tableLayoutPanel11.Controls.Add(productionReadingsPanel, 0, 0);
+        tableLayoutPanel11.Dock = DockStyle.Fill;
+        tableLayoutPanel11.Location = new Point(6, 92);
+        tableLayoutPanel11.Margin = new Padding(0);
+        tableLayoutPanel11.Name = "tableLayoutPanel11";
+        tableLayoutPanel11.RowCount = 1;
+        tableLayoutPanel11.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        tableLayoutPanel11.Size = new Size(1121, 532);
+        tableLayoutPanel11.TabIndex = 4;
+        // 
+        // productionReadingsPanel
+        // 
+        productionReadingsPanel.BackColor = Color.Transparent;
+        productionReadingsPanel.BorderRadius = 7;
+        productionReadingsPanel.Controls.Add(productionReadingsTitleIconPictureBox);
+        productionReadingsPanel.Controls.Add(productionReadingsTitleLabel);
+        productionReadingsPanel.Controls.Add(productionReadingsUnderlineLabel);
+        productionReadingsPanel.Controls.Add(productionSearchPanel);
+        productionReadingsPanel.Controls.Add(productionFilterButton);
+        productionReadingsPanel.Controls.Add(productionActionsButton);
+        productionReadingsPanel.Controls.Add(productionDataGridView);
+        productionReadingsPanel.Controls.Add(productionFooterLabel);
+        productionReadingsPanel.Controls.Add(productionPageLabel);
+        productionReadingsPanel.Controls.Add(productionPreviousPageButton);
+        productionReadingsPanel.Controls.Add(productionPageTextBox);
+        productionReadingsPanel.Controls.Add(productionNextPageButton);
+        productionReadingsPanel.Dock = DockStyle.Fill;
+        productionReadingsPanel.Location = new Point(0, 0);
+        productionReadingsPanel.Margin = new Padding(0);
+        productionReadingsPanel.Name = "productionReadingsPanel";
+        productionReadingsPanel.ShadowBlur = 0;
+        productionReadingsPanel.ShadowOffsetY = 0;
+        productionReadingsPanel.Size = new Size(1121, 532);
+        productionReadingsPanel.TabIndex = 0;
+        // 
+        // productionReadingsTitleIconPictureBox
+        // 
+        productionReadingsTitleIconPictureBox.BackColor = Color.Transparent;
+        productionReadingsTitleIconPictureBox.Image = (Image)resources.GetObject("productionReadingsTitleIconPictureBox.Image");
+        productionReadingsTitleIconPictureBox.Location = new Point(17, 14);
+        productionReadingsTitleIconPictureBox.Name = "productionReadingsTitleIconPictureBox";
+        productionReadingsTitleIconPictureBox.Size = new Size(14, 14);
+        productionReadingsTitleIconPictureBox.SizeMode = PictureBoxSizeMode.CenterImage;
+        productionReadingsTitleIconPictureBox.TabIndex = 0;
+        productionReadingsTitleIconPictureBox.TabStop = false;
+        // 
+        // productionReadingsTitleLabel
+        // 
+        productionReadingsTitleLabel.BackColor = Color.Transparent;
+        productionReadingsTitleLabel.Font = new Font("Cascadia Code", 7.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        productionReadingsTitleLabel.ForeColor = Color.FromArgb(31, 41, 55);
+        productionReadingsTitleLabel.Location = new Point(34, 13);
+        productionReadingsTitleLabel.Name = "productionReadingsTitleLabel";
+        productionReadingsTitleLabel.Size = new Size(160, 16);
+        productionReadingsTitleLabel.TabIndex = 1;
+        productionReadingsTitleLabel.Text = "ITENS DO PEDIDO";
+        productionReadingsTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // productionReadingsUnderlineLabel
+        // 
+        productionReadingsUnderlineLabel.BackColor = Color.FromArgb(229, 27, 43);
+        productionReadingsUnderlineLabel.Location = new Point(17, 36);
+        productionReadingsUnderlineLabel.Name = "productionReadingsUnderlineLabel";
+        productionReadingsUnderlineLabel.Size = new Size(62, 2);
+        productionReadingsUnderlineLabel.TabIndex = 2;
+        // 
+        // productionSearchPanel
+        // 
+        productionSearchPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        productionSearchPanel.BackColor = Color.Transparent;
+        productionSearchPanel.BorderRadius = 4;
+        productionSearchPanel.Controls.Add(productionSearchTextBox);
+        productionSearchPanel.Controls.Add(productionSearchGlyphLabel);
+        productionSearchPanel.FillColor = Color.FromArgb(248, 250, 252);
+        productionSearchPanel.Location = new Point(681, 10);
+        productionSearchPanel.Name = "productionSearchPanel";
+        productionSearchPanel.ShadowBlur = 0;
+        productionSearchPanel.ShadowOffsetY = 0;
+        productionSearchPanel.Size = new Size(215, 24);
+        productionSearchPanel.TabIndex = 3;
+        // 
+        // productionSearchTextBox
+        // 
+        productionSearchTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        productionSearchTextBox.BackColor = Color.FromArgb(248, 250, 252);
+        productionSearchTextBox.BorderStyle = BorderStyle.None;
+        productionSearchTextBox.Font = new Font("Cascadia Code", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        productionSearchTextBox.ForeColor = Color.FromArgb(107, 114, 128);
+        productionSearchTextBox.Location = new Point(10, 5);
+        productionSearchTextBox.Name = "productionSearchTextBox";
+        productionSearchTextBox.PlaceholderText = "Pesquisar itens...";
+        productionSearchTextBox.Size = new Size(175, 11);
+        productionSearchTextBox.TabIndex = 0;
+        // 
+        // productionSearchGlyphLabel
+        // 
+        productionSearchGlyphLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        productionSearchGlyphLabel.BackColor = Color.Transparent;
+        productionSearchGlyphLabel.Font = new Font("Segoe MDL2 Assets", 8.5F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        productionSearchGlyphLabel.ForeColor = Color.FromArgb(148, 163, 184);
+        productionSearchGlyphLabel.Location = new Point(190, 4);
+        productionSearchGlyphLabel.Name = "productionSearchGlyphLabel";
+        productionSearchGlyphLabel.Size = new Size(16, 16);
+        productionSearchGlyphLabel.TabIndex = 1;
+        productionSearchGlyphLabel.Text = "?";
+        productionSearchGlyphLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
+        // productionFilterButton
+        // 
+        productionFilterButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        productionFilterButton.BackColor = Color.White;
+        productionFilterButton.FlatAppearance.BorderColor = Color.FromArgb(226, 231, 238);
+        productionFilterButton.FlatStyle = FlatStyle.Flat;
+        productionFilterButton.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        productionFilterButton.ForeColor = Color.FromArgb(31, 41, 55);
+        productionFilterButton.Location = new Point(908, 12);
+        productionFilterButton.Name = "productionFilterButton";
+        productionFilterButton.Size = new Size(78, 24);
+        productionFilterButton.TabIndex = 5;
+        productionFilterButton.Text = "=  Filtros";
+        productionFilterButton.UseVisualStyleBackColor = false;
+        // 
+        // productionActionsButton
+        // 
+        productionActionsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        productionActionsButton.BackColor = Color.White;
+        productionActionsButton.FlatAppearance.BorderColor = Color.FromArgb(226, 231, 238);
+        productionActionsButton.FlatStyle = FlatStyle.Flat;
+        productionActionsButton.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        productionActionsButton.ForeColor = Color.FromArgb(31, 41, 55);
+        productionActionsButton.Location = new Point(996, 12);
+        productionActionsButton.Name = "productionActionsButton";
+        productionActionsButton.Size = new Size(108, 24);
+        productionActionsButton.TabIndex = 6;
+        productionActionsButton.Text = "Ações  ?";
+        productionActionsButton.UseVisualStyleBackColor = false;
+        // 
+        // productionDataGridView
+        // 
+        productionDataGridView.AllowUserToAddRows = false;
+        productionDataGridView.AllowUserToDeleteRows = false;
+        productionDataGridView.AllowUserToResizeRows = false;
+        productionDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        productionDataGridView.BackgroundColor = Color.White;
+        productionDataGridView.BorderStyle = BorderStyle.None;
+        productionDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        dataGridViewCellStyle1.BackColor = Color.FromArgb(17, 24, 39);
+        dataGridViewCellStyle1.Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        dataGridViewCellStyle1.ForeColor = Color.White;
+        dataGridViewCellStyle1.SelectionBackColor = Color.FromArgb(17, 24, 39);
+        dataGridViewCellStyle1.SelectionForeColor = Color.White;
+        productionDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
+        productionDataGridView.ColumnHeadersHeight = 24;
+        productionDataGridView.Columns.AddRange(new DataGridViewColumn[] { productionCodeColumn, productionProductColumn, productionQuantityColumn, productionWeightColumn, productionPesoLidoColumn, productionItemIdColumn, productionPesoOrigemColumn, productionNumeroItemColumn });
+        dataGridViewCellStyle5.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        dataGridViewCellStyle5.BackColor = Color.FromArgb(250, 251, 252);
+        dataGridViewCellStyle5.Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        dataGridViewCellStyle5.ForeColor = Color.FromArgb(45, 49, 56);
+        dataGridViewCellStyle5.SelectionBackColor = Color.FromArgb(229, 27, 43);
+        dataGridViewCellStyle5.SelectionForeColor = Color.White;
+        dataGridViewCellStyle5.WrapMode = DataGridViewTriState.False;
+        productionDataGridView.DefaultCellStyle = dataGridViewCellStyle5;
+        productionDataGridView.EnableHeadersVisualStyles = false;
+        productionDataGridView.GridColor = Color.FromArgb(226, 231, 238);
+        productionDataGridView.Location = new Point(17, 44);
+        productionDataGridView.MultiSelect = false;
+        productionDataGridView.Name = "productionDataGridView";
+        productionDataGridView.ReadOnly = true;
+        productionDataGridView.RowHeadersVisible = false;
+        productionDataGridView.RowHeadersWidth = 51;
+        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        productionDataGridView.Size = new Size(1087, 444);
+        productionDataGridView.TabIndex = 7;
+        // 
+        // productionCodeColumn
+        // 
+        dataGridViewCellStyle2.Font = new Font("Segoe UI", 9F);
+        productionCodeColumn.DefaultCellStyle = dataGridViewCellStyle2;
+        productionCodeColumn.HeaderText = "Material";
+        productionCodeColumn.MinimumWidth = 6;
+        productionCodeColumn.Name = "productionCodeColumn";
+        productionCodeColumn.ReadOnly = true;
+        productionCodeColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionCodeColumn.Width = 150;
+        // 
+        // productionProductColumn
+        // 
+        productionProductColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        productionProductColumn.FillWeight = 210F;
+        productionProductColumn.HeaderText = "Descrição do Material";
+        productionProductColumn.MinimumWidth = 6;
+        productionProductColumn.Name = "productionProductColumn";
+        productionProductColumn.ReadOnly = true;
+        productionProductColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        // 
+        // productionQuantityColumn
+        // 
+        dataGridViewCellStyle3.Font = new Font("Segoe UI", 9F);
+        productionQuantityColumn.DefaultCellStyle = dataGridViewCellStyle3;
+        productionQuantityColumn.HeaderText = "Quantidade";
+        productionQuantityColumn.MinimumWidth = 6;
+        productionQuantityColumn.Name = "productionQuantityColumn";
+        productionQuantityColumn.ReadOnly = true;
+        productionQuantityColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionQuantityColumn.Width = 95;
+        // 
+        // productionWeightColumn
+        // 
+        dataGridViewCellStyle4.Font = new Font("Segoe UI", 9F);
+        productionWeightColumn.DefaultCellStyle = dataGridViewCellStyle4;
+        productionWeightColumn.HeaderText = "Unidade";
+        productionWeightColumn.MinimumWidth = 6;
+        productionWeightColumn.Name = "productionWeightColumn";
+        productionWeightColumn.ReadOnly = true;
+        productionWeightColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionWeightColumn.Width = 110;
+        // 
+        // productionPesoLidoColumn
+        // 
+        productionPesoLidoColumn.HeaderText = "Peso";
+        productionPesoLidoColumn.MinimumWidth = 6;
+        productionPesoLidoColumn.Name = "productionPesoLidoColumn";
+        productionPesoLidoColumn.ReadOnly = true;
+        productionPesoLidoColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionPesoLidoColumn.Width = 110;
+        // 
+        // productionItemIdColumn
+        // 
+        productionItemIdColumn.HeaderText = "ItemId";
+        productionItemIdColumn.Name = "productionItemIdColumn";
+        productionItemIdColumn.ReadOnly = true;
+        productionItemIdColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionItemIdColumn.Visible = false;
+        // 
+        // productionPesoOrigemColumn
+        // 
+        productionPesoOrigemColumn.HeaderText = "Origem";
+        productionPesoOrigemColumn.Name = "productionPesoOrigemColumn";
+        productionPesoOrigemColumn.ReadOnly = true;
+        productionPesoOrigemColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionPesoOrigemColumn.Visible = false;
+        // 
+        // productionNumeroItemColumn
+        // 
+        productionNumeroItemColumn.HeaderText = "NumeroItem";
+        productionNumeroItemColumn.Name = "productionNumeroItemColumn";
+        productionNumeroItemColumn.ReadOnly = true;
+        productionNumeroItemColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionNumeroItemColumn.Visible = false;
+        // 
+        // productionFooterLabel
+        // 
+        productionFooterLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+        productionFooterLabel.BackColor = Color.Transparent;
+        productionFooterLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        productionFooterLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        productionFooterLabel.Location = new Point(17, 499);
+        productionFooterLabel.Name = "productionFooterLabel";
+        productionFooterLabel.Size = new Size(220, 18);
+        productionFooterLabel.TabIndex = 8;
+        productionFooterLabel.Text = "Exibindo 0 de 0 itens";
+        productionFooterLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // productionPageLabel
+        // 
+        productionPageLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        productionPageLabel.BackColor = Color.Transparent;
+        productionPageLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        productionPageLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        productionPageLabel.Location = new Point(898, 499);
+        productionPageLabel.Name = "productionPageLabel";
+        productionPageLabel.Size = new Size(80, 18);
+        productionPageLabel.TabIndex = 9;
+        productionPageLabel.Text = "Página 1 de 20";
+        productionPageLabel.TextAlign = ContentAlignment.MiddleRight;
+        // 
+        // productionPreviousPageButton
+        // 
+        productionPreviousPageButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        productionPreviousPageButton.BackColor = Color.Transparent;
+        productionPreviousPageButton.FlatAppearance.BorderSize = 0;
+        productionPreviousPageButton.FlatStyle = FlatStyle.Flat;
+        productionPreviousPageButton.Font = new Font("Cascadia Code", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        productionPreviousPageButton.ForeColor = Color.FromArgb(148, 163, 184);
+        productionPreviousPageButton.Location = new Point(984, 494);
+        productionPreviousPageButton.Name = "productionPreviousPageButton";
+        productionPreviousPageButton.Size = new Size(24, 26);
+        productionPreviousPageButton.TabIndex = 10;
+        productionPreviousPageButton.Text = "‹";
+        productionPreviousPageButton.UseVisualStyleBackColor = false;
+        // 
+        // productionPageTextBox
+        // 
+        productionPageTextBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        productionPageTextBox.BackColor = Color.White;
+        productionPageTextBox.BorderStyle = BorderStyle.FixedSingle;
+        productionPageTextBox.Font = new Font("Segoe UI", 7F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        productionPageTextBox.ForeColor = Color.FromArgb(17, 24, 39);
+        productionPageTextBox.Location = new Point(1011, 496);
+        productionPageTextBox.Name = "productionPageTextBox";
+        productionPageTextBox.ReadOnly = true;
+        productionPageTextBox.Size = new Size(44, 20);
+        productionPageTextBox.TabIndex = 11;
+        productionPageTextBox.Text = "1";
+        productionPageTextBox.TextAlign = HorizontalAlignment.Center;
+        // 
+        // productionNextPageButton
+        // 
+        productionNextPageButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        productionNextPageButton.BackColor = Color.Transparent;
+        productionNextPageButton.FlatAppearance.BorderSize = 0;
+        productionNextPageButton.FlatStyle = FlatStyle.Flat;
+        productionNextPageButton.Font = new Font("Cascadia Code", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        productionNextPageButton.ForeColor = Color.FromArgb(148, 163, 184);
+        productionNextPageButton.Location = new Point(1062, 494);
+        productionNextPageButton.Name = "productionNextPageButton";
+        productionNextPageButton.Size = new Size(24, 26);
+        productionNextPageButton.TabIndex = 12;
+        productionNextPageButton.Text = "›";
+        productionNextPageButton.UseVisualStyleBackColor = false;
+        // 
+        // apontamentoInfoPanel
+        // 
+        apontamentoInfoPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        apontamentoInfoPanel.BackColor = Color.Transparent;
+        apontamentoInfoPanel.BorderRadius = 7;
+        apontamentoInfoPanel.Controls.Add(apontamentoInfoAccentBar);
+        apontamentoInfoPanel.Controls.Add(apontamentoInfoCaptionLabel);
+        apontamentoInfoPanel.Controls.Add(apontamentoInfoValueLabel);
+        apontamentoInfoPanel.FillColor = Color.FromArgb(255, 247, 247);
+        apontamentoInfoPanel.Font = new Font("Cascadia Code", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        apontamentoInfoPanel.Location = new Point(12, 544);
+        apontamentoInfoPanel.Name = "apontamentoInfoPanel";
+        apontamentoInfoPanel.ShadowBlur = 0;
+        apontamentoInfoPanel.ShadowOffsetY = 0;
+        apontamentoInfoPanel.Size = new Size(191, 48);
+        apontamentoInfoPanel.TabIndex = 11;
+        // 
+        // apontamentoInfoAccentBar
+        // 
+        apontamentoInfoAccentBar.BackColor = Color.FromArgb(229, 27, 43);
+        apontamentoInfoAccentBar.Location = new Point(10, 11);
+        apontamentoInfoAccentBar.Name = "apontamentoInfoAccentBar";
+        apontamentoInfoAccentBar.Size = new Size(6, 22);
+        apontamentoInfoAccentBar.TabIndex = 0;
+        // 
+        // apontamentoInfoCaptionLabel
+        // 
+        apontamentoInfoCaptionLabel.BackColor = Color.Transparent;
+        apontamentoInfoCaptionLabel.Font = new Font("Cascadia Code", 7.15F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentoInfoCaptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        apontamentoInfoCaptionLabel.Location = new Point(22, 6);
+        apontamentoInfoCaptionLabel.Name = "apontamentoInfoCaptionLabel";
+        apontamentoInfoCaptionLabel.Size = new Size(160, 12);
+        apontamentoInfoCaptionLabel.TabIndex = 1;
+        apontamentoInfoCaptionLabel.Text = "INFORMAÇÃO DE PESAGEM";
+        // 
+        // apontamentoInfoValueLabel
+        // 
+        apontamentoInfoValueLabel.BackColor = Color.Transparent;
+        apontamentoInfoValueLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentoInfoValueLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        apontamentoInfoValueLabel.Location = new Point(22, 20);
+        apontamentoInfoValueLabel.Name = "apontamentoInfoValueLabel";
+        apontamentoInfoValueLabel.Size = new Size(160, 16);
+        apontamentoInfoValueLabel.TabIndex = 2;
+        apontamentoInfoValueLabel.Text = "Apontamento Nº 70530";
+        // 
+        // apontamentoChipPanel
+        // 
+        apontamentoChipPanel.Anchor = AnchorStyles.Top;
+        apontamentoChipPanel.BackColor = Color.Transparent;
+        apontamentoChipPanel.BorderRadius = 14;
+        apontamentoChipPanel.Controls.Add(apontamentoChipAccentBar);
+        apontamentoChipPanel.Controls.Add(apontamentoChipCaptionLabel);
+        apontamentoChipPanel.Controls.Add(apontamentoChipValueLabel);
+        apontamentoChipPanel.FillColor = Color.FromArgb(255, 255, 255);
+        apontamentoChipPanel.Location = new Point(656, 10);
+        apontamentoChipPanel.Name = "apontamentoChipPanel";
+        apontamentoChipPanel.ShadowBlur = 0;
+        apontamentoChipPanel.ShadowOffsetY = 0;
+        apontamentoChipPanel.Size = new Size(111, 37);
+        apontamentoChipPanel.TabIndex = 12;
+        // 
+        // apontamentoChipAccentBar
+        // 
+        apontamentoChipAccentBar.BackColor = Color.FromArgb(229, 27, 43);
+        apontamentoChipAccentBar.Location = new Point(10, 8);
+        apontamentoChipAccentBar.Name = "apontamentoChipAccentBar";
+        apontamentoChipAccentBar.Size = new Size(5, 20);
+        apontamentoChipAccentBar.TabIndex = 0;
+        // 
+        // apontamentoChipCaptionLabel
+        // 
+        apontamentoChipCaptionLabel.BackColor = Color.Transparent;
+        apontamentoChipCaptionLabel.Font = new Font("Cascadia Code", 6.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentoChipCaptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        apontamentoChipCaptionLabel.Location = new Point(20, 3);
+        apontamentoChipCaptionLabel.Name = "apontamentoChipCaptionLabel";
+        apontamentoChipCaptionLabel.Size = new Size(104, 16);
+        apontamentoChipCaptionLabel.TabIndex = 1;
+        apontamentoChipCaptionLabel.Text = "APONTAMENTO";
+        // 
+        // apontamentoChipValueLabel
+        // 
+        apontamentoChipValueLabel.BackColor = Color.Transparent;
+        apontamentoChipValueLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentoChipValueLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        apontamentoChipValueLabel.Location = new Point(20, 12);
+        apontamentoChipValueLabel.Name = "apontamentoChipValueLabel";
+        apontamentoChipValueLabel.Size = new Size(88, 22);
+        apontamentoChipValueLabel.TabIndex = 2;
+        apontamentoChipValueLabel.Text = "Nº 70530";
+        apontamentoChipValueLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // tableLayoutPanel5
         // 
@@ -716,12 +1123,13 @@ partial class ProcessoProdutoAcabadoForm
         groupBox2.ShadowOffsetY = 0;
         groupBox2.Size = new Size(438, 81);
         groupBox2.TabIndex = 2;
+        groupBox2.Visible = false;
         groupBox2.Resize += AlignDateCardLayout;
         // 
         // dateTitleIconPictureBox
         // 
         dateTitleIconPictureBox.BackColor = Color.Transparent;
-        dateTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.date_card_icon;
+        dateTitleIconPictureBox.Image = (Image)resources.GetObject("dateTitleIconPictureBox.Image");
         dateTitleIconPictureBox.Location = new Point(17, 13);
         dateTitleIconPictureBox.Name = "dateTitleIconPictureBox";
         dateTitleIconPictureBox.Size = new Size(14, 14);
@@ -918,12 +1326,13 @@ partial class ProcessoProdutoAcabadoForm
         Gpb_PrevisaoLeitura.ShadowOffsetY = 0;
         Gpb_PrevisaoLeitura.Size = new Size(666, 81);
         Gpb_PrevisaoLeitura.TabIndex = 25;
+        Gpb_PrevisaoLeitura.Visible = false;
         Gpb_PrevisaoLeitura.Resize += AlignPlannedProductionCardLayout;
         // 
         // plannedProductionTitleIconPictureBox
         // 
         plannedProductionTitleIconPictureBox.BackColor = Color.Transparent;
-        plannedProductionTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.planned_production_icon;
+        plannedProductionTitleIconPictureBox.Image = (Image)resources.GetObject("plannedProductionTitleIconPictureBox.Image");
         plannedProductionTitleIconPictureBox.Location = new Point(17, 13);
         plannedProductionTitleIconPictureBox.Name = "plannedProductionTitleIconPictureBox";
         plannedProductionTitleIconPictureBox.Size = new Size(14, 14);
@@ -992,7 +1401,7 @@ partial class ProcessoProdutoAcabadoForm
         readForecastPackagesCaptionLabel.Name = "readForecastPackagesCaptionLabel";
         readForecastPackagesCaptionLabel.Size = new Size(211, 22);
         readForecastPackagesCaptionLabel.TabIndex = 19;
-        readForecastPackagesCaptionLabel.Text = "NORMA EMBALAGEM";
+        readForecastPackagesCaptionLabel.Text = "QTD. PACOTES";
         // 
         // readForecastPackagesTextBox
         // 
@@ -1020,7 +1429,7 @@ partial class ProcessoProdutoAcabadoForm
         readForecastBoxesCaptionLabel.Name = "readForecastBoxesCaptionLabel";
         readForecastBoxesCaptionLabel.Size = new Size(211, 22);
         readForecastBoxesCaptionLabel.TabIndex = 18;
-        readForecastBoxesCaptionLabel.Text = "QTD. POR CAIXA";
+        readForecastBoxesCaptionLabel.Text = "QTD. CAIXAS";
         // 
         // readForecastBoxesTextBox
         // 
@@ -1031,12 +1440,11 @@ partial class ProcessoProdutoAcabadoForm
         readForecastBoxesTextBox.ForeColor = Color.FromArgb(17, 24, 39);
         readForecastBoxesTextBox.Location = new Point(0, 24);
         readForecastBoxesTextBox.Margin = new Padding(0);
-        readForecastBoxesTextBox.Multiline = false;
+        readForecastBoxesTextBox.Multiline = true;
         readForecastBoxesTextBox.Name = "readForecastBoxesTextBox";
-        readForecastBoxesTextBox.ReadOnly = false;
+        readForecastBoxesTextBox.ReadOnly = true;
         readForecastBoxesTextBox.Size = new Size(211, 17);
         readForecastBoxesTextBox.TabIndex = 20;
-        readForecastBoxesTextBox.TextAlign = HorizontalAlignment.Left;
         readForecastBoxesTextBox.Text = "35";
         // 
         // balanceCaptionLabel
@@ -1089,7 +1497,7 @@ partial class ProcessoProdutoAcabadoForm
         // materialTitleIconPictureBox
         // 
         materialTitleIconPictureBox.BackColor = Color.Transparent;
-        materialTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.material_card_icon;
+        materialTitleIconPictureBox.Image = (Image)resources.GetObject("materialTitleIconPictureBox.Image");
         materialTitleIconPictureBox.Location = new Point(17, 14);
         materialTitleIconPictureBox.Name = "materialTitleIconPictureBox";
         materialTitleIconPictureBox.Size = new Size(14, 14);
@@ -1121,7 +1529,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         materialFilterIconPictureBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         materialFilterIconPictureBox.BackColor = Color.Transparent;
-        materialFilterIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.filter_icon;
+        materialFilterIconPictureBox.Image = (Image)resources.GetObject("materialFilterIconPictureBox.Image");
         materialFilterIconPictureBox.Location = new Point(977, 13);
         materialFilterIconPictureBox.Name = "materialFilterIconPictureBox";
         materialFilterIconPictureBox.Size = new Size(18, 18);
@@ -1152,8 +1560,7 @@ partial class ProcessoProdutoAcabadoForm
         materialViewAllChevronLabel.Name = "materialViewAllChevronLabel";
         materialViewAllChevronLabel.Size = new Size(16, 18);
         materialViewAllChevronLabel.TabIndex = 8;
-        materialViewAllChevronLabel.Font = new Font("Segoe MDL2 Assets", 8.5F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        materialViewAllChevronLabel.Text = "\uE76C";
+        materialViewAllChevronLabel.Text = "?";
         materialViewAllChevronLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // tableLayoutPanel10
@@ -1178,22 +1585,22 @@ partial class ProcessoProdutoAcabadoForm
         materialDataGridView.BackgroundColor = Color.White;
         materialDataGridView.BorderStyle = BorderStyle.None;
         materialDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dataGridViewCellStyle5.BackColor = Color.FromArgb(245, 247, 250);
-        dataGridViewCellStyle5.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold);
-        dataGridViewCellStyle5.ForeColor = Color.FromArgb(31, 41, 55);
-        dataGridViewCellStyle5.SelectionBackColor = Color.FromArgb(245, 247, 250);
-        dataGridViewCellStyle5.SelectionForeColor = Color.FromArgb(31, 41, 55);
-        materialDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle5;
+        dataGridViewCellStyle6.BackColor = Color.FromArgb(245, 247, 250);
+        dataGridViewCellStyle6.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold);
+        dataGridViewCellStyle6.ForeColor = Color.FromArgb(31, 41, 55);
+        dataGridViewCellStyle6.SelectionBackColor = Color.FromArgb(245, 247, 250);
+        dataGridViewCellStyle6.SelectionForeColor = Color.FromArgb(31, 41, 55);
+        materialDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle6;
         materialDataGridView.ColumnHeadersHeight = 22;
         materialDataGridView.Columns.AddRange(new DataGridViewColumn[] { materialStatusColumn, materialCodeColumn, materialDescriptionColumn, materialLotColumn, materialExpirationColumn, materialBalanceColumn });
-        dataGridViewCellStyle6.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridViewCellStyle6.BackColor = Color.FromArgb(250, 251, 252);
-        dataGridViewCellStyle6.Font = new Font("Cascadia Code", 6.75F);
-        dataGridViewCellStyle6.ForeColor = Color.FromArgb(45, 49, 56);
-        dataGridViewCellStyle6.SelectionBackColor = Color.FromArgb(229, 27, 43);
-        dataGridViewCellStyle6.SelectionForeColor = Color.White;
-        dataGridViewCellStyle6.WrapMode = DataGridViewTriState.False;
-        materialDataGridView.DefaultCellStyle = dataGridViewCellStyle6;
+        dataGridViewCellStyle11.Alignment = DataGridViewContentAlignment.MiddleLeft;
+        dataGridViewCellStyle11.BackColor = Color.FromArgb(250, 251, 252);
+        dataGridViewCellStyle11.Font = new Font("Cascadia Code", 6.75F);
+        dataGridViewCellStyle11.ForeColor = Color.FromArgb(45, 49, 56);
+        dataGridViewCellStyle11.SelectionBackColor = Color.FromArgb(229, 27, 43);
+        dataGridViewCellStyle11.SelectionForeColor = Color.White;
+        dataGridViewCellStyle11.WrapMode = DataGridViewTriState.False;
+        materialDataGridView.DefaultCellStyle = dataGridViewCellStyle11;
         materialDataGridView.Dock = DockStyle.Fill;
         materialDataGridView.EnableHeadersVisualStyles = false;
         materialDataGridView.GridColor = Color.FromArgb(229, 231, 235);
@@ -1219,10 +1626,11 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // materialCodeColumn
         // 
+        dataGridViewCellStyle7.Font = new Font("Segoe UI", 6.75F);
+        materialCodeColumn.DefaultCellStyle = dataGridViewCellStyle7;
         materialCodeColumn.HeaderText = "CÓDIGO";
         materialCodeColumn.MinimumWidth = 6;
         materialCodeColumn.Name = "materialCodeColumn";
-        materialCodeColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
         materialCodeColumn.ReadOnly = true;
         materialCodeColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
         materialCodeColumn.Width = 82;
@@ -1238,347 +1646,42 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // materialLotColumn
         // 
+        dataGridViewCellStyle8.Font = new Font("Segoe UI", 6.75F);
+        materialLotColumn.DefaultCellStyle = dataGridViewCellStyle8;
         materialLotColumn.HeaderText = "LOTE";
         materialLotColumn.MinimumWidth = 6;
         materialLotColumn.Name = "materialLotColumn";
-        materialLotColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
         materialLotColumn.ReadOnly = true;
         materialLotColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
         materialLotColumn.Width = 180;
         // 
         // materialExpirationColumn
         // 
+        dataGridViewCellStyle9.Font = new Font("Segoe UI", 6.75F);
+        materialExpirationColumn.DefaultCellStyle = dataGridViewCellStyle9;
         materialExpirationColumn.HeaderText = "VALIDADE";
         materialExpirationColumn.MinimumWidth = 6;
         materialExpirationColumn.Name = "materialExpirationColumn";
-        materialExpirationColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
         materialExpirationColumn.ReadOnly = true;
         materialExpirationColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
         materialExpirationColumn.Width = 210;
         // 
         // materialBalanceColumn
         // 
+        dataGridViewCellStyle10.Font = new Font("Segoe UI", 6.75F);
+        materialBalanceColumn.DefaultCellStyle = dataGridViewCellStyle10;
         materialBalanceColumn.HeaderText = "SALDO PROD.";
         materialBalanceColumn.MinimumWidth = 6;
         materialBalanceColumn.Name = "materialBalanceColumn";
-        materialBalanceColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
         materialBalanceColumn.ReadOnly = true;
         materialBalanceColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
         materialBalanceColumn.Width = 210;
-        // 
-        // tableLayoutPanel11
-        // 
-        tableLayoutPanel11.ColumnCount = 1;
-        tableLayoutPanel11.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        tableLayoutPanel11.Controls.Add(productionReadingsPanel, 0, 0);
-        tableLayoutPanel11.Dock = DockStyle.Fill;
-        tableLayoutPanel11.Location = new Point(9, 350);
-        tableLayoutPanel11.Name = "tableLayoutPanel11";
-        tableLayoutPanel11.RowCount = 1;
-        tableLayoutPanel11.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        tableLayoutPanel11.Size = new Size(1115, 271);
-        tableLayoutPanel11.TabIndex = 4;
-        // 
-        // productionReadingsPanel
-        // 
-        productionReadingsPanel.BackColor = Color.Transparent;
-        productionReadingsPanel.BorderRadius = 7;
-        productionReadingsPanel.Controls.Add(productionReadingsTitleIconPictureBox);
-        productionReadingsPanel.Controls.Add(productionReadingsTitleLabel);
-        productionReadingsPanel.Controls.Add(productionReadingsUnderlineLabel);
-        productionReadingsPanel.Controls.Add(productionSearchPanel);
-        productionReadingsPanel.Controls.Add(productionFilterButton);
-        productionReadingsPanel.Controls.Add(productionActionsButton);
-        productionReadingsPanel.Controls.Add(productionDataGridView);
-        productionReadingsPanel.Controls.Add(productionFooterLabel);
-        productionReadingsPanel.Controls.Add(productionPageLabel);
-        productionReadingsPanel.Controls.Add(productionPreviousPageButton);
-        productionReadingsPanel.Controls.Add(productionPageTextBox);
-        productionReadingsPanel.Controls.Add(productionNextPageButton);
-        productionReadingsPanel.Dock = DockStyle.Fill;
-        productionReadingsPanel.Location = new Point(0, 3);
-        productionReadingsPanel.Margin = new Padding(0, 3, 0, 3);
-        productionReadingsPanel.Name = "productionReadingsPanel";
-        productionReadingsPanel.ShadowBlur = 0;
-        productionReadingsPanel.ShadowOffsetY = 0;
-        productionReadingsPanel.Size = new Size(1115, 265);
-        productionReadingsPanel.TabIndex = 0;
-        // 
-        // productionReadingsTitleIconPictureBox
-        // 
-        productionReadingsTitleIconPictureBox.BackColor = Color.Transparent;
-        productionReadingsTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.production_readings_icon;
-        productionReadingsTitleIconPictureBox.Location = new Point(17, 14);
-        productionReadingsTitleIconPictureBox.Name = "productionReadingsTitleIconPictureBox";
-        productionReadingsTitleIconPictureBox.Size = new Size(14, 14);
-        productionReadingsTitleIconPictureBox.SizeMode = PictureBoxSizeMode.CenterImage;
-        productionReadingsTitleIconPictureBox.TabIndex = 0;
-        productionReadingsTitleIconPictureBox.TabStop = false;
-        // 
-        // productionReadingsTitleLabel
-        // 
-        productionReadingsTitleLabel.BackColor = Color.Transparent;
-        productionReadingsTitleLabel.Font = new Font("Cascadia Code", 7.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        productionReadingsTitleLabel.ForeColor = Color.FromArgb(31, 41, 55);
-        productionReadingsTitleLabel.Location = new Point(34, 13);
-        productionReadingsTitleLabel.Name = "productionReadingsTitleLabel";
-        productionReadingsTitleLabel.Size = new Size(160, 16);
-        productionReadingsTitleLabel.TabIndex = 1;
-        productionReadingsTitleLabel.Text = "LEITURAS / ETIQUETAS";
-        productionReadingsTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // productionReadingsUnderlineLabel
-        // 
-        productionReadingsUnderlineLabel.BackColor = Color.FromArgb(229, 27, 43);
-        productionReadingsUnderlineLabel.Location = new Point(17, 36);
-        productionReadingsUnderlineLabel.Name = "productionReadingsUnderlineLabel";
-        productionReadingsUnderlineLabel.Size = new Size(62, 2);
-        productionReadingsUnderlineLabel.TabIndex = 2;
-        // 
-        // productionSearchPanel
-        // 
-        productionSearchPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        productionSearchPanel.BackColor = Color.Transparent;
-        productionSearchPanel.BorderRadius = 4;
-        productionSearchPanel.Controls.Add(productionSearchTextBox);
-        productionSearchPanel.Controls.Add(productionSearchGlyphLabel);
-        productionSearchPanel.FillColor = Color.FromArgb(248, 250, 252);
-        productionSearchPanel.Location = new Point(675, 10);
-        productionSearchPanel.Name = "productionSearchPanel";
-        productionSearchPanel.ShadowBlur = 0;
-        productionSearchPanel.ShadowOffsetY = 0;
-        productionSearchPanel.Size = new Size(215, 24);
-        productionSearchPanel.TabIndex = 3;
-        // 
-        // productionSearchTextBox
-        // 
-        productionSearchTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        productionSearchTextBox.BackColor = Color.FromArgb(248, 250, 252);
-        productionSearchTextBox.BorderStyle = BorderStyle.None;
-        productionSearchTextBox.Font = new Font("Cascadia Code", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionSearchTextBox.ForeColor = Color.FromArgb(107, 114, 128);
-        productionSearchTextBox.Location = new Point(10, 5);
-        productionSearchTextBox.Name = "productionSearchTextBox";
-        productionSearchTextBox.PlaceholderText = "Pesquisar etiquetas...";
-        productionSearchTextBox.Size = new Size(175, 11);
-        productionSearchTextBox.TabIndex = 0;
-        // 
-        // productionSearchGlyphLabel
-        // 
-        productionSearchGlyphLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        productionSearchGlyphLabel.BackColor = Color.Transparent;
-        productionSearchGlyphLabel.Font = new Font("Segoe MDL2 Assets", 8.5F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionSearchGlyphLabel.ForeColor = Color.FromArgb(148, 163, 184);
-        productionSearchGlyphLabel.Location = new Point(190, 4);
-        productionSearchGlyphLabel.Name = "productionSearchGlyphLabel";
-        productionSearchGlyphLabel.Size = new Size(16, 16);
-        productionSearchGlyphLabel.TabIndex = 1;
-        productionSearchGlyphLabel.Text = "\uE721";
-        productionSearchGlyphLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // productionFilterButton
-        // 
-        productionFilterButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        productionFilterButton.BackColor = Color.White;
-        productionFilterButton.FlatAppearance.BorderColor = Color.FromArgb(226, 231, 238);
-        productionFilterButton.FlatStyle = FlatStyle.Flat;
-        productionFilterButton.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        productionFilterButton.ForeColor = Color.FromArgb(31, 41, 55);
-        productionFilterButton.Location = new Point(902, 12);
-        productionFilterButton.Name = "productionFilterButton";
-        productionFilterButton.Size = new Size(78, 24);
-        productionFilterButton.TabIndex = 5;
-        productionFilterButton.Text = "=  Filtros";
-        productionFilterButton.UseVisualStyleBackColor = false;
-        // 
-        // productionActionsButton
-        // 
-        productionActionsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        productionActionsButton.BackColor = Color.White;
-        productionActionsButton.FlatAppearance.BorderColor = Color.FromArgb(226, 231, 238);
-        productionActionsButton.FlatStyle = FlatStyle.Flat;
-        productionActionsButton.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        productionActionsButton.ForeColor = Color.FromArgb(31, 41, 55);
-        productionActionsButton.Location = new Point(990, 12);
-        productionActionsButton.Name = "productionActionsButton";
-        productionActionsButton.Size = new Size(108, 24);
-        productionActionsButton.TabIndex = 6;
-        productionActionsButton.Text = "Ações  \uE70D";
-        productionActionsButton.UseVisualStyleBackColor = false;
-        // 
-        // productionDataGridView
-        // 
-        productionDataGridView.AllowUserToAddRows = false;
-        productionDataGridView.AllowUserToDeleteRows = false;
-        productionDataGridView.AllowUserToResizeRows = false;
-        productionDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        productionDataGridView.BackgroundColor = Color.White;
-        productionDataGridView.BorderStyle = BorderStyle.None;
-        productionDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dataGridViewCellStyle7.BackColor = Color.FromArgb(17, 24, 39);
-        dataGridViewCellStyle7.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold);
-        dataGridViewCellStyle7.ForeColor = Color.White;
-        dataGridViewCellStyle7.SelectionBackColor = Color.FromArgb(17, 24, 39);
-        dataGridViewCellStyle7.SelectionForeColor = Color.White;
-        productionDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle7;
-        productionDataGridView.ColumnHeadersHeight = 24;
-        productionDataGridView.Columns.AddRange(new DataGridViewColumn[] { productionCodeColumn, productionDateColumn, productionProductColumn, productionQuantityColumn, productionWeightColumn, productionPrintColumn });
-        dataGridViewCellStyle8.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridViewCellStyle8.BackColor = Color.FromArgb(250, 251, 252);
-        dataGridViewCellStyle8.Font = new Font("Cascadia Code", 6.75F);
-        dataGridViewCellStyle8.ForeColor = Color.FromArgb(45, 49, 56);
-        dataGridViewCellStyle8.SelectionBackColor = Color.FromArgb(250, 251, 252);
-        dataGridViewCellStyle8.SelectionForeColor = Color.FromArgb(45, 49, 56);
-        dataGridViewCellStyle8.WrapMode = DataGridViewTriState.False;
-        productionDataGridView.DefaultCellStyle = dataGridViewCellStyle8;
-        productionDataGridView.EnableHeadersVisualStyles = false;
-        productionDataGridView.GridColor = Color.FromArgb(226, 231, 238);
-        productionDataGridView.Location = new Point(17, 44);
-        productionDataGridView.MultiSelect = false;
-        productionDataGridView.Name = "productionDataGridView";
-        productionDataGridView.ReadOnly = true;
-        productionDataGridView.RowHeadersVisible = false;
-        productionDataGridView.RowHeadersWidth = 51;
-        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        productionDataGridView.Size = new Size(1081, 177);
-        productionDataGridView.TabIndex = 7;
-        // 
-        // productionCodeColumn
-        // 
-        productionCodeColumn.HeaderText = "CÓDIGO LEITURA";
-        productionCodeColumn.MinimumWidth = 6;
-        productionCodeColumn.Name = "productionCodeColumn";
-        productionCodeColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
-        productionCodeColumn.ReadOnly = true;
-        productionCodeColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        productionCodeColumn.Width = 150;
-        // 
-        // productionDateColumn
-        // 
-        productionDateColumn.HeaderText = "DATA";
-        productionDateColumn.MinimumWidth = 6;
-        productionDateColumn.Name = "productionDateColumn";
-        productionDateColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
-        productionDateColumn.ReadOnly = true;
-        productionDateColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        productionDateColumn.Width = 150;
-        // 
-        // productionProductColumn
-        // 
-        productionProductColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        productionProductColumn.FillWeight = 210F;
-        productionProductColumn.HeaderText = "PRODUTO ACABADO";
-        productionProductColumn.MinimumWidth = 6;
-        productionProductColumn.Name = "productionProductColumn";
-        productionProductColumn.ReadOnly = true;
-        productionProductColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        // 
-        // productionQuantityColumn
-        // 
-        productionQuantityColumn.HeaderText = "QTDE.";
-        productionQuantityColumn.MinimumWidth = 6;
-        productionQuantityColumn.Name = "productionQuantityColumn";
-        productionQuantityColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
-        productionQuantityColumn.ReadOnly = true;
-        productionQuantityColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        productionQuantityColumn.Width = 95;
-        // 
-        // productionWeightColumn
-        // 
-        productionWeightColumn.HeaderText = "PESO (kg)";
-        productionWeightColumn.MinimumWidth = 6;
-        productionWeightColumn.Name = "productionWeightColumn";
-        productionWeightColumn.DefaultCellStyle.Font = new Font("Segoe UI", 6.75F);
-        productionWeightColumn.ReadOnly = true;
-        productionWeightColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
-        productionWeightColumn.Width = 110;
-        // 
-        // productionPrintColumn
-        // 
-        productionPrintColumn.HeaderText = "";
-        productionPrintColumn.ImageLayout = DataGridViewImageCellLayout.Zoom;
-        productionPrintColumn.MinimumWidth = 6;
-        productionPrintColumn.Name = "productionPrintColumn";
-        productionPrintColumn.ReadOnly = true;
-        productionPrintColumn.Resizable = DataGridViewTriState.False;
-        productionPrintColumn.Width = 44;
-        // 
-        // productionFooterLabel
-        // 
-        productionFooterLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        productionFooterLabel.BackColor = Color.Transparent;
-        productionFooterLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionFooterLabel.ForeColor = Color.FromArgb(75, 85, 99);
-        productionFooterLabel.Location = new Point(17, 232);
-        productionFooterLabel.Name = "productionFooterLabel";
-        productionFooterLabel.Size = new Size(220, 18);
-        productionFooterLabel.TabIndex = 8;
-        productionFooterLabel.Text = "Exibindo 1 a 6 de 120 leituras";
-        productionFooterLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // productionPageLabel
-        // 
-        productionPageLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        productionPageLabel.BackColor = Color.Transparent;
-        productionPageLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionPageLabel.ForeColor = Color.FromArgb(75, 85, 99);
-        productionPageLabel.Location = new Point(892, 232);
-        productionPageLabel.Name = "productionPageLabel";
-        productionPageLabel.Size = new Size(80, 18);
-        productionPageLabel.TabIndex = 9;
-        productionPageLabel.Text = "Página 1 de 20";
-        productionPageLabel.TextAlign = ContentAlignment.MiddleRight;
-        // 
-        // productionPreviousPageButton
-        // 
-        productionPreviousPageButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        productionPreviousPageButton.BackColor = Color.Transparent;
-        productionPreviousPageButton.FlatAppearance.BorderSize = 0;
-        productionPreviousPageButton.FlatStyle = FlatStyle.Flat;
-        productionPreviousPageButton.Font = new Font("Cascadia Code", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        productionPreviousPageButton.ForeColor = Color.FromArgb(148, 163, 184);
-        productionPreviousPageButton.Location = new Point(978, 227);
-        productionPreviousPageButton.Name = "productionPreviousPageButton";
-        productionPreviousPageButton.Size = new Size(24, 26);
-        productionPreviousPageButton.TabIndex = 10;
-        productionPreviousPageButton.Text = "‹";
-        productionPreviousPageButton.UseVisualStyleBackColor = false;
-        // 
-        // productionPageTextBox
-        // 
-        productionPageTextBox.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        productionPageTextBox.BackColor = Color.White;
-        productionPageTextBox.BorderStyle = BorderStyle.FixedSingle;
-        productionPageTextBox.Font = new Font("Segoe UI", 7F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        productionPageTextBox.ForeColor = Color.FromArgb(17, 24, 39);
-        productionPageTextBox.Location = new Point(1005, 229);
-        productionPageTextBox.Name = "productionPageTextBox";
-        productionPageTextBox.ReadOnly = true;
-        productionPageTextBox.Size = new Size(44, 18);
-        productionPageTextBox.TabIndex = 11;
-        productionPageTextBox.Text = "1";
-        productionPageTextBox.TextAlign = HorizontalAlignment.Center;
-        // 
-        // productionNextPageButton
-        // 
-        productionNextPageButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        productionNextPageButton.BackColor = Color.Transparent;
-        productionNextPageButton.FlatAppearance.BorderSize = 0;
-        productionNextPageButton.FlatStyle = FlatStyle.Flat;
-        productionNextPageButton.Font = new Font("Cascadia Code", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        productionNextPageButton.ForeColor = Color.FromArgb(148, 163, 184);
-        productionNextPageButton.Location = new Point(1056, 227);
-        productionNextPageButton.Name = "productionNextPageButton";
-        productionNextPageButton.Size = new Size(24, 26);
-        productionNextPageButton.TabIndex = 12;
-        productionNextPageButton.Text = "›";
-        productionNextPageButton.UseVisualStyleBackColor = false;
         // 
         // productionSearchIconPictureBox
         // 
         productionSearchIconPictureBox.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         productionSearchIconPictureBox.BackColor = Color.FromArgb(248, 250, 252);
-        productionSearchIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.search_red;
+        productionSearchIconPictureBox.Image = (Image)resources.GetObject("productionSearchIconPictureBox.Image");
         productionSearchIconPictureBox.Location = new Point(870, 13);
         productionSearchIconPictureBox.Name = "productionSearchIconPictureBox";
         productionSearchIconPictureBox.Size = new Size(16, 16);
@@ -1620,7 +1723,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         lotSearchIconLabel.Anchor = AnchorStyles.None;
         lotSearchIconLabel.BackColor = Color.Transparent;
-        lotSearchIconLabel.Image = global::FugaPET_Dev.Properties.Resources.search_red;
+        lotSearchIconLabel.Image = (Image)resources.GetObject("lotSearchIconLabel.Image");
         lotSearchIconLabel.Location = new Point(6, 19);
         lotSearchIconLabel.Name = "lotSearchIconLabel";
         lotSearchIconLabel.Size = new Size(43, 38);
@@ -1639,7 +1742,7 @@ partial class ProcessoProdutoAcabadoForm
         statusLabel.Name = "statusLabel";
         statusLabel.Size = new Size(478, 38);
         statusLabel.TabIndex = 0;
-        statusLabel.Text = "\u2713  Leitura OK !";
+        statusLabel.Text = "?  Leitura OK !";
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // footerBar
@@ -1716,7 +1819,7 @@ partial class ProcessoProdutoAcabadoForm
         cellUserIcon.Name = "cellUserIcon";
         cellUserIcon.Size = new Size(28, 38);
         cellUserIcon.TabIndex = 1;
-        cellUserIcon.Text = "\uE77B";
+        cellUserIcon.Text = "";
         cellUserIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // cellUserDivider
@@ -1766,7 +1869,7 @@ partial class ProcessoProdutoAcabadoForm
         cellTerminalIcon.Name = "cellTerminalIcon";
         cellTerminalIcon.Size = new Size(28, 38);
         cellTerminalIcon.TabIndex = 1;
-        cellTerminalIcon.Text = "\uE977";
+        cellTerminalIcon.Text = "";
         cellTerminalIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // cellTerminalDivider
@@ -1816,7 +1919,7 @@ partial class ProcessoProdutoAcabadoForm
         cellEmpresaIcon.Name = "cellEmpresaIcon";
         cellEmpresaIcon.Size = new Size(28, 38);
         cellEmpresaIcon.TabIndex = 1;
-        cellEmpresaIcon.Text = "\uE80F";
+        cellEmpresaIcon.Text = "";
         cellEmpresaIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // cellEmpresaDivider
@@ -1866,7 +1969,7 @@ partial class ProcessoProdutoAcabadoForm
         cellBancoIcon.Name = "cellBancoIcon";
         cellBancoIcon.Size = new Size(28, 38);
         cellBancoIcon.TabIndex = 1;
-        cellBancoIcon.Text = "\uE8FC";
+        cellBancoIcon.Text = "";
         cellBancoIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // cellBancoDivider
@@ -1916,7 +2019,7 @@ partial class ProcessoProdutoAcabadoForm
         cellHoraIcon.Name = "cellHoraIcon";
         cellHoraIcon.Size = new Size(24, 38);
         cellHoraIcon.TabIndex = 1;
-        cellHoraIcon.Text = "\uE121";
+        cellHoraIcon.Text = "";
         cellHoraIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // cellHoraDivider
@@ -1965,7 +2068,7 @@ partial class ProcessoProdutoAcabadoForm
         cellDataIcon.Name = "cellDataIcon";
         cellDataIcon.Size = new Size(24, 38);
         cellDataIcon.TabIndex = 1;
-        cellDataIcon.Text = "\uE787";
+        cellDataIcon.Text = "";
         cellDataIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // statusCell
@@ -2028,11 +2131,11 @@ partial class ProcessoProdutoAcabadoForm
         customTitleBarPanel.Controls.Add(headerDividerLabel);
         customTitleBarPanel.Controls.Add(headerTitleIconPanel);
         customTitleBarPanel.Controls.Add(headerTitleLabel);
-        customTitleBarPanel.Controls.Add(headerSubtitleLabel);
         customTitleBarPanel.Controls.Add(sapStatusPanel);
         customTitleBarPanel.Controls.Add(minimizeWindowLabel);
         customTitleBarPanel.Controls.Add(maximizeWindowLabel);
         customTitleBarPanel.Controls.Add(closeWindowLabel);
+        customTitleBarPanel.Controls.Add(headerSubtitleLabel);
         customTitleBarPanel.Dock = DockStyle.Fill;
         customTitleBarPanel.Location = new Point(0, 0);
         customTitleBarPanel.Margin = new Padding(0);
@@ -2062,13 +2165,13 @@ partial class ProcessoProdutoAcabadoForm
         menuHeaderLabel.Name = "menuHeaderLabel";
         menuHeaderLabel.Size = new Size(40, 36);
         menuHeaderLabel.TabIndex = 4;
-        menuHeaderLabel.Text = "\uE700";
+        menuHeaderLabel.Text = "";
         menuHeaderLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // companyLogoPictureBox
         // 
         companyLogoPictureBox.BackColor = Color.Transparent;
-        companyLogoPictureBox.Image = global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
+        companyLogoPictureBox.Image = (Image)resources.GetObject("companyLogoPictureBox.Image");
         companyLogoPictureBox.Location = new Point(60, 5);
         companyLogoPictureBox.Name = "companyLogoPictureBox";
         companyLogoPictureBox.Size = new Size(128, 43);
@@ -2100,7 +2203,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         headerTitleIconPictureBox.BackColor = Color.Transparent;
         headerTitleIconPictureBox.Dock = DockStyle.Fill;
-        headerTitleIconPictureBox.Image = global::FugaPET_Dev.Properties.Resources.production_title_icon;
+        headerTitleIconPictureBox.Image = (Image)resources.GetObject("headerTitleIconPictureBox.Image");
         headerTitleIconPictureBox.Location = new Point(0, 0);
         headerTitleIconPictureBox.Name = "headerTitleIconPictureBox";
         headerTitleIconPictureBox.Size = new Size(29, 29);
@@ -2117,20 +2220,8 @@ partial class ProcessoProdutoAcabadoForm
         headerTitleLabel.Name = "headerTitleLabel";
         headerTitleLabel.Size = new Size(260, 23);
         headerTitleLabel.TabIndex = 7;
-        headerTitleLabel.Text = "Leitura de Produção";
+        headerTitleLabel.Text = "Produto Semi-Acabado";
         headerTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // headerSubtitleLabel
-        // 
-        headerSubtitleLabel.BackColor = Color.Transparent;
-        headerSubtitleLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
-        headerSubtitleLabel.Location = new Point(279, 29);
-        headerSubtitleLabel.Name = "headerSubtitleLabel";
-        headerSubtitleLabel.Size = new Size(420, 18);
-        headerSubtitleLabel.TabIndex = 8;
-        headerSubtitleLabel.Text = "Registro e confirmação de produção / Integração SAP";
-        headerSubtitleLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // sapStatusPanel
         // 
@@ -2141,11 +2232,11 @@ partial class ProcessoProdutoAcabadoForm
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
         sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(910, 10);
+        sapStatusPanel.Location = new Point(748, 10);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
         sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(190, 27);
+        sapStatusPanel.Size = new Size(452, 27);
         sapStatusPanel.TabIndex = 9;
         // 
         // sapStatusDotLabel
@@ -2157,7 +2248,7 @@ partial class ProcessoProdutoAcabadoForm
         sapStatusDotLabel.Name = "sapStatusDotLabel";
         sapStatusDotLabel.Size = new Size(14, 18);
         sapStatusDotLabel.TabIndex = 0;
-        sapStatusDotLabel.Text = "\u25CF";
+        sapStatusDotLabel.Text = "●";
         sapStatusDotLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // sapStatusLabel
@@ -2167,7 +2258,7 @@ partial class ProcessoProdutoAcabadoForm
         sapStatusLabel.ForeColor = Color.White;
         sapStatusLabel.Location = new Point(27, 5);
         sapStatusLabel.Name = "sapStatusLabel";
-        sapStatusLabel.Size = new Size(151, 17);
+        sapStatusLabel.Size = new Size(411, 17);
         sapStatusLabel.TabIndex = 1;
         sapStatusLabel.Text = "SAP: não configurado";
         sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -2211,25 +2302,28 @@ partial class ProcessoProdutoAcabadoForm
         closeWindowLabel.Text = "×";
         closeWindowLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
+        // headerSubtitleLabel
+        // 
+        headerSubtitleLabel.BackColor = Color.Transparent;
+        headerSubtitleLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
+        headerSubtitleLabel.Location = new Point(279, 29);
+        headerSubtitleLabel.Name = "headerSubtitleLabel";
+        headerSubtitleLabel.Size = new Size(420, 18);
+        headerSubtitleLabel.TabIndex = 8;
+        headerSubtitleLabel.Text = "Pesagem e entrada de produto semi-acabado por ordem de produção";
+        headerSubtitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        // 
         // sidePanel
         // 
         sidePanel.BackColor = Color.Transparent;
         sidePanel.BorderRadius = 7;
         sidePanel.Controls.Add(sideStatusTitleLabel);
         sidePanel.Controls.Add(statusCard);
-        sidePanel.Controls.Add(boxesTitleLabel);
-        sidePanel.Controls.Add(boxesValueLabel);
-        sidePanel.Controls.Add(boxesProgressBg);
-        sidePanel.Controls.Add(boxesTotalLabel);
-        sidePanel.Controls.Add(packagesTitleLabel);
-        sidePanel.Controls.Add(packagesValueLabel);
-        sidePanel.Controls.Add(packagesProgressBg);
-        sidePanel.Controls.Add(packagesTotalLabel);
+        sidePanel.Controls.Add(groupBox4);
         sidePanel.Controls.Add(iniciarLeituraButton);
         sidePanel.Controls.Add(lerEtiquetaButton);
         sidePanel.Controls.Add(leituraManualButton);
-        sidePanel.Controls.Add(excluirUltimaButton);
-        sidePanel.Controls.Add(excluirCodigoButton);
         sidePanel.Dock = DockStyle.Fill;
         sidePanel.Location = new Point(1142, 66);
         sidePanel.Margin = new Padding(3, 14, 9, 12);
@@ -2263,7 +2357,7 @@ partial class ProcessoProdutoAcabadoForm
         statusCard.Name = "statusCard";
         statusCard.ShadowBlur = 0;
         statusCard.ShadowOffsetY = 0;
-        statusCard.Size = new Size(163, 80);
+        statusCard.Size = new Size(183, 80);
         statusCard.TabIndex = 1;
         // 
         // statusCardIcon
@@ -2301,115 +2395,147 @@ partial class ProcessoProdutoAcabadoForm
         statusHintLabel.TabIndex = 2;
         statusHintLabel.Text = "Leitura aguardando início";
         // 
-        // boxesTitleLabel
+        // groupBox4
         // 
-        boxesTitleLabel.BackColor = Color.Transparent;
-        boxesTitleLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        boxesTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
-        boxesTitleLabel.Image = global::FugaPET_Dev.Properties.Resources.material_card_icon;
-        boxesTitleLabel.ImageAlign = ContentAlignment.MiddleLeft;
-        boxesTitleLabel.Location = new Point(16, 138);
-        boxesTitleLabel.Name = "boxesTitleLabel";
-        boxesTitleLabel.Size = new Size(160, 18);
-        boxesTitleLabel.TabIndex = 2;
-        boxesTitleLabel.Text = "     LEITURA - CAIXAS";
-        boxesTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        groupBox4.BackColor = Color.Transparent;
+        groupBox4.BorderRadius = 10;
+        groupBox4.Controls.Add(tableLayoutPanel12);
+        groupBox4.Controls.Add(weightSummaryAccentBar);
+        groupBox4.Controls.Add(weightSummaryTitleLabel);
+        groupBox4.Controls.Add(weightSummarySubtitleLabel);
+        groupBox4.Controls.Add(weightSummaryDividerLabel);
+        groupBox4.FillColor = Color.FromArgb(255, 255, 255);
+        groupBox4.ForeColor = Color.FromArgb(229, 231, 235);
+        groupBox4.Location = new Point(16, 130);
+        groupBox4.Name = "groupBox4";
+        groupBox4.ShadowBlur = 0;
+        groupBox4.ShadowOffsetY = 0;
+        groupBox4.Size = new Size(183, 206);
+        groupBox4.TabIndex = 14;
         // 
-        // boxesValueLabel
+        // tableLayoutPanel12
         // 
-        boxesValueLabel.BackColor = Color.Transparent;
-        boxesValueLabel.Font = new Font("Segoe UI", 19F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        boxesValueLabel.ForeColor = Color.FromArgb(212, 37, 49);
-        boxesValueLabel.Location = new Point(16, 160);
-        boxesValueLabel.Name = "boxesValueLabel";
-        boxesValueLabel.Size = new Size(110, 38);
-        boxesValueLabel.TabIndex = 3;
-        boxesValueLabel.Text = "000";
-        boxesValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+        tableLayoutPanel12.ColumnCount = 1;
+        tableLayoutPanel12.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        tableLayoutPanel12.Controls.Add(weightSummaryForecastPanel, 0, 0);
+        tableLayoutPanel12.Controls.Add(weightSummaryUsedPanel, 0, 1);
+        tableLayoutPanel12.Dock = DockStyle.Fill;
+        tableLayoutPanel12.Location = new Point(0, 0);
+        tableLayoutPanel12.Name = "tableLayoutPanel12";
+        tableLayoutPanel12.RowCount = 2;
+        tableLayoutPanel12.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        tableLayoutPanel12.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        tableLayoutPanel12.Size = new Size(183, 206);
+        tableLayoutPanel12.TabIndex = 9;
         // 
-        // boxesProgressBg
+        // weightSummaryForecastPanel
         // 
-        boxesProgressBg.BackColor = Color.FromArgb(229, 232, 238);
-        boxesProgressBg.Controls.Add(boxesProgressFill);
-        boxesProgressBg.Location = new Point(16, 207);
-        boxesProgressBg.Name = "boxesProgressBg";
-        boxesProgressBg.Size = new Size(126, 6);
-        boxesProgressBg.TabIndex = 4;
+        weightSummaryForecastPanel.BackColor = Color.Transparent;
+        weightSummaryForecastPanel.Controls.Add(boxesCaptionLabel);
+        weightSummaryForecastPanel.Controls.Add(boxesCounterLabel);
+        weightSummaryForecastPanel.Dock = DockStyle.Fill;
+        weightSummaryForecastPanel.Location = new Point(0, 0);
+        weightSummaryForecastPanel.Margin = new Padding(0);
+        weightSummaryForecastPanel.Name = "weightSummaryForecastPanel";
+        weightSummaryForecastPanel.Size = new Size(183, 103);
+        weightSummaryForecastPanel.TabIndex = 10;
         // 
-        // boxesProgressFill
+        // boxesCaptionLabel
         // 
-        boxesProgressFill.BackColor = Color.FromArgb(212, 37, 49);
-        boxesProgressFill.Location = new Point(0, 0);
-        boxesProgressFill.Name = "boxesProgressFill";
-        boxesProgressFill.Size = new Size(88, 6);
-        boxesProgressFill.TabIndex = 0;
+        boxesCaptionLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold);
+        boxesCaptionLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        boxesCaptionLabel.Location = new Point(3, 0);
+        boxesCaptionLabel.Name = "boxesCaptionLabel";
+        boxesCaptionLabel.Size = new Size(177, 16);
+        boxesCaptionLabel.TabIndex = 5;
+        boxesCaptionLabel.Text = "Saldo OP";
+        boxesCaptionLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // boxesTotalLabel
+        // boxesCounterLabel
         // 
-        boxesTotalLabel.BackColor = Color.Transparent;
-        boxesTotalLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        boxesTotalLabel.ForeColor = Color.FromArgb(98, 108, 124);
-        boxesTotalLabel.Location = new Point(146, 198);
-        boxesTotalLabel.Name = "boxesTotalLabel";
-        boxesTotalLabel.Size = new Size(45, 18);
-        boxesTotalLabel.TabIndex = 5;
-        boxesTotalLabel.Text = "de 35";
-        boxesTotalLabel.TextAlign = ContentAlignment.MiddleLeft;
+        boxesCounterLabel.BackColor = Color.FromArgb(250, 251, 252);
+        boxesCounterLabel.Font = new Font("Segoe UI", 15.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        boxesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        boxesCounterLabel.Location = new Point(3, 16);
+        boxesCounterLabel.Name = "boxesCounterLabel";
+        boxesCounterLabel.Size = new Size(177, 28);
+        boxesCounterLabel.TabIndex = 6;
+        boxesCounterLabel.Text = "000";
+        boxesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // packagesTitleLabel
+        // weightSummaryUsedPanel
         // 
-        packagesTitleLabel.BackColor = Color.Transparent;
-        packagesTitleLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        packagesTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
-        packagesTitleLabel.Image = global::FugaPET_Dev.Properties.Resources.material_card_icon;
-        packagesTitleLabel.ImageAlign = ContentAlignment.MiddleLeft;
-        packagesTitleLabel.Location = new Point(16, 240);
-        packagesTitleLabel.Name = "packagesTitleLabel";
-        packagesTitleLabel.Size = new Size(160, 18);
-        packagesTitleLabel.TabIndex = 6;
-        packagesTitleLabel.Text = "     LEITURA - PACOTES";
-        packagesTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        weightSummaryUsedPanel.BackColor = Color.Transparent;
+        weightSummaryUsedPanel.Controls.Add(packagesCaptionLabel);
+        weightSummaryUsedPanel.Controls.Add(packagesCounterLabel);
+        weightSummaryUsedPanel.Dock = DockStyle.Fill;
+        weightSummaryUsedPanel.Location = new Point(0, 103);
+        weightSummaryUsedPanel.Margin = new Padding(0);
+        weightSummaryUsedPanel.Name = "weightSummaryUsedPanel";
+        weightSummaryUsedPanel.Size = new Size(183, 103);
+        weightSummaryUsedPanel.TabIndex = 11;
         // 
-        // packagesValueLabel
+        // packagesCaptionLabel
         // 
-        packagesValueLabel.BackColor = Color.Transparent;
-        packagesValueLabel.Font = new Font("Segoe UI", 19F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        packagesValueLabel.ForeColor = Color.FromArgb(212, 37, 49);
-        packagesValueLabel.Location = new Point(16, 262);
-        packagesValueLabel.Name = "packagesValueLabel";
-        packagesValueLabel.Size = new Size(110, 38);
-        packagesValueLabel.TabIndex = 7;
-        packagesValueLabel.Text = "000";
-        packagesValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+        packagesCaptionLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold);
+        packagesCaptionLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        packagesCaptionLabel.Location = new Point(3, 0);
+        packagesCaptionLabel.Name = "packagesCaptionLabel";
+        packagesCaptionLabel.Size = new Size(177, 16);
+        packagesCaptionLabel.TabIndex = 7;
+        packagesCaptionLabel.Text = "Peso Utilizado";
+        packagesCaptionLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // packagesProgressBg
+        // packagesCounterLabel
         // 
-        packagesProgressBg.BackColor = Color.FromArgb(229, 232, 238);
-        packagesProgressBg.Controls.Add(packagesProgressFill);
-        packagesProgressBg.Location = new Point(16, 309);
-        packagesProgressBg.Name = "packagesProgressBg";
-        packagesProgressBg.Size = new Size(126, 6);
-        packagesProgressBg.TabIndex = 8;
+        packagesCounterLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        packagesCounterLabel.BackColor = Color.FromArgb(250, 251, 252);
+        packagesCounterLabel.Font = new Font("Segoe UI", 15.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        packagesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        packagesCounterLabel.Location = new Point(3, 16);
+        packagesCounterLabel.Name = "packagesCounterLabel";
+        packagesCounterLabel.Size = new Size(177, 28);
+        packagesCounterLabel.TabIndex = 8;
+        packagesCounterLabel.Text = "000";
+        packagesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
-        // packagesProgressFill
+        // weightSummaryAccentBar
         // 
-        packagesProgressFill.BackColor = Color.FromArgb(212, 37, 49);
-        packagesProgressFill.Location = new Point(0, 0);
-        packagesProgressFill.Name = "packagesProgressFill";
-        packagesProgressFill.Size = new Size(126, 6);
-        packagesProgressFill.TabIndex = 0;
+        weightSummaryAccentBar.BackColor = Color.FromArgb(229, 27, 43);
+        weightSummaryAccentBar.Location = new Point(14, 14);
+        weightSummaryAccentBar.Name = "weightSummaryAccentBar";
+        weightSummaryAccentBar.Size = new Size(4, 28);
+        weightSummaryAccentBar.TabIndex = 15;
         // 
-        // packagesTotalLabel
+        // weightSummaryTitleLabel
         // 
-        packagesTotalLabel.BackColor = Color.Transparent;
-        packagesTotalLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        packagesTotalLabel.ForeColor = Color.FromArgb(98, 108, 124);
-        packagesTotalLabel.Location = new Point(146, 300);
-        packagesTotalLabel.Name = "packagesTotalLabel";
-        packagesTotalLabel.Size = new Size(45, 18);
-        packagesTotalLabel.TabIndex = 9;
-        packagesTotalLabel.Text = "de 840";
-        packagesTotalLabel.TextAlign = ContentAlignment.MiddleLeft;
+        weightSummaryTitleLabel.BackColor = Color.Transparent;
+        weightSummaryTitleLabel.Font = new Font("Cascadia Code", 8.4F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        weightSummaryTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        weightSummaryTitleLabel.Location = new Point(28, 11);
+        weightSummaryTitleLabel.Name = "weightSummaryTitleLabel";
+        weightSummaryTitleLabel.Size = new Size(132, 18);
+        weightSummaryTitleLabel.TabIndex = 16;
+        weightSummaryTitleLabel.Text = "RESUMO DE PESO";
+        // 
+        // weightSummarySubtitleLabel
+        // 
+        weightSummarySubtitleLabel.BackColor = Color.Transparent;
+        weightSummarySubtitleLabel.Font = new Font("Cascadia Code", 6.5F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        weightSummarySubtitleLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        weightSummarySubtitleLabel.Location = new Point(28, 28);
+        weightSummarySubtitleLabel.Name = "weightSummarySubtitleLabel";
+        weightSummarySubtitleLabel.Size = new Size(138, 14);
+        weightSummarySubtitleLabel.TabIndex = 17;
+        weightSummarySubtitleLabel.Text = "Previsto vs utilizado";
+        // 
+        // weightSummaryDividerLabel
+        // 
+        weightSummaryDividerLabel.BackColor = Color.FromArgb(226, 231, 238);
+        weightSummaryDividerLabel.Location = new Point(14, 44);
+        weightSummaryDividerLabel.Name = "weightSummaryDividerLabel";
+        weightSummaryDividerLabel.Size = new Size(155, 1);
+        weightSummaryDividerLabel.TabIndex = 18;
         // 
         // iniciarLeituraButton
         // 
@@ -2417,8 +2543,7 @@ partial class ProcessoProdutoAcabadoForm
         iniciarLeituraButton.BaseBackColor = Color.FromArgb(34, 166, 82);
         iniciarLeituraButton.BaseForeColor = Color.White;
         iniciarLeituraButton.Font = new Font("Cascadia Code", 6.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
-        iniciarLeituraButton.IconGlyph = "\uE768";
+        iniciarLeituraButton.IconGlyph = "";
         iniciarLeituraButton.KeyHint = "F5";
         iniciarLeituraButton.Location = new Point(12, 350);
         iniciarLeituraButton.Name = "iniciarLeituraButton";
@@ -2431,7 +2556,7 @@ partial class ProcessoProdutoAcabadoForm
         lerEtiquetaButton.BackColor = Color.Transparent;
         lerEtiquetaButton.Font = new Font("Cascadia Code", 6.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
         lerEtiquetaButton.IconFontFamily = "Segoe UI Symbol";
-        lerEtiquetaButton.IconGlyph = "\u2696";
+        lerEtiquetaButton.IconGlyph = "⚖";
         lerEtiquetaButton.KeyHint = "F12";
         lerEtiquetaButton.Location = new Point(12, 396);
         lerEtiquetaButton.Name = "lerEtiquetaButton";
@@ -2443,42 +2568,13 @@ partial class ProcessoProdutoAcabadoForm
         // 
         leituraManualButton.BackColor = Color.Transparent;
         leituraManualButton.Font = new Font("Cascadia Code", 6.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        leituraManualButton.IconFontFamily = "Segoe MDL2 Assets";
-        leituraManualButton.IconGlyph = "\uE70F";
+        leituraManualButton.IconGlyph = "";
         leituraManualButton.KeyHint = "F9";
         leituraManualButton.Location = new Point(12, 442);
         leituraManualButton.Name = "leituraManualButton";
-        leituraManualButton.PrimaryText = "LEITURA MANUAL";
+        leituraManualButton.PrimaryText = "DIGITAR PESO";
         leituraManualButton.Size = new Size(190, 38);
         leituraManualButton.TabIndex = 12;
-        // 
-        // excluirUltimaButton
-        // 
-        excluirUltimaButton.BackColor = Color.Transparent;
-        excluirUltimaButton.BaseForeColor = Color.FromArgb(212, 122, 28);
-        excluirUltimaButton.Font = new Font("Cascadia Code", 6F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        excluirUltimaButton.IconFontFamily = "Segoe MDL2 Assets";
-        excluirUltimaButton.IconGlyph = "\uE72B";
-        excluirUltimaButton.KeyHint = "F6";
-        excluirUltimaButton.Location = new Point(12, 488);
-        excluirUltimaButton.Name = "excluirUltimaButton";
-        excluirUltimaButton.PrimaryText = "EXCLUIR ÚLTIMA LEITURA";
-        excluirUltimaButton.Size = new Size(190, 38);
-        excluirUltimaButton.TabIndex = 13;
-        // 
-        // excluirCodigoButton
-        // 
-        excluirCodigoButton.BackColor = Color.Transparent;
-        excluirCodigoButton.BaseForeColor = Color.FromArgb(212, 37, 49);
-        excluirCodigoButton.Font = new Font("Cascadia Code", 5.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        excluirCodigoButton.IconFontFamily = "Segoe MDL2 Assets";
-        excluirCodigoButton.IconGlyph = "\uE74D";
-        excluirCodigoButton.KeyHint = "F7";
-        excluirCodigoButton.Location = new Point(12, 534);
-        excluirCodigoButton.Name = "excluirCodigoButton";
-        excluirCodigoButton.PrimaryText = "EXCLUIR LEITURA POR CÓDIGO";
-        excluirCodigoButton.Size = new Size(190, 38);
-        excluirCodigoButton.TabIndex = 14;
         // 
         // sidePanelLayout
         // 
@@ -2488,7 +2584,6 @@ partial class ProcessoProdutoAcabadoForm
         sidePanelLayout.Controls.Add(sideActionsGroupBox, 0, 1);
         sidePanelLayout.Controls.Add(deleteLastLegendPanel, 0, 5);
         sidePanelLayout.Controls.Add(deleteByCodeLegendPanel, 0, 6);
-        sidePanelLayout.Controls.Add(groupBox4, 0, 7);
         sidePanelLayout.Controls.Add(readWeightLegendPanel, 0, 2);
         sidePanelLayout.Controls.Add(manualLotLegendPanel, 0, 3);
         sidePanelLayout.Dock = DockStyle.Fill;
@@ -2575,7 +2670,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         startActionIconLabel.Anchor = AnchorStyles.Right;
         startActionIconLabel.BackColor = Color.Transparent;
-        startActionIconLabel.Image = global::FugaPET_Dev.Properties.Resources.start_action;
+        startActionIconLabel.Image = (Image)resources.GetObject("startActionIconLabel.Image");
         startActionIconLabel.Location = new Point(8, 5);
         startActionIconLabel.Name = "startActionIconLabel";
         startActionIconLabel.Size = new Size(32, 34);
@@ -2611,7 +2706,7 @@ partial class ProcessoProdutoAcabadoForm
         // stopActionIconLabel
         // 
         stopActionIconLabel.BackColor = Color.Transparent;
-        stopActionIconLabel.Image = global::FugaPET_Dev.Properties.Resources.stop_action;
+        stopActionIconLabel.Image = (Image)resources.GetObject("stopActionIconLabel.Image");
         stopActionIconLabel.Location = new Point(3, 6);
         stopActionIconLabel.Name = "stopActionIconLabel";
         stopActionIconLabel.Size = new Size(32, 33);
@@ -2646,7 +2741,7 @@ partial class ProcessoProdutoAcabadoForm
         // deleteLastLegendIconLabel
         // 
         deleteLastLegendIconLabel.BackColor = Color.Transparent;
-        deleteLastLegendIconLabel.Image = global::FugaPET_Dev.Properties.Resources.delete_last;
+        deleteLastLegendIconLabel.Image = (Image)resources.GetObject("deleteLastLegendIconLabel.Image");
         deleteLastLegendIconLabel.Location = new Point(2, 9);
         deleteLastLegendIconLabel.Name = "deleteLastLegendIconLabel";
         deleteLastLegendIconLabel.Size = new Size(20, 18);
@@ -2679,7 +2774,7 @@ partial class ProcessoProdutoAcabadoForm
         // deleteByCodeLegendIconLabel
         // 
         deleteByCodeLegendIconLabel.BackColor = Color.Transparent;
-        deleteByCodeLegendIconLabel.Image = global::FugaPET_Dev.Properties.Resources.delete_code;
+        deleteByCodeLegendIconLabel.Image = (Image)resources.GetObject("deleteByCodeLegendIconLabel.Image");
         deleteByCodeLegendIconLabel.Location = new Point(2, 9);
         deleteByCodeLegendIconLabel.Name = "deleteByCodeLegendIconLabel";
         deleteByCodeLegendIconLabel.Size = new Size(20, 18);
@@ -2698,87 +2793,6 @@ partial class ProcessoProdutoAcabadoForm
         deleteByCodeLegendTextLabel.Text = "Excluir Etiqueta\r\npor Codigo";
         deleteByCodeLegendTextLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
-        // groupBox4
-        // 
-        groupBox4.Controls.Add(tableLayoutPanel12);
-        groupBox4.ForeColor = Color.FromArgb(229, 231, 235);
-        groupBox4.Location = new Point(3, 626);
-        groupBox4.Name = "groupBox4";
-        groupBox4.Size = new Size(151, 27);
-        groupBox4.TabIndex = 14;
-        groupBox4.TabStop = false;
-        groupBox4.Text = "Leitura Caixas";
-        // 
-        // tableLayoutPanel12
-        // 
-        tableLayoutPanel12.ColumnCount = 1;
-        tableLayoutPanel12.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        tableLayoutPanel12.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        tableLayoutPanel12.Controls.Add(boxesCaptionLabel, 0, 0);
-        tableLayoutPanel12.Controls.Add(packagesCaptionLabel, 0, 2);
-        tableLayoutPanel12.Controls.Add(packagesCounterLabel, 0, 3);
-        tableLayoutPanel12.Controls.Add(boxesCounterLabel, 0, 1);
-        tableLayoutPanel12.Dock = DockStyle.Fill;
-        tableLayoutPanel12.Location = new Point(3, 19);
-        tableLayoutPanel12.Name = "tableLayoutPanel12";
-        tableLayoutPanel12.RowCount = 4;
-        tableLayoutPanel12.RowStyles.Add(new RowStyle(SizeType.Percent, 28.5714283F));
-        tableLayoutPanel12.RowStyles.Add(new RowStyle(SizeType.Percent, 71.42857F));
-        tableLayoutPanel12.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
-        tableLayoutPanel12.RowStyles.Add(new RowStyle(SizeType.Absolute, 53F));
-        tableLayoutPanel12.Size = new Size(145, 5);
-        tableLayoutPanel12.TabIndex = 9;
-        // 
-        // boxesCaptionLabel
-        // 
-        boxesCaptionLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        boxesCaptionLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold);
-        boxesCaptionLabel.ForeColor = Color.FromArgb(229, 231, 235);
-        boxesCaptionLabel.Location = new Point(3, 0);
-        boxesCaptionLabel.Name = "boxesCaptionLabel";
-        boxesCaptionLabel.Size = new Size(139, 1);
-        boxesCaptionLabel.TabIndex = 5;
-        boxesCaptionLabel.Text = "Caixas";
-        // 
-        // packagesCaptionLabel
-        // 
-        packagesCaptionLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        packagesCaptionLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold);
-        packagesCaptionLabel.ForeColor = Color.FromArgb(229, 231, 235);
-        packagesCaptionLabel.Location = new Point(3, -65);
-        packagesCaptionLabel.Name = "packagesCaptionLabel";
-        packagesCaptionLabel.Size = new Size(139, 16);
-        packagesCaptionLabel.TabIndex = 7;
-        packagesCaptionLabel.Text = "Pacotes";
-        // 
-        // packagesCounterLabel
-        // 
-        packagesCounterLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        packagesCounterLabel.BackColor = Color.FromArgb(247, 248, 250);
-        packagesCounterLabel.BorderStyle = BorderStyle.FixedSingle;
-        packagesCounterLabel.Font = new Font("Segoe UI", 23F);
-        packagesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
-        packagesCounterLabel.Location = new Point(3, -45);
-        packagesCounterLabel.Name = "packagesCounterLabel";
-        packagesCounterLabel.Size = new Size(139, 48);
-        packagesCounterLabel.TabIndex = 8;
-        packagesCounterLabel.Text = "840";
-        packagesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // boxesCounterLabel
-        // 
-        boxesCounterLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        boxesCounterLabel.BackColor = Color.FromArgb(247, 248, 250);
-        boxesCounterLabel.BorderStyle = BorderStyle.FixedSingle;
-        boxesCounterLabel.Font = new Font("Segoe UI", 23F);
-        boxesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
-        boxesCounterLabel.Location = new Point(3, -19);
-        boxesCounterLabel.Name = "boxesCounterLabel";
-        boxesCounterLabel.Size = new Size(139, 1);
-        boxesCounterLabel.TabIndex = 6;
-        boxesCounterLabel.Text = "035";
-        boxesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
         // readWeightLegendPanel
         // 
         readWeightLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
@@ -2794,7 +2808,7 @@ partial class ProcessoProdutoAcabadoForm
         // readWeightLegendIconLabel
         // 
         readWeightLegendIconLabel.BackColor = Color.Transparent;
-        readWeightLegendIconLabel.Image = global::FugaPET_Dev.Properties.Resources.read_weight;
+        readWeightLegendIconLabel.Image = (Image)resources.GetObject("readWeightLegendIconLabel.Image");
         readWeightLegendIconLabel.Location = new Point(5, 15);
         readWeightLegendIconLabel.Name = "readWeightLegendIconLabel";
         readWeightLegendIconLabel.Size = new Size(20, 18);
@@ -2827,7 +2841,7 @@ partial class ProcessoProdutoAcabadoForm
         // manualLotLegendIconLabel
         // 
         manualLotLegendIconLabel.BackColor = Color.Transparent;
-        manualLotLegendIconLabel.Image = global::FugaPET_Dev.Properties.Resources.manual_lot;
+        manualLotLegendIconLabel.Image = (Image)resources.GetObject("manualLotLegendIconLabel.Image");
         manualLotLegendIconLabel.Location = new Point(2, 9);
         manualLotLegendIconLabel.Name = "manualLotLegendIconLabel";
         manualLotLegendIconLabel.Size = new Size(20, 18);
@@ -2865,7 +2879,7 @@ partial class ProcessoProdutoAcabadoForm
         tableLayoutPanel2.Size = new Size(1366, 720);
         tableLayoutPanel2.TabIndex = 1;
         // 
-        // ProcessoProdutoAcabadoForm
+        // ProcessoSemiAcabadoForm
         // 
         AutoScaleDimensions = new SizeF(7F, 16F);
         AutoScaleMode = AutoScaleMode.Font;
@@ -2875,15 +2889,14 @@ partial class ProcessoProdutoAcabadoForm
         Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         FormBorderStyle = FormBorderStyle.None;
         MinimumSize = new Size(1180, 648);
-        Name = "ProcessoProdutoAcabadoForm";
+        Name = "ProcessoSemiAcabadoForm";
         StartPosition = FormStartPosition.CenterScreen;
-        Text = "CI - Leitura de Producao";
+        Text = "Produto Semi-Acabado";
         WindowState = FormWindowState.Maximized;
         rootTableLayoutPanel.ResumeLayout(false);
         tableLayoutPanel1.ResumeLayout(false);
         tableLayoutPanel3.ResumeLayout(false);
         productionOrderShadowPanel.ResumeLayout(false);
-        productionOrderShadowPanel.PerformLayout();
         productionOrderIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)productionOrderSearchLabel).EndInit();
         lotCardPanel.ResumeLayout(false);
@@ -2891,12 +2904,19 @@ partial class ProcessoProdutoAcabadoForm
         lotIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)lotIconPictureBox).EndInit();
         stepCardPanel.ResumeLayout(false);
-        stepIconPanel.ResumeLayout(false);
-        ((System.ComponentModel.ISupportInitialize)stepIconPictureBox).EndInit();
         finishedProductCardPanel.ResumeLayout(false);
         finishedProductCardPanel.PerformLayout();
         finishedProductIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)finishedProductIconPictureBox).EndInit();
+        tableLayoutPanel11.ResumeLayout(false);
+        productionReadingsPanel.ResumeLayout(false);
+        productionReadingsPanel.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)productionReadingsTitleIconPictureBox).EndInit();
+        productionSearchPanel.ResumeLayout(false);
+        productionSearchPanel.PerformLayout();
+        ((System.ComponentModel.ISupportInitialize)productionDataGridView).EndInit();
+        apontamentoInfoPanel.ResumeLayout(false);
+        apontamentoChipPanel.ResumeLayout(false);
         tableLayoutPanel5.ResumeLayout(false);
         groupBox2.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)dateTitleIconPictureBox).EndInit();
@@ -2911,13 +2931,6 @@ partial class ProcessoProdutoAcabadoForm
         ((System.ComponentModel.ISupportInitialize)materialFilterIconPictureBox).EndInit();
         tableLayoutPanel10.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)materialDataGridView).EndInit();
-        tableLayoutPanel11.ResumeLayout(false);
-        productionReadingsPanel.ResumeLayout(false);
-        productionReadingsPanel.PerformLayout();
-        ((System.ComponentModel.ISupportInitialize)productionReadingsTitleIconPictureBox).EndInit();
-        productionSearchPanel.ResumeLayout(false);
-        productionSearchPanel.PerformLayout();
-        ((System.ComponentModel.ISupportInitialize)productionDataGridView).EndInit();
         ((System.ComponentModel.ISupportInitialize)productionSearchIconPictureBox).EndInit();
         tableLayoutPanel7.ResumeLayout(false);
         tableLayoutPanel7.PerformLayout();
@@ -2939,8 +2952,10 @@ partial class ProcessoProdutoAcabadoForm
         sapStatusPanel.ResumeLayout(false);
         sidePanel.ResumeLayout(false);
         statusCard.ResumeLayout(false);
-        boxesProgressBg.ResumeLayout(false);
-        packagesProgressBg.ResumeLayout(false);
+        groupBox4.ResumeLayout(false);
+        tableLayoutPanel12.ResumeLayout(false);
+        weightSummaryForecastPanel.ResumeLayout(false);
+        weightSummaryUsedPanel.ResumeLayout(false);
         sidePanelLayout.ResumeLayout(false);
         groupBox3.ResumeLayout(false);
         sideActionsGroupBox.ResumeLayout(false);
@@ -2953,8 +2968,6 @@ partial class ProcessoProdutoAcabadoForm
         ((System.ComponentModel.ISupportInitialize)deleteLastLegendIconLabel).EndInit();
         deleteByCodeLegendPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)deleteByCodeLegendIconLabel).EndInit();
-        groupBox4.ResumeLayout(false);
-        tableLayoutPanel12.ResumeLayout(false);
         readWeightLegendPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)readWeightLegendIconLabel).EndInit();
         manualLotLegendPanel.ResumeLayout(false);
@@ -2973,13 +2986,11 @@ partial class ProcessoProdutoAcabadoForm
     private FugaPET_Dev.Tela.Controls.RoundedPanel productionOrderShadowPanel;
     private FugaPET_Dev.Tela.Controls.RoundedPanel productionOrderIconPanel;
     private Label productionOrderCaptionLabel;
-    private TextBox productionOrderTextBox;
+    private ComboBox pedidoComboBox;
     private PictureBox productionOrderSearchLabel;
     private FugaPET_Dev.Tela.Controls.RoundedPanel stepCardPanel;
     private Label stepCaptionLabel;
     private Label stepDescriptionLabel;
-    private FugaPET_Dev.Tela.Controls.RoundedPanel stepIconPanel;
-    private PictureBox stepIconPictureBox;
     private FugaPET_Dev.Tela.Controls.RoundedPanel finishedProductCardPanel;
     private FugaPET_Dev.Tela.Controls.RoundedPanel finishedProductIconPanel;
     private PictureBox finishedProductIconPictureBox;
@@ -3054,7 +3065,7 @@ partial class ProcessoProdutoAcabadoForm
     private Label label1;
     private PictureBox lotSearchIconLabel;
     private GroupBox groupBox3;
-    private GroupBox groupBox4;
+    private FugaPET_Dev.Tela.Controls.RoundedPanel groupBox4;
     private TableLayoutPanel tableLayoutPanel12;
     private TableLayoutPanel tableLayoutPanel13;
     private GroupBox groupBox1;
@@ -3094,23 +3105,10 @@ partial class ProcessoProdutoAcabadoForm
     private Label statusCardIcon;
     private Label statusValueLabel;
     private Label statusHintLabel;
-    private Label boxesTitleLabel;
-    private Label boxesValueLabel;
-    private Panel boxesProgressBg;
-    private Panel boxesProgressFill;
-    private Label boxesTotalLabel;
-    private Label packagesTitleLabel;
-    private Label packagesValueLabel;
-    private Panel packagesProgressBg;
-    private Panel packagesProgressFill;
-    private Label packagesTotalLabel;
     private FugaPET_Dev.Tela.ActionPillButton iniciarLeituraButton;
     private FugaPET_Dev.Tela.ActionPillButton lerEtiquetaButton;
     private FugaPET_Dev.Tela.ActionPillButton leituraManualButton;
-    private FugaPET_Dev.Tela.ActionPillButton excluirUltimaButton;
-    private FugaPET_Dev.Tela.ActionPillButton excluirCodigoButton;
 }
-
 
 
 
