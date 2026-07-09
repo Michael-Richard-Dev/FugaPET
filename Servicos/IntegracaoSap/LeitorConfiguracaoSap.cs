@@ -14,6 +14,7 @@ public static class LeitorConfiguracaoSap
     private const string VariavelAmbienteMaterialDocumentBaseUrl = "FUGAPET_SAP_MATERIAL_DOCUMENT_BASE_URL";
     private const string VariavelAmbienteProductionOrderBaseUrl = "FUGAPET_SAP_PRODUCTION_ORDER_BASE_URL";
     private const string VariavelAmbienteProductionOrderConfirmationBaseUrl = "FUGAPET_SAP_PRODUCTION_ORDER_CONFIRMATION_BASE_URL";
+    private const string VariavelAmbienteProductBaseUrl = "FUGAPET_SAP_PRODUCT_BASE_URL";
     private const string VariavelAmbienteUsuario = "FUGAPET_SAP_USERNAME";
     private const string VariavelAmbienteSenha = "FUGAPET_SAP_PASSWORD";
     private const string VariavelAmbienteSapClient = "FUGAPET_SAP_CLIENT";
@@ -50,6 +51,9 @@ public static class LeitorConfiguracaoSap
         string materialDocumentBaseUrlArquivo = string.Empty;
         string productionOrderBaseUrlArquivo = string.Empty;
         string productionOrderConfirmationBaseUrlArquivo = string.Empty;
+        string productBaseUrlArquivo = string.Empty;
+        string usuarioArquivo = string.Empty;
+        string senhaArquivo = string.Empty;
         string sapClientArquivo = string.Empty;
         IReadOnlyList<string> hostsPermitidosArquivo = [];
         bool escritaHabilitada = false;
@@ -78,6 +82,9 @@ public static class LeitorConfiguracaoSap
                     materialDocumentBaseUrlArquivo = LerTexto(sap, "material_document_base_url", string.Empty);
                     productionOrderBaseUrlArquivo = LerTexto(sap, "production_order_base_url", string.Empty);
                     productionOrderConfirmationBaseUrlArquivo = LerTexto(sap, "production_order_confirmation_base_url", string.Empty);
+                    productBaseUrlArquivo = LerTexto(sap, "product_base_url", string.Empty);
+                    usuarioArquivo = LerTexto(sap, "usuario", string.Empty);
+                    senhaArquivo = LerTexto(sap, "senha", string.Empty);
                     sapClientArquivo = LerTexto(sap, "sap_client", string.Empty);
                     hostsPermitidosArquivo = LerListaTextos(sap, "hosts_permitidos");
                     escritaHabilitada = LerBooleano(sap, "escrita_habilitada", false);
@@ -101,8 +108,13 @@ public static class LeitorConfiguracaoSap
                 obterVariavelAmbiente,
                 VariavelAmbienteProductionOrderConfirmationBaseUrl,
                 productionOrderConfirmationBaseUrlArquivo),
-            Usuario = ObterSomenteAmbiente(obterVariavelAmbiente, VariavelAmbienteUsuario),
-            Senha = ObterSomenteAmbiente(obterVariavelAmbiente, VariavelAmbienteSenha),
+            ProductBaseUrl = ObterOuAmbiente(
+                obterVariavelAmbiente,
+                VariavelAmbienteProductBaseUrl,
+                productBaseUrlArquivo),
+            ArquivoConfiguracaoSapEncontrado = File.Exists(caminhoArquivo),
+            Usuario = ObterOuAmbiente(obterVariavelAmbiente, VariavelAmbienteUsuario, usuarioArquivo),
+            Senha = ObterOuAmbiente(obterVariavelAmbiente, VariavelAmbienteSenha, senhaArquivo),
             SapClient = ObterOuAmbiente(obterVariavelAmbiente, VariavelAmbienteSapClient, sapClientArquivo),
             HostsPermitidos = ObterHostsPermitidos(
                 obterVariavelAmbiente,

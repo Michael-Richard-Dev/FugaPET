@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 
@@ -58,13 +58,13 @@ public sealed class MaterialDocumentSapServico : IMaterialDocumentSapServico
         if (!_configuracaoSap.Configurado)
         {
             return await BloquearAsync(
-                chaveNegocio, correlationId, cronometro, ConfiguracaoSap.MensagemConfiguracaoAusente);
+                chaveNegocio, correlationId, cronometro, _configuracaoSap.MensagemConfiguracaoBaseAusente());
         }
 
         if (!_configuracaoSap.MaterialDocumentConfigurado)
         {
             return await BloquearAsync(
-                chaveNegocio, correlationId, cronometro, ConfiguracaoSap.MensagemMaterialDocumentNaoConfigurado);
+                chaveNegocio, correlationId, cronometro, _configuracaoSap.MensagemMaterialDocumentAusente());
         }
 
         if (!_configuracaoSap.EscritaHabilitada)

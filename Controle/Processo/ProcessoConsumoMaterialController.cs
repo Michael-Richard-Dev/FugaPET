@@ -54,6 +54,15 @@ public sealed class ProcessoConsumoMaterialController
         CancellationToken cancellationToken = default)
         => _consumoMaterialServico.ConsultarOrdemAsync(numeroOrdem, cancellationToken);
 
+    /// <summary>
+    /// Tarefa Consumo 22.10.1: descrições reais dos componentes (A_ProductDescription), mapa Product → mestre.
+    /// A tela usa para o join lógico; delega ao serviço (que resolve o Product Master governado/mock).
+    /// </summary>
+    public Task<IReadOnlyDictionary<string, ProdutoSapMestre>> ObterDescricoesComponentesAsync(
+        IEnumerable<string> codigosProduto,
+        CancellationToken cancellationToken = default)
+        => _consumoMaterialServico.ObterDescricoesComponentesAsync(codigosProduto, cancellationToken);
+
     /// <summary>Chave composta do componente (delega ao servico).</summary>
     public static string ChaveComponente(ComponenteConsumoMaterial componente)
         => ConsumoMaterialServico.ChaveComponente(componente);

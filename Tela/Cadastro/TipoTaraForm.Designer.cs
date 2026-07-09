@@ -14,9 +14,6 @@ partial class TipoTaraForm
     private PictureBox headerTitleIconPictureBox;
     private Label headerTitleLabel;
     private Label headerSubtitleLabel;
-    private RoundedPanel sapStatusPanel;
-    private Label sapStatusDotLabel;
-    private Label sapStatusLabel;
     private Label minimizeWindowLabel;
     private Label maximizeWindowLabel;
     private Label closeWindowLabel;
@@ -188,9 +185,6 @@ partial class TipoTaraForm
         headerTitleIconPictureBox = new PictureBox();
         headerTitleLabel = new Label();
         headerSubtitleLabel = new Label();
-        sapStatusPanel = new RoundedPanel();
-        sapStatusDotLabel = new Label();
-        sapStatusLabel = new Label();
         minimizeWindowLabel = new Label();
         maximizeWindowLabel = new Label();
         closeWindowLabel = new Label();
@@ -238,7 +232,6 @@ partial class TipoTaraForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).BeginInit();
         headerTitleIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
-        sapStatusPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)profilesDataGridView).BeginInit();
         heroPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).BeginInit();
@@ -511,6 +504,7 @@ partial class TipoTaraForm
         nomePerfilTextBox.BorderStyle = BorderStyle.None;
         nomePerfilTextBox.Font = new Font("Segoe UI", 9F);
         nomePerfilTextBox.Location = new Point(12, 10);
+        nomePerfilTextBox.MaxLength = 80;
         nomePerfilTextBox.Name = "nomePerfilTextBox";
         nomePerfilTextBox.Size = new Size(214, 16);
         nomePerfilTextBox.TabIndex = 3;
@@ -543,6 +537,7 @@ partial class TipoTaraForm
         descricaoTextBox.BorderStyle = BorderStyle.None;
         descricaoTextBox.Font = new Font("Segoe UI", 9F);
         descricaoTextBox.Location = new Point(12, 10);
+        descricaoTextBox.MaxLength = 255;
         descricaoTextBox.Multiline = true;
         descricaoTextBox.Name = "descricaoTextBox";
         descricaoTextBox.Size = new Size(482, 73);
@@ -565,6 +560,7 @@ partial class TipoTaraForm
         // 
         situacaoComboBox.FlatStyle = FlatStyle.Flat;
         situacaoComboBox.Font = new Font("Segoe UI", 9F);
+        situacaoComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         situacaoComboBox.Items.AddRange(new object[] { "Ativo", "Inativo" });
         situacaoComboBox.Location = new Point(3, 4);
         situacaoComboBox.Name = "situacaoComboBox";
@@ -1170,7 +1166,6 @@ partial class TipoTaraForm
         customTitleBarPanel.Controls.Add(headerTitleIconPanel);
         customTitleBarPanel.Controls.Add(headerTitleLabel);
         customTitleBarPanel.Controls.Add(headerSubtitleLabel);
-        customTitleBarPanel.Controls.Add(sapStatusPanel);
         customTitleBarPanel.Controls.Add(minimizeWindowLabel);
         customTitleBarPanel.Controls.Add(maximizeWindowLabel);
         customTitleBarPanel.Controls.Add(closeWindowLabel);
@@ -1255,49 +1250,9 @@ partial class TipoTaraForm
         headerSubtitleLabel.Size = new Size(560, 17);
         headerSubtitleLabel.TabIndex = 5;
         headerSubtitleLabel.Text = "Cadastro e manutenção de tipos de tara";
-        // 
-        // sapStatusPanel
-        // 
-        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
-        sapStatusPanel.BorderRadius = 12;
-        sapStatusPanel.Controls.Add(sapStatusDotLabel);
-        sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(910, 10);
-        sapStatusPanel.Name = "sapStatusPanel";
-        sapStatusPanel.ShadowBlur = 0;
-        sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(190, 27);
-        sapStatusPanel.TabIndex = 6;
-        // 
-        // sapStatusDotLabel
-        // 
-        sapStatusDotLabel.BackColor = Color.Transparent;
-        sapStatusDotLabel.Font = new Font("Segoe UI Symbol", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusDotLabel.Location = new Point(11, 4);
-        sapStatusDotLabel.Name = "sapStatusDotLabel";
-        sapStatusDotLabel.Size = new Size(14, 18);
-        sapStatusDotLabel.TabIndex = 0;
-        sapStatusDotLabel.Text = "●";
-        sapStatusDotLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // sapStatusLabel
-        // 
-        sapStatusLabel.BackColor = Color.Transparent;
-        sapStatusLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        sapStatusLabel.ForeColor = Color.White;
-        sapStatusLabel.Location = new Point(27, 5);
-        sapStatusLabel.Name = "sapStatusLabel";
-        sapStatusLabel.Size = new Size(151, 17);
-        sapStatusLabel.TabIndex = 0;
-        sapStatusLabel.Text = "SAP: não configurado";
-        sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
+        //
         // minimizeWindowLabel
-        // 
+        //
         minimizeWindowLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         minimizeWindowLabel.BackColor = Color.Transparent;
         minimizeWindowLabel.Cursor = Cursors.Hand;
@@ -1641,7 +1596,6 @@ partial class TipoTaraForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).EndInit();
         headerTitleIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
-        sapStatusPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)profilesDataGridView).EndInit();
         heroPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).EndInit();
@@ -1689,24 +1643,6 @@ partial class TipoTaraForm
         headerSubtitleLabel.Location = new Point(279, 29);
         headerSubtitleLabel.Size = new Size(560, 17);
         headerSubtitleLabel.Text = "Permissões e níveis de acesso / Administração do sistema";
-        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
-        sapStatusPanel.BorderRadius = 12;
-        sapStatusPanel.Controls.Add(sapStatusDotLabel);
-        sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(910, 10);
-        sapStatusPanel.Size = new Size(190, 27);
-        sapStatusDotLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusDotLabel.Location = new Point(11, 4);
-        sapStatusDotLabel.Size = new Size(14, 18);
-        sapStatusDotLabel.Text = "●";
-        sapStatusLabel.Font = new Font("Cascadia Code", 7F, FontStyle.Bold);
-        sapStatusLabel.ForeColor = Color.White;
-        sapStatusLabel.Location = new Point(27, 5);
-        sapStatusLabel.Size = new Size(151, 17);
-        sapStatusLabel.Text = "SAP: não configurado";
         ConfigureWindowButton(minimizeWindowLabel, "–", new Point(1218, 0), new Font("Segoe UI", 12F));
         ConfigureWindowButton(maximizeWindowLabel, "\uE922", new Point(1266, 0), new Font("Segoe MDL2 Assets", 9F));
         ConfigureWindowButton(closeWindowLabel, "\uE8BB", new Point(1314, 0), new Font("Segoe MDL2 Assets", 9F));

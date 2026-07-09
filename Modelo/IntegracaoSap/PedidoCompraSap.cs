@@ -24,6 +24,21 @@ public sealed record PedidoCompraSap
     /// <summary>Status do pedido no SAP, quando disponivel (mapeia <c>status_pedido</c>).</summary>
     public string? Status { get; init; }
 
+    /// <summary>
+    /// Tarefa Entrada 23.1: PurchasingProcessingStatus do cabecalho (aprovacao/liberacao do pedido).
+    /// "05"=liberado/aprovado; "03"/"04"=em aprovacao; "08"=rejeitado. Vazio quando o SAP nao informou.
+    /// </summary>
+    public string StatusProcessamentoCompraSap { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Tarefa Entrada 23.1: ReleaseIsNotCompleted do cabecalho — true = liberacao NAO concluida (bloqueia).
+    /// Null quando o campo nao existe no $metadata/ambiente (ausencia registrada em diagnostico).
+    /// </summary>
+    public bool? LiberacaoNaoConcluidaSap { get; init; }
+
+    /// <summary>Tarefa Entrada 23.1: PurchasingCompletenessStatus do cabecalho, quando disponivel.</summary>
+    public string StatusCompletudeCompraSap { get; init; } = string.Empty;
+
     /// <summary>PurchasingGroup — grupo de compras do cabecalho. Usado no filtro de escopo (Jales).</summary>
     public string? GrupoCompra { get; init; }
 

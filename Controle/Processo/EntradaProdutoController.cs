@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using FugaPET_Dev.Controle.Cadastro;
@@ -30,6 +30,11 @@ public sealed class EntradaProdutoController
     public ImpressaoEntradaServico Impressao { get; }
     public AutorizacaoCentroDepositoEntrada AutorizacaoCentroDeposito { get; }
     public TaraController Tara { get; }
+
+    // Tarefa Entrada 24.1: serviço de tipo mestre (A_Product) LAZY — só construído ao consultar um pedido.
+    private IProductMasterSapServico? _productMasterServico;
+    private IProductMasterSapServico ProductMasterServico =>
+        _productMasterServico ??= FabricaProductMasterSapServico.Criar();
 
     private readonly Func<bool> _ehAmbienteHomologacao;
     private readonly Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>> _carregarItensParaEnvio;
@@ -271,14 +276,21 @@ public sealed class EntradaProdutoController
             return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.LancamentoSemItens };
         }
 
-        // Pre-POST (etapa 5/6): bloqueia itens sem dados obrigatorios ou com unidade != KG, sem
-        // inventar fallback nem conversao. Nenhuma chamada ao SAP acontece neste caminho.
+        // Pre-POST (etapa 5/6): bloqueia itens sem dados obrigatorios ou sem peso liquido positivo,
+        // sem inventar fallback nem conversao. Nenhuma chamada ao SAP acontece neste caminho.
         ResultadoEnvioSapEntrada? bloqueioItens = ValidarItensParaEnvio(itens);
         if (bloqueioItens is not null)
         {
             Sap.RegistrarDiagnostico(
                 $"Envio SAP bloqueado (lancamento {codigoLancamento}): {bloqueioItens.Mensagem}");
             return bloqueioItens;
+        }
+
+        // Tarefa Entrada 23.2 (Ajuste 5): coerência quantidade SAP × peso líquido ANTES da reserva/POST.
+        ResultadoEnvioSapEntrada? bloqueioQuantidade = ValidarCoerenciaQuantidadeSap(codigoLancamento, itens);
+        if (bloqueioQuantidade is not null)
+        {
+            return bloqueioQuantidade;
         }
 
         // Reserva/claim ATOMICO antes de montar o payload e antes do POST (concorrencia/idempotencia):
@@ -314,11 +326,13 @@ public sealed class EntradaProdutoController
         }
 
         // Um UNICO documento de material por lancamento, com todos os itens elegiveis (movimento 101).
-        // Material/Plant/StorageLocation/EntryUnit/PurchaseOrder/PurchaseOrderItem vem do banco local.
+        // Material/Plant/StorageLocation/PurchaseOrder/PurchaseOrderItem vem do banco local.
+        // EntryUnit e a quantidade operacional da tela de balanca sao sempre KG/peso liquido.
         string numeroPedido = itens[0].NumeroPedido.Trim();
         MaterialDocumentSapRequest requisicao =
             MontarRequisicaoMaterialDocument(numeroPedido, codigoLancamento, itens);
         string chaveNegocio = $"{numeroPedido}/{codigoLancamento}";
+        RegistrarDiagnosticoEnvioKg(codigoLancamento, itens);
 
         // Apos a reserva, uma falha de POST e tratada como FALHA SAP (status volta a ERRO_SAP, abaixo)
         // para liberar reenvio futuro — em vez de deixar o lancamento preso em ENVIADO_SAP.
@@ -330,10 +344,13 @@ public sealed class EntradaProdutoController
         }
         catch (Exception ex)
         {
+            string mensagemTecnicaSanitizada = MaterialDocumentSapApiClient.SanitizarExcecaoTecnica(ex);
+            string mensagemFalhaTecnica = "SAP HML: FALHA — documento de material não criado. "
+                + mensagemTecnicaSanitizada;
             Sap.RegistrarDiagnostico(
-                $"Envio SAP: falha tecnica ao criar documento de material (lancamento {codigoLancamento}).{Environment.NewLine}{ex}");
-            resultadoSap = ResultadoMaterialDocumentSap.Falha(
-                null, "SAP HML: FALHA — documento de material não criado.");
+                $"Envio SAP: falha tecnica ao criar documento de material (lancamento {codigoLancamento}). "
+                + mensagemTecnicaSanitizada);
+            resultadoSap = ResultadoMaterialDocumentSap.Falha(null, mensagemFalhaTecnica);
         }
 
         // O documento e atomico: ou cria com todos os itens, ou nenhum. O status local usa o
@@ -415,6 +432,10 @@ public sealed class EntradaProdutoController
                 + $"gravado no lancamento {codigoLancamento}.");
         }
 
+        string mensagemFalhaSap = string.IsNullOrWhiteSpace(resultadoSap.MensagemSanitizada)
+            ? "SAP HML: FALHA — documento de material não criado."
+            : resultadoSap.MensagemSanitizada;
+
         return new ResultadoEnvioSapEntrada
         {
             Cenario = cenario,
@@ -424,9 +445,10 @@ public sealed class EntradaProdutoController
             StatusLocalAtualizado = true,
             MaterialDocument = resultadoSap.MaterialDocument,
             MaterialDocumentYear = resultadoSap.MaterialDocumentYear,
+            MensagemCritica = sucesso ? null : mensagemFalhaSap,
             Mensagem = sucesso
                 ? $"SAP HML: ENVIADO — documento material {resultadoSap.MaterialDocument}/{resultadoSap.MaterialDocumentYear}"
-                : "SAP HML: FALHA — documento de material não criado."
+                : mensagemFalhaSap
         };
     }
 
@@ -478,8 +500,7 @@ public sealed class EntradaProdutoController
             if (string.IsNullOrWhiteSpace(item.NumeroItem)
                 || string.IsNullOrWhiteSpace(item.Material)
                 || string.IsNullOrWhiteSpace(item.Centro)
-                || string.IsNullOrWhiteSpace(item.Deposito)
-                || string.IsNullOrWhiteSpace(item.Unidade))
+                || string.IsNullOrWhiteSpace(item.Deposito))
             {
                 string descricao = string.IsNullOrWhiteSpace(item.NumeroItem)
                     ? "(sem número)"
@@ -489,20 +510,76 @@ public sealed class EntradaProdutoController
                     Cenario = CenarioEnvioSapEntrada.DadosIncompletos,
                     Total = itens.Count,
                     Mensagem =
-                        $"Item {descricao} sem material, centro, depósito, unidade ou item do pedido. "
+                        $"Item {descricao} sem material, centro, depósito ou item do pedido. "
                         + "Envio bloqueado."
                 };
             }
 
-            if (!string.Equals(item.Unidade!.Trim(), "KG", StringComparison.OrdinalIgnoreCase))
+            if (item.PesoLiquidoKg <= 0m)
             {
                 return new ResultadoEnvioSapEntrada
                 {
-                    Cenario = CenarioEnvioSapEntrada.UnidadeNaoSuportada,
+                    Cenario = CenarioEnvioSapEntrada.DadosIncompletos,
                     Total = itens.Count,
-                    Mensagem =
-                        "Unidade do item não suportada para envio automático de entrada. "
-                        + $"Unidade: {item.Unidade.Trim()}."
+                    Mensagem = $"Item {item.NumeroItem.Trim()} sem peso líquido positivo para envio SAP."
+                };
+            }
+        }
+
+        return null;
+    }
+
+
+    // Tarefa Entrada 23.2 (Ajuste 6): diagnóstico completo antes do POST 101 — peso bruto, tara (derivada
+    // de bruto-líquido), tara em KG, peso líquido, QuantityInEntryUnit final e EntryUnit.
+    private void RegistrarDiagnosticoEnvioKg(
+        long codigoLancamento,
+        IReadOnlyList<EntradaProdutoItemEnvioSap> itens)
+    {
+        foreach (EntradaProdutoItemEnvioSap item in itens)
+        {
+            string itemSap = NormalizarItemSap(item.NumeroItem);
+            string unidadePedido = string.IsNullOrWhiteSpace(item.Unidade)
+                ? "(não informada)"
+                : item.Unidade.Trim().ToUpperInvariant();
+            decimal taraKg = item.PesoBrutoKg - item.PesoLiquidoKg;
+            string quantidadeSap = FormatarQuantidade(item.PesoLiquidoKg);
+
+            Sap.RegistrarDiagnostico(
+                $"Entrada 101 balanca lancamento {codigoLancamento}: Item {itemSap}; "
+                + $"Material {item.Material?.Trim()}; Centro {item.Centro?.Trim()}; Deposito {item.Deposito?.Trim()}; "
+                + $"Peso bruto {FormatarQuantidade(item.PesoBrutoKg)} KG; Tara {FormatarQuantidade(taraKg)} KG; "
+                + $"Tara convertida {FormatarQuantidade(taraKg)} KG; Peso liquido {quantidadeSap} KG; "
+                + $"QuantityInEntryUnit {quantidadeSap}; Quantidade SAP: {quantidadeSap} KG. EntryUnit SAP: KG. "
+                + $"Unidade original do pedido {unidadePedido}.");
+        }
+    }
+
+    // Tarefa Entrada 23.2 (Ajuste 5): guarda preventiva — a quantidade SAP formatada deve bater com o peso
+    // líquido calculado (tolerância 0,001 KG). Protege contra qualquer regressão de conversão/formatação
+    // (ex.: 1,5 virar 1500) ANTES da reserva/POST. Nenhuma chamada ao SAP acontece aqui.
+    private ResultadoEnvioSapEntrada? ValidarCoerenciaQuantidadeSap(
+        long codigoLancamento,
+        IReadOnlyList<EntradaProdutoItemEnvioSap> itens)
+    {
+        foreach (EntradaProdutoItemEnvioSap item in itens)
+        {
+            string quantidadeTexto = FormatarQuantidade(item.PesoLiquidoKg);
+            decimal quantidadeSapKg = decimal.Parse(
+                quantidadeTexto, System.Globalization.CultureInfo.InvariantCulture);
+
+            if (!EntradaProdutoQuantidadeSap.QuantidadeCoerente(quantidadeSapKg, item.PesoLiquidoKg))
+            {
+                Sap.RegistrarDiagnostico(
+                    $"Entrada 101 BLOQUEADO (lancamento {codigoLancamento}): Item {NormalizarItemSap(item.NumeroItem)} "
+                    + $"quantidade SAP {quantidadeTexto} divergente do peso liquido "
+                    + $"{FormatarQuantidade(item.PesoLiquidoKg)} KG (bruto {FormatarQuantidade(item.PesoBrutoKg)} KG).");
+                return new ResultadoEnvioSapEntrada
+                {
+                    Cenario = CenarioEnvioSapEntrada.DadosIncompletos,
+                    Total = itens.Count,
+                    Mensagem = "Quantidade SAP divergente do peso líquido calculado. "
+                        + "Envio bloqueado para evitar entrada incorreta."
                 };
             }
         }
@@ -524,7 +601,7 @@ public sealed class EntradaProdutoController
                 GoodsMovementType = "101",
                 GoodsMovementRefDocType = "B", // referencia = Pedido de Compra (exigido pelo SAP no 101)
                 QuantityInEntryUnit = FormatarQuantidade(item.PesoLiquidoKg),
-                EntryUnit = item.Unidade!.Trim().ToUpperInvariant(),
+                EntryUnit = "KG",
                 PurchaseOrder = numeroPedido,
                 PurchaseOrderItem = NormalizarItemSap(item.NumeroItem)
             })
@@ -551,8 +628,9 @@ public sealed class EntradaProdutoController
             : valor;
     }
 
+    // Tarefa Entrada 23.2 (Ajuste 4): serialização INVARIANTE centralizada (nunca cultura pt-BR / milhar).
     private static string FormatarQuantidade(decimal pesoLiquidoKg)
-        => pesoLiquidoKg.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        => EntradaProdutoQuantidadeSap.FormatarQuantidadeSap(pesoLiquidoKg);
 
     // Facet SAP: MaterialDocumentHeaderText e Edm.String MaxLength=25. Texto curto, ASCII simples,
     // sem acentos nem caracteres especiais, com corte defensivo. Ex.: "FP 4500001253 L33".
@@ -628,6 +706,8 @@ public sealed class EntradaProdutoController
     /// </summary>
     public async Task<ResultadoConsultaPedido> ConsultarPedidoAsync(
         string numeroPedido,
+        FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo =
+            FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima,
         CancellationToken cancellationToken = default)
     {
         // 1. CACHE LOCAL primeiro: resposta rapida e SEM chamar o SAP quando o pedido ja foi
@@ -669,10 +749,61 @@ public sealed class EntradaProdutoController
             }
         }
 
+        // Tarefa Entrada 23.1: valida APROVACAO/LIBERACAO no SAP (cabecalho FRESCO, sem confiar no cache
+        // que nao guarda o status). Pedido nao liberado NAO carrega itens operacionais (Ajuste 6).
+        PedidoCompraSap? cabecalhoSap =
+            await Sap.ObterCabecalhoSapParaValidacaoAsync(numeroPedido, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        ResultadoValidacaoPedidoCompra validacao = ValidadorLiberacaoPedidoCompra.Validar(cabecalhoSap);
+
+        if (!validacao.Liberado)
+        {
+            return new ResultadoConsultaPedido
+            {
+                Sucesso = true,
+                Mensagem = validacao.MotivoBloqueio,
+                NumeroPedido = pedido.NumeroPedido,
+                Fornecedor = pedido.Fornecedor,
+                DataPedido = pedido.DataPedido,
+                TipoPedido = pedido.TipoPedido,
+                ItensAutorizados = [], // Ajuste 6: nada operacional para pedido nao liberado
+                ItensOcultados = 0,
+                PedidoLiberado = false,
+                MotivoBloqueioLiberacao = validacao.MotivoBloqueio,
+                StatusProcessamento = validacao.CodigoStatus,
+                DescricaoStatusProcessamento = validacao.DescricaoStatus,
+                LiberacaoNaoConcluida = validacao.LiberacaoNaoConcluida
+            };
+        }
+
         // Escopo Jales (H5): exibe apenas itens dentro do centro/deposito autorizado.
         IReadOnlyList<PedidoCompraSapItem> itensAutorizados = pedido.Itens
             .Where(item => AutorizacaoCentroDeposito.ItemAutorizado(item.Centro, item.Deposito))
             .ToList();
+
+        // Tarefa Entrada 24.1: enriquece cada item com o ProductType (A_Product) e classifica; filtra pelo MODO.
+        IReadOnlyList<PedidoCompraSapItem> itensClassificados =
+            await EnriquecerEClassificarItensAsync(pedido.NumeroPedido, modo, itensAutorizados, cancellationToken);
+        IReadOnlyList<PedidoCompraSapItem> itensDoModo =
+            FugaPET_Dev.Modelo.Processo.FiltroItensEntradaMaterial.FiltrarItensPorModo(itensClassificados, modo);
+        RegistrarDiagnosticoClassificacaoEntrada(pedido.NumeroPedido, modo, itensClassificados);
+
+        // Ajuste 15: todos os itens Indefinidos (Product Master não classificou) → bloqueia por segurança.
+        if (FugaPET_Dev.Modelo.Processo.FiltroItensEntradaMaterial.TodosIndefinidos(itensClassificados))
+        {
+            return BloquearPedidoPorModo(
+                pedido, validacao,
+                FugaPET_Dev.Modelo.Processo.FiltroItensEntradaMaterial.MensagemTodosIndefinidos);
+        }
+
+        // Ajuste 9: pedido sem NENHUM item do modo atual → alerta, não carrega grid vazia como sucesso.
+        if (itensDoModo.Count == 0)
+        {
+            return BloquearPedidoPorModo(
+                pedido, validacao,
+                FugaPET_Dev.Modelo.Processo.FiltroItensEntradaMaterial.MontarMensagemSemItensDoModo(
+                    modo, pedido.NumeroPedido, itensClassificados.Count));
+        }
 
         return new ResultadoConsultaPedido
         {
@@ -682,9 +813,100 @@ public sealed class EntradaProdutoController
             Fornecedor = pedido.Fornecedor,
             DataPedido = pedido.DataPedido,
             TipoPedido = pedido.TipoPedido,
-            ItensAutorizados = itensAutorizados,
-            ItensOcultados = pedido.Itens.Count - itensAutorizados.Count
+            ItensAutorizados = itensDoModo, // Ajuste 10/11: só os itens do modo entram na operação
+            ItensOcultados = pedido.Itens.Count - itensDoModo.Count,
+            PedidoLiberado = true,
+            PedidoTemItensDoModo = true,
+            StatusProcessamento = validacao.CodigoStatus,
+            DescricaoStatusProcessamento = validacao.DescricaoStatus
         };
+    }
+
+    // Tarefa Entrada 24.1: bloqueio da abertura operacional por MODO (mantém pedido liberado; sem itens do modo).
+    private static ResultadoConsultaPedido BloquearPedidoPorModo(
+        PedidoCompraSapAgregado pedido,
+        ResultadoValidacaoPedidoCompra validacao,
+        string mensagemBloqueio)
+        => new()
+        {
+            Sucesso = true,
+            Mensagem = mensagemBloqueio,
+            NumeroPedido = pedido.NumeroPedido,
+            Fornecedor = pedido.Fornecedor,
+            DataPedido = pedido.DataPedido,
+            TipoPedido = pedido.TipoPedido,
+            ItensAutorizados = [],
+            ItensOcultados = 0,
+            PedidoLiberado = true,
+            PedidoTemItensDoModo = false,
+            MotivoBloqueioModo = mensagemBloqueio,
+            StatusProcessamento = validacao.CodigoStatus,
+            DescricaoStatusProcessamento = validacao.DescricaoStatus
+        };
+
+    // Tarefa Entrada 24.1 (Ajustes 6/13/15): enriquece cada item com ProductType (A_Product) e classifica.
+    // Cache por MATERIAL evita chamada repetida para o mesmo código. Falha/sem tipo → Indefinido (não libera por chute).
+    private async Task<IReadOnlyList<PedidoCompraSapItem>> EnriquecerEClassificarItensAsync(
+        string numeroPedido,
+        FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo,
+        IReadOnlyList<PedidoCompraSapItem> itens,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, ProdutoSapMestre?> cachePorMaterial = new(StringComparer.OrdinalIgnoreCase);
+        List<PedidoCompraSapItem> resultado = new(itens.Count);
+
+        foreach (PedidoCompraSapItem item in itens)
+        {
+            string material = (item.CodigoMaterial ?? string.Empty).Trim();
+            ProdutoSapMestre? mestre = null;
+            if (!string.IsNullOrWhiteSpace(material))
+            {
+                if (!cachePorMaterial.TryGetValue(material, out mestre))
+                {
+                    mestre = await ProductMasterServico.ObterProdutoAsync(material, cancellationToken);
+                    cachePorMaterial[material] = mestre;
+                }
+            }
+
+            string tipo = mestre?.TipoMaterialSap ?? string.Empty;
+            FugaPET_Dev.Modelo.Processo.ClassificacaoEntradaMaterial classificacao =
+                FugaPET_Dev.Modelo.Processo.ClassificadorItemEntradaMaterial.ClassificarPorProductType(tipo);
+
+            resultado.Add(item with
+            {
+                TipoMaterialSap = tipo,
+                GrupoMaterialSap = mestre?.GrupoMaterialSap ?? string.Empty,
+                UnidadeBaseSap = mestre?.UnidadeBaseSap ?? string.Empty,
+                DescricaoTipoMaterial =
+                    FugaPET_Dev.Modelo.Processo.ClassificadorComponenteConsumo.ObterDescricaoTipoMaterialSap(tipo),
+                ClassificacaoEntrada = classificacao
+            });
+
+            // Ajuste 14: diagnóstico por item.
+            Sap.RegistrarDiagnostico(
+                $"[Entrada][ClassificacaoItem] Pedido {numeroPedido}; Modo {modo}; Item {item.NumeroItem.Trim()}; "
+                + $"Material {material}; ProductType {tipo}; ProductGroup {mestre?.GrupoMaterialSap}; "
+                + $"BaseUnit {mestre?.UnidadeBaseSap}; Classificacao {classificacao}; Origem A_Product.ProductType.");
+        }
+
+        return resultado;
+    }
+
+    // Ajuste 14: totalizadores da classificação do pedido para o modo atual.
+    private void RegistrarDiagnosticoClassificacaoEntrada(
+        string numeroPedido,
+        FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo,
+        IReadOnlyList<PedidoCompraSapItem> itens)
+    {
+        FugaPET_Dev.Modelo.Processo.TotaisClassificacaoEntrada totais =
+            FugaPET_Dev.Modelo.Processo.FiltroItensEntradaMaterial.ContarClassificacoes(itens, modo);
+
+        Sap.RegistrarDiagnostico(
+            $"[Entrada][ClassificacaoPedido] Pedido {numeroPedido}; Modo {modo}; "
+            + $"Total de itens {totais.Total}; Itens Materia-Prima {totais.MateriaPrima}; "
+            + $"Itens Quimicos {totais.Quimico}; Itens Outro/Indefinido {totais.OutroOuIndefinido}; "
+            + $"Itens do modo {totais.DoModo}; "
+            + $"Resultado {(totais.DoModo > 0 ? "Pedido aceito para o modo" : "Pedido bloqueado para o modo")}.");
     }
 }
 
@@ -751,4 +973,17 @@ public sealed class ResultadoConsultaPedido
     public string TipoPedido { get; init; } = string.Empty;
     public IReadOnlyList<PedidoCompraSapItem> ItensAutorizados { get; init; } = [];
     public int ItensOcultados { get; init; }
+
+    // Tarefa Entrada 23.1: aprovação/liberação do pedido no SAP. PedidoLiberado default true para não
+    // afetar chamadas que não passam pela validação; o fluxo real sempre o define explicitamente.
+    public bool PedidoLiberado { get; init; } = true;
+    public string MotivoBloqueioLiberacao { get; init; } = string.Empty;
+    public string StatusProcessamento { get; init; } = string.Empty;
+    public string DescricaoStatusProcessamento { get; init; } = string.Empty;
+    public bool LiberacaoNaoConcluida { get; init; }
+
+    // Tarefa Entrada 24.1: separação por modo. PedidoTemItensDoModo default true para não afetar chamadas
+    // que não passam pela classificação; o fluxo real sempre o define. MotivoBloqueioModo = alerta por modo.
+    public bool PedidoTemItensDoModo { get; init; } = true;
+    public string MotivoBloqueioModo { get; init; } = string.Empty;
 }

@@ -6,7 +6,9 @@ using NpgsqlTypes;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
-public sealed class TaraRepositorio : RepositorioBase
+// Tarefa Tara: classe NÃO selada + métodos virtuais para permitir teste do serviço com repositório fake
+// (mesmo padrão de Cargo/TipoTara). Nenhuma alteração de SQL/estrutura da tabela.
+public class TaraRepositorio : RepositorioBase
 {
     public TaraRepositorio(IFabricaConexaoBanco fabricaConexaoBanco) : base(fabricaConexaoBanco)
     {
@@ -15,7 +17,7 @@ public sealed class TaraRepositorio : RepositorioBase
     private const string ColunasSelect =
         "codigo_tara, codigo_tipo_tara, codigo_setor, nome_tara, tamanho, peso_kg, observacao, situacao_tara, tara_criado_em";
 
-    public async Task<IReadOnlyList<TaraCadastro>> ListarAsync(CancellationToken cancellationToken = default)
+    public virtual async Task<IReadOnlyList<TaraCadastro>> ListarAsync(CancellationToken cancellationToken = default)
     {
         const string sql = $"SELECT {ColunasSelect} FROM tara ORDER BY nome_tara;";
 
@@ -36,7 +38,7 @@ public sealed class TaraRepositorio : RepositorioBase
     /// Taras ATIVAS de um setor especifico, para a selecao de tara da Entrada de Produto.
     /// Impede o uso de tara pertencente a outro setor.
     /// </summary>
-    public async Task<IReadOnlyList<TaraCadastro>> ListarAtivasPorSetorAsync(long codigoSetor, CancellationToken cancellationToken = default)
+    public virtual async Task<IReadOnlyList<TaraCadastro>> ListarAtivasPorSetorAsync(long codigoSetor, CancellationToken cancellationToken = default)
     {
         const string sql = $"""
             SELECT {ColunasSelect}
@@ -60,7 +62,7 @@ public sealed class TaraRepositorio : RepositorioBase
         return taras;
     }
 
-    public async Task<TaraCadastro?> ObterPorIdAsync(long codigoTara, CancellationToken cancellationToken = default)
+    public virtual async Task<TaraCadastro?> ObterPorIdAsync(long codigoTara, CancellationToken cancellationToken = default)
     {
         const string sql = $"SELECT {ColunasSelect} FROM tara WHERE codigo_tara = @codigo_tara;";
 
@@ -73,9 +75,11 @@ public sealed class TaraRepositorio : RepositorioBase
         return MapearTara(leitor);
     }
 
-    public async Task<bool> ExisteNomeNoSetorTipoAsync(string nome, long codigoSetor, long codigoTipoTara, long? ignorarCodigo, CancellationToken cancellationToken = default)
+    // Tarefa Tara (Ajuste 7): duplicidade GLOBAL dentro de setor+tipo — nome único por
+    // (codigo_setor, codigo_tipo_tara, upper(trim(nome_tara))) INDEPENDENTE da situação (ativo OU inativo).
+    // NÃO filtra por situacao_tara. Mesmo nome em outro setor/tipo continua permitido.
+    public virtual async Task<bool> ExisteNomeNoSetorTipoAsync(string nome, long codigoSetor, long codigoTipoTara, long? ignorarCodigo, CancellationToken cancellationToken = default)
     {
-        // Index unique: uq_tara_setor_tipo_nome (codigo_setor, codigo_tipo_tara, upper(trim(nome_tara))) WHERE situacao_tara
         const string sql = """
             SELECT EXISTS (
                 SELECT 1
@@ -83,7 +87,6 @@ public sealed class TaraRepositorio : RepositorioBase
                 WHERE codigo_setor = @codigo_setor
                   AND codigo_tipo_tara = @codigo_tipo_tara
                   AND upper(trim(nome_tara)) = upper(trim(@nome_tara))
-                  AND situacao_tara = true
                   AND (@ignorar_codigo IS NULL OR codigo_tara <> @ignorar_codigo)
             );
             """;
@@ -99,7 +102,7 @@ public sealed class TaraRepositorio : RepositorioBase
         return retorno is bool existe && existe;
     }
 
-    public async Task<long> InserirAsync(TaraCadastro tara, CancellationToken cancellationToken = default)
+    public virtual async Task<long> InserirAsync(TaraCadastro tara, CancellationToken cancellationToken = default)
     {
         const string sql = """
             INSERT INTO tara
@@ -126,7 +129,9 @@ public sealed class TaraRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public async Task<int> AtualizarAsync(TaraCadastro tara, CancellationToken cancellationToken = default)
+    // Tarefa Tara (Ajuste 11): AtualizarAsync edita SOMENTE dados cadastrais. NÃO altera situacao_tara
+    // (situação muda apenas por ExcluirAsync/ReativarAsync).
+    public virtual async Task<int> AtualizarAsync(TaraCadastro tara, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE tara
@@ -136,7 +141,6 @@ public sealed class TaraRepositorio : RepositorioBase
                 tamanho = @tamanho,
                 peso_kg = @peso_kg,
                 observacao = @observacao,
-                situacao_tara = @situacao_tara,
                 tara_atualizado_por = @tara_atualizado_por
             WHERE codigo_tara = @codigo_tara;
             """;
@@ -151,13 +155,12 @@ public sealed class TaraRepositorio : RepositorioBase
             comando.Parameters.Add(ParametroTexto("@tamanho", tara.Tamanho));
             comando.Parameters.Add(new NpgsqlParameter("@peso_kg", NpgsqlDbType.Numeric) { Value = tara.PesoKg });
             comando.Parameters.Add(ParametroTexto("@observacao", tara.Observacao));
-            comando.Parameters.Add(ParametroBooleano("@situacao_tara", tara.SituacaoTara));
             comando.Parameters.Add(ParametroLongoNulo("@tara_atualizado_por", tara.TaraAtualizadoPor ?? ObterCodigoUsuarioSessao()));
             return await comando.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
     }
 
-    public async Task<int> ExcluirAsync(long codigoTara, CancellationToken cancellationToken = default)
+    public virtual async Task<int> ExcluirAsync(long codigoTara, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE tara
@@ -176,7 +179,7 @@ public sealed class TaraRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public async Task<int> ReativarAsync(long codigoTara, CancellationToken cancellationToken = default)
+    public virtual async Task<int> ReativarAsync(long codigoTara, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE tara

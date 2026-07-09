@@ -55,6 +55,15 @@ partial class ProcessoProducaoForm
     private Label entradaStatusLabel;
     private Label entradaShortcutLabel;
     private Label entradaArrowLabel;
+    // Tarefa Entrada 24.1b: card "Entrada de Químicos".
+    private RoundedPanel entradaQuimicosCard;
+    private RoundedPanel entradaQuimicosIconPanel;
+    private Label entradaQuimicosIconLabel;
+    private Label entradaQuimicosTitleLabel;
+    private Label entradaQuimicosDescriptionLabel;
+    private Label entradaQuimicosStatusLabel;
+    private Label entradaQuimicosShortcutLabel;
+    private Label entradaQuimicosArrowLabel;
 
     protected override void Dispose(bool disposing)
     {
@@ -118,6 +127,14 @@ partial class ProcessoProducaoForm
         entradaStatusLabel = new Label();
         entradaShortcutLabel = new Label();
         entradaArrowLabel = new Label();
+        entradaQuimicosCard = new RoundedPanel();
+        entradaQuimicosIconPanel = new RoundedPanel();
+        entradaQuimicosIconLabel = new Label();
+        entradaQuimicosTitleLabel = new Label();
+        entradaQuimicosDescriptionLabel = new Label();
+        entradaQuimicosStatusLabel = new Label();
+        entradaQuimicosShortcutLabel = new Label();
+        entradaQuimicosArrowLabel = new Label();
         contentPanel.SuspendLayout();
         processoSemiAcabadoCard.SuspendLayout();
         semiAcabadoIconPanel.SuspendLayout();
@@ -131,6 +148,8 @@ partial class ProcessoProducaoForm
         ordensIconPanel.SuspendLayout();
         entradaProdutoCard.SuspendLayout();
         entradaIconPanel.SuspendLayout();
+        entradaQuimicosCard.SuspendLayout();
+        entradaQuimicosIconPanel.SuspendLayout();
         SuspendLayout();
         // 
         // contentPanel
@@ -143,6 +162,7 @@ partial class ProcessoProducaoForm
         contentPanel.Controls.Add(processoConsumoMaterialCard);
         contentPanel.Controls.Add(processoConsumoQuimicosCard);
         contentPanel.Controls.Add(ordensAndamentoCard);
+        contentPanel.Controls.Add(entradaQuimicosCard);
         contentPanel.Dock = DockStyle.Fill;
         contentPanel.Location = new Point(0, 0);
         contentPanel.Name = "contentPanel";
@@ -173,7 +193,7 @@ partial class ProcessoProducaoForm
         processoSemiAcabadoCard.Controls.Add(semiAcabadoShortcutLabel);
         processoSemiAcabadoCard.Controls.Add(semiAcabadoArrowLabel);
         processoSemiAcabadoCard.Cursor = Cursors.Hand;
-        processoSemiAcabadoCard.Location = new Point(796, 70);
+        processoSemiAcabadoCard.Location = new Point(28, 336);
         processoSemiAcabadoCard.Name = "processoSemiAcabadoCard";
         processoSemiAcabadoCard.ShadowBlur = 0;
         processoSemiAcabadoCard.ShadowOffsetY = 0;
@@ -258,7 +278,7 @@ partial class ProcessoProducaoForm
         semiAcabadoShortcutLabel.Name = "semiAcabadoShortcutLabel";
         semiAcabadoShortcutLabel.Size = new Size(38, 28);
         semiAcabadoShortcutLabel.TabIndex = 4;
-        semiAcabadoShortcutLabel.Text = "F4";
+        semiAcabadoShortcutLabel.Text = "F5";
         semiAcabadoShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // semiAcabadoArrowLabel
@@ -285,7 +305,7 @@ partial class ProcessoProducaoForm
         processoProdutoAcabadoCard.Controls.Add(processShortcutLabel);
         processoProdutoAcabadoCard.Controls.Add(processArrowLabel);
         processoProdutoAcabadoCard.Cursor = Cursors.Hand;
-        processoProdutoAcabadoCard.Location = new Point(28, 336);
+        processoProdutoAcabadoCard.Location = new Point(284, 336);
         processoProdutoAcabadoCard.Name = "processoProdutoAcabadoCard";
         processoProdutoAcabadoCard.ShadowBlur = 0;
         processoProdutoAcabadoCard.ShadowOffsetY = 0;
@@ -371,7 +391,7 @@ partial class ProcessoProducaoForm
         processShortcutLabel.Name = "processShortcutLabel";
         processShortcutLabel.Size = new Size(38, 28);
         processShortcutLabel.TabIndex = 4;
-        processShortcutLabel.Text = "F5";
+        processShortcutLabel.Text = "F6";
         processShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // processArrowLabel
@@ -398,7 +418,7 @@ partial class ProcessoProducaoForm
         processoConsumoMaterialCard.Controls.Add(pesagemShortcutLabel);
         processoConsumoMaterialCard.Controls.Add(pesagemArrowLabel);
         processoConsumoMaterialCard.Cursor = Cursors.Hand;
-        processoConsumoMaterialCard.Location = new Point(284, 70);
+        processoConsumoMaterialCard.Location = new Point(540, 70);
         processoConsumoMaterialCard.Name = "processoConsumoMaterialCard";
         processoConsumoMaterialCard.ShadowBlur = 0;
         processoConsumoMaterialCard.ShadowOffsetY = 0;
@@ -484,7 +504,7 @@ partial class ProcessoProducaoForm
         pesagemShortcutLabel.Name = "pesagemShortcutLabel";
         pesagemShortcutLabel.Size = new Size(38, 28);
         pesagemShortcutLabel.TabIndex = 4;
-        pesagemShortcutLabel.Text = "F2";
+        pesagemShortcutLabel.Text = "F3";
         pesagemShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // pesagemArrowLabel
@@ -511,7 +531,7 @@ partial class ProcessoProducaoForm
         processoConsumoQuimicosCard.Controls.Add(quimicosShortcutLabel);
         processoConsumoQuimicosCard.Controls.Add(quimicosArrowLabel);
         processoConsumoQuimicosCard.Cursor = Cursors.Hand;
-        processoConsumoQuimicosCard.Location = new Point(540, 70);
+        processoConsumoQuimicosCard.Location = new Point(796, 70);
         processoConsumoQuimicosCard.Name = "processoConsumoQuimicosCard";
         processoConsumoQuimicosCard.ShadowBlur = 0;
         processoConsumoQuimicosCard.ShadowOffsetY = 0;
@@ -596,7 +616,7 @@ partial class ProcessoProducaoForm
         quimicosShortcutLabel.Name = "quimicosShortcutLabel";
         quimicosShortcutLabel.Size = new Size(38, 28);
         quimicosShortcutLabel.TabIndex = 4;
-        quimicosShortcutLabel.Text = "F3";
+        quimicosShortcutLabel.Text = "F4";
         quimicosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // quimicosArrowLabel
@@ -623,7 +643,7 @@ partial class ProcessoProducaoForm
         ordensAndamentoCard.Controls.Add(ordensShortcutLabel);
         ordensAndamentoCard.Controls.Add(ordensArrowLabel);
         ordensAndamentoCard.Cursor = Cursors.Hand;
-        ordensAndamentoCard.Location = new Point(284, 336);
+        ordensAndamentoCard.Location = new Point(540, 336);
         ordensAndamentoCard.Name = "ordensAndamentoCard";
         ordensAndamentoCard.ShadowBlur = 0;
         ordensAndamentoCard.ShadowOffsetY = 0;
@@ -708,7 +728,7 @@ partial class ProcessoProducaoForm
         ordensShortcutLabel.Name = "ordensShortcutLabel";
         ordensShortcutLabel.Size = new Size(38, 28);
         ordensShortcutLabel.TabIndex = 4;
-        ordensShortcutLabel.Text = "F6";
+        ordensShortcutLabel.Text = "F7";
         ordensShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // ordensArrowLabel
@@ -781,7 +801,7 @@ partial class ProcessoProducaoForm
         entradaTitleLabel.Name = "entradaTitleLabel";
         entradaTitleLabel.Size = new Size(202, 62);
         entradaTitleLabel.TabIndex = 1;
-        entradaTitleLabel.Text = "Entrada de\r\nProduto";
+        entradaTitleLabel.Text = "Entrada de\r\nMatéria-Prima";
         entradaTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // entradaDescriptionLabel
@@ -794,7 +814,7 @@ partial class ProcessoProducaoForm
         entradaDescriptionLabel.Name = "entradaDescriptionLabel";
         entradaDescriptionLabel.Size = new Size(175, 46);
         entradaDescriptionLabel.TabIndex = 2;
-        entradaDescriptionLabel.Text = "Entrada de produto via\r\npedido de compra / SAP.";
+        entradaDescriptionLabel.Text = "Entrada 101 de matéria-prima\r\nvia pedido de compra / SAP.";
         entradaDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // entradaStatusLabel
@@ -836,6 +856,118 @@ partial class ProcessoProducaoForm
         entradaArrowLabel.Text = "→";
         entradaArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
+        // entradaQuimicosCard
+        //
+        entradaQuimicosCard.BackColor = Color.Transparent;
+        entradaQuimicosCard.BorderColor = Color.FromArgb(226, 232, 240);
+        entradaQuimicosCard.Controls.Add(entradaQuimicosIconPanel);
+        entradaQuimicosCard.Controls.Add(entradaQuimicosTitleLabel);
+        entradaQuimicosCard.Controls.Add(entradaQuimicosDescriptionLabel);
+        entradaQuimicosCard.Controls.Add(entradaQuimicosStatusLabel);
+        entradaQuimicosCard.Controls.Add(entradaQuimicosShortcutLabel);
+        entradaQuimicosCard.Controls.Add(entradaQuimicosArrowLabel);
+        entradaQuimicosCard.Cursor = Cursors.Hand;
+        entradaQuimicosCard.Location = new Point(284, 70);
+        entradaQuimicosCard.Name = "entradaQuimicosCard";
+        entradaQuimicosCard.ShadowBlur = 0;
+        entradaQuimicosCard.ShadowOffsetY = 0;
+        entradaQuimicosCard.Size = new Size(240, 250);
+        entradaQuimicosCard.TabIndex = 10;
+        //
+        // entradaQuimicosIconPanel
+        //
+        entradaQuimicosIconPanel.BackColor = Color.Transparent;
+        entradaQuimicosIconPanel.BorderRadius = 9;
+        entradaQuimicosIconPanel.Controls.Add(entradaQuimicosIconLabel);
+        entradaQuimicosIconPanel.Cursor = Cursors.Hand;
+        entradaQuimicosIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        entradaQuimicosIconPanel.Location = new Point(92, 20);
+        entradaQuimicosIconPanel.Name = "entradaQuimicosIconPanel";
+        entradaQuimicosIconPanel.ShadowBlur = 0;
+        entradaQuimicosIconPanel.ShadowOffsetY = 0;
+        entradaQuimicosIconPanel.Size = new Size(56, 56);
+        entradaQuimicosIconPanel.TabIndex = 0;
+        //
+        // entradaQuimicosIconLabel
+        //
+        entradaQuimicosIconLabel.BackColor = Color.Transparent;
+        entradaQuimicosIconLabel.Cursor = Cursors.Hand;
+        entradaQuimicosIconLabel.Dock = DockStyle.Fill;
+        entradaQuimicosIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        entradaQuimicosIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        entradaQuimicosIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
+        entradaQuimicosIconLabel.Location = new Point(0, 0);
+        entradaQuimicosIconLabel.Name = "entradaQuimicosIconLabel";
+        entradaQuimicosIconLabel.Size = new Size(56, 56);
+        entradaQuimicosIconLabel.TabIndex = 0;
+        entradaQuimicosIconLabel.Text = "";
+        entradaQuimicosIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // entradaQuimicosTitleLabel
+        //
+        entradaQuimicosTitleLabel.BackColor = Color.Transparent;
+        entradaQuimicosTitleLabel.Cursor = Cursors.Hand;
+        entradaQuimicosTitleLabel.Font = new Font("Segoe UI", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        entradaQuimicosTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        entradaQuimicosTitleLabel.Location = new Point(20, 92);
+        entradaQuimicosTitleLabel.Name = "entradaQuimicosTitleLabel";
+        entradaQuimicosTitleLabel.Size = new Size(202, 62);
+        entradaQuimicosTitleLabel.TabIndex = 1;
+        entradaQuimicosTitleLabel.Text = "Entrada de\r\nQuímicos";
+        entradaQuimicosTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // entradaQuimicosDescriptionLabel
+        //
+        entradaQuimicosDescriptionLabel.BackColor = Color.Transparent;
+        entradaQuimicosDescriptionLabel.Cursor = Cursors.Hand;
+        entradaQuimicosDescriptionLabel.Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        entradaQuimicosDescriptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        entradaQuimicosDescriptionLabel.Location = new Point(20, 156);
+        entradaQuimicosDescriptionLabel.Name = "entradaQuimicosDescriptionLabel";
+        entradaQuimicosDescriptionLabel.Size = new Size(175, 46);
+        entradaQuimicosDescriptionLabel.TabIndex = 2;
+        entradaQuimicosDescriptionLabel.Text = "Entrada 101 de químicos\r\nvia pedido de compra / SAP.";
+        entradaQuimicosDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // entradaQuimicosStatusLabel
+        //
+        entradaQuimicosStatusLabel.BackColor = Color.FromArgb(220, 252, 231);
+        entradaQuimicosStatusLabel.Cursor = Cursors.Hand;
+        entradaQuimicosStatusLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        entradaQuimicosStatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        entradaQuimicosStatusLabel.Location = new Point(20, 214);
+        entradaQuimicosStatusLabel.Name = "entradaQuimicosStatusLabel";
+        entradaQuimicosStatusLabel.Size = new Size(82, 28);
+        entradaQuimicosStatusLabel.TabIndex = 3;
+        entradaQuimicosStatusLabel.Text = "Disponível";
+        entradaQuimicosStatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // entradaQuimicosShortcutLabel
+        //
+        entradaQuimicosShortcutLabel.BackColor = Color.FromArgb(243, 244, 246);
+        entradaQuimicosShortcutLabel.Cursor = Cursors.Hand;
+        entradaQuimicosShortcutLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        entradaQuimicosShortcutLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        entradaQuimicosShortcutLabel.Location = new Point(110, 214);
+        entradaQuimicosShortcutLabel.Name = "entradaQuimicosShortcutLabel";
+        entradaQuimicosShortcutLabel.Size = new Size(38, 28);
+        entradaQuimicosShortcutLabel.TabIndex = 4;
+        entradaQuimicosShortcutLabel.Text = "F2";
+        entradaQuimicosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // entradaQuimicosArrowLabel
+        //
+        entradaQuimicosArrowLabel.BackColor = Color.Transparent;
+        entradaQuimicosArrowLabel.Cursor = Cursors.Hand;
+        entradaQuimicosArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        entradaQuimicosArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        entradaQuimicosArrowLabel.Location = new Point(190, 207);
+        entradaQuimicosArrowLabel.Name = "entradaQuimicosArrowLabel";
+        entradaQuimicosArrowLabel.Size = new Size(32, 36);
+        entradaQuimicosArrowLabel.TabIndex = 5;
+        entradaQuimicosArrowLabel.Text = "→";
+        entradaQuimicosArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
         // ProcessoProducaoForm
         //
         AutoScaleDimensions = new SizeF(7F, 15F);
@@ -857,6 +989,8 @@ partial class ProcessoProducaoForm
         ordensIconPanel.ResumeLayout(false);
         entradaProdutoCard.ResumeLayout(false);
         entradaIconPanel.ResumeLayout(false);
+        entradaQuimicosCard.ResumeLayout(false);
+        entradaQuimicosIconPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 }

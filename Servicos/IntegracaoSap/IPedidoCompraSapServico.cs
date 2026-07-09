@@ -20,6 +20,15 @@ public interface IPedidoCompraSapServico
     Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tarefa Entrada 23.1: cabeçalho FRESCO do pedido no SAP (com PurchasingProcessingStatus/ReleaseIsNotCompleted),
+    /// usado para validar aprovação/liberação ANTES de liberar a operação de Entrada. Null quando não configurado/
+    /// indisponível/não encontrado — nesse caso o validador bloqueia por segurança. NÃO usa cache de aprovação.
+    /// </summary>
+    Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default);
     Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default);
     Task<DateOnly?> ObterDataPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default);

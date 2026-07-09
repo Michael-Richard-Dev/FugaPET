@@ -11,6 +11,16 @@ public sealed class TaraServico
     private const string Entidade = PermissoesSistema.Rotinas.Tara;
     private const string Tela = "TaraForm";
 
+    // Ajuste 7: nome é chave funcional ÚNICA por setor+tipo, independente de ativo/inativo.
+    internal const string MensagemDuplicidadeGlobal =
+        "Já existe uma tara com este nome para o mesmo setor e tipo, mesmo que esteja inativa. Localize o registro existente e utilize a ação Reativar.";
+
+    // Ajuste 5: situação muda apenas por Inativar/Reativar (não pela edição).
+    internal const string MensagemInativarPelaAcao =
+        "A inativação da tara deve ser feita pela ação Inativar.";
+    internal const string MensagemReativarPelaAcao =
+        "A reativação da tara deve ser feita pela ação Reativar.";
+
     private readonly TaraRepositorio _taraRepositorio;
     private readonly AuditoriaServico _auditoriaServico;
 
@@ -32,16 +42,15 @@ public sealed class TaraServico
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarAsync(Entidade, PermissoesSistema.Acoes.Criar, _auditoriaServico, Tela, cancellationToken);
         if (bloqueio is not null) return bloqueio;
 
-        ResultadoOperacao? validacao = ValidarBasico(tara);
+        ResultadoOperacao? validacao = ValidarENormalizar(tara);
         if (validacao is not null) return validacao;
-
-        tara.NomeTara = tara.NomeTara.Trim();
 
         try
         {
+            // Ajuste 7: duplicidade GLOBAL (ativa OU inativa) no mesmo setor+tipo — orienta a reativar o existente.
             if (await _taraRepositorio.ExisteNomeNoSetorTipoAsync(tara.NomeTara, tara.CodigoSetor, tara.CodigoTipoTara, null, cancellationToken))
             {
-                return ResultadoOperacao.Falha("Ja existe uma tara ativa com este nome no mesmo setor e tipo.");
+                return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
             }
 
             long id = await _taraRepositorio.InserirAsync(tara, cancellationToken);
@@ -52,7 +61,7 @@ public sealed class TaraServico
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
-            return ResultadoOperacao.Falha("Ja existe uma tara com este nome no mesmo setor e tipo.");
+            return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
         }
         catch (Exception ex)
         {
@@ -67,44 +76,46 @@ public sealed class TaraServico
 
         if (tara.CodigoTara <= 0) return ResultadoOperacao.Falha("Id da tara invalido para edicao.");
 
-        ResultadoOperacao? validacao = ValidarBasico(tara);
+        ResultadoOperacao? validacao = ValidarENormalizar(tara);
         if (validacao is not null) return validacao;
-
-        tara.NomeTara = tara.NomeTara.Trim();
 
         try
         {
-            if (await _taraRepositorio.ExisteNomeNoSetorTipoAsync(tara.NomeTara, tara.CodigoSetor, tara.CodigoTipoTara, tara.CodigoTara, cancellationToken))
-            {
-                return ResultadoOperacao.Falha("Ja existe outra tara ativa com este nome no mesmo setor e tipo.");
-            }
-
-            // Carrega estado anterior para emitir o evento de auditoria correto
-            // (ATUALIZADO vs EXCLUIDO vs REATIVADO) coerente com o trigger do banco.
             TaraCadastro? anterior = await _taraRepositorio.ObterPorIdAsync(tara.CodigoTara, cancellationToken);
             if (anterior is null)
             {
                 return ResultadoOperacao.Falha("Tara nao encontrada para edicao.");
             }
 
-            int atualizados = await _taraRepositorio.AtualizarAsync(tara, cancellationToken);
-            if (atualizados <= 0) return ResultadoOperacao.Falha("Tara nao encontrada para edicao.");
-
-            string descricao = $"Tara '{tara.NomeTara}'";
+            // Ajuste 5: edição altera SOMENTE dados cadastrais. Situação muda só por Inativar/Reativar.
             if (anterior.SituacaoTara && !tara.SituacaoTara)
             {
-                await _auditoriaServico.RegistrarCadastroExcluidoAsync(Entidade, tara.CodigoTara, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Tara inativada com sucesso.");
+                return ResultadoOperacao.Falha(MensagemInativarPelaAcao);
             }
 
             if (!anterior.SituacaoTara && tara.SituacaoTara)
             {
-                await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, tara.CodigoTara, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Tara reativada com sucesso.");
+                return ResultadoOperacao.Falha(MensagemReativarPelaAcao);
             }
 
-            await _auditoriaServico.RegistrarCadastroAtualizadoAsync(Entidade, tara.CodigoTara, descricao, Tela, cancellationToken);
+            // Ajuste 7: duplicidade GLOBAL contra OUTRO registro (ativo OU inativo) no mesmo setor+tipo.
+            if (await _taraRepositorio.ExisteNomeNoSetorTipoAsync(tara.NomeTara, tara.CodigoSetor, tara.CodigoTipoTara, tara.CodigoTara, cancellationToken))
+            {
+                return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
+            }
+
+            // Preserva a situação atual (não é alterada por edição).
+            tara.SituacaoTara = anterior.SituacaoTara;
+
+            int atualizados = await _taraRepositorio.AtualizarAsync(tara, cancellationToken);
+            if (atualizados <= 0) return ResultadoOperacao.Falha("Tara nao encontrada para edicao.");
+
+            await _auditoriaServico.RegistrarCadastroAtualizadoAsync(Entidade, tara.CodigoTara, $"Tara '{tara.NomeTara}'", Tela, cancellationToken);
             return ResultadoOperacao.Ok("Edicao concluida com sucesso.");
+        }
+        catch (PostgresException ex) when (ex.SqlState == "23505")
+        {
+            return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
         }
         catch (Exception ex)
         {
@@ -142,6 +153,19 @@ public sealed class TaraServico
 
         try
         {
+            // Ajuste 7/11: reativar respeitando duplicidade GLOBAL (não pode existir OUTRA tara com o mesmo
+            // nome no mesmo setor+tipo, ativa OU inativa).
+            TaraCadastro? tara = await _taraRepositorio.ObterPorIdAsync(id, cancellationToken);
+            if (tara is null)
+            {
+                return ResultadoOperacao.Falha("Tara nao encontrada.");
+            }
+
+            if (await _taraRepositorio.ExisteNomeNoSetorTipoAsync(tara.NomeTara, tara.CodigoSetor, tara.CodigoTipoTara, id, cancellationToken))
+            {
+                return ResultadoOperacao.Falha("Já existe outra tara com este nome no mesmo setor e tipo. Não é possível reativar este registro.");
+            }
+
             int reativados = await _taraRepositorio.ReativarAsync(id, cancellationToken);
             if (reativados <= 0) return ResultadoOperacao.Falha("Tara nao encontrada ou ja estava ativa.");
 
@@ -154,12 +178,39 @@ public sealed class TaraServico
         }
     }
 
-    private static ResultadoOperacao? ValidarBasico(TaraCadastro tara)
+    // Ajuste 8: validação/normalização no padrão Setor/Cargo/TipoTara. Peso em KG (> 0, até 3 casas — numeric(14,3)).
+    private static ResultadoOperacao? ValidarENormalizar(TaraCadastro tara)
     {
-        if (tara.CodigoTipoTara <= 0) return ResultadoOperacao.Falha("Tipo da tara e obrigatorio.");
-        if (tara.CodigoSetor <= 0) return ResultadoOperacao.Falha("Setor da tara e obrigatorio.");
-        if (string.IsNullOrWhiteSpace(tara.NomeTara)) return ResultadoOperacao.Falha("Nome da tara e obrigatorio.");
-        if (tara.PesoKg < 0) return ResultadoOperacao.Falha("Peso da tara nao pode ser negativo.");
+        tara.NomeTara = tara.NomeTara?.Trim() ?? string.Empty;
+        tara.Tamanho = tara.Tamanho?.Trim() ?? string.Empty;
+        tara.Observacao = tara.Observacao?.Trim() ?? string.Empty;
+
+        if (tara.CodigoTipoTara <= 0) return ResultadoOperacao.Falha("Tipo da tara é obrigatório.");
+        if (tara.CodigoSetor <= 0) return ResultadoOperacao.Falha("Setor da tara é obrigatório.");
+
+        if (tara.NomeTara.Length < TaraCadastro.TamanhoMinimoNome
+            || tara.NomeTara.Length > TaraCadastro.TamanhoMaximoNome)
+        {
+            return ResultadoOperacao.Falha("Nome da tara deve ter entre 2 e 80 caracteres.");
+        }
+
+        if (tara.Tamanho.Length > TaraCadastro.TamanhoMaximoTamanho)
+        {
+            return ResultadoOperacao.Falha("Tamanho da tara deve ter no máximo 80 caracteres.");
+        }
+
+        if (tara.Observacao.Length > TaraCadastro.TamanhoMaximoObservacao)
+        {
+            return ResultadoOperacao.Falha("Observação da tara deve ter no máximo 255 caracteres.");
+        }
+
+        if (tara.PesoKg <= 0m)
+        {
+            return ResultadoOperacao.Falha("Informe um peso de tara válido em KG, maior que zero.");
+        }
+
+        // Até 3 casas decimais (coerente com numeric(14,3)); mantém KG (nunca gramas).
+        tara.PesoKg = Math.Round(tara.PesoKg, 3, MidpointRounding.AwayFromZero);
         return null;
     }
 }

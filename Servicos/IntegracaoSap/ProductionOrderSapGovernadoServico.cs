@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.Cadastro;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
@@ -34,5 +34,16 @@ internal sealed class ProductionOrderSapGovernadoServico : IProductionOrderSapSe
         return validacao.Sucesso
             ? await _servicoInterno.ConsultarOrdemAsync(numeroOrdem, cancellationToken)
             : ResultadoConsultaOrdemProducaoSap.Indisponivel(validacao.Mensagem);
+    }
+    public async Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ResultadoOperacao validacao = await _estadoIntegracaoSapServico.ValidarAsync(
+            OperacaoIntegracaoSap.Consulta,
+            cancellationToken);
+
+        return validacao.Sucesso
+            ? await _servicoInterno.ListarOrdensRelevantesAsync(cancellationToken)
+            : [];
     }
 }

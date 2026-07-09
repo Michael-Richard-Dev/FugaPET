@@ -76,6 +76,81 @@ public sealed class ProcessoConsumoMaterialModoTests
     }
 
     [Fact]
+    public void Classificador_22_9_DeveSepararOpsPorProdutoDaOrdem()
+    {
+        ClassificadorOrdemConsumoMaterial classificador = new(
+            produtosMateriaPrima: ["PROD-MP"],
+            produtosQuimicos: ["PROD-QM"]);
+
+        OrdemProducaoConsumo opMateriaPrima = new() { NumeroOrdem = "1001", MaterialProduzido = "prod-mp" };
+        OrdemProducaoConsumo opQuimico = new() { NumeroOrdem = "1002", MaterialProduzido = "PROD-QM" };
+
+        Assert.True(classificador.OrdemPertenceAoModo(opMateriaPrima, ModoConsumoMaterial.MateriaPrima, out ResultadoClassificacaoOrdemConsumo classificacaoMateria));
+        Assert.Equal(TipoClassificacaoOrdemConsumo.MateriaPrima, classificacaoMateria.Classificacao);
+        Assert.False(classificador.OrdemPertenceAoModo(opMateriaPrima, ModoConsumoMaterial.Quimico, out _));
+
+        Assert.True(classificador.OrdemPertenceAoModo(opQuimico, ModoConsumoMaterial.Quimico, out ResultadoClassificacaoOrdemConsumo classificacaoQuimico));
+        Assert.Equal(TipoClassificacaoOrdemConsumo.Quimico, classificacaoQuimico.Classificacao);
+        Assert.False(classificador.OrdemPertenceAoModo(opQuimico, ModoConsumoMaterial.MateriaPrima, out _));
+    }
+
+    [Fact]
+    public void Classificador_22_9_ProdutoSemClassificacaoNaoLiberaIndevidamente()
+    {
+        ClassificadorOrdemConsumoMaterial classificador = new(
+            produtosMateriaPrima: ["PROD-MP"],
+            produtosQuimicos: ["PROD-QM"]);
+        OrdemProducaoConsumo opDesconhecida = new() { NumeroOrdem = "1003", MaterialProduzido = "PROD-SEM-CLASSE" };
+
+        Assert.False(classificador.OrdemPertenceAoModo(opDesconhecida, ModoConsumoMaterial.MateriaPrima, out ResultadoClassificacaoOrdemConsumo classificacao));
+        Assert.Equal(TipoClassificacaoOrdemConsumo.Desconhecida, classificacao.Classificacao);
+        Assert.Equal("MaterialProduzido", classificacao.CampoUsado);
+        Assert.Contains("sem classificação", classificacao.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.False(classificador.OrdemPertenceAoModo(opDesconhecida, ModoConsumoMaterial.Quimico, out _));
+    }
+
+    [Fact]
+    public void Form_22_9_1_NaoDeveBloquearOpPeloProdutoProduzido()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string consultar = ExtrairMetodo(form, "private async Task ConsultarOrdemProducaoAsync");
+        string diagnostico = ExtrairMetodo(form, "private void RegistrarDiagnosticoClassificacaoOrdem");
+
+        // Ajuste 1: o bloqueio de OP baseado SÓ no produto produzido foi REMOVIDO (era o bug do 22.9).
+        Assert.DoesNotContain("ValidarOrdemPertenceAoModoAtual", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("MontarMensagemBloqueioModo", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("A OP informada não pertence ao processo", form, StringComparison.Ordinal);
+
+        // O produto produzido segue como CONTEXTO/diagnóstico, sem impedir o carregamento da OP.
+        Assert.Contains("OrdemPertenceAoModoAtual(resultado.Ordem", consultar, StringComparison.Ordinal);
+        Assert.Contains("RegistrarDiagnosticoClassificacaoOrdem(resultado.Ordem", consultar, StringComparison.Ordinal);
+        Assert.Contains("PreencherOrdemCarregada(resultado.Ordem, componentesModo)", consultar, StringComparison.Ordinal);
+
+        // A separação Matéria-Prima × Químico passa a ser feita pelos COMPONENTES.
+        Assert.Contains("FiltrarComponentesPorModo", form, StringComparison.Ordinal);
+        Assert.Contains("EnriquecerComponentesComTipoMaterial", form, StringComparison.Ordinal);
+
+        Assert.Contains("[Consumo][ClassificacaoOP]", diagnostico, StringComparison.Ordinal);
+        Assert.Contains("Modo da tela:", diagnostico, StringComparison.Ordinal);
+        Assert.Contains("Resultado:", diagnostico, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Classificador_22_9_DeveFicarCentralizadoSemSqlPatchOuPayload261()
+    {
+        string classificador = LerArquivoProjeto("Modelo", "Processo", "ClassificadorOrdemConsumoMaterial.cs");
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string consumoSap = LerArquivoProjeto("Servicos", "IntegracaoSap", "ConsumoMaterialSap261Servico.cs");
+
+        Assert.Contains("public sealed class ClassificadorOrdemConsumoMaterial", classificador, StringComparison.Ordinal);
+        Assert.Contains("MaterialProduzido", classificador, StringComparison.Ordinal);
+        Assert.DoesNotContain("CREATE TABLE", classificador, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(" PATCH ", classificador, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("POST", classificador, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("GoodsMovementRefDocType", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClassificadorOrdemConsumoMaterial", consumoSap, StringComparison.Ordinal);
+    }
+    [Fact]
     public void Form_NaoDeveTerComboParaTrocarTipoDeConsumo()
     {
         string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.Designer.cs");
@@ -109,7 +184,8 @@ public sealed class ProcessoConsumoMaterialModoTests
         Assert.Contains("TipoBalancaPreferencial", form, StringComparison.Ordinal);
         Assert.Contains("FiltrarComponentesPorModo", form, StringComparison.Ordinal);
         Assert.Contains("ComponenteEhQuimico", form, StringComparison.Ordinal);
-        Assert.Contains("MaterialGroup = QUIMICO/LQ/L003", form, StringComparison.Ordinal);
+        // 22.9.1: o modo Químico agora exige explicitamente a classificação Químico do COMPONENTE.
+        Assert.Contains("ClassificacaoConsumoMaterial.Quimico", form, StringComparison.Ordinal);
         Assert.DoesNotContain("class ProcessoConsumoQuimicosForm", form, StringComparison.Ordinal);
     }
 
@@ -171,3 +247,4 @@ public sealed class ProcessoConsumoMaterialModoTests
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev não encontrada.");
     }
 }
+

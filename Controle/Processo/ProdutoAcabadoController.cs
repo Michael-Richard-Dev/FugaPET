@@ -202,7 +202,9 @@ public sealed class ProdutoAcabadoController
         {
             NumeroOrdem = ordemSap.NumeroOrdem.Trim(),
             MaterialProduzido = PrimeiroTexto(item?.Material, ordemSap.MaterialProduzido),
-            DescricaoMaterial = PrimeiroTexto(item?.Material, ordemSap.MaterialProduzido),
+            // Tarefa 21.6.4 (Ajuste 2): o SAP não retorna descrição do material aqui — NÃO usar o código
+            // como descrição (senão o card Produto Acabado duplica). Fica vazio até haver texto real.
+            DescricaoMaterial = string.Empty,
             Centro = PrimeiroTexto(item?.Centro, ordemSap.Centro),
             DepositoDestino = PrimeiroTexto(item?.Deposito, ordemSap.Deposito),
             QuantidadePlanejada = planejada,

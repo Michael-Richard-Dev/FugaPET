@@ -126,9 +126,12 @@ public sealed class ProcessoConsumoMaterialFormTests
 
         Assert.Equal("61058562W", resultado.Ordem!.LoteProdutoProduzido);
         Assert.Equal("61058562W", resultado.Ordem.Lote);
+        // O lote do PRODUTO nunca é copiado para o componente (continua vazio).
         Assert.Equal(string.Empty, resultado.Ordem.Componentes[0].Lote);
-        Assert.Contains("lote do produto produzido", resultado.Mensagem, StringComparison.Ordinal);
-        Assert.Contains("lote dos componentes não foi retornado", resultado.Mensagem, StringComparison.Ordinal);
+        // Tarefa Consumo 22.2: componente sem lote SAP fica BLOQUEADO (não elegível) e não pode pesar.
+        Assert.False(resultado.Ordem.Componentes[0].PesagemLiberada);
+        Assert.Equal(CenarioConsultaOrdemConsumo.SemComponentes, resultado.Cenario);
+        Assert.Contains("lote", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -282,12 +285,16 @@ public sealed class ProcessoConsumoMaterialFormTests
     private static ConsumoMaterialServico ServicoPesagem() => new(new FakeProductionOrderSapServico());
 
     private static ComponenteConsumoMaterial Componente(
-        string unidade = "KG", decimal pendente = 50m, string reserva = "0000123456", string itemReserva = "0001")
+        string unidade = "KG", decimal pendente = 50m, string reserva = "0000123456", string itemReserva = "0001",
+        decimal consumidoSap = 0m)
         => new()
         {
             CodigoMaterial = "COMP-5678",
             DescricaoMaterial = "Insumo",
             UnidadeMedida = unidade,
+            // Tarefa Consumo 22.4: a tolerância usa QuantidadePrevista + QuantidadeConsumida; mantém pendente = previsto - consumido.
+            QuantidadePrevista = pendente + consumidoSap,
+            QuantidadeConsumida = consumidoSap,
             QuantidadePendente = pendente,
             NumeroReserva = reserva,
             ItemReserva = itemReserva,
@@ -375,7 +382,7 @@ public sealed class ProcessoConsumoMaterialFormTests
             componente, "1000909", 1m, 0m, PesagemConsumoMaterial.OrigemManual, 0m, 1);
 
         Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario);
-        Assert.Contains("ultrapassa o saldo previsto", r.Mensagem, StringComparison.Ordinal); // Tarefa 18.2: mensagem detalhada
+        Assert.Contains("excede a tolerância permitida", r.Mensagem, StringComparison.Ordinal); // Tarefa 22.4: tolerância 5%
     }
 
     [Fact]
@@ -385,9 +392,9 @@ public sealed class ProcessoConsumoMaterialFormTests
             Componente(pendente: 50m), "1000009", pesoBrutoKg: 10m, pesoTaraKg: 0m,
             PesagemConsumoMaterial.OrigemBalanca, totalJaPesadoLocalKg: 45m, sequencia: 2);
 
-        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario); // 45 + 10 = 55 > 50
+        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario); // 45 + 10 = 55 > 52,5 (previsto 50 + 5%)
         Assert.Null(r.Pesagem);
-        Assert.Contains("ultrapassa o saldo previsto", r.Mensagem, StringComparison.Ordinal); // Tarefa 18.2: mensagem detalhada
+        Assert.Contains("excede a tolerância permitida", r.Mensagem, StringComparison.Ordinal); // Tarefa 22.4
     }
 
     [Fact]
@@ -400,12 +407,17 @@ public sealed class ProcessoConsumoMaterialFormTests
             componente, "1000009", 12m, 0m, PesagemConsumoMaterial.OrigemBalanca, 0m, 1);
         ResultadoPesagemConsumo segunda = servico.RegistrarPesagemLocal(
             componente, "1000009", 8m, 0m, PesagemConsumoMaterial.OrigemBalanca, primeira.Pesagem!.PesoLiquidoKg, 2);
+        // Tarefa 22.4: previsto 20 → limite 21 (5%). O total 20 + 1 = 21 ainda cabe na tolerância.
         ResultadoPesagemConsumo terceira = servico.RegistrarPesagemLocal(
             componente, "1000009", 1m, 0m, PesagemConsumoMaterial.OrigemBalanca, 20m, 3);
+        // 21 + 0,5 = 21,5 estoura a tolerância.
+        ResultadoPesagemConsumo quarta = servico.RegistrarPesagemLocal(
+            componente, "1000009", 0.5m, 0m, PesagemConsumoMaterial.OrigemBalanca, 21m, 4);
 
         Assert.True(primeira.Sucesso);
-        Assert.True(segunda.Sucesso);                 // 12 + 8 = 20 == pendente: ok
-        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, terceira.Cenario); // ja no limite
+        Assert.True(segunda.Sucesso);                 // 12 + 8 = 20 == previsto: ok
+        Assert.True(terceira.Sucesso);                // 20 + 1 = 21 == previsto + 5%: ok
+        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, quarta.Cenario); // 21,5 > 21
     }
 
     [Fact]
@@ -435,16 +447,17 @@ public sealed class ProcessoConsumoMaterialFormTests
     [Fact]
     public void PesagemLocal_18_2_LiquidoAcimaSaldo_BloqueiaComMensagemDetalhada()
     {
-        // Ajuste 1: liquido (10.5) acima do saldo (5 restante) bloqueia com mensagem detalhada.
+        // Tarefa 22.4: total 5 + 10,5 = 15,5 acima do limite 10,5 (previsto 10 + 5%) → bloqueia com detalhe.
         ResultadoPesagemConsumo r = ServicoPesagem().RegistrarPesagemLocal(
             Componente(pendente: 10m), "1000009", pesoBrutoKg: 13m, pesoTaraKg: 2.5m,
             PesagemConsumoMaterial.OrigemManual, totalJaPesadoLocalKg: 5m, sequencia: 2);
 
-        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario); // 5 + 10.5 = 15.5 > 10
+        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, r.Cenario); // 5 + 10.5 = 15.5 > 10.5
         Assert.Null(r.Pesagem);
-        Assert.Contains("ultrapassa o saldo previsto", r.Mensagem, StringComparison.Ordinal);
-        Assert.Contains("Peso previsto:", r.Mensagem, StringComparison.Ordinal);
-        Assert.Contains("Já utilizado:", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("excede a tolerância permitida", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("Previsto:", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("Limite com tolerância 5%:", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("Total após pesagem:", r.Mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -615,9 +628,10 @@ public sealed class ProcessoConsumoMaterialFormTests
     }
 
     [Theory]
-    [InlineData(50, 50, "CONSUMIDO", false)]   // total atingiu o pendente
+    [InlineData(50, 50, "PENDENTE", true)]      // total atingiu o pendente base, mas ainda há tolerância
+    [InlineData(50, 53, "CONSUMIDO", false)]   // total atingiu o limite com tolerância
     [InlineData(50, 30, "PENDENTE", true)]     // abaixo do pendente: reabre
-    [InlineData(0, 0, "CONSUMIDO", false)]     // ja consumido no SAP (pendente 0)
+    [InlineData(0, 0, "CONSUMIDO", false)]     // sem previsto/pendente: bloqueado
     public void AtualizarStatusComponente_ReabreOuBloqueiaPorTotalLocal(
         int pendente, int total, string statusEsperado, bool liberadaEsperada)
     {
@@ -839,8 +853,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         // Confirmacao exige ENVIANDO_SAP e documento NULL (evita confirmar sem claim valido).
         Assert.Contains("AND status_lancamento = 'ENVIANDO_SAP'", repo, StringComparison.Ordinal);
 
-        // Falha: ENVIANDO_SAP -> FALHA_SAP (nao volta automatico para PENDENTE_SAP).
-        Assert.Contains("SET status_lancamento = 'FALHA_SAP'", repo, StringComparison.Ordinal);
+        // Falha SAP apos POST: ENVIANDO_SAP -> PENDENTE_SAP para reenvio manual seguro.
+        Assert.Contains("SET status_lancamento = 'PENDENTE_SAP'", repo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -981,11 +995,12 @@ public sealed class ProcessoConsumoMaterialFormTests
 
     private static ComponenteOrdemProducaoSap CompSap(
         string material = "QM002", string unidade = "KG", decimal necessaria = 10m, decimal retirada = 0m,
-        string deposito = "PP01", string operacao = "")
+        string deposito = "PP01", string operacao = "", string lote = "L001")
         => new()
         {
             Material = material, UnidadeBase = unidade, QuantidadeNecessaria = necessaria, QuantidadeRetirada = retirada,
-            Deposito = deposito, Centro = "3007", Reserva = "6676", ItemReserva = "2", Operacao = operacao
+            Deposito = deposito, Centro = "3007", Reserva = "6676", ItemReserva = "2", Operacao = operacao,
+            Lote = lote // Tarefa Consumo 22.2: lote SAP obrigatório p/ elegibilidade (default válido nos testes)
         };
 
     [Fact]
@@ -1045,8 +1060,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         ResultadoConsultaOrdemConsumo r = await ConsultarComSap(
             OrdemSapCustom(liberada: true, CompSap(necessaria: 10m, retirada: 10m)));
 
-        Assert.Equal(CenarioConsultaOrdemConsumo.SemComponentes, r.Cenario);
-        Assert.Contains("já consumidos", r.Mensagem, StringComparison.Ordinal);
+        Assert.Equal(CenarioConsultaOrdemConsumo.Carregada, r.Cenario);
+        Assert.True(r.Ordem!.Componentes[0].PesagemLiberada);
     }
 
     [Fact]
@@ -1095,7 +1110,8 @@ public sealed class ProcessoConsumoMaterialFormTests
                     QuantidadeNecessaria = 50m,
                     QuantidadeRetirada = 0m,
                     UnidadeBase = "PC",
-                    TipoMovimento = "261"
+                    TipoMovimento = "261",
+                    Lote = "L0001" // Tarefa Consumo 22.2: lote SAP p/ elegibilidade
                 },
                 new ComponenteOrdemProducaoSap
                 {
@@ -1107,7 +1123,8 @@ public sealed class ProcessoConsumoMaterialFormTests
                     QuantidadeNecessaria = 25m,
                     QuantidadeRetirada = 10m,
                     UnidadeBase = "KG",
-                    TipoMovimento = string.Empty
+                    TipoMovimento = string.Empty,
+                    Lote = "L0002" // Tarefa Consumo 22.2: lote SAP p/ elegibilidade
                 }
             ]
         };
@@ -1221,7 +1238,7 @@ public sealed class ProcessoConsumoMaterialFormTests
 
         // Correcao 4: preserva selecao manual valida (nao troca para o primeiro).
         Assert.Contains("ObterComponenteSelecionadoNoGridPrincipal()", metodo, StringComparison.Ordinal);
-        Assert.Contains("atual is not null && atual.PesagemLiberada", metodo, StringComparison.Ordinal);
+        Assert.Contains("atual is not null && ComponentePodeOperar(atual, out _)", metodo, StringComparison.Ordinal);
         // Destaca a linha REAL do grid e sincroniza o componente selecionado.
         Assert.Contains("linha.Tag is not ComponenteConsumoMaterial componente", metodo, StringComparison.Ordinal);
         Assert.Contains("linha.Selected = true;", metodo, StringComparison.Ordinal);
@@ -1320,8 +1337,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("materialDataGridView.CellClick += MaterialDataGridView_CellClick;", form, StringComparison.Ordinal);
         Assert.Contains("private OrdemProducaoConsumo? _ordemConsumoAtual;", form, StringComparison.Ordinal);
         Assert.Contains("private ComponenteConsumoMaterial? _componenteConsumoSelecionado;", form, StringComparison.Ordinal);
-        // Mensagem de componente nao liberado.
-        Assert.Contains("Componente já consumido ou não liberado para pesagem.", form, StringComparison.Ordinal);
+        // Mensagem de componente bloqueado pela regra operacional central.
+        Assert.Contains("Opera??o bloqueada para este componente", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1372,7 +1389,10 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("componente.DepositoConsumo", metodo, StringComparison.Ordinal);
         Assert.Contains("ObterLoteComponenteGrid(componente)", metodo, StringComparison.Ordinal);
         Assert.Contains("ObterTipoSapGrid(componente)", metodo, StringComparison.Ordinal);
-        Assert.Contains("A ordem de produção não possui componentes para consumo.", metodo, StringComparison.Ordinal);
+        // Tarefa 22.9.2: PreencherOrdemCarregada recebe a lista JÁ filtrada pelo modo (não vazia); a mensagem
+        // de "sem componentes compatíveis" foi movida para o bloqueio em BloquearOrdemIncompativelComModo.
+        Assert.Contains("IReadOnlyList<ComponenteConsumoMaterial> componentesModo", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("A ordem de produção não possui componentes para consumo.", metodo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1387,7 +1407,7 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("CapturarComponenteSelecionadoDoGridPrincipal();", central, StringComparison.Ordinal);
         Assert.Contains("ObterLinhaSelecionadaNoGridPrincipal()", captura, StringComparison.Ordinal);
         Assert.Contains("linhaSelecionada?.Tag as ComponenteConsumoMaterial", captura, StringComparison.Ordinal);
-        Assert.Contains("_componenteConsumoSelecionado.PesagemLiberada", captura, StringComparison.Ordinal);
+        Assert.Contains("ComponentePodeOperar(_componenteConsumoSelecionado", captura, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1403,7 +1423,7 @@ public sealed class ProcessoConsumoMaterialFormTests
         // Ajuste 7: Peso Previsto NAO e reescrito; agora atualiza Saldo Restante (nao a coluna de previsto).
         Assert.DoesNotContain("productionQuantityColumn", atualizarLinha, StringComparison.Ordinal);
         Assert.Contains("productionSaldoColumn", atualizarLinha, StringComparison.Ordinal);
-        Assert.Contains("SomarPesagensLocais(chave)", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("ObterQuantidadeUtilizadaComponente(componente, chave)", atualizarLinha, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1420,28 +1440,29 @@ public sealed class ProcessoConsumoMaterialFormTests
     }
 
     [Fact]
-    public void Tela_DeveMostrarESolicitarLoteDoComponenteAntesDeSalvar()
+    public void Consumo_22_2_SemLoteManualNaTela()
     {
+        // Testes 1-3: a tela NÃO tem mais fluxo de lote manual (métodos e prompt removidos).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
 
-        Assert.Contains("Não informado", form, StringComparison.Ordinal); // coluna Lote Componente quando vazio
-        Assert.Contains("GarantirLoteComponentesPesados()", form, StringComparison.Ordinal);
-        Assert.Contains("SolicitarLoteComponente(componente)", form, StringComparison.Ordinal);
-        Assert.Contains("Informe o lote do componente", form, StringComparison.Ordinal);
-        Assert.Contains("este lote é da matéria-prima consumida, não do produto produzido", form, StringComparison.Ordinal);
-        Assert.Contains("AplicarLoteComponente(componente, loteInformado.Trim())", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarantirLoteComponenteAntesDaPesagem", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarantirLoteComponentesPesados", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("SolicitarLoteComponente", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("AplicarLoteComponente", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("Informe o lote do componente", form, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Tela_LoteInformadoDeveIrParaComponenteGridEPesagens()
+    public void Consumo_22_2_GridMostraSemLoteEBloqueiaSemLoteSap()
     {
+        // Testes 6/9/12: grid mostra "Sem lote"; regra central bloqueia sem lote SAP.
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
-        string metodo = ExtrairMetodo(form, "private void AplicarLoteComponente");
+        Assert.Contains("? \"Sem lote\" : componente.Lote.Trim();", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("? \"Não informado\" : componente.Lote.Trim();", form, StringComparison.Ordinal);
 
-        Assert.Contains("componente.Lote = lote;", metodo, StringComparison.Ordinal);
-        // Lote do componente agora tem coluna propria (productionLoteColumn), nao mais na descricao.
-        Assert.Contains("productionLoteColumn", metodo, StringComparison.Ordinal);
-        Assert.Contains("pesagem.Lote = lote;", metodo, StringComparison.Ordinal);
+        string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialServico.cs");
+        // AvaliarLiberacaoPesagem bloqueia componente sem lote SAP (mensagem sem lote manual).
+        Assert.Contains("componente sem lote SAP informado. O FugaPET não permite lote manual", servico, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1590,8 +1611,10 @@ public sealed class ProcessoConsumoMaterialFormTests
         // Selecao na lista consulta (selecao real nunca esta vazia -> mantem o aviso).
         string selChanged = ExtrairMetodo(form, "private async void ProductionOrderComboBox_SelectedIndexChanged");
         Assert.Contains("ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true)", selChanged, StringComparison.Ordinal);
-        // Parte 3: OP consultada com sucesso entra na lista recente, sem bloquear digitacao manual.
-        Assert.Contains("RegistrarOrdemRecente(resultado.NumeroOrdem)", form, StringComparison.Ordinal);
+        // Parte 3/22.9: OP consultada e aceita no modo entra na lista recente, sem bloquear digitacao manual.
+        Assert.Contains("RegistrarOrdemRecenteSePermitida(resultado.Ordem)", form, StringComparison.Ordinal);
+        string recenteFiltrada = ExtrairMetodo(form, "private void RegistrarOrdemRecenteSePermitida");
+        Assert.Contains("OrdemPertenceAoModoAtual(ordem, out _)", recenteFiltrada, StringComparison.Ordinal);
         string recente = ExtrairMetodo(form, "private void RegistrarOrdemRecente");
         Assert.Contains("productionOrderComboBox.Items.Insert(0, valor);", recente, StringComparison.Ordinal);
     }
@@ -1633,18 +1656,24 @@ public sealed class ProcessoConsumoMaterialFormTests
             out string m1));
         Assert.Contains("depósito", m1, StringComparison.Ordinal);
 
+        // Tarefa Consumo 22.2: com depósito mas SEM lote SAP -> bloqueia (prioridade: depósito, depois lote).
         Assert.False(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
-            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 0m, UnidadeMedida = "KG" },
-            out string m2));
-        Assert.Contains("pendente", m2, StringComparison.Ordinal);
+            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 5m, UnidadeMedida = "KG", Lote = string.Empty },
+            out string mLote));
+        Assert.Contains("lote", mLote, StringComparison.OrdinalIgnoreCase);
 
         Assert.False(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
-            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 5m, UnidadeMedida = "L" },
+            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 0m, UnidadeMedida = "KG", Lote = "L1" },
+            out string m2));
+        Assert.Contains("limite de consumo", m2, StringComparison.Ordinal);
+
+        Assert.False(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
+            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 5m, UnidadeMedida = "L", Lote = "L1" },
             out string m3));
         Assert.Contains("KG", m3, StringComparison.Ordinal);
 
         Assert.True(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
-            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 5m, UnidadeMedida = "KG" },
+            new ComponenteConsumoMaterial { DepositoConsumo = "PP01", QuantidadePendente = 5m, UnidadeMedida = "KG", Lote = "L1" },
             out _));
     }
 
@@ -1681,25 +1710,95 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("apontamentoChipCaptionLabel.Text = \"ROTA SAP\";", metodo, StringComparison.Ordinal);
         Assert.Contains("apontamentoInfoCaptionLabel.Text = \"ORIENTAÇÃO\";", metodo, StringComparison.Ordinal);
         Assert.Contains("apontamentoChipValueLabel.Text = chip;", metodo, StringComparison.Ordinal);
-        Assert.Contains("apontamentoInfoValueLabel.Text = info;", metodo, StringComparison.Ordinal);
+        Assert.Contains("AtualizarApontamentoInfo(info, mensagemCompleta ?? info);", metodo, StringComparison.Ordinal);
         // Rotas curtas no chip + orientação detalhada distinta no info.
         Assert.Contains("\"Sem depósito\"", metodo, StringComparison.Ordinal);
         Assert.Contains("\"Backflush\"", metodo, StringComparison.Ordinal);
-        Assert.Contains("Componente sem depósito. Pesagem bloqueada.", metodo, StringComparison.Ordinal);
-        Assert.Contains("usar Preview Confirmação", metodo, StringComparison.Ordinal);
+        Assert.Contains("Sem depósito SAP.\\nAjuste necessário.", metodo, StringComparison.Ordinal);
+        Assert.Contains("Backflush bloqueado\\npara consumo manual.", metodo, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SapStatus_PadraoEntrada_TextosEstadoECorDoPonto()
+    public void ApontamentoInfoPanel_DeveSuportarDuasLinhasSemEllipsisETooltipCompleto()
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.Designer.cs");
+        string atualizarInfo = ExtrairMetodo(form, "private void AtualizarApontamentoInfo");
+        string resumir = ExtrairMetodo(form, "private static string ResumirMensagemApontamento");
+
+        Assert.Contains("apontamentoInfoPanel.Size = new Size(191, 78);", designer, StringComparison.Ordinal);
+        Assert.Contains("apontamentoInfoValueLabel.Size = new Size(154, 44);", designer, StringComparison.Ordinal);
+        Assert.Contains("apontamentoInfoValueLabel.AutoSize = false;", designer, StringComparison.Ordinal);
+        Assert.Contains("apontamentoInfoValueLabel.AutoEllipsis = false;", designer, StringComparison.Ordinal);
+        Assert.Contains("apontamentoInfoValueLabel.TextAlign = ContentAlignment.MiddleLeft;", designer, StringComparison.Ordinal);
+        Assert.Contains("_apontamentoInfoToolTip", atualizarInfo, StringComparison.Ordinal);
+        Assert.Contains("SetToolTip(apontamentoInfoValueLabel, tooltip)", atualizarInfo, StringComparison.Ordinal);
+        Assert.Contains("const int limitePainel = 84;", resumir, StringComparison.Ordinal);
+        Assert.Contains("string.Join(Environment.NewLine, linhas.Take(2))", resumir, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaximumSize = new Size(160, 38)", designer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApontamentoInfoPanel_DeveUsarMensagensCurtasComQuebraIntencional()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string metodo = ExtrairMetodo(form, "private void AtualizarApontamentoVisual");
+        string orientacao = ExtrairMetodo(form, "private static string ObterMensagemCurtaOrientacaoApontamento");
+        string bloqueio = ExtrairMetodo(form, "private static string ObterMensagemCurtaBloqueioApontamento");
+
+        Assert.Contains("MensagemApontamentoInicial = \"Selecione um componente\\nou inicie a leitura.\"", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("Selecione ou inicie a leitura para escolher um componente", metodo, StringComparison.Ordinal);
+        Assert.Contains("Componente selecionado.\\nPronto para leitura.", metodo, StringComparison.Ordinal);
+        Assert.Contains("Leitura ativa.\\nAguardando peso.", metodo, StringComparison.Ordinal);
+        Assert.Contains("Consumo salvo.\\nPendente de envio SAP.", orientacao, StringComparison.Ordinal);
+        Assert.Contains("Consumo enviado\\nao SAP.", orientacao, StringComparison.Ordinal);
+        Assert.Contains("Falha no envio SAP.\\nVerifique o diagnóstico.", orientacao, StringComparison.Ordinal);
+        Assert.Contains("Backflush bloqueado\\npara consumo manual.", bloqueio, StringComparison.Ordinal);
+        Assert.Contains("Sem depósito SAP.\\nAjuste necessário.", bloqueio, StringComparison.Ordinal);
+        Assert.Contains("Sem lote SAP.\\nAjuste necessário.", bloqueio, StringComparison.Ordinal);
+        Assert.Contains("Tolerância excedida.\\nPesagem bloqueada.", bloqueio, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SapStatus_PadraoEntrada_TextosCurtosTooltipECorDoPonto()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.Designer.cs");
 
         Assert.Contains("enum EstadoVisualIntegracaoSapConsumo", form, StringComparison.Ordinal);
         string metodo = ExtrairMetodo(form, "private void AtualizarEstadoVisualIntegracaoSapConsumo");
-        Assert.Contains("SAP HML: LIBERADO PARA ENVIO", metodo, StringComparison.Ordinal);
-        Assert.Contains("SAP HML: BLOQUEADO — SEM DEPÓSITO", metodo, StringComparison.Ordinal);
-        Assert.Contains("SAP HML: BACKFLUSH — CONFIRMAÇÃO EM PREPARAÇÃO", metodo, StringComparison.Ordinal);
-        Assert.Contains("sapStatusDotLabel.ForeColor = cor;", metodo, StringComparison.Ordinal);
+        string atualizarSapStatus = ExtrairMetodo(form, "private void AtualizarSapStatus");
+        string resumirStatus = ExtrairMetodo(form, "private static string ResumirStatusSapHeader");
+
+        Assert.Contains("SAP HML: AGUARDANDO", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: ENVIANDO", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: ENVIADO", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: PENDENTE", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: FALHA", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: SEM SALDO", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: BLOQUEADO", metodo, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: OFFLINE", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("SAP HML: LIBERADO PARA ENVIO", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("SAP HML: BACKFLUSH — CONFIRMAÇÃO EM PREPARAÇÃO", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("sapStatusLabel.Text = string.IsNullOrWhiteSpace(detalhe)", metodo, StringComparison.Ordinal);
+        Assert.Contains("AtualizarSapStatus(textoCurto, tooltip, cor);", metodo, StringComparison.Ordinal);
+        Assert.Contains("sapStatusDotLabel.ForeColor = cor;", atualizarSapStatus, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.AutoEllipsis = false;", atualizarSapStatus, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.Text = ResumirStatusSapHeader(statusCurto);", atualizarSapStatus, StringComparison.Ordinal);
+        Assert.Contains("SetToolTip(sapStatusPanel, tooltip)", atualizarSapStatus, StringComparison.Ordinal);
+        Assert.Contains("SetToolTip(sapStatusLabel, tooltip)", atualizarSapStatus, StringComparison.Ordinal);
+        Assert.Contains("SetToolTip(sapStatusDotLabel, tooltip)", atualizarSapStatus, StringComparison.Ordinal);
+        Assert.Contains("M7/021", resumirStatus, StringComparison.Ordinal);
+        Assert.Contains("Deficit of", resumirStatus, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: SEM SALDO", resumirStatus, StringComparison.Ordinal);
+        Assert.Contains("Payload", resumirStatus, StringComparison.Ordinal);
+        Assert.Contains("SAP HML: FALHA", resumirStatus, StringComparison.Ordinal);
+        Assert.Contains("sapStatusPanel.Size = new Size(210, 27);", designer, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.Size = new Size(174, 19);", designer, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.AutoEllipsis = false;", designer, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.AutoSize = false;", designer, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;", designer, StringComparison.Ordinal);
+        Assert.Contains("sapStatusLabel.Padding = new Padding(2, 0, 4, 0);", designer, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1758,7 +1857,7 @@ public sealed class ProcessoConsumoMaterialFormTests
         string helper = ExtrairMetodo(form, "private bool ValidarComponenteAtualParaPesagem");
         Assert.True(
             helper.IndexOf("CapturarComponenteSelecionadoDoGridPrincipal();", StringComparison.Ordinal)
-            < helper.IndexOf("AvaliarLiberacaoPesagem(", StringComparison.Ordinal));
+            < helper.IndexOf("ComponentePodeOperar(componente", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1767,7 +1866,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
         string metodo = ExtrairMetodo(form, "private void AtualizarComponenteSelecionadoDoGrid");
 
-        Assert.Contains("if (_isReadingWeight)", metodo, StringComparison.Ordinal);
+        Assert.Contains("_isReadingWeight", metodo, StringComparison.Ordinal);
+        Assert.Contains("_restaurandoSelecaoLinhaComponentes", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("if (_isProductionStarted)", metodo, StringComparison.Ordinal);
     }
 
@@ -1844,7 +1944,7 @@ public sealed class ProcessoConsumoMaterialFormTests
 
         // Componente sem deposito/nao pesavel nao abre selecao de tara.
         string sel = ExtrairMetodo(form, "private async Task SelecionarTaraParaComponenteAsync");
-        Assert.Contains("AvaliarLiberacaoPesagem(componente, out _) || !componente.PesagemLiberada", sel, StringComparison.Ordinal);
+        Assert.Contains("ComponentePodeOperar(componente, out _)", sel, StringComparison.Ordinal);
         Assert.Contains("ExisteTaraSelecionada(componente)", sel, StringComparison.Ordinal);
     }
 
@@ -1937,12 +2037,45 @@ public sealed class ProcessoConsumoMaterialFormTests
         string cellClick = ExtrairMetodo(form, "private void ProductionDataGridView_CellClick");
 
         // Ajuste 1 (Tarefa 18): clicar no grid apenas seleciona; NAO abre a tela de tara.
-        Assert.Contains("AtualizarComponenteSelecionadoDoGrid();", cellClick, StringComparison.Ordinal);
+        Assert.Contains("SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);", cellClick, StringComparison.Ordinal);
         Assert.DoesNotContain("SelecionarTaraParaComponenteAsync", cellClick, StringComparison.Ordinal);
         Assert.Contains("Use LER PESO ou DIGITAR PESO para registrar a pesagem.", cellClick, StringComparison.Ordinal);
         Assert.Contains("Inicie a leitura para pesar.", cellClick, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Consumo_22_11_GridComponentesSempreSelecionaLinhaInteira()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.Designer.cs");
+        string configurar = ExtrairMetodo(form, "private void ConfigurarSelecaoLinhaInteiraGridComponentes");
+        string selecionar = ExtrairMetodo(form, "private void SelecionarLinhaInteiraGridComponentes");
+        string atualizarEstado = ExtrairMetodo(form, "private void UpdateProductionState");
+        string atualizarLinha = ExtrairMetodo(form, "private void AtualizarLinhaComponenteSelecionado");
+        string restaurar = ExtrairMetodo(form, "private bool RestaurarSelecaoComponente");
+        string mouseDown = ExtrairMetodo(form, "private void ProductionDataGridView_CellMouseDown");
+        string cellClick = ExtrairMetodo(form, "private void ProductionDataGridView_CellClick");
+        string mouseClick = ExtrairMetodo(form, "private void ProductionDataGridView_CellMouseClick");
+
+        Assert.Contains("productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;", designer, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.MultiSelect = false;", designer, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.ReadOnly = true;", configurar, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.RowHeadersVisible = false;", configurar, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.AllowUserToAddRows = false;", configurar, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.AllowUserToDeleteRows = false;", configurar, StringComparison.Ordinal);
+        Assert.Contains("DataGridViewSelectionMode.FullRowSelect", atualizarEstado, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.MultiSelect = false;", atualizarEstado, StringComparison.Ordinal);
+        Assert.DoesNotContain("DataGridViewSelectionMode.CellSelect", form, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.ClearSelection();", selecionar, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.CurrentCell = row.Cells[safeColumnIndex];", selecionar, StringComparison.Ordinal);
+        Assert.Contains("row.Selected = true;", selecionar, StringComparison.Ordinal);
+        Assert.Contains("SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);", mouseDown, StringComparison.Ordinal);
+        Assert.Contains("SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);", cellClick, StringComparison.Ordinal);
+        Assert.Contains("SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);", mouseClick, StringComparison.Ordinal);
+        Assert.Contains("RestaurarSelecaoComponente(componente);", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("ProcessoConsumoMaterialController.ChaveComponente", restaurar, StringComparison.Ordinal);
+        Assert.Contains("_restaurandoSelecaoLinhaComponentes = true;", restaurar, StringComparison.Ordinal);
+    }
     [Fact]
     public void GridMostraPesoUtilizado_SoVerdadeiroParaPesoMaiorQueZero()
     {
@@ -1974,42 +2107,22 @@ public sealed class ProcessoConsumoMaterialFormTests
         string metodo = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
 
         Assert.Contains("!_isProductionStarted", metodo, StringComparison.Ordinal);
-        Assert.Contains("_pesagensPorComponente.Values.Any(lista => lista.Count > 0)", metodo, StringComparison.Ordinal);
+        Assert.Contains("PossuiPesagemPendenteParaNovoApontamento()", metodo, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Pesagem_F9F12_GarantemLoteAntesDaTaraEPeso()
+    public void Consumo_22_2_F9F12BloqueiamSemLoteViaValidacaoCentral()
     {
+        // Testes 13/14: F9/F12 NÃO chamam mais lote manual; o bloqueio vem de ValidarComponenteAtualParaPesagem
+        // (que usa AvaliarLiberacaoPesagem, agora com a regra de lote SAP).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
 
         string f9 = ExtrairMetodo(form, "private async void LeituraManual_Click");
-        Assert.True(
-            f9.IndexOf("GarantirLoteComponenteAntesDaPesagem(componenteF9!)", StringComparison.Ordinal)
-            < f9.IndexOf("SelecionarTaraParaComponenteAsync(componenteF9!)", StringComparison.Ordinal));
-
         string f12 = ExtrairMetodo(form, "private async void ReadWeightLegend_Click");
-        Assert.True(
-            f12.IndexOf("GarantirLoteComponenteAntesDaPesagem(componenteF12!)", StringComparison.Ordinal)
-            < f12.IndexOf("SelecionarTaraParaComponenteAsync(componenteF12!)", StringComparison.Ordinal));
-
-        // Sem lote -> nao registra peso.
-        string helper = ExtrairMetodo(form, "private bool GarantirLoteComponenteAntesDaPesagem");
-        Assert.Contains("Peso não registrado: informe o lote do componente", helper, StringComparison.Ordinal);
-        Assert.Contains("AplicarLoteComponente(componente, loteInformado.Trim());", helper, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AplicarLote_ReindexaPesagensDaChaveAntigaParaNova()
-    {
-        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
-        string metodo = ExtrairMetodo(form, "private void AplicarLoteComponente");
-
-        Assert.Contains("string chaveAntiga = ProcessoConsumoMaterialController.ChaveComponente(componente);", metodo, StringComparison.Ordinal);
-        Assert.Contains("string chaveNova = ProcessoConsumoMaterialController.ChaveComponente(componente);", metodo, StringComparison.Ordinal);
-        Assert.Contains("_pesagensPorComponente.Remove(chaveAntiga);", metodo, StringComparison.Ordinal);
-        Assert.Contains("existentes.AddRange(pesagens);", metodo, StringComparison.Ordinal);
-        // NAO usa mais o padrao perigoso material-only.
-        Assert.DoesNotContain("p.CodigoMaterial,", metodo, StringComparison.Ordinal);
+        Assert.Contains("ValidarComponenteAtualParaPesagem(out ComponenteConsumoMaterial? componenteF9", f9, StringComparison.Ordinal);
+        Assert.Contains("ValidarComponenteAtualParaPesagem(out ComponenteConsumoMaterial? componenteF12", f12, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarantirLoteComponenteAntesDaPesagem", f9, StringComparison.Ordinal);
+        Assert.DoesNotContain("GarantirLoteComponenteAntesDaPesagem", f12, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2117,17 +2230,6 @@ public sealed class ProcessoConsumoMaterialFormTests
     }
 
     // ---------- Tarefa 18: tara só ao pesar, reindex de tara, botões LER/DIGITAR PESO ----------
-
-    [Fact]
-    public void AplicarLote_ReindexaTaraSelecionada()
-    {
-        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
-        string metodo = ExtrairMetodo(form, "private void AplicarLoteComponente");
-
-        Assert.Contains("_tarasPorComponente.TryGetValue(chaveAntiga", metodo, StringComparison.Ordinal);
-        Assert.Contains("_tarasPorComponente.Remove(chaveAntiga);", metodo, StringComparison.Ordinal);
-        Assert.Contains("_tarasPorComponente[chaveNova] = taraSelecionada;", metodo, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void Pesagem_F9F12_AbremTaraSomenteAoPesar_EUmaVez()
@@ -2323,6 +2425,348 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("controle.CausesValidation = false;", config, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Consumo_22_1_GridTemColunaOperacaoAoLadoDaDescricao()
+    {
+        // Testes 5-9: coluna "Operação" existe, logo após a descrição, centralizada, largura suficiente.
+        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.Designer.cs");
+
+        Assert.Contains("productionOperacaoColumn.HeaderText = \"Operação\";", designer, StringComparison.Ordinal);
+        Assert.Contains("productionOperacaoColumn.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;", designer, StringComparison.Ordinal);
+        Assert.Contains("productionOperacaoColumn.Width = 85;", designer, StringComparison.Ordinal);
+        // Posição: logo após productionProductColumn e antes de productionReservaColumn no AddRange.
+        int add = designer.IndexOf("productionDataGridView.Columns.AddRange", StringComparison.Ordinal);
+        Assert.True(add >= 0);
+        int posProduct = designer.IndexOf("productionProductColumn, productionOperacaoColumn, productionReservaColumn", add, StringComparison.Ordinal);
+        Assert.True(posProduct > add, "Operação deve ficar entre Descrição e Reserva (não no final da grid).");
+    }
+
+    [Fact]
+    public void Consumo_22_1_MapeamentoEModeloPossuemOperacao()
+    {
+        // Testes 1-4/10-11: modelo tem Operacao; API lê ManufacturingOrderOperation; grid usa "-" se vazio.
+        string modelo = LerArquivoProjeto("Modelo", "Processo", "ComponenteConsumoMaterial.cs");
+        Assert.Contains("public string Operacao { get; set; }", modelo, StringComparison.Ordinal);
+
+        string client = LerArquivoProjeto("Servicos", "IntegracaoSap", "ProductionOrderSapApiClient.cs");
+        Assert.Contains("Operacao = LerTexto(c, \"ManufacturingOrderOperation\")", client, StringComparison.Ordinal);
+
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string metodo = ExtrairMetodo(form, "private static string ObterOperacaoGrid(ComponenteConsumoMaterial componente)");
+        Assert.Contains("string.IsNullOrWhiteSpace(componente.Operacao)", metodo, StringComparison.Ordinal);
+        Assert.Contains("\"-\"", metodo, StringComparison.Ordinal);
+        Assert.Contains("componente.Operacao.Trim()", metodo, StringComparison.Ordinal);
+        // A coluna é preenchida na carga (independe de Backflush/manual — mesmo caminho para todos).
+        Assert.Contains("ObterOperacaoGrid(componente),  // Tarefa Consumo 22.1", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_3_BackflushBloqueiaPesagemMasComponentesManuaisSeguem()
+    {
+        // Testes 3-7/12-14: Backflush (com depósito+lote+KG+saldo) é bloqueado; manual segue liberado.
+        Assert.False(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
+            new ComponenteConsumoMaterial
+            {
+                DepositoConsumo = "PP01", Lote = "L1", UnidadeMedida = "KG",
+                QuantidadePendente = 5m, BackflushSap = true
+            },
+            out string motivoBackflush));
+        Assert.Contains("Backflush", motivoBackflush, StringComparison.Ordinal);
+        Assert.Contains("consumo manual 261", motivoBackflush, StringComparison.Ordinal);
+
+        // Componente manual equivalente (não Backflush) continua liberado.
+        Assert.True(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
+            new ComponenteConsumoMaterial
+            {
+                DepositoConsumo = "PP01", Lote = "L1", UnidadeMedida = "KG",
+                QuantidadePendente = 5m, BackflushSap = false
+            },
+            out _));
+
+        // Prioridade: sem depósito e sem lote têm precedência sobre Backflush.
+        Assert.False(ConsumoMaterialServico.AvaliarLiberacaoPesagem(
+            new ComponenteConsumoMaterial { DepositoConsumo = string.Empty, Lote = "L1", BackflushSap = true, UnidadeMedida = "KG", QuantidadePendente = 5m },
+            out string mDep));
+        Assert.Contains("depósito", mDep, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_3_GridMostraBackflushE261BloqueiaBackflush()
+    {
+        // Testes 1/2/8/9: grid mantém "Backflush"; o 261 direto bloqueia Backflush (não gera payload/envio).
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string tipoSap = ExtrairMetodo(form, "private static string ObterTipoSapGrid(ComponenteConsumoMaterial componente)");
+        Assert.Contains("ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao => \"Backflush\"", tipoSap, StringComparison.Ordinal);
+
+        string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialServico.cs");
+        // Bloqueio de pesagem por Backflush na regra central.
+        Assert.Contains("componente Backflush. O consumo deste item é automático pelo SAP", servico, StringComparison.Ordinal);
+        // 261 direto já classifica Backflush como Confirmação de Produção (não 261).
+        Assert.Contains("ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao", servico, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    // previsto, consumidoSap, pesagensLocais, novaPesagem, esperadoAceita
+    [InlineData(100, 0, 0, 100, true)]   // 1: previsto 100, nova 100 aceita
+    [InlineData(100, 0, 0, 105, true)]   // 2: nova 105 aceita (limite exato)
+    [InlineData(100, 0, 0, 106, false)]  // 3: nova 106 bloqueia
+    [InlineData(100, 0, 0, 50, true)]    // 4: nova 50 aceita (subconsumo)
+    [InlineData(100, 80, 0, 20, true)]   // 5: 80+20=100 aceita
+    [InlineData(100, 80, 0, 25, true)]   // 6: 80+25=105 aceita
+    [InlineData(100, 80, 0, 26, false)]  // 7: 80+26=106 bloqueia
+    [InlineData(100, 80, 10, 15, true)]  // 8: 80+10+15=105 aceita
+    [InlineData(100, 80, 10, 16, false)] // 9: 80+10+16=106 bloqueia
+    [InlineData(100, 106, 0, 1, false)]  // 10: consumido SAP já acima do limite bloqueia
+    public void Consumo_22_4_ToleranciaCincoPorCentoApenasParaMais(
+        decimal previsto, decimal consumido, decimal local, decimal nova, bool esperadoAceita)
+    {
+        bool ok = ConsumoMaterialServico.ValidarToleranciaConsumo(
+            previsto, consumido, local, nova, out decimal limite, out decimal total, out string mensagem);
+
+        Assert.Equal(esperadoAceita, ok);
+        Assert.Equal(previsto * 1.05m, limite);
+        Assert.Equal(consumido + local + nova, total);
+        if (!ok)
+        {
+            Assert.NotEmpty(mensagem);
+        }
+    }
+
+    [Fact]
+    public void Consumo_22_4_ConstanteLimiteMensagemE261()
+    {
+        // Testes 17/15/16: mensagem completa no bloqueio; constante 5%; revalidação antes do 261.
+        Assert.Equal(105m, ConsumoMaterialServico.CalcularLimiteConsumoComTolerancia(100m));
+        Assert.Equal(52.5m, ConsumoMaterialServico.CalcularLimiteConsumoComTolerancia(50m));
+        Assert.Equal(0m, ConsumoMaterialServico.CalcularLimiteConsumoComTolerancia(0m));
+
+        ConsumoMaterialServico.ValidarToleranciaConsumo(100m, 80m, 0m, 26m, out _, out _, out string msg);
+        foreach (string parte in new[] { "Previsto:", "Consumido SAP:", "Pesagem local pendente:", "Nova pesagem:", "Limite com tolerância 5%:", "Total após pesagem:" })
+        {
+            Assert.Contains(parte, msg, StringComparison.Ordinal);
+        }
+
+        string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialServico.cs");
+        Assert.Contains("public const decimal PercentualToleranciaConsumo = 0.05m;", servico, StringComparison.Ordinal);
+        // Revalidação antes de montar/enviar o payload 261.
+        Assert.Contains("ValidarToleranciaLancamento261(lancamento)", servico, StringComparison.Ordinal);
+        Assert.Contains("Consumo total excede a tolerância permitida de 5%. Envio SAP 261 bloqueado.", servico, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_8_SucessoSapFechaLancamentoELiberaNovoApontamento()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string finalizar = ExtrairMetodo(form, "private string FinalizarApontamentoEnviadoSapELiberarNovaPesagem");
+        string confirmar = ExtrairMetodo(form, "private async Task ConfirmarConsumoAsync");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
+
+        Assert.Contains("FinalizarApontamentoEnviadoSapELiberarNovaPesagem(mensagemFinal)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("bool envioSapConfirmado = icone == MessageBoxIcon.Information", confirmar, StringComparison.Ordinal);
+        Assert.Contains("Nenhuma nova pesagem pendente para envio SAP.", confirmar, StringComparison.Ordinal);
+        Assert.Contains("componente.QuantidadeConsumida += enviadoKg;", finalizar, StringComparison.Ordinal);
+        Assert.Contains("componente.QuantidadePendente = Math.Max(0m, componente.QuantidadePrevista - componente.QuantidadeConsumida);", finalizar, StringComparison.Ordinal);
+        Assert.Contains("ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, 0m);", finalizar, StringComparison.Ordinal);
+        Assert.Contains("_pesagensPorComponente.Clear();", finalizar, StringComparison.Ordinal);
+        Assert.Contains("_ultimoCodigoLancamentoSalvo = null;", finalizar, StringComparison.Ordinal);
+        Assert.Contains("_consumoSalvoNaSessao = false;", finalizar, StringComparison.Ordinal);
+        Assert.Contains("Nova pesagem liberada para o saldo restante", finalizar, StringComparison.Ordinal);
+        Assert.Contains("Limite de consumo atingido para este componente", finalizar, StringComparison.Ordinal);
+        Assert.Contains("PossuiPesagemPendenteParaNovoApontamento()", atualizar, StringComparison.Ordinal);
+        Assert.Contains("&& !_consumoSalvoNaSessao", atualizar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_8_ToleranciaPermiteNovoApontamentoAteLimiteAposParcial()
+    {
+        ComponenteConsumoMaterial componente = new()
+        {
+            CodigoMaterial = "COMP-5678",
+            UnidadeMedida = "KG",
+            DepositoConsumo = "PP01",
+            Lote = "L1",
+            NumeroReserva = "R1",
+            ItemReserva = "0001",
+            QuantidadePrevista = 100m,
+            QuantidadeConsumida = 104m,
+            QuantidadePendente = 0m,
+            Status = ComponenteConsumoMaterial.StatusPendente,
+            PesagemLiberada = true
+        };
+
+        Assert.Equal(1m, ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(componente));
+        Assert.True(ConsumoMaterialServico.AvaliarLiberacaoPesagem(componente, out _));
+
+        ResultadoPesagemConsumo aceita = ServicoPesagem().RegistrarPesagemLocal(
+            componente, "1000009", 1m, 0m, PesagemConsumoMaterial.OrigemManual, 0m, 1);
+        Assert.True(aceita.Sucesso);
+
+        ResultadoPesagemConsumo bloqueia = ServicoPesagem().RegistrarPesagemLocal(
+            componente, "1000009", 2m, 0m, PesagemConsumoMaterial.OrigemManual, 0m, 2);
+        Assert.Equal(CenarioPesagemConsumo.ExcedePendente, bloqueia.Cenario);
+
+        componente.QuantidadeConsumida = 105m;
+        Assert.Equal(0m, ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(componente));
+        Assert.False(ConsumoMaterialServico.AvaliarLiberacaoPesagem(componente, out string motivo));
+        Assert.Contains("limite de consumo", motivo, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Consumo_22_8_PersistenciaLocalUsaToleranciaENaoSaldoBaseZero()
+    {
+        string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialServico.cs");
+
+        Assert.Contains("CalcularDisponivelConsumoComTolerancia", servico, StringComparison.Ordinal);
+        Assert.Contains("ValidarToleranciaConsumo(", servico, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (totalLiquido > componente.QuantidadePendente)", servico, StringComparison.Ordinal);
+        Assert.Contains("CalcularDisponivelConsumoComTolerancia(componente) <= 0m", servico, StringComparison.Ordinal);
+    }
+    [Fact]
+    public void Consumo_22_12_PreCargaOps_AposLoginNaoBloqueiaUi()
+    {
+        string painel = LerArquivoProjeto("Tela", "PainelInicialForm.cs");
+        string cache = LerArquivoProjeto("Servicos", "Operacao", "OrdemProducaoCacheServico.cs");
+
+        Assert.Contains("IOrdemProducaoCacheServico _preCarregamentoOrdensProducao", painel, StringComparison.Ordinal);
+        Assert.Contains("Shown += (_, _) => IniciarPreCarregamentoOrdensProducao();", painel, StringComparison.Ordinal);
+        Assert.Contains("private void IniciarPreCarregamentoOrdensProducao()", painel, StringComparison.Ordinal);
+        Assert.Contains("Task.Run(async () =>", painel, StringComparison.Ordinal);
+        Assert.Contains("PreCarregarAsync(_fechamentoPreCarregamentoCts.Token)", painel, StringComparison.Ordinal);
+        string preloadOps = ExtrairMetodo(painel, "private void IniciarPreCarregamentoOrdensProducao");
+        Assert.DoesNotContain(".Wait()", preloadOps, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Result", preloadOps, StringComparison.Ordinal);
+        Assert.Contains("_travaPreCarga.WaitAsync(0", cache, StringComparison.Ordinal);
+        Assert.Contains("TimeoutPadrao", cache, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_12_ConsultaOp_UsaCacheFirstEFallbackOnline()
+    {
+        string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialServico.cs");
+        string consultar = ExtrairMetodo(servico, "public async Task<ResultadoConsultaOrdemConsumo> ConsultarOrdemAsync");
+
+        Assert.Contains("_cacheOrdensProducao.TentarObter(numero", consultar, StringComparison.Ordinal);
+        Assert.Contains("OP {numero} carregada do cache", consultar, StringComparison.Ordinal);
+        Assert.Contains("OP {numero} não estava no cache. Consultando SAP online.", consultar, StringComparison.Ordinal);
+        Assert.Contains("await _ordemProducaoServico.ConsultarOrdemAsync(numero, cancellationToken)", consultar, StringComparison.Ordinal);
+        Assert.Contains("_cacheOrdensProducao.Armazenar(resultado.Ordem);", consultar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_12_PreCargaOps_FiltroSapSomenteLeitura()
+    {
+        string cliente = LerArquivoProjeto("Servicos", "IntegracaoSap", "ProductionOrderSapApiClient.cs");
+        string metodo = ExtrairMetodo(cliente, "private Uri MontarUrlPreCargaOrdens");
+        string listar = ExtrairMetodo(cliente, "public async Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync");
+
+        Assert.Contains("A_ProductionOrder_2", metodo, StringComparison.Ordinal);
+        Assert.Contains("ProductionPlant eq", metodo, StringComparison.Ordinal);
+        Assert.Contains("PlantaPreCargaFugaPet = \"3007\"", cliente, StringComparison.Ordinal);
+        Assert.Contains("OrderIsReleased eq 'X'", metodo, StringComparison.Ordinal);
+        Assert.Contains("OrderIsConfirmed ne 'X'", metodo, StringComparison.Ordinal);
+        Assert.Contains("OrderIsDeleted ne 'X'", metodo, StringComparison.Ordinal);
+        Assert.Contains("$top={LimitePreCargaOrdens}", metodo, StringComparison.Ordinal);
+        Assert.Contains("HttpMethod.Get", listar, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpMethod.Post", listar, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpMethod.Patch", listar, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("X-CSRF-Token", listar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Consumo_22_12_PainelLateral_UsaMesmoComponenteDaGrid()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string preencher = ExtrairMetodo(form, "private void PreencherOrdemCarregada");
+        string totais = ExtrairMetodo(form, "private void AtualizarTotaisConsumo");
+        string atualizarLinha = ExtrairMetodo(form, "private void AtualizarLinhaComponenteSelecionado");
+        string capturar = ExtrairMetodo(form, "private bool CapturarComponenteSelecionadoDoGridPrincipal");
+
+        Assert.Contains("ObterQuantidadePrevistaInicial(componente)", preencher, StringComparison.Ordinal);
+        Assert.Contains("Math.Max(0m, componente.QuantidadeConsumida)", preencher, StringComparison.Ordinal);
+        Assert.Contains("FormatarPesoGrid(utilizadoInicial, unidade)", preencher, StringComparison.Ordinal);
+        Assert.Contains("decimal totalUtilizado = ObterQuantidadeUtilizadaComponente(componente, chave);", totais, StringComparison.Ordinal);
+        Assert.Contains("boxesCounterLabel.Text = FormatarPesoPainel(previstoInicial);", totais, StringComparison.Ordinal);
+        Assert.Contains("packagesCounterLabel.Text = FormatarPesoPainel(totalUtilizado);", totais, StringComparison.Ordinal);
+        Assert.Contains("Saldo: {FormatarPesoPainel(saldoRestante)}", totais, StringComparison.Ordinal);
+        Assert.Contains("productionWeightColumn", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("FormatarPesoGrid(totalUtilizado, unidade)", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("UpdateProductionCounters();", capturar, StringComparison.Ordinal);
+        Assert.Contains("Selecione um componente", capturar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_12_1_ComponentePodeOperar_DeveBloquearTiposNaoOperacionais()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string helper = ExtrairMetodo(form, "private bool ComponentePodeOperar");
+
+        Assert.Contains("ObterTipoSapGrid(componente)", helper, StringComparison.Ordinal);
+        Assert.Contains("Bloqueado", helper, StringComparison.Ordinal);
+        Assert.Contains("Sem dep?sito", helper, StringComparison.Ordinal);
+        Assert.Contains("string.IsNullOrWhiteSpace(componente.Lote)", helper, StringComparison.Ordinal);
+        Assert.Contains("Backflush", helper, StringComparison.Ordinal);
+        Assert.Contains("ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao", helper, StringComparison.Ordinal);
+        Assert.Contains("261 Direto", helper, StringComparison.Ordinal);
+        Assert.Contains("ClassificacaoEnvioConsumo261.MaterialDocument261Direto", helper, StringComparison.Ordinal);
+        Assert.Contains("ComponentePertenceAoModoAtual(componente)", helper, StringComparison.Ordinal);
+        Assert.Contains("ConsumoMaterialServico.AvaliarLiberacaoPesagem(componente", helper, StringComparison.Ordinal);
+        Assert.Contains("ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(componente) <= 0m", helper, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_12_1_SelecaoDeComponenteBloqueado_DeveDesabilitarOperacao()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string capturar = ExtrairMetodo(form, "private bool CapturarComponenteSelecionadoDoGridPrincipal");
+        string bloqueio = ExtrairMetodo(form, "private void BloquearComponenteOperacional");
+        string iniciar = ExtrairMetodo(form, "private bool OrdemConsumoSelecionadaValida");
+
+        Assert.Contains("ComponentePodeOperar(_componenteConsumoSelecionado", capturar, StringComparison.Ordinal);
+        Assert.Contains("BloquearComponenteOperacional(_componenteConsumoSelecionado", capturar, StringComparison.Ordinal);
+        Assert.Contains("SetReadWeightEnabled(false);", bloqueio, StringComparison.Ordinal);
+        Assert.Contains("_confirmarConsumoButton.Enabled = false;", bloqueio, StringComparison.Ordinal);
+        Assert.Contains("EstadoVisualIntegracaoSapConsumo.Bloqueado", bloqueio, StringComparison.Ordinal);
+        Assert.DoesNotContain("_ordemConsumoAtual.Componentes.Any(c => c.PesagemLiberada)", iniciar, StringComparison.Ordinal);
+        Assert.Contains("ComponentePodeOperar(_componenteConsumoSelecionado, out _)", iniciar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_12_1_AcoesOperacionais_DeveRevalidarComponenteAtual()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string start = ExtrairMetodo(form, "private async void StartProduction_Click");
+        string validarPeso = ExtrairMetodo(form, "private bool ValidarComponenteAtualParaPesagem");
+        string registrar = ExtrairMetodo(form, "private async Task RegistrarPesagemConsumoAsync");
+        string confirmar = ExtrairMetodo(form, "private async Task ConfirmarConsumoAsync");
+        string enviar = ExtrairMetodo(form, "private async Task EnviarSap261Async");
+        string preview = ExtrairMetodo(form, "private async Task VisualizarPayloadSap261Async");
+
+        Assert.Contains("CapturarComponenteSelecionadoDoGridPrincipal();", start, StringComparison.Ordinal);
+        Assert.Contains("ComponentePodeOperar(_componenteConsumoSelecionado", start, StringComparison.Ordinal);
+        Assert.Contains("ComponentePodeOperar(componente", validarPeso, StringComparison.Ordinal);
+        Assert.Contains("MontarMensagemOperacaoBloqueada(motivoBloqueio)", validarPeso, StringComparison.Ordinal);
+        Assert.Contains("ComponentePodeOperar(componente", registrar, StringComparison.Ordinal);
+        Assert.Contains("RegistrarPesagemConsumo(", registrar, StringComparison.Ordinal);
+        Assert.True(
+            registrar.IndexOf("ComponentePodeOperar(componente", StringComparison.Ordinal)
+                < registrar.IndexOf("RegistrarPesagemConsumo(", StringComparison.Ordinal));
+        Assert.Contains("ValidarComponentesComPesagemPendentesOperaveis(out string mensagemBloqueioOperacional)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("ValidarComponenteSelecionadoParaSap261(out string mensagemBloqueioOperacionalEnviar)", enviar, StringComparison.Ordinal);
+        Assert.Contains("ValidarComponenteSelecionadoParaSap261(out string mensagemBloqueioOperacionalPreview)", preview, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Consumo_22_12_1_Autoselecao_DeveIgnorarComponentesBloqueados()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string metodo = ExtrairMetodo(form, "private bool SelecionarPrimeiroComponentePesavelSeNecessario");
+
+        Assert.Contains("ComponentePodeOperar(atual, out _)", metodo, StringComparison.Ordinal);
+        Assert.Contains("!ComponentePodeOperar(componente, out _)", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("atual is not null && atual.PesagemLiberada", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("!componente.PesagemLiberada", metodo, StringComparison.Ordinal);
+    }
+
     private static string LerArquivoProjeto(params string[] partes)
         => File.ReadAllText(Path.Combine(RaizProjeto(), Path.Combine(partes)));
 
@@ -2353,3 +2797,19 @@ public sealed class ProcessoConsumoMaterialFormTests
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

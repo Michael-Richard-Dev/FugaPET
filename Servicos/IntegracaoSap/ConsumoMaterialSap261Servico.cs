@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
@@ -49,7 +49,7 @@ public sealed class ConsumoMaterialSap261Servico : IConsumoMaterialSap261Servico
     {
         if (!_configuracaoSap.MaterialDocumentConfigurado)
         {
-            return ResultadoEnvioConsumoSap261.Falha(ConfiguracaoSap.MensagemMaterialDocumentNaoConfigurado);
+            return ResultadoEnvioConsumoSap261.Falha(_configuracaoSap.MensagemMaterialDocumentAusente());
         }
 
         if (!_configuracaoSap.EscritaHabilitada)
@@ -80,6 +80,16 @@ public sealed class ConsumoMaterialSap261Servico : IConsumoMaterialSap261Servico
 
         try
         {
+            string payloadJson = ConsumoMaterialSapPayloadBuilder.SerializarPreview(requisicao);
+            await RegistrarLogAsync(
+                chaveNegocio,
+                correlationId,
+                cronometro,
+                "PARCIAL",
+                null,
+                MontarDiagnosticoPayload261(requisicao, payloadJson),
+                finalizarCronometro: false);
+
             ResultadoEnvioConsumoSap261 resultado =
                 await _cliente.Value.EnviarConsumo261Async(requisicao, correlationId.ToString(), cancellationToken);
 
@@ -109,9 +119,13 @@ public sealed class ConsumoMaterialSap261Servico : IConsumoMaterialSap261Servico
 
     private async Task RegistrarLogAsync(
         string? chaveNegocio, Guid correlationId, Stopwatch cronometro,
-        string situacao, int? statusHttp, string? mensagemTecnica)
+        string situacao, int? statusHttp, string? mensagemTecnica, bool finalizarCronometro = true)
     {
-        cronometro.Stop();
+        if (finalizarCronometro)
+        {
+            cronometro.Stop();
+        }
+
         await _logIntegracaoSapServico.RegistrarAsync(
             new RegistroLogIntegracaoSap
             {
@@ -128,5 +142,30 @@ public sealed class ConsumoMaterialSap261Servico : IConsumoMaterialSap261Servico
                 RegistradoEmUtc = DateTimeOffset.UtcNow
             },
             CancellationToken.None);
+    }
+
+    private static string MontarDiagnosticoPayload261(
+        ConsumoMaterialSap261Request requisicao,
+        string payloadJson)
+    {
+        IEnumerable<string> itens = requisicao.ToMaterialDocumentItem.Select(item =>
+            "Movimento: 261"
+            + $" | OP: {item.ManufacturingOrder}"
+            + $" | Reserva: {item.Reservation}"
+            + $" | Item reserva: {item.ReservationItem}"
+            + $" | Material: {item.Material}"
+            + $" | Centro: {item.Plant}"
+            + $" | Depósito: {item.StorageLocation}"
+            + $" | Lote: {item.Batch}"
+            + $" | Quantidade: {item.QuantityInEntryUnit}"
+            + $" | Unidade: {item.EntryUnit}");
+
+        return "Payload SAP 261 enviado."
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, itens)
+            + Environment.NewLine
+            + "Payload JSON:"
+            + Environment.NewLine
+            + payloadJson;
     }
 }

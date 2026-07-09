@@ -72,7 +72,7 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
         if (!_configuracaoSap.Configurado)
         {
             ResultadoOperacao falha =
-                ResultadoOperacao.Falha(ConfiguracaoSap.MensagemConfiguracaoAusente);
+                ResultadoOperacao.Falha(_configuracaoSap.MensagemConfiguracaoBaseAusente());
             await RegistrarLogAsync(
                 "CONSULTA_PEDIDO",
                 numeroPedido,
@@ -204,7 +204,7 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
     {
         if (!_configuracaoSap.Configurado)
         {
-            return ResultadoOperacao.Falha(ConfiguracaoSap.MensagemConfiguracaoAusente);
+            return ResultadoOperacao.Falha(_configuracaoSap.MensagemConfiguracaoBaseAusente());
         }
 
         Guid identificadorExecucao = Guid.NewGuid();
@@ -370,6 +370,35 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
         CancellationToken cancellationToken = default)
         => _repositorio.ObterPedidoAgregadoAsync(numeroPedido, cancellationToken);
 
+    /// <summary>
+    /// Tarefa Entrada 23.1: cabeçalho FRESCO do pedido no SAP (GET direto, com status de aprovação/liberação).
+    /// Não usa cache. Não configurado / não encontrado / erro → null (o validador bloqueia por segurança).
+    /// </summary>
+    public async Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_configuracaoSap.Configurado || string.IsNullOrWhiteSpace(numeroPedido))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _clienteSap.Value.ConsultarPedidoAsync(numeroPedido, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[Entrada][ValidacaoPedidoCompra] Falha ao consultar cabecalho do pedido {numeroPedido}: {ex.GetType().Name}.");
+            return null;
+        }
+    }
+
     /// <summary>Fornecedor vinculado ao pedido no cache local, para preencher a tela de Entrada.</summary>
     public Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)
         => _repositorio.ObterFornecedorPorNumeroPedidoAsync(numeroPedido, cancellationToken);
@@ -412,7 +441,7 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
 
         if (!_configuracaoSap.Configurado)
         {
-            return ResultadoOperacao.Falha(ConfiguracaoSap.MensagemConfiguracaoAusente);
+            return ResultadoOperacao.Falha(_configuracaoSap.MensagemConfiguracaoBaseAusente());
         }
 
         if (!_configuracaoSap.EscritaHabilitada)

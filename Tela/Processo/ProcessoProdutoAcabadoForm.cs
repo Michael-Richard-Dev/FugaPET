@@ -16,6 +16,15 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private static readonly Color ReadingStatusActiveColor = Color.FromArgb(34, 166, 82);
     private static readonly Color ActionDisabledColor = Color.FromArgb(156, 163, 175);
 
+    // Tarefa 21.6.5 (Ajuste 6): fontes maiores/legíveis (Segoe UI), padrão dos cadastros Setor/Cargo.
+    private static readonly Font FonteTituloSecao = new("Segoe UI", 9.5F, FontStyle.Bold);
+    private static readonly Font FonteLabelCampo = new("Segoe UI", 9F, FontStyle.Bold);
+    private static readonly Font FonteValorCampo = new("Segoe UI", 11F, FontStyle.Bold);
+    private static readonly Font FonteGridHeader = new("Segoe UI", 9F, FontStyle.Bold);
+    private static readonly Font FonteGridCell = new("Segoe UI", 9.5F, FontStyle.Regular);
+    private static readonly Font FonteBotao = new("Segoe UI", 9F, FontStyle.Bold);
+    private static readonly Font FonteAuxiliar = new("Segoe UI", 8F, FontStyle.Italic);
+
     internal const string MensagemBalancaProdutoAcabadoNaoConfigurada =
         "Balança de produto acabado não configurada para esta operação.";
     internal const string MensagemPostSapDesativado =
@@ -37,6 +46,18 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private TextBox ultimaCaixaTextBox = null!;
     private TextBox materialEmbalagemPaleteTextBox = null!;
     private DataGridView paletesDataGridView = null!;
+    private string _ultimaOpConsultada = string.Empty; // Tarefa 21.6.3 (Ajuste 1): evita reconsultar a mesma OP no Tab/Leave
+    private FugaPET_Dev.Tela.Controls.RoundedPanel? _criarPaleteCard; // Tarefa 21.6.3 (Ajuste 8)
+    private Label? _paleteMensagemLabel;
+    private TableLayoutPanel? _areaInferior; // Tarefa 21.6.5 (Ajuste 5): composição vertical da área inferior
+    private Label? _plannedDivider3;          // Tarefa 21.6.4 (Ajuste 4): 3º divisor (4 colunas)
+    private Label? _materialCaixaCaptionLabel; // Tarefa 21.6.4 (Ajuste 4): coluna própria MATERIAL CAIXA
+    private Label? _materialCaixaValorLabel;
+    private Label? _normaVaziaLabel;              // Tarefa 21.6 (Ajuste 4): estado vazio do grid de norma
+    private Label? _pendenciaBalancaTituloLabel;  // Tarefa 21.6 (Ajuste 3): pendencia operacional (lateral)
+    private Label? _pendenciaBalancaTextoLabel;
+    private Label? _statusNormaValorLabel;        // Tarefa 21.6 (Ajuste 2): STATUS NORMA / MATERIAL CAIXA
+    private Label? _avisoNormaFallbackLabel;
 
     public ProcessoProdutoAcabadoForm()
         : this(new ProdutoAcabadoController())
@@ -54,8 +75,12 @@ public partial class ProcessoProdutoAcabadoForm : Form
         ConfigurarGridNormaEmbalagem();
         ConfigurarGridCaixas();
         ConfigurarPaletizacaoOperacional();
+        ConfigurarCardNormaExtra();      // Tarefa 21.6 (Ajuste 2)
+        ConfigurarCampoQtdArredondado(); // Tarefa 21.6.4 (Ajuste 5)
+        CriarBlocoPendenciaBalanca();    // Tarefa 21.6 (Ajuste 3)
         AtualizarEstadoLeitura(false);
         AtualizarResumoOperacional();
+        AtualizarPendenciaBalanca();
         KeyPreview = true;
     }
 
@@ -91,23 +116,37 @@ public partial class ProcessoProdutoAcabadoForm : Form
         headerTitleLabel.Text = "Produto Acabado";
         headerSubtitleLabel.Text = "Pesagem de caixas e formação de palete por ordem de produção";
         productionOrderCaptionLabel.Text = "OP";
-        stepCaptionLabel.Text = "Consulta de OP";
-        stepDescriptionLabel.Text = "OP selecionada";
+        // Tarefa 21.6.4 (Ajuste 1): card ITEM OP útil (sem OP → "-"/"Aguardando OP"; nada de "Consulta de").
+        stepCaptionLabel.Text = "ITEM OP";
+        stepDescriptionLabel.Text = "Aguardando OP";
+        stepLabel.Text = "-";
         finishedProductCaptionLabel.Text = "Produto acabado";
         lotCaptionLabel.Text = "Lote";
+        // Tarefa 21.6 (Ajuste 1): card de dados produtivos — NAO usar titulo "DATAS" nem rotulos de data.
+        dateTitleLabel.Text = "DADOS DA OP";
         ovenExitCaptionLabel.Text = "Depósito destino";
         classificationDateCaptionLabel.Text = "Saldo pendente";
         manufacturingDateCaptionLabel.Text = "Quantidade planejada";
         expirationDateCaptionLabel.Text = "Quantidade entregue";
+        // Tarefa 21.6 (Ajuste 2): status/material da norma no card de producao planejada.
+        balanceCaptionLabel.Text = "STATUS NORMA";
         materialTitleLabel.Text = "Norma de Embalagem";
         productionReadingsTitleLabel.Text = "Caixas Pesadas";
         productionActionsButton.Text = "CRIAR PALETE";
         productionActionsButton.Visible = false;
+        // Tarefa 21.6 (Ajuste 8): termos operacionais na lateral direita (sem "pacotes").
+        // Tarefa 21.6.2 (Ajuste 2): remover o ícone que sobrepunha o texto na lateral direita.
+        boxesTitleLabel.Text = "CAIXAS PESADAS";
+        boxesTitleLabel.Image = null;
+        boxesTitleLabel.Padding = new Padding(0);
+        packagesTitleLabel.Text = "PESO REGISTRADO";
+        packagesTitleLabel.Image = null;
+        packagesTitleLabel.Padding = new Padding(0);
         boxesCaptionLabel.Text = "Caixas";
         packagesCaptionLabel.Text = "Peso líquido";
         readWeightLegendTextLabel.Text = "F12 - Ler peso balança";
         manualLotLegendTextLabel.Text = "F9 - Digitar peso";
-        deleteLastLegendTextLabel.Text = "Del - Cancelar última caixa";
+        deleteLastLegendTextLabel.Text = "Del - Excluir última caixa";
         deleteByCodeLegendTextLabel.Text = "Esc - Fechar";
         lerEtiquetaButton.PrimaryText = "LER PESO";
         lerEtiquetaButton.KeyHint = "F12";
@@ -118,7 +157,8 @@ public partial class ProcessoProdutoAcabadoForm : Form
         sapStatusLabel.Text = _controller.SapSimulado ? "SAP OP: DEMONSTRAÇÃO" : "SAP OP: CONSULTA";
         statusLabel.Text = "Informe uma OP para consulta.";
         CarregarContextoTerminal();
-        balanceTextBox.Text = MensagemBalancaProdutoAcabadoNaoConfigurada;
+        // Tarefa 21.6 (Ajuste 3): a mensagem de balança saiu do card — vira pendencia na lateral direita.
+        balanceTextBox.Text = string.Empty;
         cellUserText.Text = UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = RodapeBancoHelper.ObterTextoBancoDados();
         string nomeTerminal = string.IsNullOrWhiteSpace(_contextoTerminal?.NomeTerminal)
@@ -149,8 +189,12 @@ public partial class ProcessoProdutoAcabadoForm : Form
         FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
         KeyDown += ProcessoProdutoAcabadoForm_KeyDown;
         productionOrderTextBox.KeyDown += ProductionOrderTextBox_KeyDown;
+        // Tarefa 21.6.3 (Ajuste 1): sair do campo OP (Tab/perda de foco) consulta a OP nova, como o Enter.
+        productionOrderTextBox.Leave += async (_, _) => await ConsultarOpAoSairDoCampoAsync();
         productionOrderSearchLabel.Click += async (_, _) => await ConsultarOpAsync();
         readForecastBoxesTextBox.KeyPress += ReadForecastBoxesTextBox_KeyPress;
+        // Tarefa 21.6.2 (Ajuste 1): digitar a QTD. por caixa no fallback reavalia o botão iniciar (fica verde).
+        readForecastBoxesTextBox.TextChanged += (_, _) => AtualizarBotoesOperacao();
         iniciarLeituraButton.Click += ToggleProductionFromSideButton_Click;
         startActionPanel.Click += ToggleProductionFromSideButton_Click;
         stopActionPanel.Click += (_, _) => AtualizarEstadoLeitura(false);
@@ -195,59 +239,200 @@ public partial class ProcessoProdutoAcabadoForm : Form
         materialDataGridView.AutoGenerateColumns = false;
         materialDataGridView.ReadOnly = true;
         materialDataGridView.MultiSelect = false;
+        // Tarefa 21.6.3 (Ajuste 6): grid da norma ocupa a largura útil (Fill), como o grid de caixas.
+        materialDataGridView.Dock = DockStyle.Fill;
+        materialDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        materialDataGridView.ColumnHeadersDefaultCellStyle.Font = FonteGridHeader; // Tarefa 21.6.5 (Ajustes 6/7)
+        materialDataGridView.DefaultCellStyle.Font = FonteGridCell;
+        materialDataGridView.ColumnHeadersHeight = 28;
+        materialDataGridView.RowTemplate.Height = 28;
+        // Tarefa 21.6 (Ajuste 4): cabecalhos completos (sem truncar "T..." / "Un.").
         materialStatusColumn.HeaderText = "Tipo";
+        materialStatusColumn.FillWeight = 70;
         materialCodeColumn.HeaderText = "Material";
+        materialCodeColumn.FillWeight = 110;
         materialDescriptionColumn.HeaderText = "Item";
-        materialLotColumn.HeaderText = "Qtd";
-        materialExpirationColumn.HeaderText = "Un.";
+        materialDescriptionColumn.FillWeight = 70;
+        materialLotColumn.HeaderText = "Quantidade";
+        materialLotColumn.FillWeight = 90;
+        materialExpirationColumn.HeaderText = "Unidade";
+        materialExpirationColumn.FillWeight = 80;
         materialBalanceColumn.HeaderText = "Norma";
+        materialBalanceColumn.FillWeight = 120;
+        CriarMensagemNormaVazia();
+    }
+
+    /// <summary>Tarefa 21.6 (Ajuste 4): estado vazio amigavel sobre o grid de norma de embalagem.</summary>
+    private void CriarMensagemNormaVazia()
+    {
+        _normaVaziaLabel = new Label
+        {
+            Name = "normaVaziaLabel",
+            AutoSize = false,
+            BackColor = Color.FromArgb(248, 250, 252),
+            Dock = DockStyle.Fill,
+            Font = new Font("Cascadia Code", 8F, FontStyle.Italic),
+            ForeColor = Color.FromArgb(107, 114, 128),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Text = "Norma de embalagem não retornou itens. Usando fallback de quantidade por caixa.",
+            Visible = false
+        };
+        // Tarefa 21.6.2 (Ajuste 5): o pai da grid é um TableLayoutPanel — para a mensagem central aparecer,
+        // colocamos o label na MESMA célula da grid (Dock=Fill) e alternamos a visibilidade grid/label.
+        if (materialDataGridView.Parent is TableLayoutPanel tabelaNorma)
+        {
+            TableLayoutPanelCellPosition celula = tabelaNorma.GetCellPosition(materialDataGridView);
+            tabelaNorma.Controls.Add(_normaVaziaLabel);
+            tabelaNorma.SetCellPosition(_normaVaziaLabel, celula);
+        }
+        else if (materialDataGridView.Parent is Control paiNorma)
+        {
+            paiNorma.Controls.Add(_normaVaziaLabel);
+            _normaVaziaLabel.Location = materialDataGridView.Location;
+            _normaVaziaLabel.Size = materialDataGridView.Size;
+            _normaVaziaLabel.Anchor = materialDataGridView.Anchor;
+            _normaVaziaLabel.BringToFront();
+        }
+
+        AtualizarMensagemNormaVazia(); // estado inicial (sem OP): mostra a mensagem central
+    }
+
+    private void AtualizarMensagemNormaVazia()
+    {
+        if (_normaVaziaLabel is null)
+        {
+            return;
+        }
+
+        bool semItens = _normaEmbalagem is null || _normaEmbalagem.Itens.Count == 0;
+        _normaVaziaLabel.Text = _normaEmbalagem is null
+            ? "Norma de embalagem não retornou itens.\r\nUsando fallback de quantidade por caixa."
+            : "Norma de embalagem carregada sem componentes.";
+        // Alterna: mensagem central quando vazio; grid quando há itens.
+        _normaVaziaLabel.Visible = semItens;
+        materialDataGridView.Visible = !semItens;
+        if (semItens)
+        {
+            _normaVaziaLabel.BringToFront();
+        }
     }
 
     private void ConfigurarGridCaixas()
     {
+        // Tarefa 21.6 (Ajuste 6): uma coluna por conceito — tara, liquido, origem e status separados.
         productionDataGridView.AutoGenerateColumns = false;
         productionDataGridView.ReadOnly = true;
         productionDataGridView.MultiSelect = false;
-        productionCodeColumn.HeaderText = "Caixa";
-        productionDateColumn.HeaderText = "Bruto";
-        productionProductColumn.HeaderText = "Tara/Líquido";
-        productionQuantityColumn.HeaderText = "Qtd";
-        productionWeightColumn.HeaderText = "Origem/Status";
-        productionPrintColumn.HeaderText = "HU";
+        productionDataGridView.Columns.Clear();
+        productionDataGridView.ScrollBars = ScrollBars.Vertical;
+        // Tarefa 21.6.2 (Ajuste 7): colunas preenchem a largura útil (Fill + FillWeight por coluna).
+        productionDataGridView.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        // Tarefa 21.6.5 (Ajustes 6/7): fonte e linhas de grid maiores/legíveis.
+        productionDataGridView.ColumnHeadersDefaultCellStyle.Font = FonteGridHeader;
+        productionDataGridView.DefaultCellStyle.Font = FonteGridCell;
+        productionDataGridView.ColumnHeadersHeight = 28;
+        productionDataGridView.RowTemplate.Height = 28;
+        AdicionarColunaCaixa("caixaNumeroColumn", "Caixa", 70);
+        AdicionarColunaCaixa("caixaPesoBrutoColumn", "Peso bruto", 90);
+        AdicionarColunaCaixa("caixaTaraColumn", "Tara", 70);
+        AdicionarColunaCaixa("caixaPesoLiquidoColumn", "Peso líquido", 90);
+        AdicionarColunaCaixa("caixaQtdProdutosColumn", "Qtd produtos", 90);
+        AdicionarColunaCaixa("caixaOrigemColumn", "Origem", 80);
+        AdicionarColunaCaixa("caixaStatusColumn", "Status", 120);
+        AdicionarColunaCaixa("caixaPaleteLocalColumn", "Palete local", 110);
+        AdicionarColunaCaixa("caixaHuColumn", "HU caixa", 110);
     }
+
+    private void AdicionarColunaCaixa(string nome, string titulo, int peso)
+        => productionDataGridView.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = nome,
+            HeaderText = titulo,
+            FillWeight = peso,
+            SortMode = DataGridViewColumnSortMode.NotSortable
+        });
 
 
     private void ConfigurarPaletizacaoOperacional()
     {
-        Label primeiraCaixaLabel = CriarLabelPaletizacao("Primeira caixa");
-        primeiraCaixaLabel.Location = new Point(205, 14);
-        productionReadingsPanel.Controls.Add(primeiraCaixaLabel);
+        // Cabeçalho (Caixas Pesadas + pesquisa/filtros) permanece no topo do painel (Designer).
+        productionSearchPanel.Location = new Point(675, 6);
+        productionSearchPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        productionFilterButton.Location = new Point(902, 6);
+        productionFilterButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
+        // Tarefa 21.6.5 (Ajuste 8): card CRIAR PALETE maior (Dock=Fill numa linha de 92px da tabela).
+        _criarPaleteCard = new FugaPET_Dev.Tela.Controls.RoundedPanel
+        {
+            Name = "criarPaleteCard",
+            BorderRadius = 10,
+            BorderThickness = 1,
+            BorderColor = Color.FromArgb(226, 231, 238),
+            FillColor = Color.White,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 4, 0, 4)
+        };
+
+        Label criarPaleteTituloLabel = new()
+        {
+            Name = "criarPaleteTituloLabel",
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Font = FonteTituloSecao,
+            ForeColor = Color.FromArgb(17, 24, 39),
+            Location = new Point(14, 8),
+            Size = new Size(320, 20),
+            Text = "CRIAR PALETE",
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        _criarPaleteCard.Controls.Add(criarPaleteTituloLabel);
+
+        Label primeiraCaixaLabel = CriarLabelPaletizacao("Primeira caixa");
+        primeiraCaixaLabel.Location = new Point(14, 32);
+        primeiraCaixaLabel.Size = new Size(126, 16);
+        _criarPaleteCard.Controls.Add(primeiraCaixaLabel);
         primeiraCaixaTextBox = CriarTextBoxPaletizacao("primeiraCaixaTextBox");
-        primeiraCaixaTextBox.Location = new Point(205, 31);
-        productionReadingsPanel.Controls.Add(primeiraCaixaTextBox);
+        _criarPaleteCard.Controls.Add(EnvolverCampoArredondado(primeiraCaixaTextBox, new Point(14, 52), 126));
 
         Label ultimaCaixaLabel = CriarLabelPaletizacao("Última caixa");
-        ultimaCaixaLabel.Location = new Point(300, 14);
-        productionReadingsPanel.Controls.Add(ultimaCaixaLabel);
-
+        ultimaCaixaLabel.Location = new Point(150, 32);
+        ultimaCaixaLabel.Size = new Size(126, 16);
+        _criarPaleteCard.Controls.Add(ultimaCaixaLabel);
         ultimaCaixaTextBox = CriarTextBoxPaletizacao("ultimaCaixaTextBox");
-        ultimaCaixaTextBox.Location = new Point(300, 31);
-        productionReadingsPanel.Controls.Add(ultimaCaixaTextBox);
+        _criarPaleteCard.Controls.Add(EnvolverCampoArredondado(ultimaCaixaTextBox, new Point(150, 52), 126));
 
         Label materialEmbalagemLabel = CriarLabelPaletizacao("Material embalagem");
-        materialEmbalagemLabel.Location = new Point(395, 14);
-        productionReadingsPanel.Controls.Add(materialEmbalagemLabel);
-
+        materialEmbalagemLabel.Location = new Point(286, 32);
+        materialEmbalagemLabel.Size = new Size(200, 16);
+        _criarPaleteCard.Controls.Add(materialEmbalagemLabel);
         materialEmbalagemPaleteTextBox = CriarTextBoxPaletizacao("materialEmbalagemPaleteTextBox");
-        materialEmbalagemPaleteTextBox.Location = new Point(395, 31);
-        materialEmbalagemPaleteTextBox.Size = new Size(150, 20);
         materialEmbalagemPaleteTextBox.Text = "PALLET01";
-        productionReadingsPanel.Controls.Add(materialEmbalagemPaleteTextBox);
+        _criarPaleteCard.Controls.Add(EnvolverCampoArredondado(materialEmbalagemPaleteTextBox, new Point(286, 52), 200));
 
-        productionDataGridView.Location = new Point(17, 60);
-        productionDataGridView.Size = new Size(1081, 112);
-        productionDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        // Mensagem de estado do card (fonte legível).
+        _paleteMensagemLabel = new Label
+        {
+            Name = "paleteMensagemLabel",
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Font = FonteAuxiliar,
+            ForeColor = Color.FromArgb(107, 114, 128),
+            Location = new Point(510, 56),
+            Size = new Size(430, 20),
+            Text = "Registre caixas para criar um palete.",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        };
+        _criarPaleteCard.Controls.Add(_paleteMensagemLabel);
+
+        // Botão CRIAR PALETE à direita do card, reposicionado no Resize (card é Dock=Fill).
+        productionActionsButton.Parent?.Controls.Remove(productionActionsButton);
+        productionActionsButton.Size = new Size(176, 34);
+        productionActionsButton.Font = FonteBotao;
+        _criarPaleteCard.Controls.Add(productionActionsButton);
+        _criarPaleteCard.Resize += (_, _) =>
+            productionActionsButton.Location = new Point(_criarPaleteCard.Width - productionActionsButton.Width - 16, 30);
+        productionActionsButton.BringToFront();
 
         paletesDataGridView = new DataGridView
         {
@@ -256,23 +441,24 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AllowUserToDeleteRows = false,
             AllowUserToResizeRows = false,
             AutoGenerateColumns = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             BackgroundColor = Color.White,
             BorderStyle = BorderStyle.None,
-            ColumnHeadersHeight = 20,
+            ColumnHeadersHeight = 28, // Tarefa 21.6.5 (Ajuste 7)
             EnableHeadersVisualStyles = false,
             GridColor = Color.FromArgb(226, 231, 238),
-            Location = new Point(17, 178),
+            Dock = DockStyle.Fill, // Tarefa 21.6.5 (Ajustes 1/4): nada de Anchor Bottom
+            MinimumSize = new Size(0, 120),
             MultiSelect = false,
             ReadOnly = true,
             RowHeadersVisible = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            Size = new Size(1081, 43),
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect
         };
         paletesDataGridView.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(17, 24, 39);
         paletesDataGridView.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        paletesDataGridView.ColumnHeadersDefaultCellStyle.Font = new Font("Cascadia Code", 6.5F, FontStyle.Bold);
-        paletesDataGridView.DefaultCellStyle.Font = new Font("Cascadia Code", 6.5F);
+        paletesDataGridView.ColumnHeadersDefaultCellStyle.Font = FonteGridHeader;
+        paletesDataGridView.DefaultCellStyle.Font = FonteGridCell;
+        paletesDataGridView.RowTemplate.Height = 28; // Tarefa 21.6.5 (Ajuste 7)
         paletesDataGridView.Columns.Add("paleteLocalColumn", "Palete local");
         paletesDataGridView.Columns.Add("paletePrimeiraCaixaColumn", "Primeira caixa");
         paletesDataGridView.Columns.Add("paleteUltimaCaixaColumn", "Última caixa");
@@ -280,9 +466,51 @@ public partial class ProcessoProdutoAcabadoForm : Form
         paletesDataGridView.Columns.Add("paletePesoBrutoColumn", "Peso bruto");
         paletesDataGridView.Columns.Add("paletePesoLiquidoColumn", "Peso líquido");
         paletesDataGridView.Columns.Add("paleteTaraColumn", "Tara");
-        paletesDataGridView.Columns.Add("paleteMaterialColumn", "Material embalagem");
+        paletesDataGridView.Columns.Add("paleteMaterialColumn", "Material");
         paletesDataGridView.Columns.Add("paleteStatusColumn", "Status");
-        productionReadingsPanel.Controls.Add(paletesDataGridView);
+
+        Label paletesCriadosTituloLabel = new()
+        {
+            Name = "paletesCriadosTituloLabel",
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Font = FonteTituloSecao,
+            ForeColor = Color.FromArgb(17, 24, 39),
+            Dock = DockStyle.Fill,
+            Padding = new Padding(2, 4, 0, 2),
+            Text = "Paletes Criados",
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        // Tarefa 21.6.5 (Ajuste 5): área inferior estruturada em TableLayoutPanel vertical (sem coords fixas).
+        // [caixas grid %] [card CRIAR PALETE 92px] [título Paletes Criados 24px] [paletes grid %].
+        _areaInferior = new TableLayoutPanel
+        {
+            Name = "areaInferiorProdutoAcabado",
+            ColumnCount = 1,
+            RowCount = 4,
+            Location = new Point(0, 34),
+            Size = new Size(productionReadingsPanel.Width, productionReadingsPanel.Height - 34),
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+            Padding = new Padding(14, 0, 14, 6),
+            BackColor = Color.Transparent
+        };
+        _areaInferior.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _areaInferior.RowStyles.Add(new RowStyle(SizeType.Percent, 56F));   // caixas
+        _areaInferior.RowStyles.Add(new RowStyle(SizeType.Absolute, 92F));  // card CRIAR PALETE
+        _areaInferior.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));  // título Paletes Criados
+        _areaInferior.RowStyles.Add(new RowStyle(SizeType.Percent, 44F));   // paletes
+
+        productionDataGridView.Parent?.Controls.Remove(productionDataGridView);
+        productionDataGridView.Dock = DockStyle.Fill;
+        productionDataGridView.Margin = new Padding(0, 0, 0, 6);
+        productionDataGridView.MinimumSize = new Size(0, 170); // Tarefa 21.6.5 (Ajuste 2)
+        _areaInferior.Controls.Add(productionDataGridView, 0, 0);
+        _areaInferior.Controls.Add(_criarPaleteCard, 0, 1);
+        _areaInferior.Controls.Add(paletesCriadosTituloLabel, 0, 2);
+        _areaInferior.Controls.Add(paletesDataGridView, 0, 3);
+        productionReadingsPanel.Controls.Add(_areaInferior);
+        _areaInferior.BringToFront();
     }
 
     private static Label CriarLabelPaletizacao(string texto)
@@ -290,7 +518,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         {
             AutoSize = false,
             BackColor = Color.Transparent,
-            Font = new Font("Cascadia Code", 6.5F, FontStyle.Bold),
+            Font = FonteLabelCampo, // Tarefa 21.6.4 (Ajuste 7)
             ForeColor = Color.FromArgb(75, 85, 99),
             Size = new Size(150, 14),
             Text = texto,
@@ -301,13 +529,53 @@ public partial class ProcessoProdutoAcabadoForm : Form
         => new()
         {
             Name = nome,
-            BackColor = Color.FromArgb(248, 250, 252),
-            BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Cascadia Code", 7F, FontStyle.Bold),
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.None,
+            Font = FonteLabelCampo, // Tarefa 21.6.5 (Ajuste 6)
             ForeColor = Color.FromArgb(17, 24, 39),
-            Size = new Size(82, 20),
             MaxLength = 30
         };
+
+    /// <summary>
+    /// Tarefa 21.6.3 (Ajuste 9): envolve um TextBox numa caixa arredondada (RoundedPanel) — padrão dos
+    /// cadastros de Setor/Cargo. O TextBox fica Dock=Fill dentro do painel, preservando eventos/validação.
+    /// </summary>
+    private static FugaPET_Dev.Tela.Controls.RoundedPanel EnvolverCampoArredondado(TextBox tb, Point local, int largura)
+    {
+        tb.BorderStyle = BorderStyle.None;
+        tb.BackColor = Color.White;
+        tb.Dock = DockStyle.Fill;
+        tb.Font = FonteLabelCampo; // Tarefa 21.6.5 (Ajuste 6): fonte legível dentro do campo
+        FugaPET_Dev.Tela.Controls.RoundedPanel caixa = new()
+        {
+            BorderRadius = 8,
+            BorderThickness = 1,
+            BorderColor = Color.FromArgb(209, 213, 219),
+            FillColor = Color.White,
+            Location = local,
+            Size = new Size(largura, 28), // Tarefa 21.6.5 (Ajuste 8): campo maior p/ fonte maior
+            Padding = new Padding(8, 5, 8, 5)
+        };
+        caixa.Controls.Add(tb);
+        return caixa;
+    }
+
+    /// <summary>Tarefa 21.6.3 (Ajuste 1): consulta a OP ao sair do campo (Tab/foco), se for uma OP nova.</summary>
+    private async Task ConsultarOpAoSairDoCampoAsync()
+    {
+        string op = productionOrderTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(op) || _operacaoEmAndamento || _leituraIniciada)
+        {
+            return;
+        }
+
+        if (string.Equals(op, _ultimaOpConsultada, StringComparison.OrdinalIgnoreCase))
+        {
+            return; // mesma OP já carregada — não reconsulta
+        }
+
+        await ConsultarOpAsync(exibirAvisoOpObrigatoria: false);
+    }
 
     private async Task ConsultarOpAsync(bool exibirAvisoOpObrigatoria = true)
     {
@@ -349,6 +617,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             }
 
             _ordemAtual = resultado.Ordem;
+            _ultimaOpConsultada = _ordemAtual.NumeroOrdem; // Tarefa 21.6.3 (Ajuste 1): não reconsultar a mesma OP no Leave
             _normaEmbalagem = resultado.NormaEmbalagem;
             _caixasPesadas.Clear();
             _paletesMontados.Clear();
@@ -392,9 +661,21 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
-        stepLabel.Text = _ordemAtual.NumeroOrdem;
+        // Tarefa 21.6.4 (Ajuste 1): card "ITEM OP" (só item) ou "ITEM / OPERAÇÃO" (item + operação, sem "/-").
+        string item = string.IsNullOrWhiteSpace(_ordemAtual.ItemOrdem) ? "-" : _ordemAtual.ItemOrdem.Trim();
+        bool temOperacao = !string.IsNullOrWhiteSpace(_ordemAtual.Operacao);
+        stepCaptionLabel.Text = temOperacao ? "ITEM / OPERAÇÃO" : "ITEM OP";
+        stepLabel.Text = temOperacao ? $"{item} / {_ordemAtual.Operacao.Trim()}" : item;
+        stepDescriptionLabel.Text = string.IsNullOrWhiteSpace(_ordemAtual.StatusOrdem)
+            ? "Aguardando OP"
+            : $"Status: {FormatarStatusOrdem(_ordemAtual.StatusOrdem)}";
+
+        // Tarefa 21.6.4 (Ajuste 2): não duplicar o código como descrição (comparação normalizada).
         finishedProductCodeTextBox.Text = _ordemAtual.MaterialProduzido;
-        finishedProductTextBox.Text = _ordemAtual.DescricaoMaterial;
+        bool descricaoUtil = !string.IsNullOrWhiteSpace(_ordemAtual.DescricaoMaterial)
+            && !TextosEquivalentesComoCodigo(_ordemAtual.DescricaoMaterial, _ordemAtual.MaterialProduzido);
+        finishedProductTextBox.Text = descricaoUtil ? _ordemAtual.DescricaoMaterial : string.Empty;
+        finishedProductTextBox.Visible = descricaoUtil;
         lotTextBox.Text = _ordemAtual.Lote;
         ovenExitTextBox.Text = _ordemAtual.DepositoDestino;
         classificationDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadePendente);
@@ -407,24 +688,16 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private void PreencherNormaEmbalagem()
     {
         materialDataGridView.Rows.Clear();
-        if (_normaEmbalagem is null)
+        if (_normaEmbalagem is not null)
         {
-            AtualizarCampoQuantidadePorCaixa();
-            return;
+            foreach (ProdutoAcabadoNormaItem item in _normaEmbalagem.Itens)
+            {
+                materialDataGridView.Rows.Add(item.TipoMaterial, item.Material, item.Item, item.Quantidade, item.Unidade, _normaEmbalagem.PackagingInstruction);
+            }
         }
 
-        if (_normaEmbalagem.Itens.Count == 0)
-        {
-            materialDataGridView.Rows.Add("P", _normaEmbalagem.Material, "0001", _normaEmbalagem.QuantidadeProdutosPorCaixa, _normaEmbalagem.Unidade, _normaEmbalagem.PackagingInstruction);
-            AtualizarCampoQuantidadePorCaixa();
-            return;
-        }
-
-        foreach (ProdutoAcabadoNormaItem item in _normaEmbalagem.Itens)
-        {
-            materialDataGridView.Rows.Add(item.TipoMaterial, item.Material, item.Item, item.Quantidade, item.Unidade, _normaEmbalagem.PackagingInstruction);
-        }
-
+        // Tarefa 21.6 (Ajuste 4): grid vazio mostra mensagem amigavel em vez de tabela em branco.
+        AtualizarMensagemNormaVazia();
         AtualizarCampoQuantidadePorCaixa();
     }
 
@@ -442,6 +715,186 @@ public partial class ProcessoProdutoAcabadoForm : Form
         readForecastBoxesTextBox.ForeColor = Color.FromArgb(17, 24, 39);
         readForecastBoxesTextBox.Cursor = fallback ? Cursors.IBeam : Cursors.Default;
         readForecastBoxesTextBox.TabStop = fallback;
+
+        // Tarefa 21.6 (Ajuste 2): STATUS NORMA + MATERIAL CAIXA + aviso discreto de fallback.
+        // Tarefa 21.6.3 (Ajuste 14): fallback em ÂMBAR (não vermelho crítico); SAP OK em verde discreto.
+        balanceTextBox.Text = _ordemAtual is null
+            ? string.Empty
+            : fallback ? "FALLBACK MEMÓRIA" : "SAP OK";
+        balanceTextBox.ForeColor = _ordemAtual is null
+            ? Color.FromArgb(17, 24, 39)
+            : fallback ? Color.FromArgb(180, 83, 9)     // âmbar/laranja discreto
+                       : Color.FromArgb(22, 101, 52);   // verde discreto
+        if (_statusNormaValorLabel is not null)
+        {
+            // A coluna já tem a legenda "MATERIAL CAIXA" — aqui vai só o valor (ou "-").
+            _statusNormaValorLabel.Text = _normaEmbalagem is null || string.IsNullOrWhiteSpace(_normaEmbalagem.MaterialCaixa)
+                ? "-"
+                : _normaEmbalagem.MaterialCaixa;
+        }
+
+        if (_avisoNormaFallbackLabel is not null)
+        {
+            _avisoNormaFallbackLabel.Visible = fallback;
+            _avisoNormaFallbackLabel.Text = "Norma SAP indisponível. Quantidade por caixa informada manualmente.";
+        }
+    }
+
+    /// <summary>
+    /// Tarefa 21.6.2 (Ajuste 3): MATERIAL CAIXA + aviso de fallback DENTRO do card PRODUÇÃO PLANEJADA
+    /// (Gpb_PrevisaoLeitura) — não na lateral. MATERIAL CAIXA na linha do título (espaço livre à direita);
+    /// aviso na faixa inferior do card. STATUS NORMA continua no card via balanceTextBox.
+    /// </summary>
+    /// <summary>
+    /// Tarefa 21.6.4 (Ajuste 5): envolve o campo QTD. POR CAIXA numa caixa arredondada, na própria célula
+    /// da tabela (o campo OP e a pesquisa já são RoundedPanel). Preserva eventos/validação (só reparenta).
+    /// </summary>
+    private void ConfigurarCampoQtdArredondado()
+    {
+        if (readForecastBoxesTextBox.Parent is not TableLayoutPanel tabela)
+        {
+            return;
+        }
+
+        TableLayoutPanelCellPosition celula = tabela.GetCellPosition(readForecastBoxesTextBox);
+        tabela.Controls.Remove(readForecastBoxesTextBox);
+        readForecastBoxesTextBox.BorderStyle = BorderStyle.None;
+        readForecastBoxesTextBox.Dock = DockStyle.Fill;
+        FugaPET_Dev.Tela.Controls.RoundedPanel caixa = new()
+        {
+            Name = "qtdPorCaixaCaixaArredondada",
+            BorderRadius = 8,
+            BorderThickness = 1,
+            BorderColor = Color.FromArgb(209, 213, 219),
+            FillColor = Color.White,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 2, 8, 4),
+            Padding = new Padding(8, 3, 8, 3)
+        };
+        caixa.Controls.Add(readForecastBoxesTextBox);
+        tabela.Controls.Add(caixa, celula.Column, celula.Row);
+    }
+
+    private void ConfigurarCardNormaExtra()
+    {
+        // Tarefa 21.6.4 (Ajuste 4): PRODUÇÃO PLANEJADA vira 4 COLUNAS reais
+        // (QTD. POR CAIXA | NORMA EMBALAGEM | STATUS NORMA | MATERIAL CAIXA).
+        tableLayoutPanel8.ColumnStyles.Clear();
+        tableLayoutPanel8.ColumnCount = 4;
+        for (int i = 0; i < 4; i++)
+        {
+            tableLayoutPanel8.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        }
+
+        _materialCaixaCaptionLabel = new Label
+        {
+            Name = "materialCaixaCaptionLabel",
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            Font = FonteLabelCampo,
+            ForeColor = readForecastBoxesCaptionLabel.ForeColor,
+            Margin = readForecastBoxesCaptionLabel.Margin,
+            Text = "MATERIAL CAIXA",
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        tableLayoutPanel8.Controls.Add(_materialCaixaCaptionLabel, 3, 0);
+
+        _materialCaixaValorLabel = new Label
+        {
+            Name = "materialCaixaValorLabel",
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            Font = FonteValorCampo,
+            ForeColor = Color.FromArgb(17, 24, 39),
+            Margin = balanceTextBox.Margin,
+            Text = "-",
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        tableLayoutPanel8.Controls.Add(_materialCaixaValorLabel, 3, 1);
+        _statusNormaValorLabel = _materialCaixaValorLabel; // AtualizarCampoQuantidadePorCaixa preenche o valor
+
+        Control cardNorma = plannedProductionTitleLabel.Parent ?? Gpb_PrevisaoLeitura;
+
+        // 3º divisor (entre STATUS NORMA e MATERIAL CAIXA), posicionado por AlignPlannedProductionCardLayout.
+        _plannedDivider3 = new Label
+        {
+            Name = "plannedDivider3",
+            AutoSize = false,
+            BackColor = Color.FromArgb(226, 231, 238),
+            Size = new Size(1, 22)
+        };
+        cardNorma.Controls.Add(_plannedDivider3);
+
+        // Aviso de fallback numa linha própria discreta, abaixo das 4 colunas.
+        _avisoNormaFallbackLabel = new Label
+        {
+            Name = "avisoNormaFallbackLabel",
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Font = FonteAuxiliar, // Tarefa 21.6.5 (Ajuste 6)
+            ForeColor = Color.FromArgb(180, 83, 9),
+            Location = new Point(17, 78),
+            Size = new Size(630, 18),
+            Text = "Norma SAP indisponível. Quantidade por caixa informada manualmente.",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Visible = false
+        };
+        cardNorma.Controls.Add(_avisoNormaFallbackLabel);
+        _avisoNormaFallbackLabel.BringToFront();
+        AlignPlannedProductionCardLayout(this, EventArgs.Empty);
+    }
+
+    /// <summary>Tarefa 21.6.1 (Ajuste 8): pendência operacional da balança na lateral direita (sidePanel).</summary>
+    private void CriarBlocoPendenciaBalanca()
+    {
+        _pendenciaBalancaTituloLabel = new Label
+        {
+            Name = "pendenciaBalancaTituloLabel",
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Font = FonteLabelCampo, // Tarefa 21.6.5 (Ajuste 6)
+            ForeColor = Color.FromArgb(180, 83, 9),
+            Location = new Point(12, 392),
+            Size = new Size(195, 18),
+            Text = "PENDÊNCIA OPERACIONAL",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Visible = false
+        };
+        sidePanel.Controls.Add(_pendenciaBalancaTituloLabel);
+
+        _pendenciaBalancaTextoLabel = new Label
+        {
+            Name = "pendenciaBalancaTextoLabel",
+            AutoSize = false,
+            BackColor = Color.FromArgb(254, 243, 199),
+            Font = FonteAuxiliar, // Tarefa 21.6.5 (Ajuste 6)
+            ForeColor = Color.FromArgb(120, 53, 15),
+            Location = new Point(12, 410),
+            Size = new Size(195, 62),
+            Text = "Balança de produto acabado não configurada.\r\nUse F9 para peso manual ou configure a balança.",
+            TextAlign = ContentAlignment.TopLeft,
+            Visible = false
+        };
+        sidePanel.Controls.Add(_pendenciaBalancaTextoLabel);
+        _pendenciaBalancaTituloLabel.BringToFront();
+        _pendenciaBalancaTextoLabel.BringToFront();
+    }
+
+    private void AtualizarPendenciaBalanca()
+    {
+        bool balancaConfigurada = _contextoTerminal?.IdBalancaPadrao is long id && id > 0;
+        bool exibir = !balancaConfigurada; // sem balança = pendencia operacional (F9 continua liberado)
+        if (_pendenciaBalancaTituloLabel is not null)
+        {
+            _pendenciaBalancaTituloLabel.Visible = exibir;
+        }
+
+        if (_pendenciaBalancaTextoLabel is not null)
+        {
+            _pendenciaBalancaTextoLabel.Visible = exibir;
+        }
     }
 
     private bool NormaEmFallbackMemoria()
@@ -718,13 +1171,17 @@ public partial class ProcessoProdutoAcabadoForm : Form
         productionDataGridView.Rows.Clear();
         foreach (ProdutoAcabadoCaixa caixa in _caixasPesadas)
         {
+            // Tarefa 21.6 (Ajuste 6): uma coluna por conceito (bruto, tara, liquido, origem, status, palete, HU).
             productionDataGridView.Rows.Add(
                 caixa.NumeroCaixa.ToString("0000", CultureInfo.InvariantCulture),
                 FormatarKg(caixa.PesoBrutoKg),
-                $"Tara {FormatarKg(caixa.TaraKg)} / Liq {FormatarKg(caixa.PesoLiquidoKg)}",
+                FormatarKg(caixa.TaraKg),
+                FormatarKg(caixa.PesoLiquidoKg),
                 caixa.QuantidadeProdutos.ToString(CultureInfo.InvariantCulture),
-                ObterStatusCaixa(caixa),
-                new Bitmap(1, 1));
+                caixa.OrigemPesagem,
+                caixa.StatusSap,
+                string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal) ? "-" : caixa.CodigoPaleteLocal,
+                string.IsNullOrWhiteSpace(caixa.HandlingUnitCaixa) ? "-" : caixa.HandlingUnitCaixa);
         }
     }
 
@@ -741,11 +1198,6 @@ public partial class ProcessoProdutoAcabadoForm : Form
         AtualizarResumoOperacional();
         statusLabel.Text = "Última caixa de produto acabado cancelada.";
     }
-
-    private static string ObterStatusCaixa(ProdutoAcabadoCaixa caixa)
-        => string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal)
-            ? $"{caixa.OrigemPesagem} / {caixa.StatusSap}"
-            : $"{caixa.OrigemPesagem} / PALETE {caixa.CodigoPaleteLocal}";
 
     private void CriarPaleteLocal()
     {
@@ -1016,36 +1468,100 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
     private void AtualizarBotoesOperacao()
     {
+        // Tarefa 21.6.2 (Ajuste 1): iniciar verde com OP + QTD. por caixa válida (falta de balança não impede).
         bool livre = !_operacaoEmAndamento;
-        bool podeAlternarLeitura = livre && _ordemAtual is not null;
+        bool podeAlternarLeitura = livre && _ordemAtual is not null && QuantidadePorCaixaValida();
         iniciarLeituraButton.PrimaryText = _leituraIniciada ? "PARAR LEITURA" : "INICIAR LEITURA";
         iniciarLeituraButton.IconGlyph = _leituraIniciada ? "\uE71A" : "\uE768";
         iniciarLeituraButton.BaseBackColor = _leituraIniciada
-            ? Color.FromArgb(212, 37, 49)
-            : podeAlternarLeitura ? ReadingStatusActiveColor : ActionDisabledColor;
-        iniciarLeituraButton.Enabled = podeAlternarLeitura;
-        iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
+            ? Color.FromArgb(212, 37, 49)                        // vermelho parar
+            : podeAlternarLeitura ? Color.FromArgb(34, 166, 82)  // verde iniciar
+                                  : Color.FromArgb(156, 163, 175); // cinza desabilitado
+        iniciarLeituraButton.BaseForeColor = Color.White;
+        iniciarLeituraButton.Enabled = _leituraIniciada || podeAlternarLeitura;
+        iniciarLeituraButton.Cursor = (_leituraIniciada || podeAlternarLeitura) ? Cursors.Hand : Cursors.Default;
+        iniciarLeituraButton.Invalidate(); // ActionPillButton é custom-painted: precisa repintar a cor
         lerEtiquetaButton.Visible = _leituraIniciada;
         leituraManualButton.Visible = _leituraIniciada;
         lerEtiquetaButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null;
         leituraManualButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null;
-        productionActionsButton.Visible = !_leituraIniciada && _caixasPesadas.Count > 0;
-        productionActionsButton.Enabled = productionActionsButton.Visible && livre;
+        // Tarefa 21.6.3 (Ajuste 8): botão CRIAR PALETE sempre visível no card; habilita só com caixa livre.
+        productionActionsButton.Visible = !_leituraIniciada;
+        productionActionsButton.Enabled = !_leituraIniciada && livre && ExisteCaixaLivreParaPalete();
+        if (_paleteMensagemLabel is not null)
+        {
+            _paleteMensagemLabel.Text = _caixasPesadas.Count == 0
+                ? "Registre caixas para criar um palete."
+                : ExisteCaixaLivreParaPalete() ? string.Empty
+                : "Todas as caixas já foram vinculadas a paletes.";
+            _paleteMensagemLabel.Visible = _paleteMensagemLabel.Text.Length > 0;
+        }
+
+        // Tarefa 21.6.2 (Ajuste 10): "Excluir última caixa" fica VISÍVEL porém cinza/desabilitado sem caixa.
+        // (deleteByCodeLegendPanel aqui é "Esc - Fechar" — NÃO desabilitar, senão trava o fechamento.)
+        bool possuiCaixa = _caixasPesadas.Count > 0;
+        deleteLastLegendPanel.Enabled = possuiCaixa;
+        deleteLastLegendTextLabel.ForeColor = possuiCaixa ? Color.FromArgb(229, 231, 235) : Color.FromArgb(120, 126, 136);
     }
+
+    /// <summary>Tarefa 21.6.2: QTD. por caixa válida (norma real ou fallback digitado &gt; 0).</summary>
+    private bool QuantidadePorCaixaValida()
+    {
+        if (_normaEmbalagem is null)
+        {
+            return false;
+        }
+
+        if (_normaEmbalagem.QuantidadeProdutosPorCaixa > 0)
+        {
+            return true;
+        }
+
+        return NormaEmFallbackMemoria()
+            && int.TryParse(readForecastBoxesTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int q)
+            && q > 0;
+    }
+
+    private bool ExisteCaixaLivreParaPalete()
+        => _caixasPesadas.Any(c => string.IsNullOrWhiteSpace(c.CodigoPaleteLocal));
 
     private void AtualizarResumoOperacional()
     {
-        boxesCounterLabel.Text = _caixasPesadas.Count.ToString("000", CultureInfo.InvariantCulture);
-        boxesValueLabel.Text = _caixasPesadas.Count.ToString("000", CultureInfo.InvariantCulture);
-        decimal liquido = _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg);
-        packagesCounterLabel.Text = FormatarKg(liquido);
-        packagesValueLabel.Text = FormatarKg(liquido);
-        productionFooterLabel.Text = $"{_caixasPesadas.Count} caixa(s) registrada(s). POST SAP desativado.";
+        // Tarefa 21.6.3 (Ajuste 13): contadores sem total fixo; unidade da OP decide peso x produtos.
+        int qtdCaixas = _caixasPesadas.Count;
+        boxesCounterLabel.Text = qtdCaixas.ToString("000", CultureInfo.InvariantCulture);
+        boxesValueLabel.Text = qtdCaixas.ToString("000", CultureInfo.InvariantCulture);
+        boxesTotalLabel.Text = "de 0";
+
+        bool temOp = _ordemAtual is not null;
+        string unidade = (_ordemAtual?.Unidade ?? "KG").Trim().ToUpperInvariant();
+        bool ehPeso = unidade is "KG" or "KGM" or "G" or "TO" or "";
+        if (ehPeso)
+        {
+            packagesTitleLabel.Text = "PESO REGISTRADO";
+            decimal liquido = _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg);
+            packagesCounterLabel.Text = FormatarKg(liquido);
+            packagesValueLabel.Text = FormatarKg(liquido);
+            packagesTotalLabel.Text = temOp ? $"de {FormatarKg(_ordemAtual!.QuantidadePendente)} KG" : "de 0";
+        }
+        else
+        {
+            packagesTitleLabel.Text = "PRODUTOS REGISTRADOS";
+            int produtos = _caixasPesadas.Sum(caixa => caixa.QuantidadeProdutos);
+            packagesCounterLabel.Text = produtos.ToString("000", CultureInfo.InvariantCulture);
+            packagesValueLabel.Text = produtos.ToString("000", CultureInfo.InvariantCulture);
+            packagesTotalLabel.Text = temOp
+                ? $"de {_ordemAtual!.QuantidadePendente.ToString("0", CultureInfo.InvariantCulture)}"
+                : "de 0";
+        }
+
+        productionFooterLabel.Text = $"{qtdCaixas} caixa(s) registrada(s). POST SAP desativado.";
     }
 
     private void LimparOp()
     {
         _ordemAtual = null;
+        _ultimaOpConsultada = string.Empty; // Tarefa 21.6.3 (Ajuste 1): limpar libera nova consulta no Leave
         _normaEmbalagem = null;
         _taraCaixaSelecionada = null;
         _caixasPesadas.Clear();
@@ -1261,12 +1777,78 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
     }
 
+    /// <summary>Tarefa 21.6.4 (Ajuste 3): divisores do card DADOS DA OP alinhados às bordas das 4 colunas.</summary>
     private void AlignDateCardLayout(object? sender, EventArgs e)
     {
+        if (tableLayoutPanel6 is null)
+        {
+            return;
+        }
+
+        int left = tableLayoutPanel6.Left;
+        int top = tableLayoutPanel6.Top + 6;
+        int height = Math.Max(20, tableLayoutPanel6.Height - 12);
+        int colWidth = tableLayoutPanel6.Width / 4;
+        PosicionarDivisor(dateDividerLabel1, left + colWidth, top, height);
+        PosicionarDivisor(dateDividerLabel2, left + colWidth * 2, top, height);
+        PosicionarDivisor(dateDividerLabel3, left + colWidth * 3, top, height);
     }
 
+    /// <summary>Tarefa 21.6.4 (Ajuste 4): divisores do card PRODUÇÃO PLANEJADA alinhados às 4 colunas.</summary>
     private void AlignPlannedProductionCardLayout(object? sender, EventArgs e)
     {
+        if (tableLayoutPanel8 is null)
+        {
+            return;
+        }
+
+        int left = tableLayoutPanel8.Left;
+        int top = tableLayoutPanel8.Top + 6;
+        int height = Math.Max(20, tableLayoutPanel8.Height - 12);
+        int colWidth = tableLayoutPanel8.Width / 4;
+        PosicionarDivisor(plannedProductionDividerLabel1, left + colWidth, top, height);
+        PosicionarDivisor(plannedProductionDividerLabel2, left + colWidth * 2, top, height);
+        PosicionarDivisor(_plannedDivider3, left + colWidth * 3, top, height);
+    }
+
+    private static void PosicionarDivisor(Label? divisor, int x, int y, int height)
+    {
+        if (divisor is null)
+        {
+            return;
+        }
+
+        divisor.Location = new Point(x, y);
+        divisor.Size = new Size(1, height);
+        divisor.BringToFront();
+    }
+
+    /// <summary>
+    /// Tarefa 21.6.4 (Ajuste 2): dois textos são "o mesmo código" se, normalizados (trim/upper/sem espaço
+    /// e sem zeros à esquerda), forem iguais — usado para não exibir a descrição igual ao código.
+    /// </summary>
+    private static bool TextosEquivalentesComoCodigo(string? a, string? b)
+    {
+        static string Normalizar(string? valor)
+        {
+            string texto = (valor ?? string.Empty).Trim().ToUpperInvariant().Replace(" ", string.Empty);
+            return texto.TrimStart('0');
+        }
+
+        return !string.IsNullOrWhiteSpace(a)
+            && !string.IsNullOrWhiteSpace(b)
+            && string.Equals(Normalizar(a), Normalizar(b), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string FormatarStatusOrdem(string status)
+    {
+        string s = status.Trim();
+        return s switch
+        {
+            "LIBERADA" => "Liberada",
+            "NAO_LIBERADA" => "Não liberada",
+            _ => s.Length > 1 ? char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant() : s
+        };
     }
 }
 

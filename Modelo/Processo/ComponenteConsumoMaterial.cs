@@ -45,6 +45,16 @@ public sealed class ComponenteConsumoMaterial
     public bool ElegivelMaterialDocument261Direto { get; set; }
     public string MotivoInelegibilidadeMaterialDocument261 { get; set; } = string.Empty;
 
+    // Tarefa Consumo 22.9.1: tipo mestre do material (Product Master / API_PRODUCT_SRV) — enriquece o componente.
+    public string TipoMaterialSap { get; set; } = string.Empty;       // ProductType (ROH/HIBE/VERP/...)
+    public string DescricaoTipoMaterial { get; set; } = string.Empty; // texto amigável do ProductType
+    public string GrupoMaterialSap { get; set; } = string.Empty;      // ProductGroup
+    public string UnidadeBaseSap { get; set; } = string.Empty;        // BaseUnit
+    public bool TipoMaterialConsultado { get; set; }                  // false = Product Master não consultado
+
+    /// <summary>Classificação do componente por modo de consumo (Matéria-Prima/Químico/...), via ProductType.</summary>
+    public ClassificacaoConsumoMaterial ClassificacaoConsumo { get; set; } = ClassificacaoConsumoMaterial.Indefinido;
+
     /// <summary>
     /// Caminho de envio do consumo ao SAP: 261 direto, Confirmacao de Producao (Backflush) ou bloqueado.
     /// Apenas classificacao/diagnostico — nao executa POST.

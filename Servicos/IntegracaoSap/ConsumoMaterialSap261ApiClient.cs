@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -45,14 +45,22 @@ public sealed class ConsumoMaterialSap261ApiClient
         {
             // ---- CSRF FETCH ----
             string? token;
-            using (HttpRequestMessage fetch = CriarRequisicao(HttpMethod.Get, MontarUrlCsrf()))
+            Uri urlCsrf = MontarUrlCsrf();
+            using (HttpRequestMessage fetch = CriarRequisicao(HttpMethod.Get, urlCsrf))
             {
                 fetch.Headers.TryAddWithoutValidation("X-CSRF-Token", "Fetch");
                 using HttpResponseMessage respostaFetch = await _httpClient.SendAsync(fetch, cancellationToken);
                 if (!respostaFetch.IsSuccessStatusCode)
                 {
                     string corpoErro = await respostaFetch.Content.ReadAsStringAsync(cancellationToken);
-                    return FalhaHttp(EtapaCsrfFetch, (int)respostaFetch.StatusCode, corpoErro, correlationId);
+                    return FalhaHttp(
+                        EtapaCsrfFetch,
+                        HttpMethod.Get.Method,
+                        urlCsrf,
+                        (int)respostaFetch.StatusCode,
+                        corpoErro,
+                        correlationId,
+                        payloadJson: null);
                 }
 
                 token = respostaFetch.Headers.TryGetValues("X-CSRF-Token", out IEnumerable<string>? valores)
@@ -69,7 +77,8 @@ public sealed class ConsumoMaterialSap261ApiClient
 
             // ---- POST (payload do builder da Tarefa 6 — sem duplicar montagem) ----
             string json = ConsumoMaterialSapPayloadBuilder.SerializarPreview(requisicao);
-            using HttpRequestMessage post = CriarRequisicao(HttpMethod.Post, MontarUrlCriacao());
+            Uri urlCriacao = MontarUrlCriacao();
+            using HttpRequestMessage post = CriarRequisicao(HttpMethod.Post, urlCriacao);
             post.Content = new StringContent(json, Encoding.UTF8, "application/json");
             post.Headers.TryAddWithoutValidation("X-CSRF-Token", token);
 
@@ -77,7 +86,14 @@ public sealed class ConsumoMaterialSap261ApiClient
             string corpo = await respostaPost.Content.ReadAsStringAsync(cancellationToken);
             return respostaPost.IsSuccessStatusCode
                 ? InterpretarSucesso((int)respostaPost.StatusCode, corpo, correlationId)
-                : FalhaHttp(EtapaPost, (int)respostaPost.StatusCode, corpo, correlationId);
+                : FalhaHttp(
+                    EtapaPost,
+                    HttpMethod.Post.Method,
+                    urlCriacao,
+                    (int)respostaPost.StatusCode,
+                    corpo,
+                    correlationId,
+                    json);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -85,9 +101,11 @@ public sealed class ConsumoMaterialSap261ApiClient
         }
         catch (Exception ex)
         {
-            // Rede/TLS/timeout/URL — antes ou durante o HTTP. Mensagem sanitizada (so o tipo).
+            // Rede/TLS/timeout/URL — antes ou durante o HTTP. Sem credenciais, mas preservando tipo/mensagem.
+            string detalhe = MaterialDocumentSapApiClient.SanitizarExcecaoTecnica(
+                ex, _autorizacao.Parameter, _configuracao.Usuario, _configuracao.Senha);
             return ResultadoEnvioConsumoSap261.Falha(
-                $"Etapa CLIENTE: falha tecnica inesperada ({ex.GetType().Name}).", null, correlationId);
+                $"Etapa CLIENTE: falha tecnica inesperada. {detalhe}", null, correlationId);
         }
     }
 
@@ -124,12 +142,38 @@ public sealed class ConsumoMaterialSap261ApiClient
         return ResultadoEnvioConsumoSap261.Ok(documento!, exercicio!, statusHttp, correlationId);
     }
 
-    private static ResultadoEnvioConsumoSap261 FalhaHttp(string etapa, int statusHttp, string corpo, string correlationId)
+    private static ResultadoEnvioConsumoSap261 FalhaHttp(
+        string etapa,
+        string metodoHttp,
+        Uri endpoint,
+        int statusHttp,
+        string corpo,
+        string correlationId,
+        string? payloadJson)
     {
-        // Reaproveita a sintese de erro OData ja sanitizada do cliente 101 (sem segredo).
-        string detalhe = MaterialDocumentSapApiClient.SintetizarErroSap(corpo);
-        string mensagem = $"Etapa {etapa}: HTTP {statusHttp}." + (string.IsNullOrEmpty(detalhe) ? string.Empty : " " + detalhe);
-        return ResultadoEnvioConsumoSap261.Falha(mensagem, statusHttp, correlationId);
+        SapErroDetalhado erro = SapErroODataParser.ExtrairErroSap(corpo);
+        string mensagem = $"Etapa {etapa}: HTTP {statusHttp}."
+            + (string.IsNullOrWhiteSpace(erro.Codigo) ? string.Empty : $" Código: {erro.Codigo}.")
+            + (string.IsNullOrWhiteSpace(erro.Mensagem) ? string.Empty : $" Mensagem: {erro.Mensagem}.")
+            + (string.IsNullOrWhiteSpace(erro.Detalhes) ? string.Empty : $" Detalhes: {erro.Detalhes}.");
+
+        if (string.Equals(mensagem, $"Etapa {etapa}: HTTP {statusHttp}.", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(corpo))
+        {
+            mensagem += " Retorno bruto: " + corpo.Trim();
+        }
+
+        return ResultadoEnvioConsumoSap261.Falha(
+            mensagem,
+            statusHttp,
+            correlationId,
+            metodoHttp,
+            endpoint.ToString(),
+            corpo,
+            erro.Codigo,
+            erro.Mensagem,
+            erro.Detalhes,
+            payloadJson);
     }
 
     private HttpRequestMessage CriarRequisicao(HttpMethod metodo, Uri destino)
@@ -168,3 +212,4 @@ public sealed class ConsumoMaterialSap261ApiClient
             ? (string.IsNullOrWhiteSpace(valor.GetString()) ? null : valor.GetString())
             : null;
 }
+

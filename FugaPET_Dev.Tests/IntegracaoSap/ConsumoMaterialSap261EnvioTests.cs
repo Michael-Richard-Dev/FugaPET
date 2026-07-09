@@ -140,8 +140,51 @@ public sealed class ConsumoMaterialSap261EnvioTests
 
         Assert.False(r.Sucesso);
         Assert.Equal(400, r.StatusHttp);
+        Assert.Equal("POST", r.MetodoHttp);
+        Assert.Contains("A_MaterialDocumentHeader", r.Endpoint, StringComparison.Ordinal);
+        Assert.Equal(handler.CorpoPost, r.ResponseBody);
+        Assert.Equal("MM/123", r.CodigoErroSap);
+        Assert.Equal("Movimento invalido", r.MensagemSap);
+        Assert.Contains("\"GoodsMovementType\": \"261\"", r.PayloadJson, StringComparison.Ordinal);
+        Assert.Contains("Movimento invalido", r.Mensagem, StringComparison.Ordinal);
         Assert.DoesNotContain("user", r.Mensagem, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pass", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Client_Http400XmlOData_NaoQuebraECapturaResumo()
+    {
+        HandlerSap261 handler = new()
+        {
+            StatusPost = HttpStatusCode.BadRequest,
+            CorpoPost = "<error><code>M7/026</code><message>Unit KG is not convertible</message></error>"
+        };
+        using HttpClient http = new(handler);
+        ResultadoEnvioConsumoSap261 r = await new ConsumoMaterialSap261ApiClient(Config(true), http)
+            .EnviarConsumo261Async(Request(), "corr");
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(400, r.StatusHttp);
+        Assert.Equal("M7/026", r.CodigoErroSap);
+        Assert.Equal("Unit KG is not convertible", r.MensagemSap);
+        Assert.Equal(handler.CorpoPost, r.ResponseBody);
+    }
+
+    [Fact]
+    public async Task Client_Http400NaoParseavel_GravaRetornoBruto()
+    {
+        HandlerSap261 handler = new()
+        {
+            StatusPost = HttpStatusCode.BadRequest,
+            CorpoPost = "erro bruto sem formato OData"
+        };
+        using HttpClient http = new(handler);
+        ResultadoEnvioConsumoSap261 r = await new ConsumoMaterialSap261ApiClient(Config(true), http)
+            .EnviarConsumo261Async(Request(), "corr");
+
+        Assert.False(r.Sucesso);
+        Assert.Equal("erro bruto sem formato OData", r.ResponseBody);
+        Assert.Contains("erro bruto sem formato OData", r.Mensagem, StringComparison.Ordinal);
     }
 
     // ---------- Servico (WRITE_ENABLED) ----------
@@ -184,7 +227,7 @@ public sealed class ConsumoMaterialSap261EnvioTests
         ResultadoEnvioConsumoSap261 r = servico.ValidarProntoParaEnvio();
 
         Assert.False(r.Sucesso);
-        Assert.Equal(ConfiguracaoSap.MensagemMaterialDocumentNaoConfigurado, r.Mensagem);
+        Assert.Contains("material_document_base_url", r.Mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -199,6 +242,34 @@ public sealed class ConsumoMaterialSap261EnvioTests
 
         Assert.True(r.Sucesso);
         Assert.Equal(2, handler.Requests.Count); // CSRF + POST
+    }
+
+    [Fact]
+    public async Task Servico_WriteHabilitado_RegistraPayload261NoDiagnostico()
+    {
+        HandlerSap261 handler = new();
+        using HttpClient http = new(handler);
+        ConsumoMaterialSap261ApiClient cliente = new(Config(escrita: true), http);
+        FakeLogIntegracaoSap log = new();
+        ConsumoMaterialSap261Servico servico = new(Config(escrita: true), log, cliente);
+
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), "chave");
+
+        Assert.True(r.Sucesso);
+        RegistroLogIntegracaoSap payload = Assert.Single(
+            log.Registros,
+            registro => registro.Situacao == "PARCIAL"
+                && registro.MensagemTecnicaSanitizada?.Contains("Payload SAP 261 enviado.", StringComparison.Ordinal) == true);
+        Assert.Contains("OP: 1000009", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Reserva: 6676", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Item reserva: 2", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Material: QM002", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Centro: 3007", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Depósito: PP01", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Lote:", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Quantidade: 5.500", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("Unidade: KG", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
+        Assert.Contains("\"GoodsMovementType\": \"261\"", payload.MensagemTecnicaSanitizada, StringComparison.Ordinal);
     }
 
     // ---------- Service de operacao (reenvio + confirmacao) ----------
@@ -248,6 +319,30 @@ public sealed class ConsumoMaterialSap261EnvioTests
             MarcadoParaEliminacao = eliminacao,
             MaterialGranel = granel
         };
+
+    private static ComponenteOrdemProducaoSap CriarComponenteInvalido(string tipo)
+    {
+        string deposito = tipo == "sem_deposito" ? string.Empty : "PP01";
+        bool backflush = tipo == "backflush";
+        string lote = tipo == "sem_lote" ? string.Empty : "LOTE-EXTRA";
+
+        return new ComponenteOrdemProducaoSap
+        {
+            NumeroOrdem = "1000009",
+            Material = "QM999",
+            Centro = "3007",
+            Deposito = deposito,
+            Reserva = "9999",
+            ItemReserva = "99",
+            QuantidadeNecessaria = 1m,
+            QuantidadeRetirada = 0m,
+            UnidadeBase = "KG",
+            TipoMovimento = "261",
+            Lote = lote,
+            BackflushSap = backflush,
+            OrderOperationInternalId = "000000009999"
+        };
+    }
 
     private sealed class FakeSap261 : IConsumoMaterialSap261Servico
     {
@@ -299,12 +394,30 @@ public sealed class ConsumoMaterialSap261EnvioTests
         public Task<bool> TentarReservarEnvioSapAsync(long c, DateTime reservadoEmUtc, CancellationToken ct = default)
         {
             Reservas++;
+            if (ReservaSucesso && Lancamento is not null)
+            {
+                Lancamento.StatusLancamento = "ENVIANDO_SAP";
+                foreach (ConsumoMaterialItem item in Lancamento.Itens)
+                {
+                    item.StatusItem = "ENVIANDO_SAP";
+                }
+            }
+
             return Task.FromResult(ReservaSucesso);
         }
 
         public Task MarcarFalhaSapAsync(long c, CancellationToken ct = default)
         {
             Falhas++;
+            if (Lancamento is not null)
+            {
+                Lancamento.StatusLancamento = "PENDENTE_SAP";
+                foreach (ConsumoMaterialItem item in Lancamento.Itens)
+                {
+                    item.StatusItem = "PENDENTE_SAP";
+                }
+            }
+
             return Task.CompletedTask;
         }
 
@@ -317,8 +430,11 @@ public sealed class ConsumoMaterialSap261EnvioTests
         }
     }
 
-    private static ConsumoMaterialServico Servico(FakeRepo repo, FakeSap261 sap261)
-        => new(new FakeProdOrder(), () => repo, () => sap261);
+    private static ConsumoMaterialServico Servico(
+        FakeRepo repo,
+        FakeSap261 sap261,
+        IProductionOrderSapServico? prodOrder = null)
+        => new(prodOrder ?? new FakeProdOrder(), () => repo, () => sap261);
 
     private sealed class FakeProdOrder : IProductionOrderSapServico
     {
@@ -328,7 +444,9 @@ public sealed class ConsumoMaterialSap261EnvioTests
         public Task<ResultadoConsultaOrdemProducaoSap> ConsultarOrdemAsync(string n, CancellationToken ct = default)
             => Task.FromResult(Resultado ?? ResultadoConsultaOrdemProducaoSap.Encontrada(OrdemElegivel()));
 
-        private static OrdemProducaoSap OrdemElegivel()
+        public static OrdemProducaoSap OrdemElegivel(
+            bool backflushItemPrincipal = false,
+            params ComponenteOrdemProducaoSap[] extras)
             => new()
             {
                 NumeroOrdem = "1000009",
@@ -349,8 +467,10 @@ public sealed class ConsumoMaterialSap261EnvioTests
                         UnidadeBase = "KG",
                         TipoMovimento = "261",
                         Lote = "LOTE-261",
+                        BackflushSap = backflushItemPrincipal,
                         OrderOperationInternalId = "000000001234"
-                    }
+                    },
+                    .. extras
                 ]
             };
     }
@@ -433,7 +553,8 @@ public sealed class ConsumoMaterialSap261EnvioTests
         ResultadoEnvioConsumoSap261 r = await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
 
         Assert.False(r.Sucesso);
-        Assert.Contains("itens", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("item 2", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("lote SAP não informado", r.Mensagem, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, repo.Reservas);
         Assert.Equal(0, sap.Chamadas);
         Assert.Equal(0, repo.Falhas);
@@ -513,7 +634,7 @@ public sealed class ConsumoMaterialSap261EnvioTests
     }
 
     [Fact]
-    public async Task Enviar_FalhaSapAposReserva_MarcaFalhaSapENaoConfirma()
+    public async Task Enviar_FalhaSapAposReserva_MantemPendenteSapENaoConfirma()
     {
         FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
         FakeSap261 sap = new()
@@ -527,7 +648,105 @@ public sealed class ConsumoMaterialSap261EnvioTests
         Assert.Equal(1, repo.Reservas);
         Assert.Equal(1, sap.Chamadas);
         Assert.Equal(0, repo.Confirmacoes); // NAO confirma
-        Assert.Equal(1, repo.Falhas);       // marca FALHA_SAP
+        Assert.Equal(1, repo.Falhas);       // libera para PENDENTE_SAP
+        Assert.Equal("PENDENTE_SAP", repo.Lancamento!.StatusLancamento);
+        Assert.Contains("pendente de envio SAP", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("sem_deposito")]
+    [InlineData("backflush")]
+    [InlineData("sem_lote")]
+    public async Task Enviar_OPComOutrosComponentesInvalidos_NaoBloqueiaItemValido(string tipoInvalido)
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
+        FakeSap261 sap = new();
+        IProductionOrderSapServico prodOrder = new FakeProdOrder
+        {
+            Resultado = ResultadoConsultaOrdemProducaoSap.Encontrada(
+                FakeProdOrder.OrdemElegivel(extras: CriarComponenteInvalido(tipoInvalido)))
+        };
+
+        ResultadoEnvioConsumoSap261 r = await Servico(repo, sap, prodOrder)
+            .EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.True(r.Sucesso);
+        Assert.Equal(1, sap.Chamadas);
+        Assert.Equal(1, repo.Confirmacoes);
+        Assert.DoesNotContain("Não foi possível validar a elegibilidade SAP dos componentes", r.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Enviar_ItemSelecionadoSemDeposito_BloqueiaComMensagemEspecifica()
+    {
+        ConsumoMaterialLancamento lancamento = LancamentoPersistido();
+        lancamento.Itens[0].DepositoConsumo = null;
+        FakeRepo repo = new() { Lancamento = lancamento };
+        FakeSap261 sap = new();
+
+        ResultadoEnvioConsumoSap261 r = await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(0, sap.Chamadas);
+        Assert.Contains("item 2", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("depósito SAP não informado", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Envio SAP não realizado", r.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Não foi possível validar a elegibilidade SAP dos componentes", r.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Enviar_ItemSelecionadoSemLote_BloqueiaComMensagemEspecifica()
+    {
+        ConsumoMaterialLancamento lancamento = LancamentoPersistido();
+        lancamento.Itens[0].Lote = null;
+        FakeRepo repo = new() { Lancamento = lancamento };
+        FakeSap261 sap = new();
+
+        ResultadoEnvioConsumoSap261 r = await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(0, sap.Chamadas);
+        Assert.Contains("item 2", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("lote SAP não informado", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Envio SAP não realizado", r.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Enviar_ItemSelecionadoBackflush_BloqueiaComMensagemEspecifica()
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
+        FakeSap261 sap = new();
+        IProductionOrderSapServico prodOrder = new FakeProdOrder
+        {
+            Resultado = ResultadoConsultaOrdemProducaoSap.Encontrada(
+                FakeProdOrder.OrdemElegivel(backflushItemPrincipal: true))
+        };
+
+        ResultadoEnvioConsumoSap261 r = await Servico(repo, sap, prodOrder)
+            .EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(0, sap.Chamadas);
+        Assert.Contains("item 2", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Backflush", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Envio SAP não realizado", r.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Enviar_ItemSelecionadoAcimaDaTolerancia_BloqueiaAntesDoPost()
+    {
+        ConsumoMaterialLancamento lancamento = LancamentoPersistido();
+        lancamento.Itens[0].QuantidadePrevista = 1m;
+        lancamento.Itens[0].QuantidadeRetiradaSap = 0m;
+        lancamento.Itens[0].QuantidadeConsumidaLocal = 2m;
+        FakeRepo repo = new() { Lancamento = lancamento };
+        FakeSap261 sap = new();
+
+        ResultadoEnvioConsumoSap261 r = await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(0, sap.Chamadas);
+        Assert.Contains("tolerância", r.Mensagem, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -545,7 +764,8 @@ public sealed class ConsumoMaterialSap261EnvioTests
         ResultadoEnvioConsumoSap261 r = await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
 
         Assert.False(r.Sucesso);
-        Assert.Equal(ConsumoMaterialServico.MensagemSapExigeLote, r.Mensagem);
+        Assert.Contains(ConsumoMaterialServico.MensagemSapExigeLote, r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("pendente de envio SAP", r.Mensagem, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, repo.Reservas);
         Assert.Equal(1, sap.Chamadas);
         Assert.Equal(1, repo.Falhas);
@@ -650,10 +870,10 @@ public sealed class ConsumoMaterialSap261EnvioTests
         ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumoSap261Async(55, "op", default);
 
         Assert.False(r.Sucesso);
-        // Tarefa 12: tom operacional (orientacao p/ Confirmacao de Producao), nao mais "nao elegivel".
-        Assert.Equal(ConsumoMaterialServico.MensagemBackflushUseConfirmacao, r.Mensagem);
+        // Tarefa 22.5.1: mensagem contextual por item, sem bloquear por outros componentes.
+        Assert.Contains("item 2", r.Mensagem, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Backflush", r.Mensagem, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Confirmação de Produção", r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("Envio SAP não realizado", r.Mensagem, StringComparison.Ordinal);
         Assert.Equal(1, sap.Validacoes);
         Assert.Equal(0, repo.Reservas);
         Assert.Equal(0, sap.Chamadas);
@@ -782,7 +1002,8 @@ public sealed class ConsumoMaterialSap261EnvioTests
         ResultadoEnvioConsumoSap261 r = await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
 
         Assert.False(r.Sucesso);
-        Assert.Equal(ConsumoMaterialServico.MensagemSapReservaNaoPermiteMovimento, r.Mensagem);
+        Assert.Contains(ConsumoMaterialServico.MensagemSapReservaNaoPermiteMovimento, r.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("pendente de envio SAP", r.Mensagem, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, repo.Reservas);
         Assert.Equal(1, sap.Chamadas);
         Assert.Equal(1, repo.Falhas);
@@ -1591,6 +1812,19 @@ public sealed class ConsumoMaterialSap261EnvioTests
             string corpo = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
             CorposPost.Add(corpo);
             return new HttpResponseMessage(StatusPost) { Content = new StringContent(CorpoPost) };
+        }
+    }
+
+    private sealed class FakeLogIntegracaoSap : ILogIntegracaoSapServico
+    {
+        public List<RegistroLogIntegracaoSap> Registros { get; } = [];
+
+        public Task RegistrarAsync(
+            RegistroLogIntegracaoSap registro,
+            CancellationToken cancellationToken = default)
+        {
+            Registros.Add(registro);
+            return Task.CompletedTask;
         }
     }
 

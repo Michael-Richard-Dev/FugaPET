@@ -5,6 +5,7 @@ using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Tela.Comum;
@@ -32,8 +33,14 @@ public partial class TaraForm : Form
     private readonly TaraController _taraController;
     private readonly TipoTaraController _tipoTaraController;
     private readonly SetorController _setorController;
+    private readonly AuditoriaServico _auditoriaServico;
 
     private long _idTaraAtual;
+    // Alinhamento Setor/Cargo/TipoTara: operação protegida + modo de card + modo de botões + situação selecionada.
+    private bool _operacaoEmAndamento;
+    private ModoCard _modoCard = ModoCard.Novo;
+    private ModoAcaoBotoes _modoAcaoBotoesAtual = ModoAcaoBotoes.Nenhum;
+    private bool _situacaoSelecionadaAtiva = true;
 
     // Campo Tamanho criado em runtime (sem mexer no Designer).
     private Label? _lblTamanho;
@@ -50,11 +57,13 @@ public partial class TaraForm : Form
     public TaraForm(
         TaraController? taraController = null,
         TipoTaraController? tipoTaraController = null,
-        SetorController? setorController = null)
+        SetorController? setorController = null,
+        AuditoriaServico? auditoriaServico = null)
     {
         _taraController = taraController ?? FabricaControladoresCadastro.CriarTaraController();
         _tipoTaraController = tipoTaraController ?? FabricaControladoresCadastro.CriarTipoTaraController();
         _setorController = setorController ?? FabricaControladoresCadastro.CriarSetorController();
+        _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
 
         InitializeComponent();
         global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
@@ -81,12 +90,129 @@ public partial class TaraForm : Form
 
         AtualizarRodapePerfis();
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
+        ConfigurarCard(ModoCard.Vazio);
+        // Ajuste 5/10: combos críticos como DropDownList + MaxLength dos campos de texto.
+        situacaoComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        CmbTipoTara.DropDownStyle = ComboBoxStyle.DropDownList;
+        CmbSetor.DropDownStyle = ComboBoxStyle.DropDownList;
+        nomePerfilTextBox.MaxLength = TaraCadastro.TamanhoMaximoNome;
+        descricaoTextBox.MaxLength = TaraCadastro.TamanhoMaximoObservacao;
+        TxtPeso.MaxLength = 18;
         ConectarAcoesCadastro();
+        Shown += async (_, _) => await InicializarTelaAsync();
+    }
+
+    // Alinhamento Setor/Cargo/TipoTara (Ajuste 1): valida permissão de visualização antes de carregar; em acesso
+    // direto sem permissão, audita, avisa e fecha a tela.
+    private async Task InicializarTelaAsync()
+    {
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Cadastro,
+                PermissoesSistema.Rotinas.Tara))
+        {
+            long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+            if (codigoUsuario.HasValue)
+            {
+                await RegistrarAcessoDiretoNegadoSeguroAsync(codigoUsuario.Value);
+            }
+
+            MessageBox.Show(
+                "Você não possui permissão para acessar esta rotina.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            Close();
+            return;
+        }
 
         if (_integracaoBancoHabilitada)
         {
-            Shown += async (_, _) => await InicializarDadosAsync();
+            await InicializarDadosAsync();
         }
+    }
+
+    private async Task RegistrarAcessoDiretoNegadoSeguroAsync(long codigoUsuario)
+    {
+        try
+        {
+            await _auditoriaServico.RegistrarAcessoNegadoAsync(
+                codigoUsuario,
+                $"Acesso direto negado a Cadastro de Tara ({PermissoesSistema.Modulos.Cadastro}/{PermissoesSistema.Rotinas.Tara}/CONSULTAR ou VISUALIZAR).",
+                nameof(TaraForm));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError($"Falha ao registrar acesso direto negado ao TaraForm: {ex}");
+        }
+    }
+
+    // Ajuste 2: bloqueia reentrância; desabilita botões durante a operação e reabilita no finally.
+    private async Task ExecutarOperacaoProtegidaAsync(Func<Task> operacao, string codigoErro)
+    {
+        if (_operacaoEmAndamento)
+        {
+            return;
+        }
+
+        _operacaoEmAndamento = true;
+        AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+
+        try
+        {
+            await operacao();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                await ErroUsuarioHelper.TratarAsync(codigoErro, ex, nameof(TaraForm), "Não foi possível concluir a operação de tara. Acione o suporte."),
+                "Cadastro de Tara",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+        }
+    }
+
+    // Ajuste 3: atalhos F5 Salvar, F6 Editar, F8 Inativar/Reativar — só se Visible && Enabled (não burla permissão).
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.F5 when salvarButton.Visible && salvarButton.Enabled:
+                salvarButton.PerformClick();
+                return true;
+            case Keys.F6 when novoButton.Visible && novoButton.Enabled:
+                novoButton.PerformClick();
+                return true;
+            case Keys.F8 when excluirButton.Visible && excluirButton.Enabled:
+                excluirButton.PerformClick();
+                return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    // Ajuste 4: modo do card (Vazio/Novo/Edição) controla a visibilidade dos campos editáveis.
+    private void ConfigurarCard(ModoCard modo)
+    {
+        if (_modoCard == modo)
+        {
+            return;
+        }
+
+        _modoCard = modo;
+        // Situação só é escolhível na CRIAÇÃO; na edição fica bloqueada (status muda por Inativar/Reativar).
+        situacaoComboBox.Enabled = modo == ModoCard.Novo;
+    }
+
+    private enum ModoCard
+    {
+        Vazio,
+        Novo,
+        Edicao
     }
 
     private async Task InicializarDadosAsync()
@@ -156,9 +282,52 @@ public partial class TaraForm : Form
 
     private void ConectarAcoesCadastro()
     {
-        salvarButton.Click += async (_, _) => await SalvarTaraAsync();
-        novoButton.Click += async (_, _) => await EditarTaraAsync();
-        excluirButton.Click += async (_, _) => await ExcluirTaraAsync();
+        // Ajuste 2: toda ação passa pela proteção contra operação duplicada.
+        salvarButton.Click += async (_, _) => await ExecutarOperacaoProtegidaAsync(SalvarTaraAsync, "TARA_SALVAR_ERRO");
+        novoButton.Click += async (_, _) => await ExecutarOperacaoProtegidaAsync(EditarTaraAsync, "TARA_EDITAR_ERRO");
+        // Ajuste 6: botão de status alterna Inativar/Reativar conforme a situação selecionada.
+        excluirButton.Click += async (_, _) => await ExecutarOperacaoProtegidaAsync(AlternarSituacaoTaraAsync, "TARA_ALTERAR_SITUACAO_ERRO");
+    }
+
+    // Ajuste 6: tara ativa → Inativar (Excluir); tara inativa → Reativar.
+    private Task AlternarSituacaoTaraAsync()
+        => _situacaoSelecionadaAtiva ? ExcluirTaraAsync() : ReativarTaraAsync();
+
+    private async Task ReativarTaraAsync()
+    {
+        if (!_integracaoBancoHabilitada)
+        {
+            MessageBox.Show("Integração com banco está desabilitada temporariamente.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_idTaraAtual <= 0)
+        {
+            MessageBox.Show("Selecione uma tara inativa para reativar.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        DialogResult confirmacao = MessageBox.Show(
+            "Confirma a reativação da tara atual?",
+            "Cadastro de Tara",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (confirmacao != DialogResult.Yes)
+        {
+            return;
+        }
+
+        ResultadoOperacao resultado = await _taraController.ReativarAsync(_idTaraAtual);
+        MessageBox.Show(resultado.Mensagem, "Cadastro de Tara", MessageBoxButtons.OK,
+            resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+        if (resultado.Sucesso)
+        {
+            _idTaraAtual = 0;
+            PrepareNewTara();
+            await CarregarTarasAsync();
+        }
     }
 
     private async Task SalvarTaraAsync()
@@ -169,15 +338,29 @@ public partial class TaraForm : Form
             return;
         }
 
+        // Ajuste 9: peso válido em KG (> 0), sem parse silencioso para zero.
+        if (!TryParsePesoKg(TxtPeso.Text, out decimal pesoKg))
+        {
+            MessageBox.Show("Informe um peso de tara válido em KG, maior que zero.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // Ajuste 5: situação explícita "Ativo"/"Inativo" (nunca vazia/inválida convertida a Inativo).
+        if (!SituacaoCadastroHelper.TryInterpretarSituacao(situacaoComboBox.Text, out bool situacaoAtiva))
+        {
+            MessageBox.Show("Selecione a situação (Ativo ou Inativo).", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         TaraCadastro tara = new()
         {
             CodigoTipoTara = TryParseLong(CmbTipoTara.SelectedValue),
             CodigoSetor = TryParseLong(CmbSetor.SelectedValue),
             NomeTara = nomePerfilTextBox.Text.Trim(),
             Tamanho = _txtTamanho?.Text.Trim() ?? string.Empty,
-            PesoKg = ParsePesoKg(TxtPeso.Text),
+            PesoKg = pesoKg,
             Observacao = descricaoTextBox.Text.Trim(),
-            SituacaoTara = string.Equals(situacaoComboBox.Text, "Ativo", StringComparison.OrdinalIgnoreCase),
+            SituacaoTara = situacaoAtiva,
             TaraCriadoPor = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario
         };
 
@@ -214,6 +397,13 @@ public partial class TaraForm : Form
             return;
         }
 
+        // Ajuste 9: peso válido em KG (> 0).
+        if (!TryParsePesoKg(TxtPeso.Text, out decimal pesoKg))
+        {
+            MessageBox.Show("Informe um peso de tara válido em KG, maior que zero.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         TaraCadastro taraAtualizada = new()
         {
             CodigoTara = _idTaraAtual,
@@ -221,9 +411,10 @@ public partial class TaraForm : Form
             CodigoSetor = TryParseLong(CmbSetor.SelectedValue),
             NomeTara = nomePerfilTextBox.Text.Trim(),
             Tamanho = _txtTamanho?.Text.Trim() ?? string.Empty,
-            PesoKg = ParsePesoKg(TxtPeso.Text),
+            PesoKg = pesoKg,
             Observacao = descricaoTextBox.Text.Trim(),
-            SituacaoTara = string.Equals(situacaoComboBox.Text, "Ativo", StringComparison.OrdinalIgnoreCase),
+            // Ajuste 5: situação NÃO muda por edição — envia a situação atual (o serviço bloqueia mudanças).
+            SituacaoTara = taraSelecionada.SituacaoTara,
             TaraAtualizadoPor = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario
         };
 
@@ -252,7 +443,7 @@ public partial class TaraForm : Form
         }
 
         DialogResult confirmacao = MessageBox.Show(
-            "Confirma a inativacao da tara atual?\n\nA tara ficara inativa, mas pode ser reativada depois alterando a situacao na edicao.",
+            "Confirma a inativação da tara atual?\n\nA tara ficará inativa, mas pode ser reativada depois.",
             "Cadastro de Tara",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
@@ -277,12 +468,14 @@ public partial class TaraForm : Form
     private void PrepareNewTara()
     {
         _idTaraAtual = 0;
+        _situacaoSelecionadaAtiva = true;
+        // Ajuste 4: modo Novo — campos habilitados; situação editável só na CRIAÇÃO, iniciando "Ativo".
+        ConfigurarCard(ModoCard.Novo);
         nomePerfilTextBox.Text = string.Empty;
         descricaoTextBox.Text = string.Empty;
         if (_txtTamanho is not null) _txtTamanho.Text = string.Empty;
-        TxtPeso.Text = "0";
-        situacaoComboBox.SelectedIndex = -1;
-        situacaoComboBox.Text = string.Empty;
+        TxtPeso.Text = string.Empty;
+        situacaoComboBox.SelectedItem = SituacaoCadastroHelper.Ativo;
         CmbTipoTara.SelectedIndex = -1;
         CmbSetor.SelectedIndex = -1;
         nomePerfilTextBox.ReadOnly = false;
@@ -302,14 +495,24 @@ public partial class TaraForm : Form
         return 0;
     }
 
-    // Peso da tara em quilogramas (kg). Aceita virgula ou ponto como separador decimal.
-    private static decimal ParsePesoKg(string texto)
+    // Ajuste 9: peso da tara em KG. Aceita vírgula OU ponto. Retorna false para vazio/inválido/<= 0 (nunca
+    // converte silenciosamente para zero). internal static para teste direto (InternalsVisibleTo).
+    internal static bool TryParsePesoKg(string? texto, out decimal pesoKg)
     {
-        if (string.IsNullOrWhiteSpace(texto)) return 0m;
+        pesoKg = 0m;
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            return false;
+        }
+
         string limpo = texto.Trim().Replace(" ", string.Empty).Replace(',', '.');
-        return decimal.TryParse(limpo, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal peso) && peso >= 0
-            ? peso
-            : 0m;
+        if (!decimal.TryParse(limpo, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal valor) || valor <= 0m)
+        {
+            return false;
+        }
+
+        pesoKg = valor;
+        return true;
     }
 
     // ============================================================
@@ -461,15 +664,45 @@ public partial class TaraForm : Form
 
         AtualizarRodapePerfis(visibleIndex);
 
-        if (string.IsNullOrWhiteSpace(query))
+        // Ajuste 13: o filtro apenas oculta/exibe. Mantém a seleção real se a linha continuar visível; senão limpa.
+        RestaurarSelecaoAposFiltro();
+    }
+
+    private void RestaurarSelecaoAposFiltro()
+    {
+        Panel? selecionada = null;
+        if (_idTaraAtual > 0)
         {
-            ClearRowSelection();
+            foreach (KeyValuePair<Panel, long> par in _idTaraPorLinha)
+            {
+                if (par.Value == _idTaraAtual)
+                {
+                    selecionada = par.Key;
+                    break;
+                }
+            }
+        }
+
+        if (selecionada is not null && selecionada.Visible)
+        {
+            DestacarLinhaSelecionada(selecionada);
             return;
         }
 
-        if (visibleIndex == 0)
+        _idTaraAtual = 0;
+        ClearRowSelection();
+        ConfigurarCard(ModoCard.Vazio);
+    }
+
+    private void DestacarLinhaSelecionada(Panel selectedRowPanel)
+    {
+        Color selectedBackColor = Color.FromArgb(254, 242, 242);
+        foreach (RowSelection row in _rowSelections)
         {
-            HideAllMarkers();
+            bool isSelected = row.RowPanel == selectedRowPanel;
+            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
+            if (isSelected) ShowMarkerForRow(row.RowPanel);
+            else HideMarkerForRow(row.RowPanel);
         }
     }
 
@@ -522,15 +755,7 @@ public partial class TaraForm : Form
 
     private void SetSelectedRow(Panel selectedRowPanel)
     {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isSelected = row.RowPanel == selectedRowPanel;
-            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
-            if (isSelected) ShowMarkerForRow(row.RowPanel);
-            else HideMarkerForRow(row.RowPanel);
-        }
+        DestacarLinhaSelecionada(selectedRowPanel);
 
         _idTaraAtual = _idTaraPorLinha.TryGetValue(selectedRowPanel, out long id) ? id : 0;
         PreencherCamposTaraPorLinha(selectedRowPanel);
@@ -545,15 +770,19 @@ public partial class TaraForm : Form
             return;
         }
 
+        // Ajuste 4: modo Edição — campos editáveis; situação bloqueada (muda só por Inativar/Reativar).
+        ConfigurarCard(ModoCard.Edicao);
         nomePerfilTextBox.Text = tara.NomeTara;
         descricaoTextBox.Text = tara.Observacao;
         if (_txtTamanho is not null) _txtTamanho.Text = tara.Tamanho;
         TxtPeso.Text = FormatarPeso(tara.PesoKg);
-        situacaoComboBox.Text = tara.SituacaoTara ? "Ativo" : "Inativo";
+        situacaoComboBox.SelectedItem = tara.SituacaoTara ? SituacaoCadastroHelper.Ativo : SituacaoCadastroHelper.Inativo;
+        _situacaoSelecionadaAtiva = tara.SituacaoTara;
         CmbTipoTara.SelectedValue = tara.CodigoTipoTara;
         CmbSetor.SelectedValue = tara.CodigoSetor;
-        nomePerfilTextBox.ReadOnly = true;
-        nomePerfilTextBox.BackColor = Color.FromArgb(241, 245, 249);
+        // Ajuste 4: nome editável (renomear é seguro; vínculos com a tara são por código).
+        nomePerfilTextBox.ReadOnly = false;
+        nomePerfilTextBox.BackColor = Color.White;
     }
 
     private void SyncSummaryFromRow(Panel rowPanel)
@@ -592,13 +821,44 @@ public partial class TaraForm : Form
 
     private void AtualizarBotoesAcao(ModoAcaoBotoes modo)
     {
+        _modoAcaoBotoesAtual = modo;
+
         bool podeCriar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Tara, PermissoesSistema.Acoes.Criar);
         bool podeEditar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Tara, PermissoesSistema.Acoes.Editar);
         bool podeExcluir = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.Tara, PermissoesSistema.Acoes.Excluir);
 
         salvarButton.Visible = modo == ModoAcaoBotoes.SomenteSalvar && podeCriar;
         novoButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeEditar;
-        excluirButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeExcluir;
+
+        // Ajuste 6: botão de status (texto/cor/visibilidade/permissão) centralizado a partir do registro selecionado.
+        if (modo == ModoAcaoBotoes.EditarExcluir)
+        {
+            TaraCadastro? selecionada = _taraPorLinha.Values.FirstOrDefault(x => x.CodigoTara == _idTaraAtual);
+            bool ativo = selecionada?.SituacaoTara ?? true;
+            _situacaoSelecionadaAtiva = ativo;
+            if (ativo)
+            {
+                excluirButton.Text = "Inativar Tara             F8";
+                excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+                excluirButton.Visible = podeExcluir;
+            }
+            else
+            {
+                excluirButton.Text = "Reativar Tara             F8";
+                excluirButton.ForeColor = Color.FromArgb(22, 163, 74);
+                excluirButton.Visible = podeEditar;
+            }
+        }
+        else
+        {
+            excluirButton.Visible = false;
+        }
+
+        // Ajuste 2: bloqueio de duplo-clique / reentrância enquanto uma operação está em andamento.
+        bool habilitar = !_operacaoEmAndamento;
+        salvarButton.Enabled = habilitar;
+        novoButton.Enabled = habilitar;
+        excluirButton.Enabled = habilitar;
     }
 
     private enum ModoAcaoBotoes
@@ -1094,7 +1354,8 @@ public partial class TaraForm : Form
             Name = "txtTamanhoRuntime",
             BorderStyle = BorderStyle.None,
             Font = nomePerfilTextBox.Font,
-            BackColor = Color.White
+            BackColor = Color.White,
+            MaxLength = TaraCadastro.TamanhoMaximoTamanho // Ajuste 10
         };
 
         _tamanhoInputPanel.Controls.Add(_txtTamanho);

@@ -27,6 +27,70 @@ public sealed class ConsumoMaterialServico
     public const string TipoMovimentoConsumoPadrao = "261";
 
     public const string UnidadePesavel = "KG";
+
+    // Tarefa Consumo 22.4: tolerância de pesagem do componente — 5% APENAS PARA MAIS (subconsumo sempre aceito).
+    public const decimal PercentualToleranciaConsumo = 0.05m;
+
+    /// <summary>Limite máximo do consumo total do componente (previsto + 5%). Zero se previsto &lt;= 0.</summary>
+    public static decimal CalcularLimiteConsumoComTolerancia(decimal quantidadePrevista)
+        => quantidadePrevista <= 0m ? 0m : quantidadePrevista * (1m + PercentualToleranciaConsumo);
+
+    /// <summary>
+    /// Tarefa Consumo 22.4: valida se o consumo TOTAL (consumido SAP + pesagens locais pendentes + nova pesagem)
+    /// não ultrapassa o previsto + 5%. Subconsumo sempre aceito. Também bloqueia se o consumido SAP já veio
+    /// acima do limite. Retorna o limite/total calculados e a mensagem detalhada quando bloqueia.
+    /// </summary>
+    public static decimal CalcularDisponivelConsumoComTolerancia(ComponenteConsumoMaterial componente)
+    {
+        ArgumentNullException.ThrowIfNull(componente);
+
+        decimal previsto = componente.QuantidadePrevista > 0m
+            ? componente.QuantidadePrevista
+            : componente.QuantidadePendente + Math.Max(0m, componente.QuantidadeConsumida);
+        decimal consumido = componente.QuantidadeConsumida > 0m
+            ? componente.QuantidadeConsumida
+            : Math.Max(0m, previsto - componente.QuantidadePendente);
+        decimal limite = CalcularLimiteConsumoComTolerancia(previsto);
+        return Math.Max(0m, limite - consumido);
+    }
+
+    public static bool ValidarToleranciaConsumo(
+        decimal quantidadePrevista,
+        decimal consumidoSap,
+        decimal pesagensLocaisPendentes,
+        decimal novaPesagem,
+        out decimal limiteComTolerancia,
+        out decimal totalAposPesagem,
+        out string mensagem)
+    {
+        limiteComTolerancia = CalcularLimiteConsumoComTolerancia(quantidadePrevista);
+        totalAposPesagem = consumidoSap + pesagensLocaisPendentes + novaPesagem;
+
+        // Ajuste 7: o SAP já veio com consumo acima do limite — nova pesagem bloqueada.
+        if (quantidadePrevista > 0m && consumidoSap > limiteComTolerancia)
+        {
+            mensagem = "Componente já possui consumo SAP acima da tolerância permitida. Nova pesagem bloqueada.\r\n"
+                + $"Previsto: {quantidadePrevista:0.###} KG\r\n"
+                + $"Consumido SAP: {consumidoSap:0.###} KG\r\n"
+                + $"Limite com tolerância 5%: {limiteComTolerancia:0.###} KG";
+            return false;
+        }
+
+        if (totalAposPesagem > limiteComTolerancia)
+        {
+            mensagem = "Peso excede a tolerância permitida para o componente.\r\n"
+                + $"Previsto: {quantidadePrevista:0.###} KG\r\n"
+                + $"Consumido SAP: {consumidoSap:0.###} KG\r\n"
+                + $"Pesagem local pendente: {pesagensLocaisPendentes:0.###} KG\r\n"
+                + $"Nova pesagem: {novaPesagem:0.###} KG\r\n"
+                + $"Limite com tolerância 5%: {limiteComTolerancia:0.###} KG\r\n"
+                + $"Total após pesagem: {totalAposPesagem:0.###} KG";
+            return false;
+        }
+
+        mensagem = string.Empty;
+        return true;
+    }
     public const string MensagemPesoBrutoInvalido = "Informe um peso bruto maior que zero.";
     public const string MensagemPesoLiquidoInvalido = "Peso líquido deve ser maior que zero. Verifique o peso bruto e a tara.";
     public const string MensagemExcedePendente = "Peso líquido excede a quantidade pendente do componente.";
@@ -39,9 +103,19 @@ public sealed class ConsumoMaterialServico
     private readonly Func<IConsumoMaterialRepositorio> _criarRepositorio;
     private readonly Func<IConsumoMaterialSap261Servico> _criarSap261Servico;
     private readonly Func<IConfirmacaoProducaoSapClient> _criarConfirmacaoProducaoServico;
+    // Tarefa Consumo 22.10.1: serviço de descrição (A_ProductDescription) LAZY — só construído ao consultar a OP.
+    private readonly Func<IProductDescriptionSapServico> _criarDescricaoServico;
+    private readonly IOrdemProducaoCacheServico _cacheOrdensProducao;
 
     public ConsumoMaterialServico()
-        : this(FabricaProductionOrderSapServico.Criar())
+        : this(
+            FabricaProductionOrderSapServico.Criar(),
+            () => new ConsumoMaterialRepositorio(
+                new FabricaConexaoPostgreSql(LeitorConfiguracaoBancoPostgreSql.Carregar())),
+            FabricaConsumoMaterialSap261Servico.Criar,
+            () => new ConfirmacaoProducaoSapServico(),
+            null,
+            OrdemProducaoCacheServico.Compartilhado)
     {
     }
 
@@ -72,7 +146,9 @@ public sealed class ConsumoMaterialServico
         IProductionOrderSapServico ordemProducaoServico,
         Func<IConsumoMaterialRepositorio> criarRepositorio,
         Func<IConsumoMaterialSap261Servico> criarSap261Servico,
-        Func<IConfirmacaoProducaoSapClient> criarConfirmacaoProducaoServico)
+        Func<IConfirmacaoProducaoSapClient> criarConfirmacaoProducaoServico,
+        Func<IProductDescriptionSapServico>? criarDescricaoServico = null,
+        IOrdemProducaoCacheServico? cacheOrdensProducao = null)
     {
         _ordemProducaoServico = ordemProducaoServico
             ?? throw new ArgumentNullException(nameof(ordemProducaoServico));
@@ -82,6 +158,8 @@ public sealed class ConsumoMaterialServico
             ?? throw new ArgumentNullException(nameof(criarSap261Servico));
         _criarConfirmacaoProducaoServico = criarConfirmacaoProducaoServico
             ?? throw new ArgumentNullException(nameof(criarConfirmacaoProducaoServico));
+        _criarDescricaoServico = criarDescricaoServico ?? FabricaProductDescriptionSapServico.Criar;
+        _cacheOrdensProducao = cacheOrdensProducao ?? new OrdemProducaoCacheServico(() => _ordemProducaoServico);
     }
 
     public async Task<ResultadoConsultaOrdemConsumo> ConsultarOrdemAsync(
@@ -94,13 +172,24 @@ public sealed class ConsumoMaterialServico
             return ResultadoConsultaOrdemConsumo.Falha(MensagemOrdemObrigatoria);
         }
 
+        if (_cacheOrdensProducao.TentarObter(numero, out OrdemProducaoSap ordemCache))
+        {
+            RegistrarDiagnosticoConsulta($"OP {numero} carregada do cache de pré-carga.");
+            return Mapear(ordemCache);
+        }
+
+        RegistrarDiagnosticoConsulta($"OP {numero} não estava no cache. Consultando SAP online.");
         ResultadoConsultaOrdemProducaoSap resultado =
             await _ordemProducaoServico.ConsultarOrdemAsync(numero, cancellationToken);
 
+        if (resultado.Cenario == CenarioConsultaOrdemProducaoSap.Encontrada && resultado.Ordem is not null)
+        {
+            _cacheOrdensProducao.Armazenar(resultado.Ordem);
+            return Mapear(resultado.Ordem);
+        }
+
         return resultado.Cenario switch
         {
-            CenarioConsultaOrdemProducaoSap.Encontrada when resultado.Ordem is not null =>
-                Mapear(resultado.Ordem),
             CenarioConsultaOrdemProducaoSap.NaoEncontrada =>
                 ResultadoConsultaOrdemConsumo.NaoEncontrada(numero, MensagemNaoEncontrada),
             // Indisponivel / NaoConfigurado: surfaca o diagnostico sanitizado do SAP (etapa/status/fallback)
@@ -177,7 +266,14 @@ public sealed class ConsumoMaterialServico
                 });
             }
 
-            if (totalLiquido > componente.QuantidadePendente)
+            if (!ValidarToleranciaConsumo(
+                    componente.QuantidadePrevista,
+                    componente.QuantidadeConsumida,
+                    0m,
+                    totalLiquido,
+                    out _,
+                    out _,
+                    out _))
             {
                 return ResultadoPersistenciaConsumoMaterial.DadosInvalidos(MensagemExcedePendente);
             }
@@ -353,6 +449,31 @@ public sealed class ConsumoMaterialServico
     /// preenchido), monta o payload pelo builder (Tarefa 6), delega ao servico SAP 261 (CSRF/POST com
     /// WRITE_ENABLED) e, SOMENTE com documento/ano de retorno, marca CONFIRMADO_SAP localmente.
     /// </summary>
+    /// <summary>
+    /// Tarefa Consumo 22.4: revalida a tolerância de 5% por item do lançamento (consumido SAP + consumo local),
+    /// antes de montar/enviar o payload 261. Retorna falha se algum item estourar o limite; null se tudo OK.
+    /// </summary>
+    private static ResultadoEnvioConsumoSap261? ValidarToleranciaLancamento261(ConsumoMaterialLancamento lancamento)
+    {
+        foreach (ConsumoMaterialItem item in lancamento.Itens)
+        {
+            decimal previsto = item.QuantidadePrevista ?? 0m;
+            if (previsto <= 0m)
+            {
+                continue; // sem previsto conhecido: não há como aplicar tolerância aqui
+            }
+
+            decimal consumidoSap = item.QuantidadeRetiradaSap ?? 0m;
+            if (!ValidarToleranciaConsumo(previsto, consumidoSap, 0m, item.QuantidadeConsumidaLocal, out _, out _, out _))
+            {
+                return ResultadoEnvioConsumoSap261.Falha(
+                    "Consumo total excede a tolerância permitida de 5%. Envio SAP 261 bloqueado.");
+            }
+        }
+
+        return null;
+    }
+
     public async Task<ResultadoEnvioConsumoSap261> EnviarConsumoSap261Async(
         long codigoLancamento,
         string usuario,
@@ -385,6 +506,20 @@ public sealed class ConsumoMaterialServico
         if (!string.Equals(lancamento.StatusLancamento, ConsumoMaterialLancamento.StatusPendenteSap, StringComparison.Ordinal))
         {
             return ResultadoEnvioConsumoSap261.Falha(MensagemNaoPendente);
+        }
+
+        // Tarefa Consumo 22.4: revalida a tolerância de 5% (consumido SAP + consumo local do lançamento)
+        // ANTES de montar/enviar o payload 261 — defesa contra consumo SAP anterior que estoure o limite.
+        ResultadoEnvioConsumoSap261? bloqueioTolerancia = ValidarToleranciaLancamento261(lancamento);
+        if (bloqueioTolerancia is not null)
+        {
+            return bloqueioTolerancia;
+        }
+
+        ResultadoEnvioConsumoSap261? bloqueioLocal = ValidarItensLocaisParaEnvio261(lancamento);
+        if (bloqueioLocal is not null)
+        {
+            return bloqueioLocal;
         }
 
         // Payload pelo builder (sem duplicar montagem). Sem efeito colateral; se invalido, NAO reserva.
@@ -420,17 +555,11 @@ public sealed class ConsumoMaterialServico
             await sap261Servico.EnviarConsumo261Async(preview.Payload, chaveNegocio, cancellationToken);
         if (!envio.Sucesso && MensagemIndicaLoteObrigatorioSap(envio.Mensagem))
         {
-            envio = ResultadoEnvioConsumoSap261.Falha(
-                MensagemSapExigeLote,
-                envio.StatusHttp,
-                envio.CorrelationId);
+            envio = SubstituirMensagemFalhaSap(envio, MensagemSapExigeLote);
         }
         else if (!envio.Sucesso && MensagemIndicaReservaNaoPermiteMovimento(envio.Mensagem))
         {
-            envio = ResultadoEnvioConsumoSap261.Falha(
-                MensagemSapReservaNaoPermiteMovimento,
-                envio.StatusHttp,
-                envio.CorrelationId);
+            envio = SubstituirMensagemFalhaSap(envio, MensagemSapReservaNaoPermiteMovimento);
         }
 
         // Sucesso COM documento E ano: confirma (exige ENVIANDO_SAP). Erro de confirmacao = critico.
@@ -458,10 +587,76 @@ public sealed class ConsumoMaterialServico
             }
         }
 
-        // Correcao 4: falha SAP apos a reserva -> FALHA_SAP (nao deixa eternamente ENVIANDO_SAP).
+        // Tarefa Consumo 22.5: falha SAP apos a reserva libera o lancamento para PENDENTE_SAP,
+        // mantendo o mesmo registro local para reenvio manual seguro e sem perda de pesagem.
         await repositorio.MarcarFalhaSapAsync(lancamento.Codigo, cancellationToken);
-        return envio;
+        return MontarResultadoFalhaSapPendente(envio);
     }
+
+    private static ResultadoEnvioConsumoSap261 MontarResultadoFalhaSapPendente(
+        ResultadoEnvioConsumoSap261 envio)
+    {
+        string resumoSap = envio.StatusHttp.HasValue
+            ? $"HTTP {envio.StatusHttp}"
+            : "sem status HTTP";
+        if (!string.IsNullOrWhiteSpace(envio.CodigoErroSap))
+        {
+            resumoSap += $" - Código: {envio.CodigoErroSap}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(envio.MensagemSap))
+        {
+            resumoSap += Environment.NewLine + $"Mensagem: {envio.MensagemSap}";
+        }
+        else if (!string.IsNullOrWhiteSpace(envio.Mensagem))
+        {
+            resumoSap += Environment.NewLine + envio.Mensagem;
+        }
+
+        if (!string.IsNullOrWhiteSpace(envio.DetalhesErroSap))
+        {
+            resumoSap += Environment.NewLine + $"Detalhes: {envio.DetalhesErroSap}";
+        }
+
+        string mensagem = "Consumo salvo localmente e pendente de envio SAP."
+            + Environment.NewLine
+            + "O envio ao SAP falhou."
+            + Environment.NewLine
+            + Environment.NewLine
+            + "SAP retornou:"
+            + Environment.NewLine
+            + resumoSap
+            + Environment.NewLine
+            + Environment.NewLine
+            + "Consulte o diagnóstico técnico para ver o payload e o retorno completo.";
+
+        return ResultadoEnvioConsumoSap261.Falha(
+            mensagem,
+            envio.StatusHttp,
+            envio.CorrelationId,
+            envio.MetodoHttp,
+            envio.Endpoint,
+            envio.ResponseBody,
+            envio.CodigoErroSap,
+            envio.MensagemSap,
+            envio.DetalhesErroSap,
+            envio.PayloadJson);
+    }
+
+    private static ResultadoEnvioConsumoSap261 SubstituirMensagemFalhaSap(
+        ResultadoEnvioConsumoSap261 envio,
+        string mensagem)
+        => ResultadoEnvioConsumoSap261.Falha(
+            mensagem,
+            envio.StatusHttp,
+            envio.CorrelationId,
+            envio.MetodoHttp,
+            envio.Endpoint,
+            envio.ResponseBody,
+            envio.CodigoErroSap,
+            envio.MensagemSap,
+            envio.DetalhesErroSap,
+            envio.PayloadJson);
 
     public async Task<ResultadoEnvioConfirmacaoProducao> EnviarConfirmacaoProducaoAsync(
         long codigoLancamento,
@@ -779,29 +974,56 @@ public sealed class ConsumoMaterialServico
         ConsumoMaterialLancamento lancamento,
         CancellationToken cancellationToken)
     {
+        IReadOnlyList<ConsumoMaterialItem> itensParaEnviar = ObterItensPendentesParaEnvioAtual(lancamento);
+        if (itensParaEnviar.Count == 0)
+        {
+            return ResultadoEnvioConsumoSap261.Falha("Nenhum consumo pendente selecionado para envio SAP.");
+        }
+
+        foreach (ConsumoMaterialItem item in itensParaEnviar)
+        {
+            ResultadoEnvioConsumoSap261? bloqueioLocal = ValidarItemLocalParaEnvio261(item);
+            if (bloqueioLocal is not null)
+            {
+                return bloqueioLocal;
+            }
+        }
+
         ResultadoConsultaOrdemProducaoSap resultado =
             await _ordemProducaoServico.ConsultarOrdemAsync(lancamento.NumeroOrdem, cancellationToken);
 
         if (resultado.Cenario != CenarioConsultaOrdemProducaoSap.Encontrada || resultado.Ordem is null)
         {
             return ResultadoEnvioConsumoSap261.Falha(
-                "Não foi possível validar a elegibilidade SAP dos componentes antes do envio 261. Envio não reservado.");
+                "Não foi possível validar o item antes do envio SAP 261."
+                + Environment.NewLine
+                + $"Motivo técnico: {resultado.MensagemSanitizada}"
+                + Environment.NewLine
+                + "Envio SAP não realizado.");
         }
 
         ResultadoConsultaOrdemConsumo ordemConsumo = Mapear(resultado.Ordem);
         if (ordemConsumo.Ordem is null)
         {
             return ResultadoEnvioConsumoSap261.Falha(
-                "Não foi possível validar a elegibilidade SAP dos componentes antes do envio 261. Envio não reservado.");
+                "Não foi possível validar os itens pendentes antes do envio SAP 261."
+                + Environment.NewLine
+                + "Motivo técnico: OP retornada sem componentes mapeáveis para consumo."
+                + Environment.NewLine
+                + "Envio SAP não realizado.");
         }
 
-        foreach (ConsumoMaterialItem item in lancamento.Itens)
+        foreach (ConsumoMaterialItem item in itensParaEnviar)
         {
             ComponenteConsumoMaterial? componente = EncontrarComponenteSapAtual(ordemConsumo.Ordem.Componentes, item);
             if (componente is null)
             {
                 return ResultadoEnvioConsumoSap261.Falha(
-                    $"Componente não elegível para envio 261 direto. Reserva {FormatarReservaItem(item)}, material {item.CodigoMaterial}. Motivo: componente não encontrado na OP atual do SAP.");
+                    $"Envio SAP 261 bloqueado para o item {FormatarItemReserva(item)}."
+                    + Environment.NewLine
+                    + $"Motivo: componente não encontrado na OP atual do SAP. Reserva {FormatarReservaItem(item)}, material {item.CodigoMaterial}."
+                    + Environment.NewLine
+                    + "Envio SAP não realizado.");
             }
 
             if (string.IsNullOrWhiteSpace(componente.Lote) && !string.IsNullOrWhiteSpace(item.Lote))
@@ -813,19 +1035,115 @@ public sealed class ConsumoMaterialServico
             // reserva/CSRF/POST (mantem PENDENTE_SAP, NAO marca FALHA_SAP) com orientacao operacional.
             if (componente.BackflushSap)
             {
-                return ResultadoEnvioConsumoSap261.Falha(MensagemBackflushUseConfirmacao);
+                return ResultadoEnvioConsumoSap261.Falha(
+                    $"Envio SAP 261 bloqueado para o item {FormatarItemReserva(item)}."
+                    + Environment.NewLine
+                    + "Motivo: componente Backflush não permite 261 direto."
+                    + Environment.NewLine
+                    + "Envio SAP não realizado.");
             }
 
             bool elegivel = AvaliarElegibilidadeMaterialDocument261Direto(componente, out string motivo);
             if (!elegivel)
             {
                 return ResultadoEnvioConsumoSap261.Falha(
-                    $"Componente não elegível para envio 261 direto. Reserva {FormatarReservaItem(item)}, material {item.CodigoMaterial}. Motivo: {motivo}");
+                    $"Envio SAP 261 bloqueado para o item {FormatarItemReserva(item)}."
+                    + Environment.NewLine
+                    + $"Motivo: {motivo}"
+                    + Environment.NewLine
+                    + "Envio SAP não realizado.");
             }
         }
 
         return null;
     }
+
+    private static IReadOnlyList<ConsumoMaterialItem> ObterItensPendentesParaEnvioAtual(
+        ConsumoMaterialLancamento lancamento)
+        => lancamento.Itens
+            .Where(item => item.QuantidadeConsumidaLocal > 0m
+                && string.Equals(item.StatusItem, ConsumoMaterialItem.StatusPendenteSap, StringComparison.Ordinal))
+            .ToList();
+
+    private static ResultadoEnvioConsumoSap261? ValidarItensLocaisParaEnvio261(
+        ConsumoMaterialLancamento lancamento)
+    {
+        IReadOnlyList<ConsumoMaterialItem> itensParaEnviar = ObterItensPendentesParaEnvioAtual(lancamento);
+        if (itensParaEnviar.Count == 0)
+        {
+            return ResultadoEnvioConsumoSap261.Falha("Nenhum consumo pendente selecionado para envio SAP.");
+        }
+
+        foreach (ConsumoMaterialItem item in itensParaEnviar)
+        {
+            ResultadoEnvioConsumoSap261? bloqueioLocal = ValidarItemLocalParaEnvio261(item);
+            if (bloqueioLocal is not null)
+            {
+                return bloqueioLocal;
+            }
+        }
+
+        return null;
+    }
+
+    private static ResultadoEnvioConsumoSap261? ValidarItemLocalParaEnvio261(ConsumoMaterialItem item)
+    {
+        string itemReserva = FormatarItemReserva(item);
+        if (string.IsNullOrWhiteSpace(item.NumeroReserva))
+        {
+            return BloquearItemEnvio261(itemReserva, "reserva SAP não informada.");
+        }
+
+        if (string.IsNullOrWhiteSpace(item.ItemReserva))
+        {
+            return BloquearItemEnvio261(itemReserva, "item da reserva SAP não informado.");
+        }
+
+        if (string.IsNullOrWhiteSpace(item.CodigoMaterial))
+        {
+            return BloquearItemEnvio261(itemReserva, "material não informado.");
+        }
+
+        if (string.IsNullOrWhiteSpace(item.Centro))
+        {
+            return BloquearItemEnvio261(itemReserva, "planta SAP não informada.");
+        }
+
+        if (string.IsNullOrWhiteSpace(item.DepositoConsumo))
+        {
+            return BloquearItemEnvio261(itemReserva, "depósito SAP não informado.");
+        }
+
+        if (string.IsNullOrWhiteSpace(item.Lote))
+        {
+            return BloquearItemEnvio261(itemReserva, "lote SAP não informado.");
+        }
+
+        if (!string.Equals(item.TipoMovimentoSap, ConsumoMaterialItem.TipoMovimentoConsumo, StringComparison.OrdinalIgnoreCase))
+        {
+            return BloquearItemEnvio261(itemReserva, "tipo SAP não é 261 Direto.");
+        }
+
+        if (item.QuantidadeConsumidaLocal <= 0m)
+        {
+            return BloquearItemEnvio261(itemReserva, "quantidade consumida deve ser maior que zero.");
+        }
+
+        if (!string.Equals(item.StatusItem, ConsumoMaterialItem.StatusPendenteSap, StringComparison.Ordinal))
+        {
+            return BloquearItemEnvio261(itemReserva, "status local não permite envio.");
+        }
+
+        return null;
+    }
+
+    private static ResultadoEnvioConsumoSap261 BloquearItemEnvio261(string itemReserva, string motivo)
+        => ResultadoEnvioConsumoSap261.Falha(
+            $"Envio SAP 261 bloqueado para o item {itemReserva}."
+            + Environment.NewLine
+            + $"Motivo: {motivo}"
+            + Environment.NewLine
+            + "Envio SAP não realizado.");
 
     private static ComponenteConsumoMaterial? EncontrarComponenteSapAtual(
         IReadOnlyList<ComponenteConsumoMaterial> componentes,
@@ -841,6 +1159,9 @@ public sealed class ConsumoMaterialServico
 
     private static string FormatarReservaItem(ConsumoMaterialItem item)
         => $"{(item.NumeroReserva ?? string.Empty).Trim()}/{(item.ItemReserva ?? string.Empty).Trim()}";
+
+    private static string FormatarItemReserva(ConsumoMaterialItem item)
+        => string.IsNullOrWhiteSpace(item.ItemReserva) ? "(sem item)" : item.ItemReserva.Trim();
 
     private static ResultadoConsultaOrdemConsumo Mapear(OrdemProducaoSap sap)
     {
@@ -881,7 +1202,7 @@ public sealed class ConsumoMaterialServico
             $"OP {sap.NumeroOrdem}: consulta OK; componentes SAP (expand+fallback)={componentesSap}; "
             + $"com material={comMaterial.Count}; elegiveis para pesagem={pesaveis}.";
         string alertaLoteProdutoSemLoteComponente = DeveAlertarLoteProdutoSemLoteComponente(ordem)
-            ? " OP possui lote do produto produzido, mas o lote dos componentes não foi retornado pelo SAP. Para consumo 261, informe o lote do componente."
+            ? " OP possui lote do produto produzido, mas o lote dos componentes não foi retornado pelo SAP. Componente sem lote fica bloqueado; o FugaPET não permite lote manual — solicite ajuste da OP no SAP."
             : string.Empty;
 
         if (pesaveis > 0)
@@ -924,9 +1245,9 @@ public sealed class ConsumoMaterialServico
             return "componentes sem material";
         }
 
-        if (componentes.All(c => c.QuantidadePendente <= 0m))
+        if (componentes.All(c => CalcularDisponivelConsumoComTolerancia(c) <= 0m))
         {
-            return "todos os componentes já consumidos (quantidade pendente zerada)";
+            return "todos os componentes atingiram o limite de consumo com tolerância";
         }
 
         if (componentes.Any(c => !string.Equals(c.UnidadeMedida, UnidadePesavel, StringComparison.OrdinalIgnoreCase)))
@@ -937,6 +1258,12 @@ public sealed class ConsumoMaterialServico
         if (componentes.Any(c => string.IsNullOrWhiteSpace(c.DepositoConsumo)))
         {
             return "depósito de consumo ausente";
+        }
+
+        // Tarefa Consumo 22.2: lote sempre do SAP; sem lote é bloqueante (não há lote manual).
+        if (componentes.Any(c => string.IsNullOrWhiteSpace(c.Lote)))
+        {
+            return "lote do componente ausente no SAP (o FugaPET não permite lote manual; solicite ajuste da OP no SAP)";
         }
 
         return "nenhum componente elegível para pesagem";
@@ -1053,9 +1380,15 @@ public sealed class ConsumoMaterialServico
             return false;
         }
 
-        if (componente.QuantidadePendente <= 0m)
+        if (componente.QuantidadePendente <= 0m && componente.QuantidadePendenteSapOriginal < 0m)
         {
-            motivo = "quantidade pendente zerada.";
+            motivo = "quantidade pendente negativa no SAP.";
+            return false;
+        }
+
+        if (CalcularDisponivelConsumoComTolerancia(componente) <= 0m)
+        {
+            motivo = "quantidade pendente atingiu o limite de consumo com tolerância.";
             return false;
         }
 
@@ -1110,7 +1443,7 @@ public sealed class ConsumoMaterialServico
         foreach (ComponenteConsumoMaterial componente in componentesConsumidos)
         {
             if (string.IsNullOrWhiteSpace(componente.DepositoConsumo)
-                || componente.QuantidadePendente <= 0m
+                || CalcularDisponivelConsumoComTolerancia(componente) <= 0m
                 || string.IsNullOrWhiteSpace(componente.Lote))
             {
                 return RotaEnvioConsumo.Bloqueado;
@@ -1219,8 +1552,9 @@ public sealed class ConsumoMaterialServico
         decimal totalLocalKg)
     {
         ArgumentNullException.ThrowIfNull(componente);
-        // Completo quando o total local atinge o pendente (inclui pendente == 0: ja consumido no SAP).
-        bool completo = totalLocalKg >= componente.QuantidadePendente;
+        // Completo quando o total local atinge o disponível com tolerância.
+        decimal disponivelComTolerancia = CalcularDisponivelConsumoComTolerancia(componente);
+        bool completo = totalLocalKg >= disponivelComTolerancia;
         componente.Status = completo
             ? ComponenteConsumoMaterial.StatusConsumido
             : ComponenteConsumoMaterial.StatusPendente;
@@ -1237,6 +1571,121 @@ public sealed class ConsumoMaterialServico
     /// REGRA CENTRAL de liberacao de pesagem de um componente (Ajuste 4/5). Bloqueia sem deposito,
     /// pendente &lt;= 0 (inclui saldo SAP negativo), unidade != KG ou ja consumido. Pura/testavel.
     /// </summary>
+    /// <summary>
+    /// Tarefa Consumo 22.9.1 (Ajuste 2/5/9/10): enriquece cada componente com o tipo mestre do material
+    /// (Product Master / API_PRODUCT_SRV) e o classifica por modo de consumo. <paramref name="buscarTipoMaterial"/>
+    /// retorna o Product Master do código (null quando NÃO consultado — falha/API indisponível). Sem ProductType
+    /// consultado → classificação Indefinido (não libera consumo por chute — Ajuste 10). Registra diagnóstico por item.
+    /// </summary>
+    /// <summary>
+    /// Tarefa Consumo 22.10.1 (Ajuste 6): consulta A_ProductDescription para cada código único de componente e
+    /// monta o mapa Product → <see cref="ProdutoSapMestre"/> (só descrição preenchida). Usado pelo join lógico
+    /// na tela. Não configurado/indisponível → o código fica de fora do mapa (a tela cai no fallback controlado).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, ProdutoSapMestre>> ObterDescricoesComponentesAsync(
+        IEnumerable<string> codigosProduto,
+        CancellationToken cancellationToken = default)
+    {
+        Dictionary<string, ProdutoSapMestre> mapa = new(StringComparer.OrdinalIgnoreCase);
+        if (codigosProduto is null)
+        {
+            return mapa;
+        }
+
+        IEnumerable<string> codigosUnicos = codigosProduto
+            .Select(codigo => (codigo ?? string.Empty).Trim())
+            .Where(codigo => !string.IsNullOrWhiteSpace(codigo))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        IProductDescriptionSapServico servico = _criarDescricaoServico();
+        foreach (string codigo in codigosUnicos)
+        {
+            ProdutoSapMestre? mestre = await servico.ObterDescricaoAsync(codigo, cancellationToken);
+            if (mestre is not null && !string.IsNullOrWhiteSpace(mestre.DescricaoProdutoSap))
+            {
+                mapa[codigo] = mestre;
+            }
+        }
+
+        return mapa;
+    }
+
+    public static void EnriquecerComponentesComTipoMaterial(
+        IEnumerable<ComponenteConsumoMaterial> componentes,
+        Func<string, ProdutoSapMestre?> buscarTipoMaterial,
+        string modoDaTela = "",
+        string opNumero = "",
+        string produtoProduzido = "")
+    {
+        ArgumentNullException.ThrowIfNull(componentes);
+        ArgumentNullException.ThrowIfNull(buscarTipoMaterial);
+
+        foreach (ComponenteConsumoMaterial componente in componentes)
+        {
+            // Descrição original vinda do GET da OP (normalmente vazia) — preservada para o fallback (Ajuste 5).
+            string descricaoOp = (componente.DescricaoMaterial ?? string.Empty).Trim();
+
+            ProdutoSapMestre? mestre = buscarTipoMaterial(componente.CodigoMaterial);
+
+            // A_Product (ProductType): classificação — inalterada. Só é aplicada quando o mestre foi CONSULTADO
+            // (Consultado=true). Um mestre só com descrição (A_ProductDescription) tem Consultado=false → mantém
+            // a classificação atual (Indefinido no rollout), sem alterar a separação Matéria-Prima/Químico.
+            if (mestre is null || !mestre.Consultado)
+            {
+                componente.TipoMaterialConsultado = false;
+                componente.ClassificacaoConsumo = ClassificacaoConsumoMaterial.Indefinido;
+                componente.DescricaoTipoMaterial = "Tipo SAP não consultado";
+            }
+            else
+            {
+                componente.TipoMaterialConsultado = true;
+                // A_Product: dados TÉCNICOS (tipo/grupo/unidade). NÃO é fonte de descrição.
+                componente.TipoMaterialSap = mestre.TipoMaterialSap;
+                componente.GrupoMaterialSap = mestre.GrupoMaterialSap;
+                componente.UnidadeBaseSap = mestre.UnidadeBaseSap;
+                componente.DescricaoTipoMaterial =
+                    ClassificadorComponenteConsumo.ObterDescricaoTipoMaterialSap(mestre.TipoMaterialSap);
+                componente.ClassificacaoConsumo = ClassificadorComponenteConsumo.ClassificarComponenteParaConsumo(
+                    mestre.TipoMaterialSap, mestre.GrupoMaterialSap);
+            }
+
+            // A_ProductDescription (descrição REAL): INDEPENDENTE do gate de ProductType — aplicada mesmo quando
+            // só a descrição foi consultada (Consultado=false). Assim a descrição aparece sem mexer na classificação.
+            string descricaoSap = (mestre?.DescricaoProdutoSap ?? string.Empty).Trim();
+            string idiomaDescricao = (mestre?.IdiomaDescricaoSap ?? string.Empty).Trim();
+
+            // Ajuste 5/6: prioridade da descrição = A_ProductDescription > descrição da OP > fallback controlado
+            // (vazio → a grid exibe "Descrição não retornada pelo SAP"). Nunca "Material <codigo>" com descrição SAP.
+            string origemDescricao;
+            if (!string.IsNullOrWhiteSpace(descricaoSap))
+            {
+                componente.DescricaoMaterial = descricaoSap;
+                origemDescricao = "A_ProductDescription";
+            }
+            else if (!string.IsNullOrWhiteSpace(descricaoOp))
+            {
+                componente.DescricaoMaterial = descricaoOp;
+                origemDescricao = "OP";
+            }
+            else
+            {
+                componente.DescricaoMaterial = string.Empty;
+                origemDescricao = "Fallback";
+            }
+
+            // Ajuste 7/9: diagnóstico da classificação e da descrição (fonte/idioma/origem exibida).
+            System.Diagnostics.Trace.TraceInformation(
+                "[Consumo][ClassificacaoComponente] "
+                + $"Modo da tela: {modoDaTela}; OP: {opNumero}; Produto produzido da OP: {produtoProduzido}; "
+                + $"Componente: {componente.CodigoMaterial}; ProductType: {componente.TipoMaterialSap}; "
+                + $"ProductGroup: {componente.GrupoMaterialSap}; BaseUnit: {componente.UnidadeBaseSap}; "
+                + $"Descricao OP: {descricaoOp}; Descricao A_ProductDescription: {descricaoSap}; "
+                + $"Language usado: {idiomaDescricao}; Origem exibida: {origemDescricao}; "
+                + $"Papel operacional: componente da OP; Classificacao FugaPET: {componente.ClassificacaoConsumo}; "
+                + $"Consultado: {componente.TipoMaterialConsultado}");
+        }
+    }
+
     public static bool AvaliarLiberacaoPesagem(ComponenteConsumoMaterial componente, out string motivo)
     {
         ArgumentNullException.ThrowIfNull(componente);
@@ -1247,9 +1696,30 @@ public sealed class ConsumoMaterialServico
             return false;
         }
 
-        if (componente.QuantidadePendente <= 0m)
+        // Tarefa Consumo 22.2: lote SEMPRE vem do SAP; sem lote bloqueia igual sem depósito (sem lote manual).
+        if (string.IsNullOrWhiteSpace(componente.Lote))
         {
-            motivo = "quantidade pendente zerada ou negativa.";
+            motivo = "componente sem lote SAP informado. O FugaPET não permite lote manual; solicite ajuste da OP/componente no SAP.";
+            return false;
+        }
+
+        // Tarefa Consumo 22.3: Backflush é consumo automático pelo SAP (na confirmação da OP/operação);
+        // nesta tela (rota 261 direto) fica BLOQUEADO para pesagem/consumo manual (prioridade: depósito → lote → Backflush).
+        if (componente.BackflushSap)
+        {
+            motivo = "componente Backflush. O consumo deste item é automático pelo SAP; não é permitido consumo manual 261 nesta tela.";
+            return false;
+        }
+
+        if (componente.QuantidadePendente <= 0m && componente.QuantidadePendenteSapOriginal < 0m)
+        {
+            motivo = "quantidade pendente negativa no SAP.";
+            return false;
+        }
+
+        if (CalcularDisponivelConsumoComTolerancia(componente) <= 0m)
+        {
+            motivo = "quantidade pendente atingiu o limite de consumo com tolerância.";
             return false;
         }
 
@@ -1259,7 +1729,8 @@ public sealed class ConsumoMaterialServico
             return false;
         }
 
-        if (string.Equals(componente.Status, ComponenteConsumoMaterial.StatusConsumido, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(componente.Status, ComponenteConsumoMaterial.StatusConsumido, StringComparison.OrdinalIgnoreCase)
+            && CalcularDisponivelConsumoComTolerancia(componente) <= 0m)
         {
             motivo = "componente já consumido.";
             return false;
@@ -1367,16 +1838,18 @@ public sealed class ConsumoMaterialServico
                 CenarioPesagemConsumo.PesoLiquidoInvalido, MensagemPesoLiquidoInvalido);
         }
 
-        // Excesso contra a quantidade pendente do SAP (sem tolerancia inventada). Compara pelo LIQUIDO
-        // (ja descontada a tara). Tarefa 18.2: mensagem detalhada com saldo/previsto/utilizado.
-        decimal saldoDisponivel = componente.QuantidadePendente - totalJaPesadoLocalKg;
-        decimal novoTotal = totalJaPesadoLocalKg + liquido;
-        if (novoTotal > componente.QuantidadePendente)
+        // Tarefa Consumo 22.4: tolerância de 5% APENAS PARA MAIS sobre o PREVISTO, considerando o consumido SAP,
+        // as pesagens locais pendentes e a nova pesagem (LÍQUIDO, já descontada a tara). Subconsumo sempre aceito.
+        if (!ValidarToleranciaConsumo(
+                componente.QuantidadePrevista,
+                componente.QuantidadeConsumida,
+                totalJaPesadoLocalKg,
+                liquido,
+                out _,
+                out _,
+                out string mensagemTolerancia))
         {
-            return ResultadoPesagemConsumo.Bloqueada(
-                CenarioPesagemConsumo.ExcedePendente,
-                $"Peso líquido informado ({liquido:0.###} KG) ultrapassa o saldo previsto do componente ({saldoDisponivel:0.###} KG). "
-                + $"Peso previsto: {componente.QuantidadePendente:0.###} KG. Já utilizado: {totalJaPesadoLocalKg:0.###} KG.");
+            return ResultadoPesagemConsumo.Bloqueada(CenarioPesagemConsumo.ExcedePendente, mensagemTolerancia);
         }
 
         string origemNormalizada = string.Equals(origem, PesagemConsumoMaterial.OrigemManual, StringComparison.OrdinalIgnoreCase)
@@ -1408,3 +1881,12 @@ public sealed class ConsumoMaterialServico
             $"Pesagem de {liquido:0.###} KG registrada localmente para {componente.CodigoMaterial}.");
     }
 }
+
+
+
+
+
+
+
+
+

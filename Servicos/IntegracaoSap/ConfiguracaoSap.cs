@@ -31,6 +31,11 @@ public sealed class ConfiguracaoSap
     /// </summary>
     public string ProductionOrderConfirmationBaseUrl { get; init; } = string.Empty;
 
+    /// <summary>URL base explicita do Product Master (API_PRODUCT_SRV).</summary>
+    public string ProductBaseUrl { get; init; } = string.Empty;
+
+    public bool ArquivoConfiguracaoSapEncontrado { get; init; } = true;
+
     public string Usuario { get; init; } = string.Empty;
 
     public string Senha { get; init; } = string.Empty;
@@ -154,6 +159,94 @@ public sealed class ConfiguracaoSap
         && !string.IsNullOrWhiteSpace(Senha)
         && HostsPermitidos.Count > 0;
 
+    /// <summary>
+    /// Tarefa Consumo 22.10.1: URL base efetiva do servico de Product Master (API_PRODUCT_SRV), usada para
+    /// o GET da descricao do componente em A_ProductDescription. Reaproveita o padrao SAP ja configurado
+    /// derivando de MaterialDocumentBaseUrl (e, em ultimo caso, de BaseUrl) — troca o segmento API_*_SRV
+    /// por API_PRODUCT_SRV, mantendo host/caminho. Sem URL explicita propria (nao ha campo dedicado).
+    /// </summary>
+    public string ProductMasterBaseUrlEfetiva
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(ProductBaseUrl))
+            {
+                return ProductBaseUrl;
+            }
+
+            string derivadoDoMaterialDocument = DerivarUrlServicoSap(MaterialDocumentBaseUrl, "API_PRODUCT_SRV");
+            return !string.IsNullOrWhiteSpace(derivadoDoMaterialDocument)
+                ? derivadoDoMaterialDocument
+                : DerivarUrlServicoSap(BaseUrl, "API_PRODUCT_SRV");
+        }
+    }
+
+    /// <summary>
+    /// True quando, alem das credenciais + allowlist, ha URL (derivada) do servico de Product Master
+    /// (API_PRODUCT_SRV) para o GET da descricao do componente na Tela de Consumo.
+    /// </summary>
+    public bool ProductMasterConfigurado =>
+        !string.IsNullOrWhiteSpace(ProductMasterBaseUrlEfetiva)
+        && !string.IsNullOrWhiteSpace(Usuario)
+        && !string.IsNullOrWhiteSpace(Senha)
+        && HostsPermitidos.Count > 0;
+
+    public string MensagemConfiguracaoBaseAusente()
+    {
+        if (!ArquivoConfiguracaoSapEncontrado)
+        {
+            return MensagemArquivoConfiguracaoSapNaoEncontrado;
+        }
+
+        if (string.IsNullOrWhiteSpace(BaseUrl))
+        {
+            return "base_url n?o configurada no configuracao.sap.json.";
+        }
+
+        if (string.IsNullOrWhiteSpace(SapClient))
+        {
+            return "sap_client n?o configurado no configuracao.sap.json.";
+        }
+
+        if (HostsPermitidos.Count == 0)
+        {
+            return "hosts_permitidos n?o configurado no configuracao.sap.json.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Usuario) || string.IsNullOrWhiteSpace(Senha))
+        {
+            return "usuario/senha SAP n?o configurados. Defina no configuracao.sap.json ou nas vari?veis FUGAPET_SAP_USERNAME/FUGAPET_SAP_PASSWORD.";
+        }
+
+        if (TimeoutSegundos <= 0)
+        {
+            return "timeout_segundos n?o configurado corretamente no configuracao.sap.json.";
+        }
+
+        return MensagemConfiguracaoAusente;
+    }
+
+    public string MensagemMaterialDocumentAusente()
+        => string.IsNullOrWhiteSpace(MaterialDocumentBaseUrl)
+            ? "material_document_base_url n?o configurada no configuracao.sap.json."
+            : MensagemConfiguracaoBaseAusente();
+
+    public string MensagemProductionOrderAusente()
+        => string.IsNullOrWhiteSpace(ProductionOrderBaseUrl)
+            ? "production_order_base_url n?o configurada no configuracao.sap.json."
+            : MensagemConfiguracaoBaseAusente();
+
+    public string MensagemProductMasterAusente()
+        => string.IsNullOrWhiteSpace(ProductBaseUrl)
+            ? "product_base_url n?o configurada no configuracao.sap.json."
+            : MensagemConfiguracaoBaseAusente();
+
+    public static string MensagemArquivoConfiguracaoSapNaoEncontrado =>
+        "Arquivo configuracao.sap.json n?o encontrado na pasta da aplica??o."
+        + Environment.NewLine
+        + Environment.NewLine
+        + "Copie o arquivo configuracao.sap.exemplo.json, renomeie para configuracao.sap.json e configure as URLs/credenciais SAP HML.";
+
     public const string MensagemProductionOrderNaoConfigurado =
         "Integração SAP de Ordem de Produção não configurada.";
 
@@ -168,6 +261,9 @@ public sealed class ConfiguracaoSap
 
     public const string MensagemMaterialDocumentNaoConfigurado =
         "Integração SAP Material Document não configurada.";
+
+    public const string MensagemProductMasterNaoConfigurado =
+        "Integração SAP de Product Master (descrição) não configurada.";
 
     /// <summary>
     /// Mensagem operacional para arquivo de configuracao SAP existente porem malformado (erro de

@@ -6,7 +6,9 @@ public partial class ProcessoProducaoForm : UserControl
 {
     private const string ProducaoIconPath = "Servicos\\icone\\producao_24x_red.png";
 
-    public event EventHandler? EntradaProdutoRequested;
+    // Tarefa Entrada 24.1b: cards separados de Entrada por modo (Matéria-Prima × Químicos).
+    public event EventHandler? EntradaMateriaPrimaRequested;
+    public event EventHandler? EntradaQuimicosRequested;
     public event EventHandler? ProcessoProdutoAcabadoRequested;
     public event EventHandler? ProcessoSemiAcabadoRequested;
     public event EventHandler? ProcessoConsumoMaterialRequested;
@@ -76,12 +78,14 @@ public partial class ProcessoProducaoForm : UserControl
 
         using Bitmap source = new(iconPath);
         entradaIconLabel.Image = new Bitmap(source);
+        entradaQuimicosIconLabel.Image = new Bitmap(source);
         processIconLabel.Image = new Bitmap(source);
         pesagemIconLabel.Image = new Bitmap(source);
         quimicosIconLabel.Image = new Bitmap(source);
         semiAcabadoIconLabel.Image = new Bitmap(source);
         ordensIconLabel.Image = new Bitmap(source);
         entradaIconLabel.Text = string.Empty;
+        entradaQuimicosIconLabel.Text = string.Empty;
         processIconLabel.Text = string.Empty;
         pesagemIconLabel.Text = string.Empty;
         quimicosIconLabel.Text = string.Empty;
@@ -118,14 +122,23 @@ public partial class ProcessoProducaoForm : UserControl
 
     private void WireCardClickEvents()
     {
-        entradaProdutoCard.Click += OnEntradaProdutoClick;
-        entradaIconPanel.Click += OnEntradaProdutoClick;
-        entradaIconLabel.Click += OnEntradaProdutoClick;
-        entradaTitleLabel.Click += OnEntradaProdutoClick;
-        entradaDescriptionLabel.Click += OnEntradaProdutoClick;
-        entradaStatusLabel.Click += OnEntradaProdutoClick;
-        entradaShortcutLabel.Click += OnEntradaProdutoClick;
-        entradaArrowLabel.Click += OnEntradaProdutoClick;
+        entradaProdutoCard.Click += OnEntradaMateriaPrimaClick;
+        entradaIconPanel.Click += OnEntradaMateriaPrimaClick;
+        entradaIconLabel.Click += OnEntradaMateriaPrimaClick;
+        entradaTitleLabel.Click += OnEntradaMateriaPrimaClick;
+        entradaDescriptionLabel.Click += OnEntradaMateriaPrimaClick;
+        entradaStatusLabel.Click += OnEntradaMateriaPrimaClick;
+        entradaShortcutLabel.Click += OnEntradaMateriaPrimaClick;
+        entradaArrowLabel.Click += OnEntradaMateriaPrimaClick;
+
+        entradaQuimicosCard.Click += OnEntradaQuimicosClick;
+        entradaQuimicosIconPanel.Click += OnEntradaQuimicosClick;
+        entradaQuimicosIconLabel.Click += OnEntradaQuimicosClick;
+        entradaQuimicosTitleLabel.Click += OnEntradaQuimicosClick;
+        entradaQuimicosDescriptionLabel.Click += OnEntradaQuimicosClick;
+        entradaQuimicosStatusLabel.Click += OnEntradaQuimicosClick;
+        entradaQuimicosShortcutLabel.Click += OnEntradaQuimicosClick;
+        entradaQuimicosArrowLabel.Click += OnEntradaQuimicosClick;
 
         processoSemiAcabadoCard.Click += OnProcessoSemiAcabadoClick;
         semiAcabadoIconPanel.Click += OnProcessoSemiAcabadoClick;
@@ -173,9 +186,16 @@ public partial class ProcessoProducaoForm : UserControl
         ordensArrowLabel.Click += OnOrdensAndamentoClick;
     }
 
-    private void OnEntradaProdutoClick(object? sender, EventArgs e)
+    private void OnEntradaMateriaPrimaClick(object? sender, EventArgs e)
     {
-        EntradaProdutoRequested?.Invoke(this, EventArgs.Empty);
+        _ = ModoEntradaMaterial.MateriaPrima;
+        EntradaMateriaPrimaRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnEntradaQuimicosClick(object? sender, EventArgs e)
+    {
+        _ = ModoEntradaMaterial.Quimico;
+        EntradaQuimicosRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnProcessoProdutoAcabadoClick(object? sender, EventArgs e)

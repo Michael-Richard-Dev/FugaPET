@@ -41,6 +41,18 @@ public partial class ProcessoEntradaProdutoForm : Form
         Parcial
     }
 
+    private enum FiltroItensEntrada
+    {
+        Todos,
+        PendentesPesagem,
+        PesadosLocalmente,
+        PendentesSap,
+        EnviadosSap,
+        ErroSap,
+        ComSaldo,
+        SemSaldo
+    }
+
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
     private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
@@ -86,26 +98,47 @@ public partial class ProcessoEntradaProdutoForm : Form
     private readonly EntradaProdutoServico _entradaServico;
     private readonly Dictionary<long, PedidoCompraSapItem> _itensCarregadosPorCodigo = [];
     private readonly Dictionary<long, List<EntradaProdutoPesagem>> _leiturasPorItem = [];
+    private readonly Dictionary<long, global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro> _tarasPorItem = [];
+    private IReadOnlyList<PedidoCompraSapItem> _itensPedidoCarregados = [];
     private long? _codigoLancamentoPersistido;
     private readonly CancellationTokenSource _fechamentoTelaCts = new();
     private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController;
     private Task _envioSapTask = Task.CompletedTask;
     private readonly ToolTip _envioSapToolTip = new();
+    private readonly ContextMenuStrip _filtroItensPedidoMenu = new();
+    private Label? _estadoVazioItensLabel;
+    private FiltroItensEntrada _filtroItensAtual = FiltroItensEntrada.Todos;
+    private EstadoVisualIntegracaoSap _estadoIntegracaoSapAtual = EstadoVisualIntegracaoSap.AguardandoGravacaoLocal;
     private bool _acessoDiretoValidado;
 
+    // Tarefa Entrada 24.1 (Ajuste 3): modo operacional (Matéria-Prima × Químicos) + configuração da tela.
+    private readonly global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial _modoEntrada;
+    private readonly global::FugaPET_Dev.Modelo.Processo.ConfiguracaoTelaEntradaMaterial _configuracaoTela;
+
     public ProcessoEntradaProdutoForm()
-        : this(new global::FugaPET_Dev.Controle.Processo.EntradaProdutoController())
+        : this(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima)
     {
     }
 
-    internal ProcessoEntradaProdutoForm(global::FugaPET_Dev.Controle.Processo.EntradaProdutoController controller)
+    public ProcessoEntradaProdutoForm(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo)
+        : this(new global::FugaPET_Dev.Controle.Processo.EntradaProdutoController(), modo)
+    {
+    }
+
+    internal ProcessoEntradaProdutoForm(
+        global::FugaPET_Dev.Controle.Processo.EntradaProdutoController controller,
+        global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo =
+            global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        _modoEntrada = modo;
+        _configuracaoTela = global::FugaPET_Dev.Modelo.Processo.ConfiguracaoTelaEntradaMaterialFactory.Criar(modo);
         _entradaServico = _controller.EntradaProduto;
         _balancaLeituraServico = _controller.BalancaLeitura;
         _impressaoEntrada = _controller.Impressao;
         _taraController = _controller.Tara;
         InitializeComponent();
+        AplicarConfiguracaoModoEntrada();
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         if (_controller.Sap.EhSimulado)
@@ -127,6 +160,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             "aguardando gravação local");
         ConfigureResponsiveSummaryCards();
         ConfigureProductionSearchBox();
+        ConfigurarBuscaFiltroEstadoVazioEntrada();
         ConfigurarComboPedidos();
         ConfigureSideActionButtonIcons();
         if (_controller.Sap.EhSimulado)
@@ -304,10 +338,11 @@ public partial class ProcessoEntradaProdutoForm : Form
         EstadoVisualIntegracaoSap estado,
         string? detalhe = null)
     {
+        _estadoIntegracaoSapAtual = estado;
         (string texto, Color cor) = estado switch
         {
             EstadoVisualIntegracaoSap.LiberadoParaEnvio =>
-                ("SAP HML: LIBERADO PARA ENVIO", Color.FromArgb(34, 197, 94)),
+                ("SAP HML: PENDENTE", Color.FromArgb(34, 197, 94)),
             EstadoVisualIntegracaoSap.Enviando =>
                 ("SAP HML: ENVIANDO", Color.FromArgb(59, 130, 246)),
             EstadoVisualIntegracaoSap.Enviado =>
@@ -317,16 +352,20 @@ public partial class ProcessoEntradaProdutoForm : Form
             EstadoVisualIntegracaoSap.Parcial =>
                 ("SAP HML: PARCIAL", Color.FromArgb(249, 115, 22)),
             EstadoVisualIntegracaoSap.AguardandoGravacaoLocal =>
-                ("SAP HML: AGUARDANDO GRAVAÇÃO LOCAL", Color.FromArgb(250, 204, 21)),
+                ("SAP HML: AGUARDANDO", Color.FromArgb(250, 204, 21)),
             _ =>
                 ("SAP HML: BLOQUEADO", Color.FromArgb(239, 68, 68))
         };
 
         sapStatusDotLabel.ForeColor = cor;
-        sapStatusLabel.Text = string.IsNullOrWhiteSpace(detalhe)
+        string tooltip = string.IsNullOrWhiteSpace(detalhe)
             ? texto
             : $"{texto} — {detalhe}";
+        sapStatusLabel.Text = texto;
         sapStatusLabel.AutoSize = false;
+        _envioSapToolTip.SetToolTip(sapStatusPanel, tooltip);
+        _envioSapToolTip.SetToolTip(sapStatusLabel, tooltip);
+        _envioSapToolTip.SetToolTip(sapStatusDotLabel, tooltip);
     }
 
     private void ReturnToLeituraProducao()
@@ -488,6 +527,129 @@ public partial class ProcessoEntradaProdutoForm : Form
         productionSearchIconPictureBox.Image = CreateTintedIcon(global::FugaPET_Dev.Properties.Resources.search_red, searchIconColor);
         productionSearchIconPictureBox.Cursor = Cursors.IBeam;
         productionSearchIconPictureBox.Click += (_, _) => productionSearchTextBox.Focus();
+    }
+
+    private void ConfigurarBuscaFiltroEstadoVazioEntrada()
+    {
+        productionSearchTextBox.PlaceholderText = _modoEntrada == global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico
+            ? "Pesquisar itens de químicos..."
+            : "Pesquisar itens de matéria-prima...";
+        productionSearchTextBox.MaxLength = 120;
+        productionSearchTextBox.TextChanged += (_, _) => AplicarFiltroItensPedido();
+
+        ConfigurarMenuFiltrosItensPedido();
+        productionFilterButton.Click += (_, _) =>
+            _filtroItensPedidoMenu.Show(productionFilterButton, new Point(0, productionFilterButton.Height));
+
+        ConfigurarEstadoVazioItensPedido();
+        ExibirEstadoVazioItensPedido(
+            "Informe ou selecione um Pedido de Compra para carregar os itens.",
+            $"A tela exibirá apenas itens compatíveis com {_configuracaoTela.TituloTela}.");
+    }
+
+    private void ConfigurarMenuFiltrosItensPedido()
+    {
+        _filtroItensPedidoMenu.Items.Clear();
+        AdicionarFiltroItensPedido("Todos", FiltroItensEntrada.Todos);
+        AdicionarFiltroItensPedido("Pendentes de pesagem", FiltroItensEntrada.PendentesPesagem);
+        AdicionarFiltroItensPedido("Pesados localmente", FiltroItensEntrada.PesadosLocalmente);
+        AdicionarFiltroItensPedido("Pendentes SAP", FiltroItensEntrada.PendentesSap);
+        AdicionarFiltroItensPedido("Enviados SAP", FiltroItensEntrada.EnviadosSap);
+        AdicionarFiltroItensPedido("Erro SAP", FiltroItensEntrada.ErroSap);
+        AdicionarFiltroItensPedido("Com saldo", FiltroItensEntrada.ComSaldo);
+        AdicionarFiltroItensPedido("Sem saldo", FiltroItensEntrada.SemSaldo);
+        AtualizarTextoFiltroItensPedido();
+    }
+
+    private void AdicionarFiltroItensPedido(string texto, FiltroItensEntrada filtro)
+    {
+        ToolStripMenuItem item = new(texto)
+        {
+            Tag = filtro,
+            Checked = filtro == _filtroItensAtual
+        };
+        item.Click += (_, _) =>
+        {
+            _filtroItensAtual = filtro;
+            foreach (ToolStripMenuItem menuItem in _filtroItensPedidoMenu.Items.OfType<ToolStripMenuItem>())
+            {
+                menuItem.Checked = menuItem.Tag is FiltroItensEntrada valor && valor == _filtroItensAtual;
+            }
+
+            AtualizarTextoFiltroItensPedido();
+            AplicarFiltroItensPedido();
+        };
+        _filtroItensPedidoMenu.Items.Add(item);
+    }
+
+    private void AtualizarTextoFiltroItensPedido()
+    {
+        string texto = _filtroItensAtual switch
+        {
+            FiltroItensEntrada.PendentesPesagem => "Pendentes",
+            FiltroItensEntrada.PesadosLocalmente => "Pesados",
+            FiltroItensEntrada.PendentesSap => "Pend. SAP",
+            FiltroItensEntrada.EnviadosSap => "Enviados",
+            FiltroItensEntrada.ErroSap => "Erro SAP",
+            FiltroItensEntrada.ComSaldo => "Com saldo",
+            FiltroItensEntrada.SemSaldo => "Sem saldo",
+            _ => "Filtros"
+        };
+
+        productionFilterButton.Text = $"=  {texto}";
+    }
+
+    private void ConfigurarEstadoVazioItensPedido()
+    {
+        _estadoVazioItensLabel = new Label
+        {
+            AutoSize = false,
+            BackColor = Color.White,
+            ForeColor = Color.FromArgb(75, 85, 99),
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Visible = false,
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+        };
+
+        productionReadingsPanel.Controls.Add(_estadoVazioItensLabel);
+        PosicionarEstadoVazioItensPedido();
+        _estadoVazioItensLabel.BringToFront();
+        productionReadingsPanel.Resize += (_, _) => PosicionarEstadoVazioItensPedido();
+        productionDataGridView.Resize += (_, _) => PosicionarEstadoVazioItensPedido();
+    }
+
+    private void PosicionarEstadoVazioItensPedido()
+    {
+        if (_estadoVazioItensLabel is null)
+        {
+            return;
+        }
+
+        _estadoVazioItensLabel.Location = productionDataGridView.Location;
+        _estadoVazioItensLabel.Size = productionDataGridView.Size;
+    }
+
+    private void ExibirEstadoVazioItensPedido(string mensagem, string? submensagem = null)
+    {
+        if (_estadoVazioItensLabel is null)
+        {
+            return;
+        }
+
+        _estadoVazioItensLabel.Text = string.IsNullOrWhiteSpace(submensagem)
+            ? mensagem
+            : $"{mensagem}{Environment.NewLine}{Environment.NewLine}{submensagem}";
+        _estadoVazioItensLabel.Visible = true;
+        _estadoVazioItensLabel.BringToFront();
+    }
+
+    private void OcultarEstadoVazioItensPedido()
+    {
+        if (_estadoVazioItensLabel is not null)
+        {
+            _estadoVazioItensLabel.Visible = false;
+        }
     }
 
     private void ConfigureSideActionButtonIcons()
@@ -755,10 +917,12 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
+        // Tarefa Entrada 23.2 (Ajuste 7): a confirmação mostra o PESO LÍQUIDO (KG) que será enviado ao SAP 101.
+        decimal pesoLiquidoTotalKg = _leiturasPorItem.Values
+            .Sum(EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido);
+
         DialogResult confirmacao = MessageBox.Show(
-            $"Confirma criar o movimento 101 no SAP DE HOMOLOGAÇÃO para o lançamento {codigoLancamento}?\n\n"
-            + "Será criado um documento de material (entrada) vinculado ao pedido. Esta é uma etapa "
-            + "separada da gravação local e só ocorre após esta confirmação.",
+            MontarConfirmacaoEnvio101(codigoLancamento, pesoLiquidoTotalKg),
             "Criar movimento 101 no SAP HML",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning,
@@ -2617,7 +2781,10 @@ public partial class ProcessoEntradaProdutoForm : Form
             return false;
         }
 
-        decimal pesoLiquido = EntradaProdutoPesagemCalculos.CalcularPesoLiquido(pesoBruto, tara.PesoKg);
+        // Tarefa Entrada 23.2 (Ajuste 2): tara SEMPRE convertida para KG por um ponto central. A tara de
+        // cadastro (TaraCadastro.PesoKg) já está em KG; passamos "KG" para manter a regra única e diagnosticável.
+        decimal taraKg = EntradaProdutoQuantidadeSap.ConverterTaraParaKg(tara.PesoKg, "KG");
+        decimal pesoLiquido = EntradaProdutoPesagemCalculos.CalcularPesoLiquido(pesoBruto, taraKg);
         if (!EntradaProdutoPesagemCalculos.LeituraTemPesoValido(pesoBruto, pesoLiquido))
         {
             statusLabel.Text = "O peso bruto deve ser maior que a tara.";
@@ -2629,7 +2796,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         leituras.Add(EntradaProdutoPesagemCalculos.MontarLeitura(
             leituras,
             pesoBruto,
-            tara.PesoKg,
+            taraKg,
             tara.CodigoTara,
             origem,
             _idBalancaSelecionada,
@@ -2976,7 +3143,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             statusLabel.Text = $"Consultando pedido {numeroPedido} no SAP...";
 
             ResultadoConsultaPedido resultado =
-                await _controller.ConsultarPedidoAsync(numeroPedido, cancellationToken);
+                await _controller.ConsultarPedidoAsync(numeroPedido, _modoEntrada, cancellationToken);
             if (!PedidoSolicitadoAindaEhAtual(numeroPedido))
             {
                 return;
@@ -3005,6 +3172,47 @@ public partial class ProcessoEntradaProdutoForm : Form
                     numeroPedido,
                     StringComparison.OrdinalIgnoreCase))
             {
+                return;
+            }
+
+            // Tarefa Entrada 23.1: pedido NAO aprovado/liberado no SAP nao abre operacao. Mantem o numero
+            // digitado no combo, limpa os dados operacionais e nao habilita leitura/confirmacao/envio.
+            if (!resultado.PedidoLiberado)
+            {
+                _numeroPedidoCarregado = string.Empty;
+                LimparDadosPedidoSelecionado();
+                string mensagemBloqueio = MontarMensagemPedidoNaoLiberado(resultado);
+                statusLabel.Text = resultado.MotivoBloqueioLiberacao;
+                AtualizarDisponibilidadeInicioLeitura();
+                if (PodeAtualizarTela())
+                {
+                    MessageBox.Show(
+                        mensagemBloqueio,
+                        "Pedido de Compra não liberado",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+
+                return;
+            }
+
+            // Tarefa Entrada 24.1 (Ajuste 9/10): pedido liberado, mas SEM item compatível com o modo desta tela
+            // (ou todos Indefinidos) — não carrega grid vazia como sucesso; alerta e mantém o número no combo.
+            if (!resultado.PedidoTemItensDoModo)
+            {
+                _numeroPedidoCarregado = string.Empty;
+                LimparDadosPedidoSelecionado();
+                statusLabel.Text = resultado.MotivoBloqueioModo;
+                AtualizarDisponibilidadeInicioLeitura();
+                if (PodeAtualizarTela())
+                {
+                    MessageBox.Show(
+                        resultado.MotivoBloqueioModo,
+                        _configuracaoTela.NomeModulo,
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+
                 return;
             }
 
@@ -3081,6 +3289,58 @@ public partial class ProcessoEntradaProdutoForm : Form
                 numeroPedido,
                 StringComparison.OrdinalIgnoreCase);
 
+    // Tarefa Entrada 24.1 (Ajuste 3/16): título/subtítulo do header conforme o modo (Matéria-Prima × Químicos).
+    private void AplicarConfiguracaoModoEntrada()
+    {
+        Text = _configuracaoTela.TituloTela;
+        headerTitleLabel.Text = _configuracaoTela.TituloTela;
+        headerSubtitleLabel.Text = _configuracaoTela.SubtituloTela;
+    }
+
+    // Tarefa Entrada 23.2 (Ajuste 7): confirmação do envio 101 mostrando o peso líquido (KG) em pt-BR.
+    // Formatação de EXIBIÇÃO (vírgula) — o payload usa serialização invariante ("1.5"), nunca este texto.
+    // internal static para teste direto (InternalsVisibleTo).
+    internal static string MontarConfirmacaoEnvio101(long codigoLancamento, decimal pesoLiquidoTotalKg)
+    {
+        string liquido = pesoLiquidoTotalKg.ToString(
+            "0.000", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        return $"Entrada SAP 101 será enviada com peso líquido de {liquido} KG.\r\n\r\n"
+            + $"Confirma criar o movimento 101 no SAP DE HOMOLOGAÇÃO para o lançamento {codigoLancamento}?\r\n\r\n"
+            + "Será criado um documento de material (entrada) vinculado ao pedido. Esta é uma etapa "
+            + "separada da gravação local e só ocorre após esta confirmação.";
+    }
+
+    // Tarefa Entrada 23.1 (Ajuste 5): mensagem amigável de pedido não liberado por status/liberação.
+    // internal static para teste direto (InternalsVisibleTo) sem instanciar o Form.
+    internal static string MontarMensagemPedidoNaoLiberado(ResultadoConsultaPedido resultado)
+    {
+        string pedido = string.IsNullOrWhiteSpace(resultado.NumeroPedido) ? "(não informado)" : resultado.NumeroPedido.Trim();
+        string status = string.IsNullOrWhiteSpace(resultado.StatusProcessamento) ? "(não informado)" : resultado.StatusProcessamento.Trim();
+        string descricao = string.IsNullOrWhiteSpace(resultado.DescricaoStatusProcessamento)
+            ? "Status SAP não mapeado"
+            : resultado.DescricaoStatusProcessamento.Trim();
+
+        if (resultado.LiberacaoNaoConcluida)
+        {
+            return "Pedido de compra com liberação não concluída no SAP.\r\n\r\n"
+                + $"Pedido: {pedido}\r\n"
+                + "A entrada não pode ser realizada até a conclusão da liberação.";
+        }
+
+        if (string.Equals(resultado.StatusProcessamento?.Trim(), ValidadorLiberacaoPedidoCompra.StatusRejeitado, StringComparison.Ordinal))
+        {
+            return "Pedido de compra rejeitado no SAP.\r\n\r\n"
+                + $"Pedido: {pedido}\r\n"
+                + "Status atual: 08 - Rejeitado.\r\n\r\n"
+                + "A entrada não pode ser realizada para pedido rejeitado.";
+        }
+
+        return "Pedido de compra ainda não liberado/aprovado no SAP.\r\n\r\n"
+            + $"Pedido: {pedido}\r\n"
+            + $"Status atual: {status} - {descricao}\r\n\r\n"
+            + "A entrada não pode ser realizada enquanto o pedido não estiver aprovado/liberado.";
+    }
+
     private void LimparDadosPedidoSelecionado()
     {
         lotTextBox.Text = string.Empty;
@@ -3100,6 +3360,8 @@ public partial class ProcessoEntradaProdutoForm : Form
     private void LimparItensPedidoCompra()
     {
         _leiturasPorItem.Clear();
+        _tarasPorItem.Clear();
+        _itensPedidoCarregados = [];
         _codigoLancamentoPersistido = null;
         AtualizarEstadoVisualLocal(
             EstadoVisualLocalEntrada.Pendente,
@@ -3109,6 +3371,9 @@ public partial class ProcessoEntradaProdutoForm : Form
             "aguardando gravação local");
         productionActionsButton.Enabled = false;
         productionDataGridView.Rows.Clear();
+        ExibirEstadoVazioItensPedido(
+            "Informe ou selecione um Pedido de Compra para carregar os itens.",
+            $"A tela exibirá apenas itens compatíveis com {_configuracaoTela.TituloTela}.");
         UpdateProductionCounters();
         UpdateProductionGridFooter();
     }
@@ -3116,6 +3381,8 @@ public partial class ProcessoEntradaProdutoForm : Form
     private void PreencherItensPedidoCompra(IReadOnlyList<PedidoCompraSapItem> itens)
     {
         _leiturasPorItem.Clear();
+        _tarasPorItem.Clear();
+        _itensPedidoCarregados = itens.ToList();
         _codigoLancamentoPersistido = null;
         AtualizarEstadoVisualLocal(
             EstadoVisualLocalEntrada.Pendente,
@@ -3124,29 +3391,142 @@ public partial class ProcessoEntradaProdutoForm : Form
             EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
             "aguardando gravação local");
         productionActionsButton.Enabled = false;
+        AplicarFiltroItensPedido();
+    }
+
+    private void AplicarFiltroItensPedido()
+    {
         productionDataGridView.Rows.Clear();
-        var cultura = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
-        foreach (PedidoCompraSapItem item in itens)
+
+        if (_itensPedidoCarregados.Count == 0)
         {
-            string quantidade = item.Quantidade.HasValue
-                ? item.Quantidade.Value.ToString("0.###", cultura)
-                : string.Empty;
-            int rowIndex = productionDataGridView.Rows.Add();
-            DataGridViewRow row = productionDataGridView.Rows[rowIndex];
-            row.Cells["productionCodeColumn"].Value = item.CodigoMaterial ?? string.Empty;
-            row.Cells["productionProductColumn"].Value = item.Descricao ?? string.Empty;
-            row.Cells["productionQuantityColumn"].Value = quantidade;
-            row.Cells["productionWeightColumn"].Value = item.UnidadeMedida ?? string.Empty;
-            row.Cells["productionPesoLidoColumn"].Value = string.Empty;
-            row.Cells["productionItemIdColumn"].Value = item.CodigoItem.ToString();
-            row.Cells["productionPesoOrigemColumn"].Value = string.Empty;
-            row.Cells["productionNumeroItemColumn"].Value = item.NumeroItem;
-            ApplyProductionRowStyle(row, rowIndex);
+            ExibirEstadoVazioItensPedido(
+                "Informe ou selecione um Pedido de Compra para carregar os itens.",
+                $"A tela exibirá apenas itens compatíveis com {_configuracaoTela.TituloTela}.");
+            AtualizarDisponibilidadeInicioLeitura();
+            UpdateProductionCounters();
+            UpdateProductionGridFooter();
+            return;
+        }
+
+        string pesquisa = productionSearchTextBox.Text.Trim();
+        List<PedidoCompraSapItem> itensFiltrados = _itensPedidoCarregados
+            .Where(item => ItemAtendeFiltroOperacional(item)
+                && ItemAtendePesquisa(item, pesquisa))
+            .ToList();
+
+        foreach (PedidoCompraSapItem item in itensFiltrados)
+        {
+            AdicionarLinhaItemPedido(item);
         }
 
         ClearGridSelection(productionDataGridView);
+
+        if (itensFiltrados.Count == 0)
+        {
+            string mensagem = string.IsNullOrWhiteSpace(pesquisa)
+                ? "Nenhum item encontrado para o filtro selecionado."
+                : "Nenhum item encontrado para o filtro informado.";
+            ExibirEstadoVazioItensPedido(mensagem);
+        }
+        else
+        {
+            OcultarEstadoVazioItensPedido();
+        }
+
+        AtualizarDisponibilidadeInicioLeitura();
         UpdateProductionCounters();
         UpdateProductionGridFooter();
+    }
+
+    private bool ItemAtendeFiltroOperacional(PedidoCompraSapItem item)
+    {
+        bool possuiPeso = ItemPossuiPesoRegistrado(item.CodigoItem);
+        bool possuiSaldo = ItemPossuiSaldo(item);
+
+        return _filtroItensAtual switch
+        {
+            FiltroItensEntrada.PendentesPesagem => !possuiPeso,
+            FiltroItensEntrada.PesadosLocalmente => possuiPeso,
+            FiltroItensEntrada.PendentesSap => possuiPeso
+                && _codigoLancamentoPersistido.HasValue
+                && _estadoIntegracaoSapAtual is not EstadoVisualIntegracaoSap.Enviado
+                && _estadoIntegracaoSapAtual is not EstadoVisualIntegracaoSap.Falha,
+            FiltroItensEntrada.EnviadosSap => possuiPeso
+                && _estadoIntegracaoSapAtual == EstadoVisualIntegracaoSap.Enviado,
+            FiltroItensEntrada.ErroSap => possuiPeso
+                && _estadoIntegracaoSapAtual == EstadoVisualIntegracaoSap.Falha,
+            FiltroItensEntrada.ComSaldo => possuiSaldo,
+            FiltroItensEntrada.SemSaldo => !possuiSaldo,
+            _ => true
+        };
+    }
+
+    private bool ItemAtendePesquisa(PedidoCompraSapItem item, string pesquisa)
+    {
+        if (string.IsNullOrWhiteSpace(pesquisa))
+        {
+            return true;
+        }
+
+        string texto = string.Join(
+            " ",
+            item.CodigoMaterial,
+            item.Descricao,
+            item.UnidadeMedida,
+            item.Quantidade?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            item.NumeroItem,
+            item.CodigoItem.ToString(),
+            ItemPossuiPesoRegistrado(item.CodigoItem) ? "pesado localmente" : "pendente pesagem",
+            _codigoLancamentoPersistido.HasValue ? "pendente sap" : "aguardando local");
+
+        return texto.Contains(pesquisa, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void AdicionarLinhaItemPedido(PedidoCompraSapItem item)
+    {
+        var cultura = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+        string quantidade = item.Quantidade.HasValue
+            ? item.Quantidade.Value.ToString("0.###", cultura)
+            : string.Empty;
+        int rowIndex = productionDataGridView.Rows.Add();
+        DataGridViewRow row = productionDataGridView.Rows[rowIndex];
+        row.Cells["productionCodeColumn"].Value = item.CodigoMaterial ?? string.Empty;
+        row.Cells["productionProductColumn"].Value = item.Descricao ?? string.Empty;
+        row.Cells["productionQuantityColumn"].Value = quantidade;
+        row.Cells["productionWeightColumn"].Value = item.UnidadeMedida ?? string.Empty;
+        row.Cells["productionPesoLidoColumn"].Value = string.Empty;
+        row.Cells["productionItemIdColumn"].Value = item.CodigoItem.ToString();
+        row.Cells["productionPesoOrigemColumn"].Value = string.Empty;
+        row.Cells["productionNumeroItemColumn"].Value = item.NumeroItem;
+        if (_tarasPorItem.TryGetValue(item.CodigoItem, out global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro? tara))
+        {
+            row.Tag = tara;
+        }
+
+        if (_leiturasPorItem.TryGetValue(item.CodigoItem, out List<EntradaProdutoPesagem>? leituras))
+        {
+            AtualizarTotaisDaLinha(row, leituras);
+        }
+
+        ApplyProductionRowStyle(row, rowIndex);
+    }
+
+    private bool ItemPossuiPesoRegistrado(long codigoItem)
+        => _leiturasPorItem.TryGetValue(codigoItem, out List<EntradaProdutoPesagem>? leituras)
+            && EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(leituras) > 0m;
+
+    private bool ItemPossuiSaldo(PedidoCompraSapItem item)
+    {
+        if (!item.Quantidade.HasValue)
+        {
+            return true;
+        }
+
+        decimal utilizado = _leiturasPorItem.TryGetValue(item.CodigoItem, out List<EntradaProdutoPesagem>? leituras)
+            ? EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(leituras)
+            : 0m;
+        return item.Quantidade.Value - utilizado > 0m;
     }
 
     private void LoadMockData()

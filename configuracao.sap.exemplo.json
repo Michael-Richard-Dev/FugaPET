@@ -1,16 +1,18 @@
 {
   "sap": {
-    "base_url": "https://servidor-sap.exemplo.local/odata/v4/servico",
-    "material_document_base_url": "https://servidor-sap.exemplo.local/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
-    "production_order_base_url": "https://servidor-sap.exemplo.local/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/",
-    "_production_order_opcional": "Opcional: se vazia, e derivada de material_document_base_url (mesmo host/caminho, trocando o servico).",
-    "sap_client": "000",
+    "base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001",
+    "material_document_base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
+    "production_order_base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/",
+    "production_order_confirmation_base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata/sap/API_PROD_ORDER_CONFIRMATION_2_SRV/",
+    "product_base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata/sap/API_PRODUCT_SRV/",
+    "sap_client": "110",
     "hosts_permitidos": [
-      "servidor-sap.exemplo.local"
+      "vhfufds4ci.sap.fugacouros.com.br"
     ],
-    "escrita_habilitada": false,
+    "usuario": "DEFINIR_USUARIO_OU_USAR_VARIAVEL_AMBIENTE",
+    "senha": "DEFINIR_SENHA_OU_USAR_VARIAVEL_AMBIENTE",
     "timeout_segundos": 30,
-    "_credenciais": "Defina FUGAPET_SAP_USERNAME, FUGAPET_SAP_PASSWORD e FUGAPET_SAP_ALLOWED_HOSTS no ambiente.",
-    "_escrita_homologacao": "Para teste autorizado, defina FUGAPET_SAP_WRITE_ENABLED=true. O padrao permanece false."
+    "escrita_habilitada": false,
+    "_seguranca": "Nao versionar senha real. Em producao/HML, prefira FUGAPET_SAP_USERNAME e FUGAPET_SAP_PASSWORD."
   }
 }

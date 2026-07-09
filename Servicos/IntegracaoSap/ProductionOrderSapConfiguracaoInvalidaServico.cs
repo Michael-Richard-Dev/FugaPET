@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -17,4 +17,7 @@ internal sealed class ProductionOrderSapConfiguracaoInvalidaServico : IProductio
         CancellationToken cancellationToken = default)
         => Task.FromResult(ResultadoConsultaOrdemProducaoSap.NaoConfigurado(
             ConfiguracaoSap.MensagemConfiguracaoInvalida));
+    public Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<OrdemProducaoSap>>([]);
 }

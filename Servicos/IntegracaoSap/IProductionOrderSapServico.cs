@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -15,4 +15,8 @@ public interface IProductionOrderSapServico
     Task<ResultadoConsultaOrdemProducaoSap> ConsultarOrdemAsync(
         string numeroOrdem,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<OrdemProducaoSap>>([]);
 }

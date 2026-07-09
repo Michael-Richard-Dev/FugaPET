@@ -299,6 +299,14 @@ public sealed class MaterialDocumentSapApiClient
             ? string.Empty
             : " " + resposta.ReasonPhrase;
         string detalhe = SintetizarErroSap(corpo);
+        if (RejeicaoUnidadeEntradaKg(detalhe))
+        {
+            detalhe =
+                "O SAP rejeitou a entrada em KG para este item do pedido. "
+                + "Verifique se o material/pedido possui conversao ou se o pedido deve ser criado em KG. "
+                + detalhe;
+        }
+
         string mensagem = $"Etapa {etapa}: HTTP {status}{reason}."
             + (string.IsNullOrEmpty(detalhe) ? string.Empty : " " + detalhe);
         if (mensagem.Length > LimiteMensagemLog)
@@ -313,6 +321,20 @@ public sealed class MaterialDocumentSapApiClient
             Etapa = etapa,
             MensagemSanitizada = mensagem
         };
+    }
+
+    private static bool RejeicaoUnidadeEntradaKg(string detalhe)
+    {
+        if (string.IsNullOrWhiteSpace(detalhe))
+        {
+            return false;
+        }
+
+        return detalhe.Contains("KG", StringComparison.OrdinalIgnoreCase)
+               && (detalhe.Contains("unit", StringComparison.OrdinalIgnoreCase)
+                   || detalhe.Contains("unidade", StringComparison.OrdinalIgnoreCase)
+                   || detalhe.Contains("uom", StringComparison.OrdinalIgnoreCase)
+                   || detalhe.Contains("convers", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

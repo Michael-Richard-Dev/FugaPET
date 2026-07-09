@@ -1,4 +1,4 @@
-using FugaPET_Dev.Controle;
+﻿using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -14,7 +14,7 @@ namespace FugaPET_Dev.Tests.IntegracaoSap;
 /// Envio CONTROLADO da Entrada ao SAP via Material Document (movimento 101), separado da finalizacao
 /// local. Garante que o Finalizar nao chama SAP, que o envio NAO usa PATCH no Pedido de Compra, que
 /// cria um unico documento de material por lancamento com os itens elegiveis, e que as travas
-/// (HOMOLOGACAO + permissao + escrita + Material Document configurado + unidade KG + dados) sao
+/// (HOMOLOGACAO + permissao + escrita + Material Document configurado + dados obrigatorios) sao
 /// reaplicadas antes do POST.
 /// </summary>
 public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
@@ -135,8 +135,15 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         Assert.Contains("77", texto);
     }
 
-    [Fact]
-    public async Task Enviar_ItemComUnidadeDiferenteDeKg_DeveBloquearSemPost()
+    [Theory]
+    [InlineData("KG")]
+    [InlineData("KGM")]
+    [InlineData("UN")]
+    [InlineData("PC")]
+    [InlineData("ST")]
+    [InlineData("PAL")]
+    [InlineData("CX")]
+    public async Task Enviar_UnidadeComercialDoPedido_DeveEnviarPesoLiquidoSempreEmKg(string unidadePedido)
     {
         DefinirSessao(comEnviarSap: true);
         FakeMaterialDocumentSapServico materialDoc = new();
@@ -144,15 +151,69 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             new FakePedidoCompraSapServico { EscritaHabilitada = true },
             materialDoc,
             ehHomologacao: true,
-            itens: [Item("10", unidade: "PC")]);
+            itens: [Item("10", unidade: unidadePedido)]);
 
         ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
-        Assert.Equal(CenarioEnvioSapEntrada.UnidadeNaoSuportada, resultado.Cenario);
-        Assert.Equal(0, materialDoc.Chamadas);
-        Assert.Contains("Unidade", resultado.Mensagem);
-        Assert.Contains("PC", resultado.Mensagem);
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, resultado.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        MaterialDocumentSapItemRequest item = Assert.Single(materialDoc.UltimaRequisicao!.Itens);
+        Assert.Equal("KG", item.EntryUnit);
+        Assert.Equal(
+            8m,
+            decimal.Parse(item.QuantityInEntryUnit, CultureInfo.InvariantCulture));
+        Assert.Equal("B", item.GoodsMovementRefDocType);
+        Assert.Equal("101", item.GoodsMovementType);
+        Assert.Equal("4500000010", item.PurchaseOrder);
+        Assert.Equal("00010", item.PurchaseOrderItem);
     }
+
+    [Fact]
+    public async Task Enviar_ItemComPesoLiquidoZero_DeveBloquearSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap semPeso = Item("10", unidade: "UN") with { PesoLiquidoKg = 0m };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [semPeso]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("peso", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Enviar_FalhaSap_DeveExibirMensagemSanitizadaDoMaterialDocument()
+    {
+        DefinirSessao(comEnviarSap: true);
+        string mensagemSap =
+            "Etapa POST_DOCUMENTO_MATERIAL: HTTP 400 Bad Request. "
+            + "O SAP rejeitou a entrada em KG para este item do pedido.";
+        FakeMaterialDocumentSapServico materialDoc = new()
+        {
+            Sucesso = false,
+            MensagemFalha = mensagemSap
+        };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item("10", unidade: "UN")]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Falha, resultado.Cenario);
+        Assert.Equal(mensagemSap, resultado.Mensagem);
+        Assert.Equal(mensagemSap, resultado.MensagemCritica);
+        Assert.Contains(mensagemSap, resultado.Itens.Single().Mensagem);
+        Assert.Equal(1, materialDoc.Chamadas);
+    }
+
 
     [Fact]
     public async Task Enviar_ItemSemDadosObrigatorios_DeveBloquearSemPost()
@@ -393,6 +454,21 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             "Write-Host 'build ok'", PadraoHabilitaEscritaSap,
             System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
+
+    [Fact]
+    public void Controller_DeveDiagnosticarUnidadeOriginalEPesoSapKgSemBloqueioAntigo()
+    {
+        string controller = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Controle", "Processo", "EntradaProdutoController.cs"));
+
+        Assert.Contains("Unidade original do pedido", controller, StringComparison.Ordinal);
+        Assert.Contains("Peso l", controller, StringComparison.Ordinal);
+        Assert.Contains("Quantidade SAP", controller, StringComparison.Ordinal);
+        Assert.Contains("EntryUnit SAP: KG", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unidade do item n", controller, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("EntryUnit = item.Unidade", controller, StringComparison.Ordinal);
+    }
+
 
     [Fact]
     public void Controller_DeveSetarGoodsMovementRefDocTypeBExplicitoESemPatch()
@@ -728,6 +804,7 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     private sealed class FakeMaterialDocumentSapServico : IMaterialDocumentSapServico
     {
         public bool Sucesso { get; init; } = true;
+        public string MensagemFalha { get; init; } = "O SAP recusou a criacao do documento de material.";
 
         /// <summary>Simula HTTP 2xx porem sem MaterialDocument/MaterialDocumentYear (etapa PARSE_RESPOSTA).</summary>
         public bool RespostaSemDocumento { get; init; }
@@ -768,7 +845,7 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
                     MaterialDocumentYear = "2026",
                     MensagemSanitizada = "Documento de material 5000000124/2026 criado no SAP."
                 }
-                : ResultadoMaterialDocumentSap.Falha(400, "O SAP recusou a criacao do documento de material."));
+                : ResultadoMaterialDocumentSap.Falha(400, MensagemFalha));
         }
     }
 
@@ -793,6 +870,8 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             => Task.FromResult(ResultadoOperacao.Ok());
         public Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(string numeroPedido, CancellationToken cancellationToken = default)
             => Task.FromResult<PedidoCompraSapAgregado?>(null);
+        public Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(string numeroPedido, CancellationToken cancellationToken = default)
+            => Task.FromResult<PedidoCompraSap?>(new PedidoCompraSap { Numero = numeroPedido, StatusProcessamentoCompraSap = "05" });
         public Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<string>>([]);
         public Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)

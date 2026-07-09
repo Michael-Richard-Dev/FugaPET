@@ -495,7 +495,7 @@ partial class ProcessoProdutoAcabadoForm
         lotTextBox.ReadOnly = true;
         lotTextBox.Size = new Size(143, 29);
         lotTextBox.TabIndex = 4;
-        lotTextBox.Text = "119 26";
+        lotTextBox.Text = "";
         // 
         // lotIconPanel
         // 
@@ -559,7 +559,7 @@ partial class ProcessoProdutoAcabadoForm
         stepLabel.Name = "stepLabel";
         stepLabel.Size = new Size(42, 25);
         stepLabel.TabIndex = 5;
-        stepLabel.Text = "12";
+        stepLabel.Text = "-";
         // 
         // stepDescriptionLabel
         // 
@@ -638,7 +638,7 @@ partial class ProcessoProdutoAcabadoForm
         finishedProductCodeTextBox.ReadOnly = true;
         finishedProductCodeTextBox.Size = new Size(80, 20);
         finishedProductCodeTextBox.TabIndex = 7;
-        finishedProductCodeTextBox.Text = "27771";
+        finishedProductCodeTextBox.Text = "";
         // 
         // finishedProductTextBox
         // 
@@ -652,7 +652,7 @@ partial class ProcessoProdutoAcabadoForm
         finishedProductTextBox.ReadOnly = true;
         finishedProductTextBox.Size = new Size(363, 20);
         finishedProductTextBox.TabIndex = 8;
-        finishedProductTextBox.Text = "TWIST STIX CARNE 24X50PCS";
+        finishedProductTextBox.Text = "";
         // 
         // finishedProductIconPanel
         // 
@@ -736,7 +736,7 @@ partial class ProcessoProdutoAcabadoForm
         dateTitleLabel.ForeColor = Color.FromArgb(31, 41, 55);
         dateTitleLabel.Location = new Point(34, 12);
         dateTitleLabel.Name = "dateTitleLabel";
-        dateTitleLabel.Size = new Size(70, 16);
+        dateTitleLabel.Size = new Size(160, 16);
         dateTitleLabel.TabIndex = 2;
         dateTitleLabel.Text = "DATAS";
         dateTitleLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -851,7 +851,7 @@ partial class ProcessoProdutoAcabadoForm
         ovenExitTextBox.ReadOnly = true;
         ovenExitTextBox.Size = new Size(95, 14);
         ovenExitTextBox.TabIndex = 10;
-        ovenExitTextBox.Text = "04/05/2026";
+        ovenExitTextBox.Text = "";
         // 
         // classificationDateTextBox
         // 
@@ -866,7 +866,7 @@ partial class ProcessoProdutoAcabadoForm
         classificationDateTextBox.ReadOnly = true;
         classificationDateTextBox.Size = new Size(95, 14);
         classificationDateTextBox.TabIndex = 12;
-        classificationDateTextBox.Text = "04/05/2026";
+        classificationDateTextBox.Text = "";
         // 
         // manufacturingDateTextBox
         // 
@@ -881,7 +881,7 @@ partial class ProcessoProdutoAcabadoForm
         manufacturingDateTextBox.ReadOnly = true;
         manufacturingDateTextBox.Size = new Size(95, 14);
         manufacturingDateTextBox.TabIndex = 14;
-        manufacturingDateTextBox.Text = "29/04/2026";
+        manufacturingDateTextBox.Text = "";
         // 
         // expirationDateTextBox
         // 
@@ -896,7 +896,7 @@ partial class ProcessoProdutoAcabadoForm
         expirationDateTextBox.ReadOnly = true;
         expirationDateTextBox.Size = new Size(98, 14);
         expirationDateTextBox.TabIndex = 16;
-        expirationDateTextBox.Text = "28/04/2029";
+        expirationDateTextBox.Text = "";
         // 
         // Gpb_PrevisaoLeitura
         // 
@@ -1008,7 +1008,7 @@ partial class ProcessoProdutoAcabadoForm
         readForecastPackagesTextBox.ReadOnly = true;
         readForecastPackagesTextBox.Size = new Size(211, 17);
         readForecastPackagesTextBox.TabIndex = 21;
-        readForecastPackagesTextBox.Text = "840";
+        readForecastPackagesTextBox.Text = "";
         // 
         // readForecastBoxesCaptionLabel
         // 
@@ -1037,7 +1037,7 @@ partial class ProcessoProdutoAcabadoForm
         readForecastBoxesTextBox.Size = new Size(211, 17);
         readForecastBoxesTextBox.TabIndex = 20;
         readForecastBoxesTextBox.TextAlign = HorizontalAlignment.Left;
-        readForecastBoxesTextBox.Text = "35";
+        readForecastBoxesTextBox.Text = "";
         // 
         // balanceCaptionLabel
         // 
@@ -1065,7 +1065,7 @@ partial class ProcessoProdutoAcabadoForm
         balanceTextBox.ReadOnly = true;
         balanceTextBox.Size = new Size(211, 17);
         balanceTextBox.TabIndex = 24;
-        balanceTextBox.Text = "5,568";
+        balanceTextBox.Text = "";
         // 
         // headerPanel
         // 
@@ -2353,7 +2353,7 @@ partial class ProcessoProdutoAcabadoForm
         boxesTotalLabel.Name = "boxesTotalLabel";
         boxesTotalLabel.Size = new Size(45, 18);
         boxesTotalLabel.TabIndex = 5;
-        boxesTotalLabel.Text = "de 35";
+        boxesTotalLabel.Text = "de 0";
         boxesTotalLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // packagesTitleLabel
@@ -2762,7 +2762,7 @@ partial class ProcessoProdutoAcabadoForm
         packagesCounterLabel.Name = "packagesCounterLabel";
         packagesCounterLabel.Size = new Size(139, 48);
         packagesCounterLabel.TabIndex = 8;
-        packagesCounterLabel.Text = "840";
+        packagesCounterLabel.Text = "0,000";
         packagesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // boxesCounterLabel
@@ -2776,7 +2776,7 @@ partial class ProcessoProdutoAcabadoForm
         boxesCounterLabel.Name = "boxesCounterLabel";
         boxesCounterLabel.Size = new Size(139, 1);
         boxesCounterLabel.TabIndex = 6;
-        boxesCounterLabel.Text = "035";
+        boxesCounterLabel.Text = "000";
         boxesCounterLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // readWeightLegendPanel

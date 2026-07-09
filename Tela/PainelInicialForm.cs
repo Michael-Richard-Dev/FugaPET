@@ -6,6 +6,7 @@ using Processo = FugaPET_Dev.Tela.Processo;
 using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Modelo.Status;
 using FugaPET_Dev.Servicos.Entrada;
+using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Servicos.Status;
 
@@ -33,6 +34,7 @@ public partial class PainelInicialForm : Form
 
     // Pre-carregamento assincrono dos pedidos da Entrada (aquecimento do cache apos o login).
     private readonly PreCarregamentoPedidosEntradaServico _preCarregamentoPedidos = new();
+    private readonly IOrdemProducaoCacheServico _preCarregamentoOrdensProducao = OrdemProducaoCacheServico.Compartilhado;
     private readonly CancellationTokenSource _fechamentoPreCarregamentoCts = new();
     private Label? _preCarregamentoStatusLabel;
 
@@ -58,6 +60,7 @@ public partial class PainelInicialForm : Form
         // Apos o MainForm aparecer (usuario ja autenticado), aquece o cache de pedidos da Entrada
         // em segundo plano. Nao bloqueia a UI nem o login.
         Shown += (_, _) => IniciarPreCarregamentoPedidosEntrada();
+        Shown += (_, _) => IniciarPreCarregamentoOrdensProducao();
         FormClosing += (_, _) => _fechamentoPreCarregamentoCts.Cancel();
         KeyDown += PainelInicialForm_KeyDown;
     }
@@ -92,6 +95,33 @@ public partial class PainelInicialForm : Form
         });
     }
 
+    /// <summary>Dispara o pré-carregamento das OPs SAP de Consumo sem bloquear login/UI.</summary>
+    private void IniciarPreCarregamentoOrdensProducao()
+    {
+        AtualizarStatusPreCarregamentoPedidos("Sincronizando OPs SAP...");
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                ResultadoPreCarregamentoOrdensProducao resultado =
+                    await _preCarregamentoOrdensProducao.PreCarregarAsync(_fechamentoPreCarregamentoCts.Token);
+
+                AtualizarStatusPreCarregamentoPedidos(resultado.Cenario switch
+                {
+                    CenarioPreCarregamentoOrdensProducao.Concluido =>
+                        $"OPs SAP carregadas: {resultado.QuantidadeCarregada}",
+                    CenarioPreCarregamentoOrdensProducao.JaEmAndamento => "Sincronizando OPs SAP...",
+                    CenarioPreCarregamentoOrdensProducao.Cancelado => string.Empty,
+                    _ => "Pré-carga de OPs SAP não concluída. Consulta online disponível."
+                });
+            }
+            catch
+            {
+                AtualizarStatusPreCarregamentoPedidos(string.Empty);
+            }
+        });
+    }
     private void CriarStatusPreCarregamentoPedidos()
     {
         _preCarregamentoStatusLabel = new Label
@@ -816,7 +846,8 @@ public partial class PainelInicialForm : Form
             Dock = DockStyle.Fill
         };
 
-        view.EntradaProdutoRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync();
+        view.EntradaMateriaPrimaRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima);
+        view.EntradaQuimicosRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico);
         view.ProcessoProdutoAcabadoRequested += async (_, _) => await OpenProcessoProdutoAcabadoAsync();
         view.ProcessoSemiAcabadoRequested += async (_, _) => await OpenProcessoSemiAcabadoAsync();
         view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima);
@@ -828,13 +859,21 @@ public partial class PainelInicialForm : Form
         return view;
     }
 
-    private async Task OpenProcessoEntradaProdutoAsync()
+    // Tarefa Entrada 24.1 (Ajuste 5): abre a Entrada no modo escolhido (Matéria-Prima × Químicos). Enquanto não
+    // houver permissão específica de Entrada de Químicos, ambos os módulos usam a permissão de Entrada atual.
+    private async Task OpenProcessoEntradaProdutoAsync(
+        global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo =
+            global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima)
     {
+        string nomeTela = modo == global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico
+            ? "Entrada de Químicos"
+            : "Entrada de Matéria-Prima";
+
         if (!AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Consultar)
             && !await PermiteAbrirTelaAsync(
                 PermissoesSistema.Modulos.ProcessoProducao,
                 PermissoesSistema.Rotinas.EntradaProduto,
-                "Entrada de Produto"))
+                nomeTela))
         {
             return;
         }
@@ -844,7 +883,7 @@ public partial class PainelInicialForm : Form
             return;
         }
 
-        using Processo.ProcessoEntradaProdutoForm form = new();
+        using Processo.ProcessoEntradaProdutoForm form = new(modo);
 
         Hide();
 
@@ -1169,7 +1208,7 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
-            await OpenProcessoConsumoMaterialAsync();
+            await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico);
             e.Handled = true;
         }
 
@@ -1181,7 +1220,7 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
-            await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico);
+            await OpenProcessoConsumoMaterialAsync();
             e.Handled = true;
         }
 
@@ -1193,7 +1232,7 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
-            await OpenProcessoSemiAcabadoAsync();
+            await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico);
             e.Handled = true;
         }
 
@@ -1205,11 +1244,23 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
-            await OpenProcessoProdutoAcabadoAsync();
+            await OpenProcessoSemiAcabadoAsync();
             e.Handled = true;
         }
 
         if (e.KeyCode == Keys.F6 && _currentContentView == _processoProducaoForm)
+        {
+            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            await OpenProcessoProdutoAcabadoAsync();
+            e.Handled = true;
+        }
+
+        if (e.KeyCode == Keys.F7 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1329,6 +1380,8 @@ public partial class PainelInicialForm : Form
         cellHoraText.Text = now.ToString("HH:mm", ptBr);
     }
 }
+
+
 
 
 

@@ -87,6 +87,16 @@ internal sealed class PedidoCompraSapGovernadoServico : IPedidoCompraSapServico
             cancellationToken);
     }
 
+    public async Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+    {
+        await ExigirConsultaAsync(cancellationToken);
+        return await _servicoInterno.ObterCabecalhoSapParaValidacaoAsync(
+            numeroPedido,
+            cancellationToken);
+    }
+
     public async Task<string> ObterFornecedorPorPedidoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default)

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -9,7 +9,7 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
     private readonly string _arquivoTemporario = Path.GetTempFileName();
 
     [Fact]
-    public void Carregar_DeveIgnorarCredenciaisPresentesNoArquivo()
+    public void Carregar_DeveLerCredenciaisDoArquivoQuandoAmbienteNaoInformado()
     {
         string marcadorUsuario = Guid.NewGuid().ToString("N");
         string marcadorSenha = Guid.NewGuid().ToString("N");
@@ -19,13 +19,13 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
             _arquivoTemporario,
             _ => null);
 
-        Assert.Empty(configuracao.Usuario);
-        Assert.Empty(configuracao.Senha);
-        Assert.False(configuracao.Configurado);
+        Assert.Equal(marcadorUsuario, configuracao.Usuario);
+        Assert.Equal(marcadorSenha, configuracao.Senha);
+        Assert.True(configuracao.Configurado);
     }
 
     [Fact]
-    public void Carregar_DeveUsarCredenciaisSomenteDasVariaveisFugapet()
+    public void Carregar_DevePriorizarCredenciaisDasVariaveisFugapet()
     {
         string marcadorUsuario = Guid.NewGuid().ToString("N");
         string marcadorSenha = Guid.NewGuid().ToString("N");
@@ -55,7 +55,7 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
         ResultadoOperacao resultado = await servico.SincronizarPedidoAsync("4500000010");
 
         Assert.False(resultado.Sucesso);
-        Assert.Equal(ConfiguracaoSap.MensagemConfiguracaoAusente, resultado.Mensagem);
+        Assert.Equal("base_url n?o configurada no configuracao.sap.json.", resultado.Mensagem);
     }
 
     [Fact]
@@ -168,6 +168,42 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
             () => LeitorConfiguracaoSap.Carregar(_arquivoTemporario, _ => null));
     }
 
+
+    [Fact]
+    public void Carregar_ArquivoInexistente_SemVariaveis_DeveRetornarMensagemClara()
+    {
+        string inexistente = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(inexistente, _ => null);
+
+        Assert.False(configuracao.ArquivoConfiguracaoSapEncontrado);
+        Assert.Contains("Arquivo configuracao.sap.json n?o encontrado", configuracao.MensagemConfiguracaoBaseAusente(), StringComparison.Ordinal);
+        Assert.Contains("configuracao.sap.exemplo.json", configuracao.MensagemConfiguracaoBaseAusente(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Carregar_DeveLerProductBaseUrlDoArquivo()
+    {
+        GravarConfiguracao(Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"));
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(_arquivoTemporario, _ => null);
+
+        Assert.Equal("https://sap.exemplo.local/sap/opu/odata/sap/API_PRODUCT_SRV/", configuracao.ProductBaseUrl);
+        Assert.Equal(configuracao.ProductBaseUrl, configuracao.ProductMasterBaseUrlEfetiva);
+    }
+
+    [Fact]
+    public void Mensagens_DeChavesObrigatorias_DeveSerClara()
+    {
+        ConfiguracaoSap semProductionOrder = new() { ArquivoConfiguracaoSapEncontrado = true };
+        ConfiguracaoSap semMaterialDocument = new() { ArquivoConfiguracaoSapEncontrado = true };
+        ConfiguracaoSap semProduct = new() { ArquivoConfiguracaoSapEncontrado = true };
+
+        Assert.Equal("production_order_base_url n?o configurada no configuracao.sap.json.", semProductionOrder.MensagemProductionOrderAusente());
+        Assert.Equal("material_document_base_url n?o configurada no configuracao.sap.json.", semMaterialDocument.MensagemMaterialDocumentAusente());
+        Assert.Equal("product_base_url n?o configurada no configuracao.sap.json.", semProduct.MensagemProductMasterAusente());
+    }
+
     public void Dispose()
     {
         File.Delete(_arquivoTemporario);
@@ -182,6 +218,9 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
                 base_url = "https://sap.exemplo.local/odata",
                 usuario = marcadorUsuario,
                 senha = marcadorSenha,
+                material_document_base_url = "https://sap.exemplo.local/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
+                production_order_base_url = "https://sap.exemplo.local/sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/",
+                product_base_url = "https://sap.exemplo.local/sap/opu/odata/sap/API_PRODUCT_SRV/",
                 sap_client = "000",
                 hosts_permitidos = new[] { "sap.exemplo.local" },
                 timeout_segundos = 30

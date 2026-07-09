@@ -79,6 +79,10 @@ public sealed class IntegracaoEntradaSapServico
     public Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(string numeroPedido, CancellationToken cancellationToken = default)
         => _pedidoCompra.ObterPedidoAgregadoAsync(numeroPedido, cancellationToken);
 
+    /// <summary>Tarefa Entrada 23.1: cabeçalho fresco do pedido (status de aprovação/liberação) para validação.</summary>
+    public Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(string numeroPedido, CancellationToken cancellationToken = default)
+        => _pedidoCompra.ObterCabecalhoSapParaValidacaoAsync(numeroPedido, cancellationToken);
+
     public Task<ResultadoOperacao> AtualizarPesoItemSapAsync(
         string numeroPedido,
         string numeroItem,

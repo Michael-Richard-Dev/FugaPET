@@ -1,4 +1,4 @@
-using FugaPET_Dev.AcessoDados.Banco;
+﻿using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
@@ -84,7 +84,7 @@ internal sealed class EstadoIntegracaoSapServico
         {
             return await BloquearAsync(
                 operacao,
-                ConfiguracaoSap.MensagemConfiguracaoAusente,
+                _configuracaoSap.MensagemConfiguracaoBaseAusente(),
                 cancellationToken);
         }
 

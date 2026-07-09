@@ -6,7 +6,9 @@ using FugaPET_Dev.Tela.Controls;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Seguranca;
+using FugaPET_Dev.Tela.Comum;
 
 namespace FugaPET_Dev.Tela.Cadastro;
 
@@ -24,9 +26,19 @@ public partial class TipoTaraForm : Form
     private readonly Dictionary<Panel, long> _idTipoTaraPorLinha = new();
     private readonly Dictionary<Panel, TipoTaraCadastro> _tipoTaraPorLinha = new();
     private readonly List<TipoTaraCadastro> _tiposTaraCarregados = new();
+    // Tarefa Tipo de Tara (Ajuste 4): referência = contagem de taras ativas por tipo (código -> quantidade).
+    private IReadOnlyDictionary<long, int> _contagemTarasPorTipo = new Dictionary<long, int>();
     private readonly ToolTip _toolTipTipoTara = new();
     private readonly TipoTaraController _tipoTaraController;
+    private readonly AuditoriaServico _auditoriaServico;
     private long _idTipoTaraAtual;
+    // Ajuste 2/3: situação do registro selecionado (define Inativar × Reativar no botão de status).
+    private bool _situacaoSelecionadaAtiva = true;
+    // Alinhamento Setor/Cargo: proteção contra operação duplicada + modo de card + modo de botões.
+    private bool _operacaoEmAndamento;
+    private ModoCard _modoCard = ModoCard.Novo;
+    private ModoAcaoBotoes _modoAcaoBotoesAtual = ModoAcaoBotoes.Nenhum;
+    private bool _edicaoTipoTaraExistente;
     private static readonly Color StatusAtivoFundo = Color.FromArgb(220, 252, 231);
     private static readonly Color StatusAtivoTexto = Color.FromArgb(22, 163, 74);
     private static readonly Color StatusInativoFundo = Color.FromArgb(255, 237, 213);
@@ -37,9 +49,12 @@ public partial class TipoTaraForm : Form
     private static readonly Color ResumoSituacaoInativoTexto = Color.FromArgb(220, 38, 38);
     private static readonly Color ResumoSituacaoNeutroTexto = Color.FromArgb(100, 116, 139);
 
-    public TipoTaraForm(TipoTaraController? setorController = null)
+    public TipoTaraForm(
+        TipoTaraController? tipoTaraController = null,
+        AuditoriaServico? auditoriaServico = null)
     {
-        _tipoTaraController = setorController ?? FabricaControladoresCadastro.CriarTipoTaraController();
+        _tipoTaraController = tipoTaraController ?? FabricaControladoresCadastro.CriarTipoTaraController();
+        _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
         global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
@@ -62,18 +77,150 @@ public partial class TipoTaraForm : Form
         AtualizarRodapePerfis();
         AtualizarTipCadastro(null);
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
+        ConfigurarCard(ModoCard.Vazio);
+        nomePerfilTextBox.MaxLength = TipoTaraCadastro.TamanhoMaximoNome;
+        descricaoTextBox.MaxLength = TipoTaraCadastro.TamanhoMaximoDescricao;
         ConectarAcoesCadastro();
+        Shown += async (_, _) => await InicializarTelaAsync();
+    }
+
+    // Alinhamento Setor/Cargo (Ajuste 2): valida permissão de visualização antes de carregar; em acesso direto
+    // sem permissão, audita, avisa e fecha a tela. Abertura normal (com permissão) não é afetada.
+    private async Task InicializarTelaAsync()
+    {
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Cadastro,
+                PermissoesSistema.Rotinas.TipoTara))
+        {
+            long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+            if (codigoUsuario.HasValue)
+            {
+                await RegistrarAcessoDiretoNegadoSeguroAsync(codigoUsuario.Value);
+            }
+
+            MessageBox.Show(
+                "Você não possui permissão para acessar esta rotina.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            Close();
+            return;
+        }
+
         if (_integracaoBancoHabilitada)
         {
-            Shown += async (_, _) => await CarregarTiposTaraAsync();
+            await CarregarTiposTaraAsync();
+        }
+    }
+
+    private async Task RegistrarAcessoDiretoNegadoSeguroAsync(long codigoUsuario)
+    {
+        try
+        {
+            await _auditoriaServico.RegistrarAcessoNegadoAsync(
+                codigoUsuario,
+                $"Acesso direto negado a Cadastro de Tipo de Tara ({PermissoesSistema.Modulos.Cadastro}/{PermissoesSistema.Rotinas.TipoTara}/CONSULTAR ou VISUALIZAR).",
+                nameof(TipoTaraForm));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError(
+                $"Falha ao registrar acesso direto negado ao TipoTaraForm: {ex}");
         }
     }
 
     private void ConectarAcoesCadastro()
     {
-        salvarButton.Click += async (_, _) => await SalvarTipoTaraAsync();
-        BtnEditar.Click += async (_, _) => await EditarTipoTaraAsync();
-        excluirButton.Click += async (_, _) => await ExcluirTipoTaraAsync();
+        // Ajuste 3: toda ação passa pela proteção contra operação duplicada (duplo clique/reentrância).
+        salvarButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(SalvarTipoTaraAsync, "TIPO_TARA_SALVAR_ERRO");
+        BtnEditar.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(EditarTipoTaraAsync, "TIPO_TARA_EDITAR_ERRO");
+        // Ajuste 2/3: o botão de status alterna Inativar/Reativar conforme a situação do registro selecionado.
+        excluirButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(AlternarSituacaoTipoTaraAsync, "TIPO_TARA_ALTERAR_SITUACAO_ERRO");
+    }
+
+    // Ajuste 3: bloqueia reentrância; desabilita os botões durante a operação e reabilita no finally.
+    private async Task ExecutarOperacaoProtegidaAsync(Func<Task> operacao, string acaoErro)
+    {
+        if (_operacaoEmAndamento)
+        {
+            return;
+        }
+
+        _operacaoEmAndamento = true;
+        AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+
+        try
+        {
+            await operacao();
+        }
+        catch (Exception ex)
+        {
+            await MostrarErroOperacaoAsync(acaoErro, ex, "Não foi possível concluir a operação de tipo de tara. Acione o suporte.");
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+        }
+    }
+
+    // Ajuste 4: atalhos F5 Salvar, F6 Editar, F8 Inativar/Reativar — só acionam o botão se Visible && Enabled
+    // (não burlam permissão nem modo).
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.F5 when salvarButton.Visible && salvarButton.Enabled:
+                salvarButton.PerformClick();
+                return true;
+            case Keys.F6 when BtnEditar.Visible && BtnEditar.Enabled:
+                BtnEditar.PerformClick();
+                return true;
+            case Keys.F8 when excluirButton.Visible && excluirButton.Enabled:
+                excluirButton.PerformClick();
+                return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    // Ajuste 5: modo do card (Vazio/Novo/Edição) controla a visibilidade dos campos editáveis.
+    private void ConfigurarCard(ModoCard modo)
+    {
+        if (_modoCard == modo)
+        {
+            return;
+        }
+
+        _modoCard = modo;
+        bool novo = modo == ModoCard.Novo;
+        bool edicao = modo == ModoCard.Edicao;
+        bool mostrarNome = novo || edicao;     // no Tipo de Tara o nome é editável também na edição (renomear).
+        bool mostrarDescricao = novo || edicao;
+
+        nomePerfilLabel.Visible = mostrarNome;
+        nomePerfilInputPanel.Visible = mostrarNome;
+        // Situação só é escolhível na CRIAÇÃO; na edição fica oculta (status muda por Inativar/Reativar).
+        situacaoLabel.Visible = novo;
+        situacaoInputPanel.Visible = novo;
+        situacaoComboBox.Enabled = novo;
+
+        descricaoLabel.Visible = mostrarDescricao;
+        descricaoInputPanel.Visible = mostrarDescricao;
+        detailsTopDividerLabel.Visible = mostrarDescricao;
+
+        _edicaoTipoTaraExistente = edicao;
+        LayoutDetailsCard();
+    }
+
+    private enum ModoCard
+    {
+        Vazio,
+        Novo,
+        Edicao
     }
 
     private async Task SalvarTipoTaraAsync()
@@ -84,22 +231,83 @@ public partial class TipoTaraForm : Form
             return;
         }
 
+        // Ajuste 1: situação precisa ser explicitamente "Ativo" ou "Inativo" (nunca vazia/inválida convertida a Inativo).
+        if (!SituacaoCadastroHelper.TryInterpretarSituacao(situacaoComboBox.Text, out bool situacaoAtiva))
+        {
+            MessageBox.Show("Selecione a situação (Ativo ou Inativo).", "Cadastro de Tipo de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         TipoTaraCadastro tipo = new()
         {
             NomeTipoTara = nomePerfilTextBox.Text.Trim(),
             DescricaoTipoTara = descricaoTextBox.Text.Trim(),
-            SituacaoTipoTara = string.Equals(situacaoComboBox.Text, "Ativo", StringComparison.OrdinalIgnoreCase),
+            SituacaoTipoTara = situacaoAtiva,
             TipoTaraCriadoPor = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario
         };
 
-        var resultado = await _tipoTaraController.InserirAsync(tipo);
-        MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-
-        if (resultado.Sucesso)
+        try
         {
-            _idTipoTaraAtual = resultado.IdGerado ?? 0;
-            PrepareNewTipoTara();
-            await CarregarTiposTaraAsync();
+            var resultado = await _tipoTaraController.InserirAsync(tipo);
+            MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            if (resultado.Sucesso)
+            {
+                _idTipoTaraAtual = resultado.IdGerado ?? 0;
+                PrepareNewTipoTara();
+                await CarregarTiposTaraAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            await MostrarErroOperacaoAsync("TIPO_TARA_SALVAR_ERRO", ex, "Não foi possível salvar o tipo de tara. Acione o suporte.");
+        }
+    }
+
+    // Ajuste 2/3: registro ativo → Inativar (ExcluirAsync); registro inativo → Reativar (ReativarAsync).
+    private Task AlternarSituacaoTipoTaraAsync()
+        => _situacaoSelecionadaAtiva ? ExcluirTipoTaraAsync() : ReativarTipoTaraAsync();
+
+    private async Task ReativarTipoTaraAsync()
+    {
+        if (!_integracaoBancoHabilitada)
+        {
+            MessageBox.Show("Integração com banco está desabilitada temporariamente.", "Cadastro de Tipo de Tara", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_idTipoTaraAtual <= 0)
+        {
+            MessageBox.Show("Selecione um tipo de tara inativo para reativar.", "Cadastro de Tipo de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        DialogResult confirmacao = MessageBox.Show(
+            "Confirma a reativação do tipo de tara atual?",
+            "Cadastro de Tipo de Tara",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (confirmacao != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            var resultado = await _tipoTaraController.ReativarAsync(_idTipoTaraAtual);
+            MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            if (resultado.Sucesso)
+            {
+                _idTipoTaraAtual = 0;
+                PrepareNewTipoTara();
+                await CarregarTiposTaraAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            await MostrarErroOperacaoAsync("TIPO_TARA_REATIVAR_ERRO", ex, "Não foi possível reativar o tipo de tara. Acione o suporte.");
         }
     }
 
@@ -118,7 +326,7 @@ public partial class TipoTaraForm : Form
         }
 
         DialogResult confirmacao = MessageBox.Show(
-            "Confirma a inativacao do tipo de tara atual?\n\nO tipo ficara inativo, mas pode ser reativado depois alterando a situacao na edicao.",
+            "Confirma a inativação do tipo de tara atual?\n\nO tipo ficará inativo, mas pode ser reativado depois.",
             "Cadastro de Tipo de Tara",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
@@ -128,14 +336,21 @@ public partial class TipoTaraForm : Form
             return;
         }
 
-        var resultado = await _tipoTaraController.ExcluirAsync(_idTipoTaraAtual);
-        MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-
-        if (resultado.Sucesso)
+        try
         {
-            _idTipoTaraAtual = 0;
-            PrepareNewTipoTara();
-            await CarregarTiposTaraAsync();
+            var resultado = await _tipoTaraController.ExcluirAsync(_idTipoTaraAtual);
+            MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            if (resultado.Sucesso)
+            {
+                _idTipoTaraAtual = 0;
+                PrepareNewTipoTara();
+                await CarregarTiposTaraAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            await MostrarErroOperacaoAsync("TIPO_TARA_EXCLUIR_ERRO", ex, "Não foi possível inativar o tipo de tara. Acione o suporte.");
         }
     }
 
@@ -160,12 +375,27 @@ public partial class TipoTaraForm : Form
             return;
         }
 
+        // Ajuste 5: nome é editável (o vínculo com Tara é por código, então renomear não quebra referência).
+        string nomeAtual = nomePerfilTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(nomeAtual))
+        {
+            MessageBox.Show("Nome do tipo de tara é obrigatório.", "Cadastro de Tipo de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // Ajuste 1: situação precisa ser explicitamente "Ativo" ou "Inativo".
+        if (!SituacaoCadastroHelper.TryInterpretarSituacao(situacaoComboBox.Text, out bool situacaoAtual))
+        {
+            MessageBox.Show("Selecione a situação (Ativo ou Inativo).", "Cadastro de Tipo de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         string descricaoAtual = descricaoTextBox.Text.Trim();
-        bool situacaoAtual = string.Equals(situacaoComboBox.Text, "Ativo", StringComparison.OrdinalIgnoreCase);
+        bool nomeAlterado = !string.Equals(nomeAtual, tipoSelecionado.NomeTipoTara?.Trim() ?? string.Empty, StringComparison.Ordinal);
         bool descricaoAlterada = !string.Equals(descricaoAtual, tipoSelecionado.DescricaoTipoTara?.Trim() ?? string.Empty, StringComparison.Ordinal);
         bool situacaoAlterada = situacaoAtual != tipoSelecionado.SituacaoTipoTara;
 
-        if (!descricaoAlterada && !situacaoAlterada)
+        if (!nomeAlterado && !descricaoAlterada && !situacaoAlterada)
         {
             MessageBox.Show("Nenhuma alteracao foi realizada para salvar.", "Cadastro de Tipo de Tara", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -174,30 +404,80 @@ public partial class TipoTaraForm : Form
         TipoTaraCadastro tipoAtualizado = new()
         {
             CodigoTipoTara = _idTipoTaraAtual,
-            NomeTipoTara = nomePerfilTextBox.Text.Trim(),
+            NomeTipoTara = nomeAtual,
             DescricaoTipoTara = descricaoAtual,
             SituacaoTipoTara = situacaoAtual,
             TipoTaraAtualizadoPor = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario
         };
 
-        var resultado = await _tipoTaraController.AtualizarAsync(tipoAtualizado);
-        MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-
-        if (resultado.Sucesso)
+        try
         {
-            await CarregarTiposTaraAsync();
+            var resultado = await _tipoTaraController.AtualizarAsync(tipoAtualizado);
+            MessageBox.Show(resultado.Mensagem, "Cadastro de Tipo de Tara", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            if (resultado.Sucesso)
+            {
+                await CarregarTiposTaraAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            await MostrarErroOperacaoAsync("TIPO_TARA_EDITAR_ERRO", ex, "Não foi possível editar o tipo de tara. Acione o suporte.");
         }
     }
 
     private async Task CarregarTiposTaraAsync()
     {
-        IReadOnlyList<TipoTaraCadastro> tipos = await _tipoTaraController.ListarAsync();
-        _tiposTaraCarregados.Clear();
-        _tiposTaraCarregados.AddRange(tipos);
-        RecriarLinhasPerfis();
-        PopularLinhasComTiposTara(_tiposTaraCarregados);
-        ApplyProfilesFilter();
+        // Ajuste 2: carregamento protegido (padrão SetorForm/CargoForm) — em erro, limpa lista/seleção/rodapé
+        // e mostra mensagem amigável via ErroUsuarioHelper.
+        try
+        {
+            IReadOnlyList<TipoTaraCadastro> tipos = await _tipoTaraController.ListarAsync();
+
+            // Ajuste 4: referência = contagem de taras ativas por tipo (falha na contagem não derruba a lista).
+            try
+            {
+                _contagemTarasPorTipo = await _tipoTaraController.ContarTarasAtivasPorTipoAsync();
+            }
+            catch
+            {
+                _contagemTarasPorTipo = new Dictionary<long, int>();
+            }
+
+            _tiposTaraCarregados.Clear();
+            _tiposTaraCarregados.AddRange(tipos);
+            RecriarLinhasPerfis();
+            PopularLinhasComTiposTara(_tiposTaraCarregados);
+            ApplyProfilesFilter();
+        }
+        catch (Exception ex)
+        {
+            _tiposTaraCarregados.Clear();
+            _contagemTarasPorTipo = new Dictionary<long, int>();
+            RemoverLinhasPerfisExistentes();
+            ClearRowSelection();
+            _idTipoTaraAtual = 0;
+            AtualizarRodapePerfis(0);
+
+            MessageBox.Show(
+                await ErroUsuarioHelper.TratarAsync(
+                    "TIPO_TARA_CARREGAR_ERRO",
+                    ex,
+                    nameof(TipoTaraForm),
+                    "Não foi possível carregar os tipos de tara. Acione o suporte."),
+                "Cadastro de Tipo de Tara",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
+
+    // Ajuste 2: mensagem amigável para falhas inesperadas em Salvar/Editar/Excluir, sem quebrar a tela.
+    private static async Task MostrarErroOperacaoAsync(string codigo, Exception ex, string mensagemPadrao)
+        => MessageBox.Show(
+            await ErroUsuarioHelper.TratarAsync(codigo, ex, nameof(TipoTaraForm), mensagemPadrao),
+            "Cadastro de Tipo de Tara",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
 
     private void ConfigureProfilesSearchFilter()
     {
@@ -316,7 +596,9 @@ public partial class TipoTaraForm : Form
 
             linha.NameLabel.Text = tipo.NomeTipoTara;
             _toolTipTipoTara.SetToolTip(linha.NameLabel, tipo.NomeTipoTara);
-            linha.UsersLabel.Text = "-";
+            // Ajuste 4: referência = quantidade de taras ativas vinculadas ("0 taras"/"1 tara"/"N taras").
+            int taras = _contagemTarasPorTipo.TryGetValue(tipo.CodigoTipoTara, out int q) ? q : 0;
+            linha.UsersLabel.Text = SituacaoCadastroHelper.FormatarReferenciaTaras(taras);
             linha.StatusLabel.Text = tipo.SituacaoTipoTara ? "Ativo" : "Inativo";
             AtualizarBadgeStatus(linha.RowPanel, linha.StatusLabel.Text);
             _idTipoTaraPorLinha[linha.RowPanel] = tipo.CodigoTipoTara;
@@ -356,19 +638,57 @@ public partial class TipoTaraForm : Form
         AtualizarAreaRolagem(visibleIndex);
         AtualizarRodapePerfis(visibleIndex);
 
-        if (string.IsNullOrWhiteSpace(query))
+        // Ajuste 6: o filtro apenas oculta/exibe linhas. NÃO marca todas as linhas filtradas. Mantém a seleção
+        // real se a linha selecionada continuar visível; senão, limpa seleção e resumo.
+        RestaurarSelecaoAposFiltro();
+    }
+
+    // Ajuste 6: preserva a seleção existente após o filtro (sem selecionar todas as linhas visíveis).
+    private void RestaurarSelecaoAposFiltro()
+    {
+        Panel? selecionada = null;
+        if (_idTipoTaraAtual > 0)
         {
-            ClearRowSelection();
+            foreach (KeyValuePair<Panel, long> par in _idTipoTaraPorLinha)
+            {
+                if (par.Value == _idTipoTaraAtual)
+                {
+                    selecionada = par.Key;
+                    break;
+                }
+            }
+        }
+
+        if (selecionada is not null && selecionada.Visible)
+        {
+            DestacarLinhaSelecionada(selecionada);
             return;
         }
 
-        if (visibleIndex > 0)
-        {
-            SetFilteredRowsSelected();
-            return;
-        }
+        // Ajuste 11: sem seleção visível → estado limpo (card Vazio, resumo/botões neutros).
+        _idTipoTaraAtual = 0;
+        ClearRowSelection();
+        ConfigurarCard(ModoCard.Vazio);
+    }
 
-        HideAllMarkers();
+    // Aplica APENAS o destaque visual/marcador da linha selecionada (sem repreencher campos).
+    private void DestacarLinhaSelecionada(Panel selectedRowPanel)
+    {
+        Color selectedBackColor = Color.FromArgb(254, 242, 242);
+
+        foreach (RowSelection row in _rowSelections)
+        {
+            bool isSelected = row.RowPanel == selectedRowPanel;
+            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
+            if (isSelected)
+            {
+                ShowMarkerForRow(row.RowPanel);
+            }
+            else
+            {
+                HideMarkerForRow(row.RowPanel);
+            }
+        }
     }
 
     private void AtualizarAreaRolagem(int quantidadeLinhasVisiveis)
@@ -401,35 +721,6 @@ public partial class TipoTaraForm : Form
         }
 
         HideAllMarkers();
-        ClearSummarySelectionValues();
-    }
-
-    private void SetFilteredRowsSelected()
-    {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-        Panel? firstVisibleRow = null;
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isVisible = row.RowPanel.Visible;
-            row.RowPanel.BackColor = isVisible ? selectedBackColor : row.NormalBackColor;
-            if (isVisible)
-            {
-                ShowMarkerForRow(row.RowPanel);
-                firstVisibleRow ??= row.RowPanel;
-            }
-            else
-            {
-                HideMarkerForRow(row.RowPanel);
-            }
-        }
-
-        if (firstVisibleRow is null)
-        {
-            HideAllMarkers();
-            ClearSummarySelectionValues();
-            return;
-        }
         ClearSummarySelectionValues();
     }
 
@@ -484,10 +775,13 @@ public partial class TipoTaraForm : Form
     private void PrepareNewTipoTara()
     {
         _idTipoTaraAtual = 0;
+        _situacaoSelecionadaAtiva = true;
+        // Ajuste 5: modo Novo — mostra Nome, Situação e Descrição; situação habilitada e iniciando "Ativo".
+        ConfigurarCard(ModoCard.Novo);
         nomePerfilTextBox.Text = string.Empty;
         descricaoTextBox.Text = string.Empty;
-        situacaoComboBox.SelectedIndex = -1;
-        situacaoComboBox.Text = string.Empty;
+        // Ajuste 1/2: novo cadastro inicia "Ativo" (situação editável só na CRIAÇÃO).
+        situacaoComboBox.SelectedItem = SituacaoCadastroHelper.Ativo;
         nomePerfilTextBox.ReadOnly = false;
         nomePerfilTextBox.BackColor = Color.White;
 
@@ -834,21 +1128,7 @@ public partial class TipoTaraForm : Form
 
     private void SetSelectedRow(Panel selectedRowPanel)
     {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isSelected = row.RowPanel == selectedRowPanel;
-            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
-            if (isSelected)
-            {
-                ShowMarkerForRow(row.RowPanel);
-            }
-            else
-            {
-                HideMarkerForRow(row.RowPanel);
-            }
-        }
+        DestacarLinhaSelecionada(selectedRowPanel);
 
         _idTipoTaraAtual = _idTipoTaraPorLinha.TryGetValue(selectedRowPanel, out long id) ? id : 0;
         PreencherCamposTipoTaraPorLinha(selectedRowPanel);
@@ -863,11 +1143,16 @@ public partial class TipoTaraForm : Form
             return;
         }
 
+        // Ajuste 5: modo Edição — Nome e Descrição editáveis; Situação oculta (muda só por Inativar/Reativar).
+        ConfigurarCard(ModoCard.Edicao);
         nomePerfilTextBox.Text = tipo.NomeTipoTara;
         descricaoTextBox.Text = tipo.DescricaoTipoTara;
-        situacaoComboBox.Text = tipo.SituacaoTipoTara ? "Ativo" : "Inativo";
-        nomePerfilTextBox.ReadOnly = true;
-        nomePerfilTextBox.BackColor = Color.FromArgb(241, 245, 249);
+        // Situação mantida coerente (embora oculta na edição).
+        situacaoComboBox.SelectedItem = tipo.SituacaoTipoTara ? SituacaoCadastroHelper.Ativo : SituacaoCadastroHelper.Inativo;
+        _situacaoSelecionadaAtiva = tipo.SituacaoTipoTara;
+        // Ajuste 5: nome EDITÁVEL após cadastro (o vínculo com Tara é por código, então renomear é seguro).
+        nomePerfilTextBox.ReadOnly = false;
+        nomePerfilTextBox.BackColor = Color.White;
         AtualizarTipCadastro(tipo.TipoTaraCriadoEm);
     }
 
@@ -904,13 +1189,45 @@ public partial class TipoTaraForm : Form
 
     private void AtualizarBotoesAcao(ModoAcaoBotoes modo)
     {
+        _modoAcaoBotoesAtual = modo;
+
         bool podeCriar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.TipoTara, PermissoesSistema.Acoes.Criar);
         bool podeEditar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.TipoTara, PermissoesSistema.Acoes.Editar);
         bool podeExcluir = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Cadastro, PermissoesSistema.Rotinas.TipoTara, PermissoesSistema.Acoes.Excluir);
 
         salvarButton.Visible = modo == ModoAcaoBotoes.SomenteSalvar && podeCriar;
         BtnEditar.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeEditar;
-        excluirButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeExcluir;
+
+        // Ajuste 6: botão de status (texto/cor/visibilidade/permissão) centralizado aqui, a partir do registro
+        // selecionado — sem depender de texto setado em PreencherCamposTipoTaraPorLinha.
+        if (modo == ModoAcaoBotoes.EditarExcluir)
+        {
+            TipoTaraCadastro? selecionado = _tipoTaraPorLinha.Values.FirstOrDefault(x => x.CodigoTipoTara == _idTipoTaraAtual);
+            bool ativo = selecionado?.SituacaoTipoTara ?? true;
+            _situacaoSelecionadaAtiva = ativo;
+            if (ativo)
+            {
+                excluirButton.Text = "Inativar Tipo             F8";
+                excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+                excluirButton.Visible = podeExcluir;
+            }
+            else
+            {
+                excluirButton.Text = "Reativar Tipo             F8";
+                excluirButton.ForeColor = Color.FromArgb(22, 163, 74);
+                excluirButton.Visible = podeEditar;
+            }
+        }
+        else
+        {
+            excluirButton.Visible = false;
+        }
+
+        // Ajuste 3: bloqueio de duplo-clique / reentrância enquanto uma operação está em andamento.
+        bool habilitar = !_operacaoEmAndamento;
+        salvarButton.Enabled = habilitar;
+        BtnEditar.Enabled = habilitar;
+        excluirButton.Enabled = habilitar;
     }
 
     private enum ModoAcaoBotoes

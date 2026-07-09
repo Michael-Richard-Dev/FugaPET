@@ -50,11 +50,13 @@ public partial class ProcessoConsumoMaterialForm : Form
     private readonly ProcessoConsumoMaterialController _controller = new();
     private readonly ModoConsumoMaterial _modoConsumo;
     private readonly ConfiguracaoTelaConsumoMaterial _configuracaoConsumo;
+    private readonly ClassificadorOrdemConsumoMaterial _classificadorOrdemConsumo;
 
     // Estado da OP de consumo carregada e do componente selecionado no grid de componentes.
     private OrdemProducaoConsumo? _ordemConsumoAtual;
     private ComponenteConsumoMaterial? _componenteConsumoSelecionado;
     private bool _atualizandoComponentes;
+    private bool _restaurandoSelecaoLinhaComponentes;
 
     // Pesagens LOCAIS de consumo por componente (chave composta). Apenas memoria ate o salvar.
     private readonly Dictionary<string, List<PesagemConsumoMaterial>> _pesagensPorComponente = new();
@@ -73,6 +75,8 @@ public partial class ProcessoConsumoMaterialForm : Form
     private bool _enviandoSap;
     private Button? _enviarSap261Button;
     private ToolTip? _envioSap261ToolTip;
+    private ToolTip? _apontamentoInfoToolTip;
+    private ToolTip? _sapStatusToolTip;
     private bool _enviandoConfirmacao;
     private Button? _enviarConfirmacaoButton;
 
@@ -91,6 +95,11 @@ public partial class ProcessoConsumoMaterialForm : Form
     // Correcao 2 (Tarefa 15): tara selecionada POR COMPONENTE (chave composta), igual ao padrao da Entrada.
     private readonly Dictionary<string, global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro> _tarasPorComponente = new();
     private bool _selecionandoTara;
+
+    // Tarefa Consumo 22.10.1: descrições reais dos componentes (A_ProductDescription), buscadas por consulta de OP.
+    // Preenchido em ConsultarOrdemProducaoAsync e lido pelo seam BuscarTipoMaterialSap no join lógico.
+    private IReadOnlyDictionary<string, ProdutoSapMestre> _descricoesProdutoPorCodigo =
+        new Dictionary<string, ProdutoSapMestre>(StringComparer.OrdinalIgnoreCase);
 
     // Tarefa 15.1: enquanto true, o Validated do campo OP NAO reconsulta (acao operacional em andamento).
     private bool _acaoOperacionalEmAndamento;
@@ -113,9 +122,17 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     public ProcessoConsumoMaterialForm(ModoConsumoMaterial modo)
+        : this(modo, ClassificadorOrdemConsumoMaterial.Padrao)
+    {
+    }
+
+    internal ProcessoConsumoMaterialForm(
+        ModoConsumoMaterial modo,
+        ClassificadorOrdemConsumoMaterial classificadorOrdemConsumo)
     {
         _modoConsumo = modo;
         _configuracaoConsumo = ConfiguracaoTelaConsumoMaterialFactory.Criar(modo);
+        _classificadorOrdemConsumo = classificadorOrdemConsumo ?? throw new ArgumentNullException(nameof(classificadorOrdemConsumo));
         InitializeComponent();
         AplicarConfiguracaoModoConsumo();
         CriarBotaoConfirmarConsumo();
@@ -135,6 +152,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         ConfigureSideActionButtonIcons();
         ApplyGridStyle(materialDataGridView);
         ApplyGridStyle(productionDataGridView);
+        ConfigurarSelecaoLinhaInteiraGridComponentes();
         ConfigureProductionGridFooter();
         productionDataGridView.CellMouseDown += ProductionDataGridView_CellMouseDown;
         productionDataGridView.CellClick += ProductionDataGridView_CellClick;
@@ -776,6 +794,37 @@ public partial class ProcessoConsumoMaterialForm : Form
         _suprimirEventoOrdem = false;
     }
 
+    private void RegistrarOrdemRecenteSePermitida(OrdemProducaoConsumo ordem)
+    {
+        if (!OrdemPertenceAoModoAtual(ordem, out _))
+        {
+            return;
+        }
+
+        RegistrarOrdemRecente(ordem.NumeroOrdem);
+    }
+
+    // Tarefa Consumo 22.9.1 (Ajuste 1): classificação do produto produzido da OP mantida APENAS como contexto
+    // de diagnóstico (não bloqueia). A separação por modo é feita pelos COMPONENTES (FiltrarComponentesPorModo).
+    private bool OrdemPertenceAoModoAtual(
+        OrdemProducaoConsumo ordem,
+        out ResultadoClassificacaoOrdemConsumo classificacao)
+        => _classificadorOrdemConsumo.OrdemPertenceAoModo(ordem, _modoConsumo, out classificacao);
+
+    private void RegistrarDiagnosticoClassificacaoOrdem(
+        OrdemProducaoConsumo ordem,
+        ResultadoClassificacaoOrdemConsumo classificacao,
+        bool aceita)
+    {
+        System.Diagnostics.Trace.TraceInformation(
+            "[Consumo][ClassificacaoOP] "
+            + $"Modo da tela: {ClassificadorOrdemConsumoMaterial.NomeModo(_modoConsumo)}; "
+            + $"OP: {ordem.NumeroOrdem}; "
+            + $"Produto da OP: {ordem.MaterialProduzido}; "
+            + $"Campo usado para classificação: {classificacao.CampoUsado}; "
+            + $"Classificação encontrada: {ClassificadorOrdemConsumoMaterial.NomeClassificacao(classificacao.Classificacao)}; "
+            + $"Resultado: {(aceita ? "Aceita" : "Bloqueada")}");
+    }
     private static string NormalizarNumeroOrdem(string? valor)
         => (valor ?? string.Empty).Trim();
 
@@ -838,15 +887,38 @@ public partial class ProcessoConsumoMaterialForm : Form
                 return;
             }
 
-            // OP carregada (liberada), nao liberada, ou sem componentes: cabecalho exibido; pesagem so
-            // libera com componente pesavel selecionado (grid vazio em SemComponentes mantem bloqueado).
-            PreencherOrdemCarregada(resultado.Ordem);
+            // Tarefa Consumo 22.9.1 (Ajuste 1): o PRODUTO PRODUZIDO da OP é apenas CONTEXTO no topo da tela e
+            // NÃO bloqueia a OP sozinho. A separação Matéria-Prima × Químico passa a ser feita pelos COMPONENTES
+            // da OP (ProductType do Product Master), no filtro por modo (FiltrarComponentesPorModo). Aqui só
+            // registramos diagnóstico da classificação do produto produzido — sem bloquear.
+            OrdemPertenceAoModoAtual(resultado.Ordem, out ResultadoClassificacaoOrdemConsumo classificacaoOrdem);
+            RegistrarDiagnosticoClassificacaoOrdem(resultado.Ordem, classificacaoOrdem, aceita: true);
+
+            // Tarefa Consumo 22.10.1 (Ajuste 6): busca as descrições reais (A_ProductDescription) dos componentes
+            // ANTES do enriquecimento — o join lógico é feito por código de produto em BuscarTipoMaterialSap.
+            _descricoesProdutoPorCodigo = await _controller.ObterDescricoesComponentesAsync(
+                resultado.Ordem.Componentes.Select(componente => componente.CodigoMaterial));
+
+            // Tarefa Consumo 22.9.2 (Ajustes 1/2/5): classifica/filtra os componentes pelo MODO da tela ANTES de
+            // carregar a operação. Se não sobrar nenhum componente compatível, a OP NÃO abre operacional (grid
+            // vazia parecendo sucesso): bloqueia com alerta e volta ao estado inicial (mantendo só o número da OP).
+            IReadOnlyList<ComponenteConsumoMaterial> componentesModo =
+                EnriquecerEClassificarComponentesDoModo(resultado.Ordem);
+
+            if (componentesModo.Count == 0)
+            {
+                BloquearOrdemIncompativelComModo(resultado.Ordem, resultado.NumeroOrdem);
+                return;
+            }
+
+            // OP carregada (liberada) ou nao liberada: cabecalho exibido; pesagem so libera com componente
+            // pesavel selecionado.
+            PreencherOrdemCarregada(resultado.Ordem, componentesModo);
             DefinirTextoCampoOrdem(resultado.NumeroOrdem);
-            RegistrarOrdemRecente(resultado.NumeroOrdem); // OP consultada com sucesso entra na lista recente
+            RegistrarOrdemRecenteSePermitida(resultado.Ordem); // OP aceita no modo atual entra na lista recente
             statusLabel.Text = resultado.Mensagem;
 
-            if (resultado.Cenario is CenarioConsultaOrdemConsumo.NaoLiberada
-                or CenarioConsultaOrdemConsumo.SemComponentes)
+            if (resultado.Cenario is CenarioConsultaOrdemConsumo.NaoLiberada)
             {
                 MessageBox.Show(resultado.Mensagem, "Ordem de Produção", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
@@ -857,7 +929,11 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
     }
 
-    private void PreencherOrdemCarregada(OrdemProducaoConsumo ordem)
+    // Tarefa Consumo 22.9.2: recebe a lista JÁ classificada/filtrada pelo modo (não vazia — a garantia de
+    // "pelo menos um componente compatível" é feita em ConsultarOrdemProducaoAsync antes de chamar este método).
+    private void PreencherOrdemCarregada(
+        OrdemProducaoConsumo ordem,
+        IReadOnlyList<ComponenteConsumoMaterial> componentesModo)
     {
         // Reaproveita a limpeza padrao e, em seguida, preenche cabecalho + grid de componentes.
         LimparDadosOrdem(limparNumeroOrdem: false);
@@ -876,8 +952,6 @@ public partial class ProcessoConsumoMaterialForm : Form
             ? $"{ordem.QuantidadePrevista:0.###} {ordem.Unidade}".Trim()
             : string.Empty;
 
-        IReadOnlyList<ComponenteConsumoMaterial> componentesModo = FiltrarComponentesPorModo(ordem.Componentes);
-
         // Grid principal visivel: lista os componentes da OP. Guarda contra eventos de selecao durante
         // o preenchimento para nao habilitar leitura antes de clique do usuario.
         _atualizandoComponentes = true;
@@ -886,18 +960,22 @@ public partial class ProcessoConsumoMaterialForm : Form
         foreach (ComponenteConsumoMaterial componente in componentesModo)
         {
             string unidade = string.IsNullOrWhiteSpace(componente.UnidadeMedida) ? "KG" : componente.UnidadeMedida;
-            string previsto = $"{componente.QuantidadePendente:0.###} {unidade}".Trim();
+            decimal previstoInicial = ObterQuantidadePrevistaInicial(componente);
+            decimal utilizadoInicial = Math.Max(0m, componente.QuantidadeConsumida);
+            decimal saldoInicial = Math.Max(0m, previstoInicial - utilizadoInicial);
+            string previsto = FormatarPesoGrid(previstoInicial, unidade);
             int indicePrincipal = productionDataGridView.Rows.Add(
                 componente.CodigoMaterial,
                 ObterDescricaoProdutoGrid(componente),
+                ObterOperacaoGrid(componente),  // Tarefa Consumo 22.1: Operação SAP ao lado da descrição
                 componente.NumeroReserva,
                 componente.ItemReserva,
                 componente.DepositoConsumo,
                 ObterLoteComponenteGrid(componente),
                 ObterTipoSapGrid(componente),
-                previsto,                       // Peso Previsto (FIXO — quantidade original/pendente da OP)
-                $"0 {unidade}".Trim(),          // Peso Utilizado (total pesado local)
-                previsto);                      // Saldo Restante inicial = Peso Previsto
+                previsto,                       // Peso Previsto (FIXO — quantidade original da OP)
+                FormatarPesoGrid(utilizadoInicial, unidade), // Peso Utilizado (SAP + local)
+                FormatarPesoGrid(saldoInicial, unidade));    // Saldo Restante
             DataGridViewRow linhaPrincipal = productionDataGridView.Rows[indicePrincipal];
             linhaPrincipal.Tag = componente;
             AplicarStatusVisualComponente(linhaPrincipal, componente);
@@ -909,7 +987,7 @@ public partial class ProcessoConsumoMaterialForm : Form
                 componente.DescricaoMaterial,
                 componente.Lote,
                 string.Empty,
-                $"{componente.QuantidadePendente:0.###} {componente.UnidadeMedida}".Trim());
+                FormatarPesoGrid(saldoInicial, componente.UnidadeMedida));
             materialDataGridView.Rows[indiceSecundario].Tag = componente;
         }
 
@@ -919,67 +997,175 @@ public partial class ProcessoConsumoMaterialForm : Form
         materialDataGridView.CurrentCell = null;
         _atualizandoComponentes = false;
 
-        if (componentesModo.Count == 0)
-        {
-            statusLabel.Text = _modoConsumo == ModoConsumoMaterial.Quimico
-                ? "Nenhum componente químico liberado para consumo nesta ordem."
-                : "Nenhum componente de matéria-prima liberado para consumo nesta ordem.";
-
-            if (ordem.Componentes.Count == 0)
-            {
-                statusLabel.Text = "A ordem de produção não possui componentes para consumo.";
-            }
-        }
-
         // OP carregada: inicio de leitura permanece BLOQUEADO ate selecionar um componente pesavel.
         AtualizarLiberacaoInicioLeitura();
         AtualizarApontamentoVisual(null);
     }
 
+    // Tarefa Consumo 22.9.2 (Ajuste 1): enriquece os componentes com o tipo mestre (Product Master) e devolve
+    // APENAS os compatíveis com o modo atual da tela. O enriquecimento roda UMA vez por consulta (evita Trace
+    // duplicado); a classificação usa ProductType/ProductGroup quando disponível (rollout: Indefinido no filtro).
+    private IReadOnlyList<ComponenteConsumoMaterial> EnriquecerEClassificarComponentesDoModo(OrdemProducaoConsumo ordem)
+    {
+        ConsumoMaterialServico.EnriquecerComponentesComTipoMaterial(
+            ordem.Componentes,
+            BuscarTipoMaterialSap,
+            modoDaTela: ClassificadorOrdemConsumoMaterial.NomeModo(_modoConsumo),
+            opNumero: ordem.NumeroOrdem,
+            produtoProduzido: ordem.MaterialProduzido);
+
+        return FiltrarComponentesPorModo(ordem.Componentes);
+    }
+
+    // Tarefa Consumo 22.9.2 (Ajustes 2/3/4/5/6/7): OP sem NENHUM componente compatível com o modo NÃO abre
+    // operacional. Volta ao estado inicial (cards/grid/painel limpos, ações desabilitadas), mantém só o número
+    // digitado, exibe alerta por modo e devolve o foco ao campo OP. O produto produzido NÃO bloqueia sozinho.
+    private void BloquearOrdemIncompativelComModo(OrdemProducaoConsumo ordem, string numeroOrdem)
+    {
+        RegistrarDiagnosticoOpIncompativel(ordem);
+
+        LimparDadosOrdem(limparNumeroOrdem: false); // limpa dados operacionais; Iniciar/F9/F12/Confirmar desabilitados
+        DefinirTextoCampoOrdem(numeroOrdem);        // mantém o número consultado para o usuário saber o que tentou
+
+        AtualizarApontamentoOpIncompativel();       // apontamentoInfoPanel + sapStatusPanel de bloqueio
+        statusLabel.Text = "OP incompatível com esta tela. Informe uma OP compatível.";
+
+        (string titulo, string mensagem) = MontarMensagemOpIncompativel(
+            _modoConsumo, ordem.NumeroOrdem, ordem.MaterialProduzido, ordem.Componentes.Count);
+        MessageBox.Show(mensagem, titulo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+        DevolverFocoParaCampoOrdem(); // foco de volta no campo OP (Ajuste 6/14)
+    }
+
+    // Ajustes 3/4: título/mensagem por modo, com contagem de componentes quando a OP possuir componentes.
+    // internal static para permitir teste direto (InternalsVisibleTo) sem instanciar o Form.
+    internal static (string titulo, string mensagem) MontarMensagemOpIncompativel(
+        ModoConsumoMaterial modo, string? numeroOrdem, string? produtoProduzido, int totalComponentes)
+    {
+        string op = string.IsNullOrWhiteSpace(numeroOrdem) ? "(não informada)" : numeroOrdem.Trim();
+        string produto = string.IsNullOrWhiteSpace(produtoProduzido) ? "(não informado)" : produtoProduzido.Trim();
+
+        bool quimico = modo == ModoConsumoMaterial.Quimico;
+        string titulo = quimico
+            ? "OP não pertence ao Consumo Químico"
+            : "OP não pertence ao Consumo de Matéria-Prima";
+        string tipoCompativel = quimico ? "Consumo Químico" : "Consumo de Matéria-Prima";
+        string telaAlternativa = quimico ? "Consumo de Matéria-Prima" : "Consumo Químico";
+        string rotuloContagem = quimico ? "Componentes químicos encontrados" : "Componentes de matéria-prima encontrados";
+
+        string mensagem =
+            $"Esta OP não possui componentes classificados para {tipoCompativel}.\r\n\r\n"
+            + $"OP: {op}\r\n"
+            + $"Produto da OP: {produto}\r\n\r\n";
+
+        if (totalComponentes > 0)
+        {
+            mensagem += $"Componentes encontrados: {totalComponentes}\r\n"
+                + $"{rotuloContagem}: 0\r\n\r\n";
+        }
+
+        mensagem += $"Use a tela de {telaAlternativa} ou verifique a classificação dos componentes no SAP.";
+
+        return (titulo, mensagem);
+    }
+
+    // Ajustes 2/6: painel de orientação + status SAP explícitos de OP incompatível (não parece consulta concluída).
+    private void AtualizarApontamentoOpIncompativel()
+    {
+        apontamentoChipCaptionLabel.Text = "ROTA SAP";
+        apontamentoInfoCaptionLabel.Text = "ORIENTAÇÃO";
+        apontamentoChipValueLabel.Text = "Bloqueado";
+        AtualizarApontamentoInfo(
+            "OP incompatível\ncom esta tela.",
+            "OP incompatível com esta tela. Informe uma OP compatível.");
+        AtualizarEstadoVisualIntegracaoSapConsumo(
+            EstadoVisualIntegracaoSapConsumo.BloqueadoOpIncompativel,
+            "OP incompatível com esta tela.");
+    }
+
+    private void DevolverFocoParaCampoOrdem()
+    {
+        if (productionOrderComboBox.CanFocus)
+        {
+            productionOrderComboBox.Focus();
+        }
+    }
+
+    // Ajuste 7: diagnóstico da OP bloqueada por modo (contagens por classificação de componente).
+    private void RegistrarDiagnosticoOpIncompativel(OrdemProducaoConsumo ordem)
+    {
+        int materiaPrima = 0, quimico = 0, embalagem = 0, outro = 0, indefinido = 0;
+        foreach (ComponenteConsumoMaterial componente in ordem.Componentes)
+        {
+            switch (componente.ClassificacaoConsumo)
+            {
+                case ClassificacaoConsumoMaterial.MateriaPrima: materiaPrima++; break;
+                case ClassificacaoConsumoMaterial.Quimico: quimico++; break;
+                case ClassificacaoConsumoMaterial.Embalagem: embalagem++; break;
+                case ClassificacaoConsumoMaterial.Outro: outro++; break;
+                default: indefinido++; break;
+            }
+        }
+
+        System.Diagnostics.Trace.TraceInformation(
+            "[Consumo][OpIncompativel] "
+            + $"Modo da tela: {ClassificadorOrdemConsumoMaterial.NomeModo(_modoConsumo)}; "
+            + $"OP consultada: {ordem.NumeroOrdem}; "
+            + $"Produto da OP: {ordem.MaterialProduzido}; "
+            + $"Total de componentes da OP: {ordem.Componentes.Count}; "
+            + "Total de componentes compativeis com o modo: 0; "
+            + $"MateriaPrima(ROH): {materiaPrima}; Quimico(HIBE): {quimico}; Embalagem(VERP): {embalagem}; "
+            + $"Outro: {outro}; Indefinido: {indefinido}; "
+            + "Resultado: OP bloqueada para o modo atual");
+    }
+
+    // Tarefa Consumo 22.9.1/22.9.2 (Ajustes 5/6): separação por COMPONENTE via ProductType (Product Master),
+    // e não mais pelo produto produzido da OP. A OP é aceita quando tem >=1 componente do modo; se a lista
+    // filtrada ficar vazia, ConsultarOrdemProducaoAsync bloqueia a abertura operacional (22.9.2).
     private IReadOnlyList<ComponenteConsumoMaterial> FiltrarComponentesPorModo(
         IReadOnlyList<ComponenteConsumoMaterial> componentes)
-    {
-        if (_modoConsumo == ModoConsumoMaterial.MateriaPrima)
-        {
-            return componentes
-                .Where(ComponenteEhMateriaPrima)
-                .ToList();
-        }
-
-        List<ComponenteConsumoMaterial> quimicos = componentes
-            .Where(ComponenteEhQuimico)
+        => componentes
+            .Where(ComponentePertenceAoModoAtual)
             .ToList();
 
-        if (quimicos.Count > 0)
-        {
-            return quimicos;
-        }
+    // Tarefa Consumo 22.10.1: seam do Product Master. A DESCRIÇÃO (A_ProductDescription) já é real — o mapa
+    // _descricoesProdutoPorCodigo é preenchido em ConsultarOrdemProducaoAsync (GET governado). O mestre retornado
+    // traz só a descrição (Consultado=false), então a CLASSIFICAÇÃO por ProductType (A_Product) segue no rollout
+    // atual (Indefinido) — separação Matéria-Prima/Químico inalterada. A_Product real fica para tarefa futura.
+    private ProdutoSapMestre? BuscarTipoMaterialSap(string codigoMaterial)
+        => _descricoesProdutoPorCodigo.GetValueOrDefault((codigoMaterial ?? string.Empty).Trim());
 
-        // TODO SAP/Negócio:
-        // Confirmar campo oficial para identificação de químicos. O modelo de componente da OP ainda não
-        // expõe MaterialGroup; por isso o modo Químicos mantém os componentes visíveis temporariamente.
-        System.Diagnostics.Trace.TraceInformation(
-            "[Consumo][Modo] Filtro de químicos sem campo SAP confirmado; mantendo componentes da OP para teste estrutural.");
-        return componentes.ToList();
-    }
+    private bool ComponentePertenceAoModoAtual(ComponenteConsumoMaterial componente)
+        => _modoConsumo == ModoConsumoMaterial.MateriaPrima
+            ? ComponenteEhMateriaPrima(componente)
+            : ComponenteEhQuimico(componente);
 
+    // Ajuste 6 (rollout): enquanto o Product Master não estiver ligado à consulta real, os componentes
+    // ficam como Indefinido. Para NÃO reproduzir o bug (OP sumindo do modo Matéria-Prima), o modo
+    // Matéria-Prima aceita MatériaPrima E Indefinido; o modo Químico exige explicitamente Químico.
+    // Quando a consulta ao Product Master estiver homologada, Indefinido passará a bloquear (Ajuste 10).
     private static bool ComponenteEhMateriaPrima(ComponenteConsumoMaterial componente)
-        => !ComponenteEhQuimico(componente);
+        => componente.ClassificacaoConsumo is ClassificacaoConsumoMaterial.MateriaPrima
+            or ClassificacaoConsumoMaterial.Indefinido;
 
     private static bool ComponenteEhQuimico(ComponenteConsumoMaterial componente)
-    {
-        _ = componente;
-        // TODO SAP/Negócio:
-        // Possíveis candidatos quando disponíveis no modelo: MaterialGroup = QUIMICO/LQ/L003, depósito,
-        // tipo de material ou grupo configurado localmente. Não inventar regra operacional sem confirmação.
-        return false;
-    }
+        => componente.ClassificacaoConsumo == ClassificacaoConsumoMaterial.Quimico;
 
-    // Descricao do produto SOMENTE (sem reserva/deposito/lote/motivo concatenados — cada um tem coluna).
+    // Tarefa Consumo 22.10 (Ajuste 5/6/12): a coluna "Descrição Produto" exibe a descrição REAL
+    // (A_ProductDescription.ProductDescription, aplicada no componente pelo enriquecimento) ou a descrição da OP.
+    // Sem descrição do SAP, usa o fallback controlado — NÃO mais "Material <codigo>".
+    internal const string DescricaoProdutoNaoRetornada = "Descrição não retornada pelo SAP";
+
     private static string ObterDescricaoProdutoGrid(ComponenteConsumoMaterial componente)
         => string.IsNullOrWhiteSpace(componente.DescricaoMaterial)
-            ? $"Material {componente.CodigoMaterial}".Trim()
+            ? DescricaoProdutoNaoRetornada
             : componente.DescricaoMaterial.Trim();
+
+    // Tarefa Consumo 22.1: operação SAP do componente (ManufacturingOrderOperation), "-" se vazia.
+    private static string ObterOperacaoGrid(ComponenteConsumoMaterial componente)
+        => string.IsNullOrWhiteSpace(componente.Operacao)
+            ? "-"
+            : componente.Operacao.Trim();
 
     // Coluna "Tipo SAP" curta (classificacao); o motivo completo vai no tooltip/status.
     private static string ObterTipoSapGrid(ComponenteConsumoMaterial componente)
@@ -997,8 +1183,9 @@ public partial class ProcessoConsumoMaterialForm : Form
         };
     }
 
+    // Tarefa Consumo 22.2: lote sempre do SAP; sem lote é bloqueante → mostra "Sem lote" (não "Não informado").
     private static string ObterLoteComponenteGrid(ComponenteConsumoMaterial componente)
-        => string.IsNullOrWhiteSpace(componente.Lote) ? "Não informado" : componente.Lote.Trim();
+        => string.IsNullOrWhiteSpace(componente.Lote) ? "Sem lote" : componente.Lote.Trim();
 
     // Texto completo (motivo) para tooltip/status — fora da coluna para nao poluir a grid.
     private static string ObterTooltipComponente(ComponenteConsumoMaterial componente)
@@ -1044,6 +1231,178 @@ public partial class ProcessoConsumoMaterialForm : Form
             ? "componente já consumido"
             : "componente não liberado para pesagem";
 
+    private bool ComponentePodeOperar(ComponenteConsumoMaterial? componente, out string motivoBloqueio)
+    {
+        motivoBloqueio = string.Empty;
+
+        if (componente is null)
+        {
+            motivoBloqueio = "Selecione um componente da ordem.";
+            return false;
+        }
+
+        string tipoSap = ObterTipoSapGrid(componente);
+
+        if (tipoSap.Contains("Bloqueado", StringComparison.OrdinalIgnoreCase))
+        {
+            motivoBloqueio = string.IsNullOrWhiteSpace(componente.MotivoInelegibilidadeMaterialDocument261)
+                ? "Tipo SAP bloqueado para consumo operacional nesta tela."
+                : $"Tipo SAP bloqueado: {componente.MotivoInelegibilidadeMaterialDocument261}";
+            return false;
+        }
+
+        if (tipoSap.Contains("Sem dep?sito", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(componente.DepositoConsumo))
+        {
+            motivoBloqueio = "Componente sem dep?sito de consumo informado pelo SAP.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(componente.Lote))
+        {
+            motivoBloqueio = "Componente sem lote SAP informado.";
+            return false;
+        }
+
+        if (tipoSap.Contains("Backflush", StringComparison.OrdinalIgnoreCase)
+            || componente.BackflushSap
+            || componente.ClassificacaoEnvio == ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao)
+        {
+            motivoBloqueio = "Componente Backflush n?o pode ser operado por 261 direto nesta tela.";
+            return false;
+        }
+
+        if (!string.Equals(tipoSap, "261 Direto", StringComparison.OrdinalIgnoreCase)
+            || componente.ClassificacaoEnvio != ClassificacaoEnvioConsumo261.MaterialDocument261Direto
+            || !componente.ElegivelMaterialDocument261Direto)
+        {
+            motivoBloqueio = string.IsNullOrWhiteSpace(componente.MotivoInelegibilidadeMaterialDocument261)
+                ? "Componente n?o classificado como 261 Direto."
+                : componente.MotivoInelegibilidadeMaterialDocument261;
+            return false;
+        }
+
+        if (!ComponentePertenceAoModoAtual(componente))
+        {
+            motivoBloqueio = $"Componente n?o pertence ao modo {NomeOperacionalConsumo}.";
+            return false;
+        }
+
+        if (!ConsumoMaterialServico.AvaliarLiberacaoPesagem(componente, out string motivoLiberacao))
+        {
+            motivoBloqueio = motivoLiberacao;
+            return false;
+        }
+
+        if (ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(componente) <= 0m)
+        {
+            motivoBloqueio = "Componente sem saldo dispon?vel para nova pesagem.";
+            return false;
+        }
+
+        if (!componente.PesagemLiberada)
+        {
+            motivoBloqueio = string.IsNullOrWhiteSpace(componente.MotivoBloqueioPesagem)
+                ? ObterMotivoComponenteBloqueado(componente)
+                : componente.MotivoBloqueioPesagem;
+            return false;
+        }
+
+        return true;
+    }
+
+    private void BloquearComponenteOperacional(ComponenteConsumoMaterial? componente, string motivoBloqueio)
+    {
+        string mensagem = string.IsNullOrWhiteSpace(motivoBloqueio)
+            ? "Opera??o bloqueada para este componente."
+            : $"Opera??o bloqueada para este componente. Motivo: {motivoBloqueio}";
+
+        statusLabel.Text = mensagem;
+        AtualizarApontamentoVisual(componente, mensagem);
+        AtualizarEstadoVisualIntegracaoSapConsumo(
+            componente is not null && string.IsNullOrWhiteSpace(componente.DepositoConsumo)
+                ? EstadoVisualIntegracaoSapConsumo.BloqueadoSemDeposito
+                : EstadoVisualIntegracaoSapConsumo.Bloqueado,
+            motivoBloqueio);
+        SetReadWeightEnabled(false);
+
+        if (!_isProductionStarted)
+        {
+            AtualizarLiberacaoInicioLeitura();
+        }
+
+        if (_confirmarConsumoButton is not null)
+        {
+            _confirmarConsumoButton.Enabled = false;
+        }
+
+        if (_previewSap261Button is not null)
+        {
+            _previewSap261Button.Enabled = false;
+        }
+
+        if (_enviarSap261Button is not null)
+        {
+            _enviarSap261Button.Enabled = false;
+        }
+    }
+
+    private string MontarMensagemOperacaoBloqueada(string motivoBloqueio)
+        => string.IsNullOrWhiteSpace(motivoBloqueio)
+            ? "Opera??o bloqueada para este componente."
+            : $"Opera??o bloqueada para este componente.\r\nMotivo: {motivoBloqueio}";
+
+    private bool ValidarComponentesComPesagemPendentesOperaveis(out string mensagem)
+    {
+        mensagem = string.Empty;
+
+        if (_ordemConsumoAtual is null)
+        {
+            return true;
+        }
+
+        foreach (ComponenteConsumoMaterial componente in _ordemConsumoAtual.Componentes)
+        {
+            string chave = ProcessoConsumoMaterialController.ChaveComponente(componente);
+            if (!_pesagensPorComponente.TryGetValue(chave, out List<PesagemConsumoMaterial>? pesagens)
+                || pesagens.Count == 0)
+            {
+                continue;
+            }
+
+            if (ComponentePodeOperar(componente, out string motivoBloqueio))
+            {
+                continue;
+            }
+
+            _componenteConsumoSelecionado = componente;
+            BloquearComponenteOperacional(componente, motivoBloqueio);
+            mensagem = MontarMensagemOperacaoBloqueada(motivoBloqueio);
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool ValidarComponenteSelecionadoParaSap261(out string mensagem)
+    {
+        mensagem = string.Empty;
+
+        if (_componenteConsumoSelecionado is null)
+        {
+            return true;
+        }
+
+        if (ComponentePodeOperar(_componenteConsumoSelecionado, out string motivoBloqueio))
+        {
+            return true;
+        }
+
+        BloquearComponenteOperacional(_componenteConsumoSelecionado, motivoBloqueio);
+        mensagem = MontarMensagemOperacaoBloqueada(motivoBloqueio);
+        return false;
+    }
+
     private static void AplicarStatusVisualComponente(DataGridViewRow linha, ComponenteConsumoMaterial componente)
     {
         if (componente.PesagemLiberada)
@@ -1073,7 +1432,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
         // Correcao 2: so ignora durante uma LEITURA DE PESO em andamento; permite trocar de componente
         // com a leitura ativa (sem precisar parar/iniciar de novo).
-        if (_isReadingWeight)
+        if (_isReadingWeight || _restaurandoSelecaoLinhaComponentes)
         {
             return;
         }
@@ -1093,20 +1452,26 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         if (_componenteConsumoSelecionado is null)
         {
+            UpdateProductionCounters();
+            AtualizarApontamentoVisual(null, "Selecione um componente");
             AtualizarLiberacaoInicioLeitura();
             return false;
         }
 
         RegistrarDiagnosticoSelecaoConsumo(_componenteConsumoSelecionado, linhaSelecionada?.Index ?? -1);
-        statusLabel.Text = _componenteConsumoSelecionado.PesagemLiberada
-            ? $"Componente {_componenteConsumoSelecionado.CodigoMaterial} selecionado. Inicie a leitura de consumo."
-            : "Componente já consumido ou não liberado para pesagem.";
 
-        // Totais (decimal/memoria) do componente recem-selecionado.
         AtualizarTotaisConsumo(
             _componenteConsumoSelecionado,
             ProcessoConsumoMaterialController.ChaveComponente(_componenteConsumoSelecionado));
 
+        if (!ComponentePodeOperar(_componenteConsumoSelecionado, out string motivoBloqueio))
+        {
+            BloquearComponenteOperacional(_componenteConsumoSelecionado, motivoBloqueio);
+            return false;
+        }
+
+        statusLabel.Text = $"Componente {_componenteConsumoSelecionado.CodigoMaterial} selecionado. Inicie a leitura de consumo.";
+        AtualizarLiberacaoInicioLeitura();
         return true;
     }
 
@@ -1127,7 +1492,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         if (_ordemConsumoAtual is null)
         {
-            mensagem = "Carregue uma ordem de produção válida para pesar.";
+            mensagem = "Carregue uma ordem de produ??o v?lida para pesar.";
             return false;
         }
 
@@ -1139,24 +1504,10 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         componente = _componenteConsumoSelecionado;
 
-        if (!ConsumoMaterialServico.AvaliarLiberacaoPesagem(componente, out string motivo))
+        if (!ComponentePodeOperar(componente, out string motivoBloqueio))
         {
-            mensagem = $"Componente não liberado para pesagem: {motivo}";
-            AtualizarApontamentoVisual(componente, mensagem);
-            AtualizarEstadoVisualIntegracaoSapConsumo(
-                string.IsNullOrWhiteSpace(componente.DepositoConsumo)
-                    ? EstadoVisualIntegracaoSapConsumo.BloqueadoSemDeposito
-                    : EstadoVisualIntegracaoSapConsumo.Bloqueado,
-                motivo);
-            return false;
-        }
-
-        if (!componente.PesagemLiberada)
-        {
-            mensagem = string.IsNullOrWhiteSpace(componente.MotivoBloqueioPesagem)
-                ? "Componente não liberado para pesagem."
-                : $"Componente não liberado para pesagem: {componente.MotivoBloqueioPesagem}";
-            AtualizarApontamentoVisual(componente, mensagem);
+            BloquearComponenteOperacional(componente, motivoBloqueio);
+            mensagem = MontarMensagemOperacaoBloqueada(motivoBloqueio);
             return false;
         }
 
@@ -1230,7 +1581,8 @@ public partial class ProcessoConsumoMaterialForm : Form
                 NormalizarNumeroOrdem(_ordemConsumoAtual.NumeroOrdem),
                 numeroOrdem,
                 StringComparison.OrdinalIgnoreCase)
-            && _ordemConsumoAtual.Componentes.Any(c => c.PesagemLiberada);
+            && _componenteConsumoSelecionado is not null
+            && ComponentePodeOperar(_componenteConsumoSelecionado, out _);
     }
 
     private void LimparDadosOrdem(bool limparNumeroOrdem = true)
@@ -1314,7 +1666,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
         // Correcao 4: preserva selecao manual valida (nao troca para o primeiro componente).
         ComponenteConsumoMaterial? atual = ObterComponenteSelecionadoNoGridPrincipal();
-        if (atual is not null && atual.PesagemLiberada)
+        if (atual is not null && ComponentePodeOperar(atual, out _))
         {
             _componenteConsumoSelecionado = atual;
             AtualizarTotaisConsumo(atual, ProcessoConsumoMaterialController.ChaveComponente(atual));
@@ -1329,7 +1681,8 @@ public partial class ProcessoConsumoMaterialForm : Form
                 continue;
             }
 
-            if (linha.Tag is not ComponenteConsumoMaterial componente || !componente.PesagemLiberada)
+            if (linha.Tag is not ComponenteConsumoMaterial componente
+                || !ComponentePodeOperar(componente, out _))
             {
                 continue;
             }
@@ -1613,14 +1966,14 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         if (_ordemConsumoAtual is null)
         {
-            statusLabel.Text = "Carregue uma ordem de produção válida para iniciar a leitura de consumo.";
+            statusLabel.Text = "Carregue uma ordem de produ??o v?lida para iniciar a leitura de consumo.";
             return;
         }
 
-        // Auto-selecao SEGURA: mantem selecao manual valida; senao destaca a 1a linha pesavel real do grid.
+        // Auto-selecao SEGURA: mantem selecao manual valida; senao destaca a 1a linha operavel real do grid.
         if (!SelecionarPrimeiroComponentePesavelSeNecessario())
         {
-            statusLabel.Text = "Nenhum componente pendente/liberado para leitura de consumo.";
+            statusLabel.Text = "Nenhum componente operacional liberado para leitura de consumo.";
             return;
         }
 
@@ -1633,9 +1986,14 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        if (!_componenteConsumoSelecionado.PesagemLiberada)
+        if (!ComponentePodeOperar(_componenteConsumoSelecionado, out string motivoBloqueio))
         {
-            statusLabel.Text = "Componente já consumido ou não liberado para pesagem.";
+            BloquearComponenteOperacional(_componenteConsumoSelecionado, motivoBloqueio);
+            MessageBox.Show(
+                MontarMensagemOperacaoBloqueada(motivoBloqueio),
+                "Iniciar leitura de consumo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
@@ -1773,11 +2131,8 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Correcao 2 (Tarefa 15.2): garante o LOTE antes da tara/leitura (a chave nasce com lote correto).
-        if (!GarantirLoteComponenteAntesDaPesagem(componenteF12!))
-        {
-            return;
-        }
+        // Tarefa Consumo 22.2: lote vem SEMPRE do SAP; sem lote o componente já é bloqueado em
+        // AvaliarLiberacaoPesagem (via ValidarComponenteAtualParaPesagem). Não há mais lote manual.
 
         // Correcao 2: garante a tara selecionada do componente antes de ler a balanca (F12 usa essa tara).
         await SelecionarTaraParaComponenteAsync(componenteF12!);
@@ -1851,6 +2206,17 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
 
         ComponenteConsumoMaterial componente = _componenteConsumoSelecionado;
+        if (!ComponentePodeOperar(componente, out string motivoBloqueio))
+        {
+            BloquearComponenteOperacional(componente, motivoBloqueio);
+            MessageBox.Show(
+                MontarMensagemOperacaoBloqueada(motivoBloqueio),
+                "Pesagem de consumo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         RegistrarDiagnosticoPesagemComponente(componente);
         // Correcao 2: a tara vem da SELECAO POR COMPONENTE (escolhida antes do F9/F12).
         TaraConsumoAplicada taraAplicada = ObterTaraConsumoAplicada(componente);
@@ -1887,7 +2253,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         _proximaSequenciaPesagem++;
 
         AtualizarTotaisConsumo(componente, chave);
-        AtualizarApontamentoVisual(componente, $"Última pesagem: {resultado.Pesagem.PesoLiquidoKg:0.000} kg.");
+        AtualizarApontamentoVisual(componente, $"?ltima pesagem: {resultado.Pesagem.PesoLiquidoKg:0.000} kg.");
         statusLabel.Text = $"{resultado.Mensagem} {FormatarResumoPesagem(resultado.Pesagem)}";
     }
 
@@ -1918,9 +2284,9 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        if (!ConsumoMaterialServico.AvaliarLiberacaoPesagem(componente, out _) || !componente.PesagemLiberada)
+        if (!ComponentePodeOperar(componente, out _))
         {
-            return; // sem deposito/saldo/unidade/consumido -> nao abre selecao de tara.
+            return; // sem deposito/saldo/unidade/consumido/backflush/bloqueado -> nao abre selecao de tara.
         }
 
         if (ExisteTaraSelecionada(componente))
@@ -2025,6 +2391,23 @@ public partial class ProcessoConsumoMaterialForm : Form
             ? lista.Sum(pesagem => pesagem.PesoLiquidoKg)
             : 0m;
 
+    private static decimal ObterQuantidadePrevistaInicial(ComponenteConsumoMaterial componente)
+        => componente.QuantidadePrevista > 0m
+            ? componente.QuantidadePrevista
+            : componente.QuantidadePendente + Math.Max(0m, componente.QuantidadeConsumida);
+
+    private decimal ObterQuantidadeUtilizadaComponente(ComponenteConsumoMaterial componente, string chave)
+        => Math.Max(0m, componente.QuantidadeConsumida) + SomarPesagensLocais(chave);
+
+    private static string FormatarPesoPainel(decimal valor)
+        => $"{valor.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg";
+
+    private static string FormatarPesoGrid(decimal valor, string unidade)
+    {
+        string texto = valor.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        string unidadeNormalizada = string.IsNullOrWhiteSpace(unidade) ? "KG" : unidade.Trim();
+        return $"{texto} {unidadeNormalizada}".Trim();
+    }
     /// <summary>
     /// Atualiza, por DECIMAL e a partir da MEMORIA (_pesagensPorComponente), os totais de consumo:
     /// Peso Previsto (pendente local) e Peso Utilizado (total pesado local); e recalcula o status do
@@ -2033,14 +2416,16 @@ public partial class ProcessoConsumoMaterialForm : Form
     private void AtualizarTotaisConsumo(ComponenteConsumoMaterial componente, string chave)
     {
         decimal totalLocal = SomarPesagensLocais(chave);
-        decimal saldoRestante = Math.Max(0m, componente.QuantidadePendente - totalLocal);
+        decimal previstoInicial = ObterQuantidadePrevistaInicial(componente);
+        decimal totalUtilizado = ObterQuantidadeUtilizadaComponente(componente, chave);
+        decimal saldoRestante = Math.Max(0m, previstoInicial - totalUtilizado);
 
-        // Ajuste 7/8: card lateral mostra Peso Previsto FIXO (nao decai), Peso Utilizado e Saldo Restante.
-        boxesCounterLabel.Text = $"{componente.QuantidadePendente:0.###} kg";
-        packagesCounterLabel.Text = $"{totalLocal:0.###} kg";
+        // Tarefa 22.12: card lateral mostra o mesmo componente selecionado da grid.
+        boxesCounterLabel.Text = FormatarPesoPainel(previstoInicial);
+        packagesCounterLabel.Text = FormatarPesoPainel(totalUtilizado);
         if (saldoRestanteCounterLabel is not null)
         {
-            saldoRestanteCounterLabel.Text = $"Saldo: {saldoRestante:0.###} kg";
+            saldoRestanteCounterLabel.Text = $"Saldo: {FormatarPesoPainel(saldoRestante)}";
         }
 
         ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, totalLocal);
@@ -2049,7 +2434,6 @@ public partial class ProcessoConsumoMaterialForm : Form
         AtualizarBotaoConfirmar();
         AtualizarApontamentoVisual(componente);
     }
-
     private void AtualizarLinhaComponenteSelecionado(ComponenteConsumoMaterial componente)
     {
         foreach (DataGridViewRow linha in materialDataGridView.Rows)
@@ -2066,13 +2450,15 @@ public partial class ProcessoConsumoMaterialForm : Form
             if (ReferenceEquals(linha.Tag, componente))
             {
                 string chave = ProcessoConsumoMaterialController.ChaveComponente(componente);
-                decimal totalLocal = SomarPesagensLocais(chave);
-                decimal saldo = Math.Max(0m, componente.QuantidadePendente - totalLocal);
+                decimal previstoInicial = ObterQuantidadePrevistaInicial(componente);
+                decimal totalUtilizado = ObterQuantidadeUtilizadaComponente(componente, chave);
+                decimal saldo = Math.Max(0m, previstoInicial - totalUtilizado);
                 string unidade = string.IsNullOrWhiteSpace(componente.UnidadeMedida) ? "KG" : componente.UnidadeMedida;
                 // Ajuste 7: a coluna de Peso Previsto NAO e reescrita durante a pesagem local (fica fixa).
-                linha.Cells["productionWeightColumn"].Value = $"{totalLocal:0.###} {unidade}".Trim();
-                linha.Cells["productionSaldoColumn"].Value = $"{saldo:0.###} {unidade}".Trim();
+                linha.Cells["productionWeightColumn"].Value = FormatarPesoGrid(totalUtilizado, unidade);
+                linha.Cells["productionSaldoColumn"].Value = FormatarPesoGrid(saldo, unidade);
                 AplicarStatusVisualComponente(linha, componente);
+                RestaurarSelecaoComponente(componente);
                 break;
             }
         }
@@ -2100,13 +2486,73 @@ public partial class ProcessoConsumoMaterialForm : Form
         _confirmarConsumoButton.BringToFront();
     }
 
+    private bool PossuiPesagemPendenteParaNovoApontamento()
+        => _pesagensPorComponente.Values.Any(lista => lista.Count > 0);
+
+    private string FinalizarApontamentoEnviadoSapELiberarNovaPesagem(string mensagemSucesso)
+    {
+        if (_ordemConsumoAtual is null)
+        {
+            return mensagemSucesso;
+        }
+
+        Dictionary<string, decimal> quantidadesEnviadas = _pesagensPorComponente
+            .Where(par => par.Value.Count > 0)
+            .ToDictionary(
+                par => par.Key,
+                par => par.Value.Sum(pesagem => pesagem.PesoLiquidoKg),
+                StringComparer.Ordinal);
+
+        foreach (ComponenteConsumoMaterial componente in _ordemConsumoAtual.Componentes)
+        {
+            string chave = ProcessoConsumoMaterialController.ChaveComponente(componente);
+            if (!quantidadesEnviadas.TryGetValue(chave, out decimal enviadoKg) || enviadoKg <= 0m)
+            {
+                continue;
+            }
+
+            componente.QuantidadeConsumida += enviadoKg;
+            componente.QuantidadePendente = Math.Max(0m, componente.QuantidadePrevista - componente.QuantidadeConsumida);
+            componente.QuantidadePendenteSapOriginal = componente.QuantidadePendente;
+            ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, 0m);
+            AtualizarLinhaComponenteSelecionado(componente);
+        }
+
+        _pesagensPorComponente.Clear();
+        _ultimoCodigoLancamentoSalvo = null;
+        _consumoSalvoNaSessao = false;
+        _lancamentoComFalhaSap = false;
+        _rotaEnvioSalva = RotaEnvioConsumo.Bloqueado;
+
+        ComponenteConsumoMaterial? selecionado = _componenteConsumoSelecionado;
+        if (selecionado is not null)
+        {
+            AtualizarTotaisConsumo(selecionado, ProcessoConsumoMaterialController.ChaveComponente(selecionado));
+            decimal saldoRestante = Math.Max(0m, selecionado.QuantidadePendente);
+            decimal disponivelComTolerancia = ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(selecionado);
+            if (disponivelComTolerancia > 0m && selecionado.PesagemLiberada)
+            {
+                AtualizarApontamentoVisual(selecionado, "Consumo enviado ao SAP. Nova pesagem liberada para o saldo restante.");
+                AtualizarBotaoConfirmar();
+                return $"Consumo enviado ao SAP.\r\nSaldo restante: {saldoRestante:0.000} KG.\r\nVocê pode iniciar uma nova leitura para este componente.";
+            }
+
+            AtualizarApontamentoVisual(selecionado, "Consumo enviado ao SAP. Componente sem saldo disponível para nova pesagem.");
+            AtualizarBotaoConfirmar();
+            return "Consumo enviado ao SAP.\r\nLimite de consumo atingido para este componente.";
+        }
+
+        AtualizarBotaoConfirmar();
+        return mensagemSucesso;
+    }
+
     private void AtualizarBotaoConfirmar()
     {
         if (_confirmarConsumoButton is not null)
         {
             // Ajuste 5 (Tarefa 18.2): CONFIRMAR CONSUMO visivel so FORA da leitura, com pesagem local e
             // consumo ainda nao salvo (oculto ao abrir/durante leitura; some/desabilita apos salvar).
-            bool possuiPesagem = _pesagensPorComponente.Values.Any(lista => lista.Count > 0);
+            bool possuiPesagem = PossuiPesagemPendenteParaNovoApontamento();
             _confirmarConsumoButton.Visible = !_isProductionStarted
                 && !_lancamentoComFalhaSap
                 && _ordemConsumoAtual is not null
@@ -2135,7 +2581,9 @@ public partial class ProcessoConsumoMaterialForm : Form
             ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
             return envio is { Sucesso: true }
                 ? ("Consumo de químicos salvo localmente e enviado ao SAP por 261 direto com sucesso.", MessageBoxIcon.Information)
-                : ("Consumo de químicos salvo localmente, mas o envio SAP 261 direto não foi concluído. Verifique o histórico/diagnóstico antes de reenviar.", MessageBoxIcon.Warning);
+                : (envio?.Mensagem
+                    ?? "Consumo de químicos salvo localmente, mas o envio SAP 261 direto não foi concluído. Verifique o histórico/diagnóstico antes de reenviar.",
+                    MessageBoxIcon.Warning);
         }
 
         if (_rotaEnvioSalva == RotaEnvioConsumo.Direto261)
@@ -2143,7 +2591,9 @@ public partial class ProcessoConsumoMaterialForm : Form
             ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
             return envio is { Sucesso: true }
                 ? ("Consumo salvo localmente e enviado ao SAP com sucesso.", MessageBoxIcon.Information)
-                : ("Consumo salvo localmente, mas o envio ao SAP falhou. Verifique o histórico/diagnóstico antes de reenviar.", MessageBoxIcon.Warning);
+                : (envio?.Mensagem
+                    ?? "Consumo salvo localmente, mas o envio ao SAP falhou. Verifique o histórico/diagnóstico antes de reenviar.",
+                    MessageBoxIcon.Warning);
         }
 
         if (_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao)
@@ -2221,6 +2671,13 @@ public partial class ProcessoConsumoMaterialForm : Form
         {
             statusLabel.Text = "Salve o consumo local antes de enviar ao SAP.";
             MessageBox.Show(statusLabel.Text, "Enviar SAP 261", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (!ValidarComponenteSelecionadoParaSap261(out string mensagemBloqueioOperacionalEnviar))
+        {
+            statusLabel.Text = mensagemBloqueioOperacionalEnviar;
+            MessageBox.Show(statusLabel.Text, "Enviar SAP 261", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -2386,6 +2843,13 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
+        if (!ValidarComponenteSelecionadoParaSap261(out string mensagemBloqueioOperacionalPreview))
+        {
+            statusLabel.Text = mensagemBloqueioOperacionalPreview;
+            MessageBox.Show(statusLabel.Text, "Preview SAP 261", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         ResultadoPreviewConsumoSap261 preview = await _controller.GerarPreviewSap261Async(codigoLancamento);
         if (!preview.Sucesso)
         {
@@ -2482,7 +2946,8 @@ public partial class ProcessoConsumoMaterialForm : Form
         BloqueadoSemDeposito,
         BloqueadoSemSaldo,
         BloqueadoEscritaDesabilitada,
-        BloqueadoSapNaoConfigurado
+        BloqueadoSapNaoConfigurado,
+        BloqueadoOpIncompativel
     }
 
     private static readonly Color SapVerde = Color.FromArgb(34, 197, 94);
@@ -2492,32 +2957,87 @@ public partial class ProcessoConsumoMaterialForm : Form
     private static readonly Color SapVermelho = Color.FromArgb(239, 68, 68);
 
     /// <summary>
-    /// Ajuste 2: atualiza texto (padrao "SAP HML: ...") e a cor do ponto conforme o estado. Mesma ideia
-    /// do AtualizarEstadoVisualIntegracaoSap da Entrada. Sem alterar integracao.
+    /// Atualiza o status SAP do header com texto curto no painel e detalhe completo no tooltip.
+    /// Não altera integração, envio 261 ou regras de consumo.
     /// </summary>
     private void AtualizarEstadoVisualIntegracaoSapConsumo(
         EstadoVisualIntegracaoSapConsumo estado,
         string? detalhe = null)
     {
-        (string texto, Color cor) = estado switch
+        (string textoCurto, Color cor, string detalhePadrao) = estado switch
         {
-            EstadoVisualIntegracaoSapConsumo.LiberadoParaEnvio => ("SAP HML: LIBERADO PARA ENVIO", SapVerde),
-            EstadoVisualIntegracaoSapConsumo.AguardandoGravacaoLocal => ("SAP HML: AGUARDANDO GRAVAÇÃO LOCAL", SapAmarelo),
-            EstadoVisualIntegracaoSapConsumo.Enviando => ("SAP HML: ENVIANDO", SapAzul),
-            EstadoVisualIntegracaoSapConsumo.Enviado => ("SAP HML: ENVIADO", SapVerde),
-            EstadoVisualIntegracaoSapConsumo.Falha => ("SAP HML: FALHA", SapVermelho),
-            EstadoVisualIntegracaoSapConsumo.Parcial => ("SAP HML: PARCIAL", SapLaranja),
-            EstadoVisualIntegracaoSapConsumo.BackflushConfirmacaoPendente => ("SAP HML: BACKFLUSH — CONFIRMAÇÃO EM PREPARAÇÃO", SapLaranja),
-            EstadoVisualIntegracaoSapConsumo.BloqueadoSemDeposito => ("SAP HML: BLOQUEADO — SEM DEPÓSITO", SapVermelho),
-            EstadoVisualIntegracaoSapConsumo.BloqueadoSemSaldo => ("SAP HML: BLOQUEADO — SEM SALDO", SapVermelho),
-            EstadoVisualIntegracaoSapConsumo.BloqueadoEscritaDesabilitada => ("SAP HML: BLOQUEADO — ESCRITA DESABILITADA", SapVermelho),
-            EstadoVisualIntegracaoSapConsumo.BloqueadoSapNaoConfigurado => ("SAP HML: BLOQUEADO — SAP NÃO CONFIGURADO", SapVermelho),
-            _ => ("SAP HML: BLOQUEADO", SapVermelho)
+            EstadoVisualIntegracaoSapConsumo.LiberadoParaEnvio => ("SAP HML: PENDENTE", SapAmarelo, "Consumo salvo localmente e pendente de envio SAP."),
+            EstadoVisualIntegracaoSapConsumo.AguardandoGravacaoLocal => ("SAP HML: AGUARDANDO", SapAmarelo, "Aguardando gravação local do consumo."),
+            EstadoVisualIntegracaoSapConsumo.Enviando => ("SAP HML: ENVIANDO", SapAzul, "Envio SAP 261 em andamento."),
+            EstadoVisualIntegracaoSapConsumo.Enviado => ("SAP HML: ENVIADO", SapVerde, "Consumo enviado ao SAP."),
+            EstadoVisualIntegracaoSapConsumo.Falha => ("SAP HML: FALHA", SapVermelho, "Falha no envio SAP. Verifique o diagnóstico."),
+            EstadoVisualIntegracaoSapConsumo.Parcial => ("SAP HML: FALHA", SapLaranja, "Envio SAP parcial. Verifique o diagnóstico."),
+            EstadoVisualIntegracaoSapConsumo.BackflushConfirmacaoPendente => ("SAP HML: BLOQUEADO", SapLaranja, "Backflush bloqueado para consumo manual via 261."),
+            EstadoVisualIntegracaoSapConsumo.BloqueadoSemDeposito => ("SAP HML: BLOQUEADO", SapVermelho, "Componente sem depósito SAP informado."),
+            EstadoVisualIntegracaoSapConsumo.BloqueadoSemSaldo => ("SAP HML: SEM SALDO", SapVermelho, "Componente sem saldo SAP disponível para consumo."),
+            EstadoVisualIntegracaoSapConsumo.BloqueadoEscritaDesabilitada => ("SAP HML: BLOQUEADO", SapVermelho, "Escrita SAP desabilitada no ambiente."),
+            EstadoVisualIntegracaoSapConsumo.BloqueadoSapNaoConfigurado => ("SAP HML: OFFLINE", SapVermelho, "Integração SAP não configurada ou indisponível."),
+            EstadoVisualIntegracaoSapConsumo.BloqueadoOpIncompativel => ("SAP HML: BLOQUEADO", SapVermelho, "OP incompatível com esta tela."),
+            _ => ("SAP HML: BLOQUEADO", SapVermelho, "Consumo bloqueado para envio SAP.")
         };
 
+        string tooltip = string.IsNullOrWhiteSpace(detalhe)
+            ? detalhePadrao
+            : detalhe.Trim();
+
+        AtualizarSapStatus(textoCurto, tooltip, cor);
+    }
+
+    private void AtualizarSapStatus(string statusCurto, string? detalheCompleto, Color cor)
+    {
         sapStatusDotLabel.ForeColor = cor;
         sapStatusLabel.AutoSize = false;
-        sapStatusLabel.Text = string.IsNullOrWhiteSpace(detalhe) ? texto : $"{texto} — {detalhe}";
+        sapStatusLabel.AutoEllipsis = false;
+        sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        sapStatusLabel.Text = ResumirStatusSapHeader(statusCurto);
+
+        _sapStatusToolTip ??= new ToolTip
+        {
+            AutoPopDelay = 12000,
+            InitialDelay = 350,
+            ReshowDelay = 150,
+            ShowAlways = true
+        };
+
+        string tooltip = string.IsNullOrWhiteSpace(detalheCompleto)
+            ? statusCurto
+            : detalheCompleto.Trim();
+
+        _sapStatusToolTip.SetToolTip(sapStatusPanel, tooltip);
+        _sapStatusToolTip.SetToolTip(sapStatusLabel, tooltip);
+        _sapStatusToolTip.SetToolTip(sapStatusDotLabel, tooltip);
+    }
+
+    private static string ResumirStatusSapHeader(string? status)
+    {
+        string texto = string.IsNullOrWhiteSpace(status) ? "SAP HML: AGUARDANDO" : status.Trim();
+
+        if (texto.Contains("M7/021", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("Deficit of", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("saldo", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SAP HML: SEM SALDO";
+        }
+
+        if (texto.Contains("HTTP", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("<", StringComparison.Ordinal)
+            || texto.Contains("{", StringComparison.Ordinal)
+            || texto.Contains("Payload", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SAP HML: FALHA";
+        }
+
+        if (texto.Length <= 22)
+        {
+            return texto;
+        }
+
+        return "SAP HML: FALHA";
     }
 
     private EstadoVisualIntegracaoSapConsumo DeterminarEstadoSapConsumo(ComponenteConsumoMaterial? componente)
@@ -2580,56 +3100,177 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         string chip;
         string info;
+        string? mensagemCompleta = orientacao;
 
         if (_ordemConsumoAtual is null)
         {
             chip = "Sem OP";
-            info = "Carregue uma OP.";
+            info = "Carregue uma OP\npara iniciar.";
         }
         else if (componente is null)
         {
             chip = "—";
-            info = "Selecione ou inicie a leitura para escolher um componente.";
+            info = MensagemApontamentoInicial;
         }
         else if (string.IsNullOrWhiteSpace(componente.DepositoConsumo))
         {
             chip = "Sem depósito";
-            info = "Componente sem depósito. Pesagem bloqueada.";
+            info = "Sem depósito SAP.\nAjuste necessário.";
+            mensagemCompleta ??= "Componente sem depósito de consumo. Pesagem bloqueada.";
         }
         else if (componente.QuantidadePendente <= 0m)
         {
             chip = "Sem saldo";
-            info = componente.QuantidadePendenteSapOriginal < 0m
+            mensagemCompleta ??= componente.QuantidadePendenteSapOriginal < 0m
                 ? $"Saldo SAP negativo: {componente.QuantidadePendenteSapOriginal:0.000} kg. Pesagem bloqueada."
                 : "Componente sem saldo pendente no SAP.";
+            info = "Sem saldo SAP.\nPesagem bloqueada.";
         }
         else if (componente.BackflushSap)
         {
             chip = "Backflush";
-            info = "Backflush: usar Preview Confirmação. Não enviar 261 direto.";
+            info = "Backflush bloqueado\npara consumo manual.";
+            mensagemCompleta ??= "Backflush: usar Preview Confirmação. Não enviar 261 direto.";
         }
         else if (componente.PesagemLiberada)
         {
             chip = "261 Direto";
-            info = "Componente liberado para pesagem.";
+            info = _isProductionStarted
+                ? "Leitura ativa.\nAguardando peso."
+                : "Componente selecionado.\nPronto para leitura.";
         }
         else
         {
             chip = "Bloqueado";
-            info = string.IsNullOrWhiteSpace(componente.MotivoBloqueioPesagem)
+            mensagemCompleta ??= string.IsNullOrWhiteSpace(componente.MotivoBloqueioPesagem)
                 ? "Componente não liberado para pesagem."
                 : $"Bloqueado: {componente.MotivoBloqueioPesagem}";
+            info = ObterMensagemCurtaBloqueioApontamento(mensagemCompleta);
         }
 
         if (!string.IsNullOrWhiteSpace(orientacao))
         {
-            info = orientacao;
+            info = ObterMensagemCurtaOrientacaoApontamento(orientacao);
         }
 
         apontamentoChipValueLabel.Text = chip;
-        apontamentoInfoValueLabel.Text = info;
-
+        AtualizarApontamentoInfo(info, mensagemCompleta ?? info);
         AtualizarEstadoVisualIntegracaoSapConsumo(DeterminarEstadoSapConsumo(componente));
+    }
+
+    private const string MensagemApontamentoInicial = "Selecione um componente\nou inicie a leitura.";
+
+    private static string ObterMensagemCurtaOrientacaoApontamento(string orientacao)
+    {
+        string texto = orientacao.Trim();
+
+        if (texto.Contains("Última pesagem", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("Consumo salvo", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("PENDENTE_SAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Consumo salvo.\nPendente de envio SAP.";
+        }
+
+        if (texto.Contains("enviado", StringComparison.OrdinalIgnoreCase)
+            && texto.Contains("SAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Consumo enviado\nao SAP.";
+        }
+
+        if (texto.Contains("Falha", StringComparison.OrdinalIgnoreCase)
+            && texto.Contains("SAP", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Falha no envio SAP.\nVerifique o diagnóstico.";
+        }
+
+        return ObterMensagemCurtaBloqueioApontamento(texto);
+    }
+
+    private static string ObterMensagemCurtaBloqueioApontamento(string mensagem)
+    {
+        if (mensagem.Contains("Backflush", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Backflush bloqueado\npara consumo manual.";
+        }
+
+        if (mensagem.Contains("depósito", StringComparison.OrdinalIgnoreCase)
+            || mensagem.Contains("deposito", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Sem depósito SAP.\nAjuste necessário.";
+        }
+
+        if (mensagem.Contains("lote", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Sem lote SAP.\nAjuste necessário.";
+        }
+
+        if (mensagem.Contains("tolerância", StringComparison.OrdinalIgnoreCase)
+            || mensagem.Contains("tolerancia", StringComparison.OrdinalIgnoreCase)
+            || mensagem.Contains("exced", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Tolerância excedida.\nPesagem bloqueada.";
+        }
+
+        return ResumirMensagemApontamento(mensagem);
+    }
+
+    private void AtualizarApontamentoInfo(string mensagemCurta, string? mensagemCompleta = null)
+    {
+        string mensagemTela = ResumirMensagemApontamento(mensagemCurta);
+        string? tooltip = string.IsNullOrWhiteSpace(mensagemCompleta)
+            ? mensagemCurta
+            : mensagemCompleta;
+
+        apontamentoInfoValueLabel.AutoSize = false;
+        apontamentoInfoValueLabel.AutoEllipsis = false;
+        apontamentoInfoValueLabel.TextAlign = ContentAlignment.MiddleLeft;
+        apontamentoInfoValueLabel.Text = mensagemTela;
+
+        _apontamentoInfoToolTip ??= new ToolTip
+        {
+            AutoPopDelay = 12000,
+            InitialDelay = 350,
+            ReshowDelay = 150,
+            ShowAlways = true
+        };
+
+        _apontamentoInfoToolTip.SetToolTip(apontamentoInfoPanel, tooltip);
+        _apontamentoInfoToolTip.SetToolTip(apontamentoInfoValueLabel, tooltip);
+    }
+
+    private static string ResumirMensagemApontamento(string? mensagem)
+    {
+        const int limitePainel = 84;
+        string texto = string.IsNullOrWhiteSpace(mensagem) ? "--" : mensagem.Trim();
+
+        if (texto.Contains('\n') || texto.Contains('\r'))
+        {
+            string[] linhas = texto.Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n')
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            return linhas.Length == 0
+                ? "--"
+                : string.Join(Environment.NewLine, linhas.Take(2));
+        }
+
+        while (texto.Contains("  ", StringComparison.Ordinal))
+        {
+            texto = texto.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        if (texto.Length <= limitePainel)
+        {
+            return texto;
+        }
+
+        int corte = texto.LastIndexOf(' ', Math.Min(limitePainel, texto.Length - 1));
+        if (corte < 42)
+        {
+            corte = limitePainel;
+        }
+
+        return texto[..corte].TrimEnd() + "…";
     }
 
     /// <summary>
@@ -2710,7 +3351,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         {
             if (_consumoSalvoNaSessao)
             {
-                statusLabel.Text = "Consumo já salvo nesta sessão. Consulte outra OP para um novo lançamento.";
+                statusLabel.Text = "Nenhuma nova pesagem pendente para envio SAP.";
                 return;
             }
 
@@ -2740,8 +3381,15 @@ public partial class ProcessoConsumoMaterialForm : Form
                 return;
             }
 
-            if (!GarantirLoteComponentesPesados())
+            // Tarefa Consumo 22.2: sem lote manual — só componentes com lote SAP puderam ser pesados,
+            // então as pesagens já nascem com lote correto (bloqueio ocorre em AvaliarLiberacaoPesagem).
+
+            // Tarefa Consumo 22.12.1: defesa final antes de persistir ? pesagem pendente s? pode salvar
+            // se o componente ainda estiver operacional no modo atual (261 Direto, lote/deposito/saldo ok).
+            if (!ValidarComponentesComPesagemPendentesOperaveis(out string mensagemBloqueioOperacional))
             {
+                statusLabel.Text = mensagemBloqueioOperacional;
+                MessageBox.Show(statusLabel.Text, TituloMensagemConsumo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -2805,6 +3453,13 @@ public partial class ProcessoConsumoMaterialForm : Form
                 // Ajuste 3/6 (Tarefa 18.2): CONFIRMAR CONSUMO e o fluxo UNICO — apos salvar, orquestra o envio
                 // pela rota (261 direto reaproveita o envio existente; Backflush/Misto/Bloqueado NAO enviam).
                 (string mensagemFinal, MessageBoxIcon icone) = await OrquestrarEnvioAposConfirmarAsync(resultado.CodigoLancamento.GetValueOrDefault(), usuario);
+                bool envioSapConfirmado = icone == MessageBoxIcon.Information
+                    && (_modoConsumo == ModoConsumoMaterial.Quimico || _rotaEnvioSalva == RotaEnvioConsumo.Direto261);
+                if (envioSapConfirmado)
+                {
+                    mensagemFinal = FinalizarApontamentoEnviadoSapELiberarNovaPesagem(mensagemFinal);
+                }
+
                 statusLabel.Text = mensagemFinal;
                 MessageBox.Show(mensagemFinal, TituloMensagemConsumo, MessageBoxButtons.OK, icone);
             }
@@ -2822,173 +3477,8 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
     }
 
-    /// <summary>
-    /// Correcao 2 (Tarefa 15.2): garante o lote do componente ANTES da primeira pesagem, para que a chave de
-    /// <see cref="_pesagensPorComponente"/> ja nasca com lote. Sem lote -> nao registra peso.
-    /// </summary>
-    private bool GarantirLoteComponenteAntesDaPesagem(ComponenteConsumoMaterial componente)
-    {
-        if (!string.IsNullOrWhiteSpace(componente.Lote))
-        {
-            return true;
-        }
-
-        string? loteInformado = SolicitarLoteComponente(componente);
-        if (string.IsNullOrWhiteSpace(loteInformado))
-        {
-            statusLabel.Text =
-                $"Peso não registrado: informe o lote do componente {componente.CodigoMaterial}, reserva {componente.NumeroReserva}/{componente.ItemReserva}.";
-            return false;
-        }
-
-        AplicarLoteComponente(componente, loteInformado.Trim());
-        return true;
-    }
-
-    private bool GarantirLoteComponentesPesados()
-    {
-        if (_ordemConsumoAtual is null)
-        {
-            return false;
-        }
-
-        foreach (ComponenteConsumoMaterial componente in _ordemConsumoAtual.Componentes)
-        {
-            string chave = ProcessoConsumoMaterialController.ChaveComponente(componente);
-            if (!_pesagensPorComponente.TryGetValue(chave, out List<PesagemConsumoMaterial>? pesagens)
-                || pesagens.Count == 0
-                || !string.IsNullOrWhiteSpace(componente.Lote))
-            {
-                continue;
-            }
-
-            string? loteInformado = SolicitarLoteComponente(componente);
-            if (string.IsNullOrWhiteSpace(loteInformado))
-            {
-                statusLabel.Text =
-                    $"Informe o lote do componente antes de enviar o consumo ao SAP. Material: {componente.CodigoMaterial}, reserva {componente.NumeroReserva}/{componente.ItemReserva}.";
-                MessageBox.Show(statusLabel.Text, "Lote obrigatório", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-
-            AplicarLoteComponente(componente, loteInformado.Trim());
-
-            // Correcao 4: apos reindexar, confirma que a NOVA chave ainda tem as pesagens.
-            string chaveNova = ProcessoConsumoMaterialController.ChaveComponente(componente);
-            if (!_pesagensPorComponente.TryGetValue(chaveNova, out List<PesagemConsumoMaterial>? pesagensNovas)
-                || pesagensNovas.Count == 0)
-            {
-                statusLabel.Text =
-                    $"Inconsistência ao vincular lote do componente {componente.CodigoMaterial}. Refaça a pesagem.";
-                MessageBox.Show(statusLabel.Text, "Lote obrigatório", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private string? SolicitarLoteComponente(ComponenteConsumoMaterial componente)
-    {
-        using Form promptForm = new()
-        {
-            Text = "Lote do componente",
-            StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ClientSize = new Size(430, 150)
-        };
-
-        Label mensagemLabel = new()
-        {
-            Text = $"Informe o lote do componente {componente.CodigoMaterial} - reserva {componente.NumeroReserva}/{componente.ItemReserva}. Atenção: este lote é da matéria-prima consumida, não do produto produzido.",
-            Location = new Point(16, 16),
-            Size = new Size(398, 54),
-            Font = new Font("Segoe UI", 9F),
-            AutoEllipsis = true
-        };
-
-        TextBox loteTextBox = new()
-        {
-            Location = new Point(16, 78),
-            Size = new Size(398, 27),
-            MaxLength = 40
-        };
-
-        Button confirmarButton = new()
-        {
-            Text = "Confirmar",
-            DialogResult = DialogResult.OK,
-            Location = new Point(206, 112),
-            Size = new Size(100, 30)
-        };
-
-        Button cancelarButton = new()
-        {
-            Text = "Cancelar",
-            DialogResult = DialogResult.Cancel,
-            Location = new Point(314, 112),
-            Size = new Size(100, 30)
-        };
-
-        promptForm.Controls.Add(mensagemLabel);
-        promptForm.Controls.Add(loteTextBox);
-        promptForm.Controls.Add(confirmarButton);
-        promptForm.Controls.Add(cancelarButton);
-        promptForm.AcceptButton = confirmarButton;
-        promptForm.CancelButton = cancelarButton;
-
-        return promptForm.ShowDialog(this) == DialogResult.OK
-            ? loteTextBox.Text.Trim()
-            : null;
-    }
-
-    private void AplicarLoteComponente(ComponenteConsumoMaterial componente, string lote)
-    {
-        // Correcao 3 (Tarefa 15.2): a CHAVE inclui o lote — ao mudar o lote, REINDEXAR _pesagensPorComponente
-        // (chaveAntiga -> chaveNova) por material+reserva+item+deposito (NUNCA so por CodigoMaterial).
-        string chaveAntiga = ProcessoConsumoMaterialController.ChaveComponente(componente);
-        componente.Lote = lote;
-        string chaveNova = ProcessoConsumoMaterialController.ChaveComponente(componente);
-
-        if (!string.Equals(chaveAntiga, chaveNova, StringComparison.Ordinal)
-            && _pesagensPorComponente.TryGetValue(chaveAntiga, out List<PesagemConsumoMaterial>? pesagens))
-        {
-            foreach (PesagemConsumoMaterial pesagem in pesagens)
-            {
-                pesagem.Lote = lote;
-            }
-
-            _pesagensPorComponente.Remove(chaveAntiga);
-            if (_pesagensPorComponente.TryGetValue(chaveNova, out List<PesagemConsumoMaterial>? existentes))
-            {
-                existentes.AddRange(pesagens);
-            }
-            else
-            {
-                _pesagensPorComponente[chaveNova] = pesagens;
-            }
-        }
-
-        // Ajuste 2 (Tarefa 18): preservar a TARA ja selecionada ao mudar o lote (chave inclui lote).
-        if (!string.Equals(chaveAntiga, chaveNova, StringComparison.Ordinal)
-            && _tarasPorComponente.TryGetValue(chaveAntiga, out global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro? taraSelecionada))
-        {
-            _tarasPorComponente.Remove(chaveAntiga);
-            _tarasPorComponente[chaveNova] = taraSelecionada;
-        }
-
-        foreach (DataGridViewRow linha in productionDataGridView.Rows)
-        {
-            if (ReferenceEquals(linha.Tag, componente))
-            {
-                linha.Cells["productionLoteColumn"].Value = ObterLoteComponenteGrid(componente);
-                DefinirTooltipLinha(linha, ObterTooltipComponente(componente));
-                break;
-            }
-        }
-    }
+    // Tarefa Consumo 22.2: removidos os métodos de LOTE MANUAL (prompt/aplicação/reindex). O lote vem só do SAP;
+    // componente sem lote é bloqueado em AvaliarLiberacaoPesagem, igual ao componente sem depósito.
 
     private static string GetFriendlyErrorMessage(Exception ex)
     {
@@ -3348,11 +3838,8 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Correcao 2 (Tarefa 15.2): garante o LOTE antes da tara/peso (a chave nasce com lote correto).
-        if (!GarantirLoteComponenteAntesDaPesagem(componenteF9!))
-        {
-            return;
-        }
+        // Tarefa Consumo 22.2: lote vem SEMPRE do SAP; sem lote o componente já é bloqueado em
+        // AvaliarLiberacaoPesagem (via ValidarComponenteAtualParaPesagem). Não há mais lote manual.
 
         // Correcao 2: garante a tara selecionada do componente antes de pedir o peso (F9 usa essa tara).
         await SelecionarTaraParaComponenteAsync(componenteF9!);
@@ -3421,9 +3908,8 @@ public partial class ProcessoConsumoMaterialForm : Form
         lerEtiquetaButton.Visible = started;
         leituraManualButton.Visible = started;
 
-        productionDataGridView.SelectionMode = started
-            ? DataGridViewSelectionMode.FullRowSelect
-            : DataGridViewSelectionMode.CellSelect;
+        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        productionDataGridView.MultiSelect = false;
 
         stopActionPanel.Visible = started;
         stopActionPanel.Enabled = started && podeAlternarLeitura;
@@ -3431,9 +3917,9 @@ public partial class ProcessoConsumoMaterialForm : Form
         stopActionIconLabel.Cursor = stopActionPanel.Cursor;
         stopActionTextLabel.Cursor = stopActionPanel.Cursor;
 
-        if (!started)
+        if (!started && _componenteConsumoSelecionado is not null)
         {
-            ClearGridSelection(productionDataGridView);
+            RestaurarSelecaoComponente(_componenteConsumoSelecionado);
         }
 
         SetReadWeightEnabled(started);
@@ -3446,22 +3932,78 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
     }
 
-    private void ProductionDataGridView_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
+    private void ConfigurarSelecaoLinhaInteiraGridComponentes()
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        productionDataGridView.MultiSelect = false;
+        productionDataGridView.ReadOnly = true;
+        productionDataGridView.RowHeadersVisible = false;
+        productionDataGridView.AllowUserToAddRows = false;
+        productionDataGridView.AllowUserToDeleteRows = false;
+    }
+
+    private void SelecionarLinhaInteiraGridComponentes(int rowIndex, int columnIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= productionDataGridView.Rows.Count)
         {
             return;
         }
 
-        DataGridViewRow row = productionDataGridView.Rows[e.RowIndex];
+        DataGridViewRow row = productionDataGridView.Rows[rowIndex];
         if (row.IsNewRow)
         {
             return;
         }
 
-        productionDataGridView.CurrentCell = productionDataGridView[e.ColumnIndex, e.RowIndex];
+        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        productionDataGridView.MultiSelect = false;
+        productionDataGridView.ClearSelection();
+
+        int safeColumnIndex = columnIndex >= 0 && columnIndex < row.Cells.Count ? columnIndex : 0;
+        productionDataGridView.CurrentCell = row.Cells[safeColumnIndex];
         row.Selected = true;
-        AtualizarComponenteSelecionadoDoGrid();
+        if (!_restaurandoSelecaoLinhaComponentes)
+        {
+            AtualizarComponenteSelecionadoDoGrid();
+        }
+    }
+
+    private bool RestaurarSelecaoComponente(ComponenteConsumoMaterial componente)
+    {
+        string chave = ProcessoConsumoMaterialController.ChaveComponente(componente);
+        foreach (DataGridViewRow row in productionDataGridView.Rows)
+        {
+            if (row.IsNewRow || row.Tag is not ComponenteConsumoMaterial candidato)
+            {
+                continue;
+            }
+
+            if (!string.Equals(ProcessoConsumoMaterialController.ChaveComponente(candidato), chave, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            _restaurandoSelecaoLinhaComponentes = true;
+            try
+            {
+                SelecionarLinhaInteiraGridComponentes(row.Index, productionDataGridView.CurrentCell?.ColumnIndex ?? 0);
+            }
+            finally
+            {
+                _restaurandoSelecaoLinhaComponentes = false;
+            }
+
+            return true;
+        }
+
+        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        productionDataGridView.MultiSelect = false;
+        ClearGridSelection(productionDataGridView);
+        return false;
+    }
+    private void ProductionDataGridView_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);
     }
 
     private void ProductionDataGridView_CellClick(object? sender, DataGridViewCellEventArgs e)
@@ -3473,7 +4015,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         // Ajuste 1 (Tarefa 18): clicar no grid APENAS seleciona a linha — NAO abre a tela de tara. A tara
         // e escolhida somente ao pesar (F12/LER PESO em ReadWeightLegend_Click e F9/DIGITAR PESO em LeituraManual_Click).
-        AtualizarComponenteSelecionadoDoGrid();
+        SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);
 
         if (_isProductionStarted && _componenteConsumoSelecionado is { PesagemLiberada: true })
         {
@@ -3487,10 +4029,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private void ProductionDataGridView_CellMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        if (e.RowIndex >= 0)
-        {
-            AtualizarComponenteSelecionadoDoGrid();
-        }
+        SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);
     }
 
     private void ProductionDataGridView_CurrentCellChanged(object? sender, EventArgs e)
@@ -3690,3 +4229,19 @@ public partial class ProcessoConsumoMaterialForm : Form
         grid.CurrentCell = null;
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

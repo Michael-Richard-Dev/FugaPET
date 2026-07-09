@@ -183,6 +183,11 @@ public sealed class PreCarregamentoPedidosEntradaTests
             string numeroPedido, CancellationToken cancellationToken = default)
             => Task.FromResult(RespostasAgregado.Count > 0 ? RespostasAgregado.Dequeue() : null);
 
+        public Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
+            string numeroPedido, CancellationToken cancellationToken = default)
+            => Task.FromResult<PedidoCompraSap?>(
+                new PedidoCompraSap { Numero = numeroPedido, StatusProcessamentoCompraSap = "05" });
+
         public Task<ResultadoOperacao> SincronizarPedidoAsync(
             string numeroPedido, CancellationToken cancellationToken = default)
         {

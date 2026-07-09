@@ -31,7 +31,10 @@ public interface IConsumoMaterialRepositorio
         DateTime reservadoEmUtc,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Marca FALHA_SAP (lancamento + itens) somente quando estiverem ENVIANDO_SAP (apos reserva).</summary>
+    /// <summary>
+    /// Libera a pendencia SAP (lancamento + itens) quando o POST falha apos a reserva, retornando de
+    /// ENVIANDO_SAP para PENDENTE_SAP para permitir reenvio manual seguro.
+    /// </summary>
     Task MarcarFalhaSapAsync(long codigoLancamento, CancellationToken cancellationToken = default);
 
     /// <summary>

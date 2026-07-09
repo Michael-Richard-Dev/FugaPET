@@ -276,7 +276,7 @@ public sealed class ConsumoMaterialRepositorio : RepositorioBase, IConsumoMateri
         {
             const string sqlLancamento = """
                 UPDATE consumo_material_lancamento
-                   SET status_lancamento = 'FALHA_SAP'
+                   SET status_lancamento = 'PENDENTE_SAP'
                  WHERE codigo_consumo_material_lancamento = @codigo
                    AND status_lancamento = 'ENVIANDO_SAP';
                 """;
@@ -288,7 +288,7 @@ public sealed class ConsumoMaterialRepositorio : RepositorioBase, IConsumoMateri
 
             const string sqlItens = """
                 UPDATE consumo_material_item
-                   SET status_item = 'FALHA_SAP'
+                   SET status_item = 'PENDENTE_SAP'
                  WHERE codigo_consumo_material_lancamento = @codigo
                    AND status_item = 'ENVIANDO_SAP';
                 """;

@@ -65,6 +65,21 @@ internal sealed class PedidoCompraSapMockServico : IPedidoCompraSapServico
         CancellationToken cancellationToken = default)
         => Task.FromResult(EhPedidoDemonstracao(numeroPedido) ? "FORNECEDOR DEMO" : string.Empty);
 
+    // Tarefa Entrada 23.1: no modo demonstracao o pedido demo entra como LIBERADO (status "05") para nao
+    // travar a demo; qualquer outro numero retorna null (o validador bloqueia por seguranca).
+    public Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<PedidoCompraSap?>(
+            EhPedidoDemonstracao(numeroPedido)
+                ? new PedidoCompraSap
+                {
+                    Numero = NumeroPedidoDemonstracao,
+                    StatusProcessamentoCompraSap = "05",
+                    LiberacaoNaoConcluidaSap = false
+                }
+                : null);
+
     public Task<DateOnly?> ObterDataPorPedidoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default)

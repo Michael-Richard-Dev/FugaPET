@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Security.Authentication;
 using System.Text;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -173,6 +173,32 @@ public sealed class MaterialDocumentSapApiClientTests
         Assert.Contains("HTTP 400", resultado.MensagemSanitizada);
         Assert.Equal(2, handler.QuantidadeRequisicoes); // fetch + post
     }
+
+    [Fact]
+    public async Task Post_RejeicaoUnidadeKg_DeveRetornarMensagemAmigavelSemFallback()
+    {
+        HttpResponseMessage fetch = new(HttpStatusCode.OK);
+        fetch.Headers.TryAddWithoutValidation("X-CSRF-Token", "token-ok");
+        HttpResponseMessage erro = new(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(
+                """{""error"":{""message"":{""value"":""Entry unit KG is not allowed for this purchase order item; maintain unit conversion in material master""}}}""",
+                Encoding.UTF8, "application/json")
+        };
+        RespostaHandler handler = new(fetch, erro);
+        using HttpClient http = new(handler);
+        MaterialDocumentSapApiClient cliente = new(CriarConfiguracao(), http);
+
+        ResultadoMaterialDocumentSap resultado =
+            await cliente.CriarDocumentoMaterialAsync(Requisicao());
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(MaterialDocumentSapApiClient.EtapaPost, resultado.Etapa);
+        Assert.Contains("O SAP rejeitou a entrada em KG", resultado.MensagemSanitizada);
+        Assert.Contains("pedido deve ser criado em KG", resultado.MensagemSanitizada);
+        Assert.DoesNotContain(handler.Metodos.Skip(2), metodo => metodo == HttpMethod.Post);
+    }
+
 
     [Fact]
     public async Task ExcecaoTlsSemResposta_DeveIndicarTlsComStatusNull()

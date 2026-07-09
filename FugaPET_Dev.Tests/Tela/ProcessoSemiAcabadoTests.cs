@@ -8,29 +8,30 @@ namespace FugaPET_Dev.Tests.Tela;
 public sealed class ProcessoSemiAcabadoTests
 {
     [Fact]
-    public void ProcessoProducao_DeveExibirModuloSemiAcabadoComoQuartoProcesso()
+    public void ProcessoProducao_DeveExibirModuloSemiAcabadoNaSegundaLinhaComoF5()
     {
         string designer = LerArquivoProjeto("Tela", "ProcessoProducaoForm.Designer.cs");
         string form = LerArquivoProjeto("Tela", "ProcessoProducaoForm.cs");
 
         Assert.Contains("processoSemiAcabadoCard", designer, StringComparison.Ordinal);
         Assert.Contains("Produto\\r\\nSemi-Acabado", designer, StringComparison.Ordinal);
-        Assert.Contains("semiAcabadoShortcutLabel.Text = \"F4\";", designer, StringComparison.Ordinal);
-        Assert.Contains("processShortcutLabel.Text = \"F5\";", designer, StringComparison.Ordinal);
-        Assert.Contains("ordensShortcutLabel.Text = \"F6\";", designer, StringComparison.Ordinal);
+        Assert.Contains("processoSemiAcabadoCard.Location = new Point(28, 336);", designer, StringComparison.Ordinal);
+        Assert.Contains("semiAcabadoShortcutLabel.Text = \"F5\";", designer, StringComparison.Ordinal);
+        Assert.Contains("processShortcutLabel.Text = \"F6\";", designer, StringComparison.Ordinal);
+        Assert.Contains("ordensShortcutLabel.Text = \"F7\";", designer, StringComparison.Ordinal);
         Assert.Contains("ProcessoSemiAcabadoRequested", form, StringComparison.Ordinal);
         Assert.Contains("OnProcessoSemiAcabadoClick", form, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PainelInicial_DeveAbrirProcessoSemiAcabadoNoF4()
+    public void PainelInicial_DeveAbrirProcessoSemiAcabadoNoF5()
     {
         string painel = LerArquivoProjeto("Tela", "PainelInicialForm.cs");
 
         Assert.Contains("view.ProcessoSemiAcabadoRequested += async (_, _) => await OpenProcessoSemiAcabadoAsync();", painel, StringComparison.Ordinal);
         Assert.Contains("private async Task OpenProcessoSemiAcabadoAsync()", painel, StringComparison.Ordinal);
         Assert.Contains("using Processo.ProcessoSemiAcabadoForm form = new();", painel, StringComparison.Ordinal);
-        Assert.Contains("if (e.KeyCode == Keys.F4 && _currentContentView == _processoProducaoForm)", painel, StringComparison.Ordinal);
+        Assert.Contains("if (e.KeyCode == Keys.F5 && _currentContentView == _processoProducaoForm)", painel, StringComparison.Ordinal);
         Assert.Contains("await OpenProcessoSemiAcabadoAsync();", painel, StringComparison.Ordinal);
     }
 

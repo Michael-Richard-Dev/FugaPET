@@ -50,6 +50,7 @@ partial class ProcessoConsumoMaterialForm
     private DataGridViewTextBoxColumn materialBalanceColumn;
     private DataGridViewTextBoxColumn productionCodeColumn;
     private DataGridViewTextBoxColumn productionProductColumn;
+    private DataGridViewTextBoxColumn productionOperacaoColumn;
     private DataGridViewTextBoxColumn productionReservaColumn;
     private DataGridViewTextBoxColumn productionItemColumn;
     private DataGridViewTextBoxColumn productionDepositoColumn;
@@ -128,6 +129,7 @@ partial class ProcessoConsumoMaterialForm
         productionDataGridView = new DataGridView();
         productionCodeColumn = new DataGridViewTextBoxColumn();
         productionProductColumn = new DataGridViewTextBoxColumn();
+        productionOperacaoColumn = new DataGridViewTextBoxColumn();
         productionReservaColumn = new DataGridViewTextBoxColumn();
         productionItemColumn = new DataGridViewTextBoxColumn();
         productionDepositoColumn = new DataGridViewTextBoxColumn();
@@ -872,7 +874,7 @@ partial class ProcessoConsumoMaterialForm
         dataGridViewCellStyle12.SelectionForeColor = Color.White;
         productionDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle12;
         productionDataGridView.ColumnHeadersHeight = 24;
-        productionDataGridView.Columns.AddRange(new DataGridViewColumn[] { productionCodeColumn, productionProductColumn, productionReservaColumn, productionItemColumn, productionDepositoColumn, productionLoteColumn, productionTipoSapColumn, productionQuantityColumn, productionWeightColumn, productionSaldoColumn });
+        productionDataGridView.Columns.AddRange(new DataGridViewColumn[] { productionCodeColumn, productionProductColumn, productionOperacaoColumn, productionReservaColumn, productionItemColumn, productionDepositoColumn, productionLoteColumn, productionTipoSapColumn, productionQuantityColumn, productionWeightColumn, productionSaldoColumn });
         dataGridViewCellStyle16.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dataGridViewCellStyle16.BackColor = Color.FromArgb(250, 251, 252);
         dataGridViewCellStyle16.Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -913,6 +915,16 @@ partial class ProcessoConsumoMaterialForm
         productionProductColumn.Name = "productionProductColumn";
         productionProductColumn.ReadOnly = true;
         productionProductColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        //
+        // productionOperacaoColumn (Tarefa Consumo 22.1: Operação SAP do componente, ao lado da descrição)
+        //
+        productionOperacaoColumn.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+        productionOperacaoColumn.HeaderText = "Operação";
+        productionOperacaoColumn.MinimumWidth = 6;
+        productionOperacaoColumn.Name = "productionOperacaoColumn";
+        productionOperacaoColumn.ReadOnly = true;
+        productionOperacaoColumn.SortMode = DataGridViewColumnSortMode.NotSortable;
+        productionOperacaoColumn.Width = 85;
         //
         // productionReservaColumn
         //
@@ -1071,11 +1083,11 @@ partial class ProcessoConsumoMaterialForm
         apontamentoInfoPanel.Controls.Add(apontamentoInfoValueLabel);
         apontamentoInfoPanel.FillColor = Color.FromArgb(255, 247, 247);
         apontamentoInfoPanel.Font = new Font("Cascadia Code", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        apontamentoInfoPanel.Location = new Point(12, 544);
+        apontamentoInfoPanel.Location = new Point(12, 514);
         apontamentoInfoPanel.Name = "apontamentoInfoPanel";
         apontamentoInfoPanel.ShadowBlur = 0;
         apontamentoInfoPanel.ShadowOffsetY = 0;
-        apontamentoInfoPanel.Size = new Size(191, 48);
+        apontamentoInfoPanel.Size = new Size(191, 78);
         apontamentoInfoPanel.TabIndex = 11;
         // 
         // apontamentoInfoAccentBar
@@ -1083,30 +1095,35 @@ partial class ProcessoConsumoMaterialForm
         apontamentoInfoAccentBar.BackColor = Color.FromArgb(229, 27, 43);
         apontamentoInfoAccentBar.Location = new Point(10, 11);
         apontamentoInfoAccentBar.Name = "apontamentoInfoAccentBar";
-        apontamentoInfoAccentBar.Size = new Size(6, 22);
+        apontamentoInfoAccentBar.Size = new Size(6, 56);
         apontamentoInfoAccentBar.TabIndex = 0;
         // 
         // apontamentoInfoCaptionLabel
         // 
         apontamentoInfoCaptionLabel.BackColor = Color.Transparent;
-        apontamentoInfoCaptionLabel.Font = new Font("Cascadia Code", 7.15F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentoInfoCaptionLabel.Font = new Font("Segoe UI", 8F, FontStyle.Bold, GraphicsUnit.Point, 0);
         apontamentoInfoCaptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
-        apontamentoInfoCaptionLabel.Location = new Point(22, 6);
+        apontamentoInfoCaptionLabel.Location = new Point(24, 8);
         apontamentoInfoCaptionLabel.Name = "apontamentoInfoCaptionLabel";
-        apontamentoInfoCaptionLabel.Size = new Size(160, 12);
+        apontamentoInfoCaptionLabel.Size = new Size(154, 14);
         apontamentoInfoCaptionLabel.TabIndex = 1;
         apontamentoInfoCaptionLabel.Text = "INFORMAÇÃO DE PESAGEM";
         // 
         // apontamentoInfoValueLabel
         // 
         apontamentoInfoValueLabel.BackColor = Color.Transparent;
-        apontamentoInfoValueLabel.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentoInfoValueLabel.Font = new Font("Segoe UI", 8.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
         apontamentoInfoValueLabel.ForeColor = Color.FromArgb(17, 24, 39);
-        apontamentoInfoValueLabel.Location = new Point(22, 20);
+        apontamentoInfoValueLabel.Location = new Point(24, 25);
         apontamentoInfoValueLabel.Name = "apontamentoInfoValueLabel";
-        apontamentoInfoValueLabel.Size = new Size(160, 16);
+        apontamentoInfoValueLabel.AutoEllipsis = false;
+        apontamentoInfoValueLabel.AutoSize = false;
+        apontamentoInfoValueLabel.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        apontamentoInfoValueLabel.Padding = new Padding(0, 0, 4, 0);
+        apontamentoInfoValueLabel.Size = new Size(154, 44);
         apontamentoInfoValueLabel.TabIndex = 2;
         apontamentoInfoValueLabel.Text = "--";
+        apontamentoInfoValueLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // apontamentoChipPanel
         // 
@@ -2299,7 +2316,7 @@ partial class ProcessoConsumoMaterialForm
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
         sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(190, 27);
+        sapStatusPanel.Size = new Size(210, 27);
         sapStatusPanel.TabIndex = 9;
         // 
         // sapStatusDotLabel
@@ -2307,9 +2324,9 @@ partial class ProcessoConsumoMaterialForm
         sapStatusDotLabel.BackColor = Color.Transparent;
         sapStatusDotLabel.Font = new Font("Segoe UI Symbol", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
         sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusDotLabel.Location = new Point(11, 4);
+        sapStatusDotLabel.Location = new Point(10, 4);
         sapStatusDotLabel.Name = "sapStatusDotLabel";
-        sapStatusDotLabel.Size = new Size(14, 18);
+        sapStatusDotLabel.Size = new Size(13, 18);
         sapStatusDotLabel.TabIndex = 0;
         sapStatusDotLabel.Text = "●";
         sapStatusDotLabel.TextAlign = ContentAlignment.MiddleCenter;
@@ -2317,13 +2334,17 @@ partial class ProcessoConsumoMaterialForm
         // sapStatusLabel
         // 
         sapStatusLabel.BackColor = Color.Transparent;
-        sapStatusLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        sapStatusLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
         sapStatusLabel.ForeColor = Color.White;
-        sapStatusLabel.Location = new Point(27, 5);
+        sapStatusLabel.Location = new Point(27, 4);
         sapStatusLabel.Name = "sapStatusLabel";
-        sapStatusLabel.Size = new Size(151, 17);
+        sapStatusLabel.Size = new Size(174, 19);
         sapStatusLabel.TabIndex = 1;
-        sapStatusLabel.Text = "SAP: não configurado";
+        sapStatusLabel.AutoEllipsis = false;
+        sapStatusLabel.AutoSize = false;
+        sapStatusLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        sapStatusLabel.Padding = new Padding(2, 0, 4, 0);
+        sapStatusLabel.Text = "SAP HML: AGUARDANDO";
         sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // minimizeWindowLabel
@@ -3177,6 +3198,9 @@ partial class ProcessoConsumoMaterialForm
     private FugaPET_Dev.Tela.ActionPillButton lerEtiquetaButton;
     private FugaPET_Dev.Tela.ActionPillButton leituraManualButton;
 }
+
+
+
 
 
 

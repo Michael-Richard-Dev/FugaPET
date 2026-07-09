@@ -779,7 +779,7 @@ partial class BalancaForm
         // 
         identificacaoSectionLabel.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         identificacaoSectionLabel.ForeColor = Color.FromArgb(220, 38, 38);
-        identificacaoSectionLabel.Location = new Point(24, 52);
+        identificacaoSectionLabel.Location = new Point(24, 64);
         identificacaoSectionLabel.Name = "identificacaoSectionLabel";
         identificacaoSectionLabel.Size = new Size(520, 22);
         identificacaoSectionLabel.TabIndex = 1;
@@ -794,7 +794,7 @@ partial class BalancaForm
         identificacaoTable.Controls.Add(setorCampoPanel, 1, 0);
         identificacaoTable.Controls.Add(identificacaoLocalCampoPanel, 0, 1);
         identificacaoTable.Controls.Add(situacaoCampoPanel, 1, 1);
-        identificacaoTable.Location = new Point(20, 76);
+        identificacaoTable.Location = new Point(20, 88);
         identificacaoTable.Name = "identificacaoTable";
         identificacaoTable.RowCount = 2;
         identificacaoTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
@@ -872,7 +872,7 @@ partial class BalancaForm
         setorInputPanel.Dock = DockStyle.Fill;
         setorInputPanel.Location = new Point(5, 22);
         setorInputPanel.Name = "setorInputPanel";
-        setorInputPanel.Padding = new Padding(10, 7, 8, 7);
+        setorInputPanel.Padding = new Padding(10, 5, 8, 5);
         setorInputPanel.ShadowBlur = 0;
         setorInputPanel.ShadowOffsetY = 0;
         setorInputPanel.Size = new Size(260, 36);
@@ -1006,7 +1006,7 @@ partial class BalancaForm
         // 
         conexaoSectionLabel.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         conexaoSectionLabel.ForeColor = Color.FromArgb(220, 38, 38);
-        conexaoSectionLabel.Location = new Point(24, 210);
+        conexaoSectionLabel.Location = new Point(24, 222);
         conexaoSectionLabel.Name = "conexaoSectionLabel";
         conexaoSectionLabel.Size = new Size(520, 22);
         conexaoSectionLabel.TabIndex = 3;
@@ -1019,7 +1019,7 @@ partial class BalancaForm
         conexaoTable.Controls.Add(tipoConexaoCampoPanel, 0, 0);
         conexaoTable.Controls.Add(tcpPanel, 0, 1);
         conexaoTable.Controls.Add(portaSerialPanel, 0, 2);
-        conexaoTable.Location = new Point(20, 234);
+        conexaoTable.Location = new Point(20, 246);
         conexaoTable.Name = "conexaoTable";
         conexaoTable.RowCount = 3;
         conexaoTable.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
@@ -1049,7 +1049,7 @@ partial class BalancaForm
         tipoConexaoInputPanel.Dock = DockStyle.Fill;
         tipoConexaoInputPanel.Location = new Point(5, 22);
         tipoConexaoInputPanel.Name = "tipoConexaoInputPanel";
-        tipoConexaoInputPanel.Padding = new Padding(10, 7, 8, 7);
+        tipoConexaoInputPanel.Padding = new Padding(10, 5, 8, 5);
         tipoConexaoInputPanel.ShadowBlur = 0;
         tipoConexaoInputPanel.ShadowOffsetY = 0;
         tipoConexaoInputPanel.Size = new Size(530, 36);
@@ -1254,7 +1254,7 @@ partial class BalancaForm
         // 
         parametrosSeriaisSectionLabel.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         parametrosSeriaisSectionLabel.ForeColor = Color.FromArgb(220, 38, 38);
-        parametrosSeriaisSectionLabel.Location = new Point(24, 430);
+        parametrosSeriaisSectionLabel.Location = new Point(24, 442);
         parametrosSeriaisSectionLabel.Name = "parametrosSeriaisSectionLabel";
         parametrosSeriaisSectionLabel.Size = new Size(520, 22);
         parametrosSeriaisSectionLabel.TabIndex = 5;
@@ -1263,7 +1263,7 @@ partial class BalancaForm
         // serialPanel
         // 
         serialPanel.Controls.Add(serialTable);
-        serialPanel.Location = new Point(20, 454);
+        serialPanel.Location = new Point(20, 466);
         serialPanel.Name = "serialPanel";
         serialPanel.Size = new Size(540, 186);
         serialPanel.TabIndex = 6;
@@ -1408,7 +1408,7 @@ partial class BalancaForm
         paridadeInputPanel.Dock = DockStyle.Fill;
         paridadeInputPanel.Location = new Point(5, 22);
         paridadeInputPanel.Name = "paridadeInputPanel";
-        paridadeInputPanel.Padding = new Padding(10, 7, 8, 7);
+        paridadeInputPanel.Padding = new Padding(10, 5, 8, 5);
         paridadeInputPanel.ShadowBlur = 0;
         paridadeInputPanel.ShadowOffsetY = 0;
         paridadeInputPanel.Size = new Size(172, 36);
@@ -1592,7 +1592,7 @@ partial class BalancaForm
         manualWarningLabel.BorderStyle = BorderStyle.FixedSingle;
         manualWarningLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
         manualWarningLabel.ForeColor = Color.FromArgb(146, 64, 14);
-        manualWarningLabel.Location = new Point(20, 454);
+        manualWarningLabel.Location = new Point(20, 466);
         manualWarningLabel.Name = "manualWarningLabel";
         manualWarningLabel.Size = new Size(540, 46);
         manualWarningLabel.TabIndex = 7;
@@ -1604,7 +1604,7 @@ partial class BalancaForm
         // 
         observacaoSectionLabel.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         observacaoSectionLabel.ForeColor = Color.FromArgb(220, 38, 38);
-        observacaoSectionLabel.Location = new Point(24, 650);
+        observacaoSectionLabel.Location = new Point(24, 662);
         observacaoSectionLabel.Name = "observacaoSectionLabel";
         observacaoSectionLabel.Size = new Size(520, 22);
         observacaoSectionLabel.TabIndex = 8;
@@ -1616,7 +1616,7 @@ partial class BalancaForm
         observacaoInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
         observacaoInputPanel.BorderRadius = 5;
         observacaoInputPanel.Controls.Add(observacaoTextBox);
-        observacaoInputPanel.Location = new Point(20, 676);
+        observacaoInputPanel.Location = new Point(20, 688);
         observacaoInputPanel.Name = "observacaoInputPanel";
         observacaoInputPanel.Padding = new Padding(10, 8, 8, 8);
         observacaoInputPanel.ShadowBlur = 0;

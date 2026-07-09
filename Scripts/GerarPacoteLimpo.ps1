@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Gera e valida um pacote limpo do projeto FugaPET_Dev.
 
@@ -162,8 +162,9 @@ function Validar-ObjetoConfiguracao {
             if ($ValidarCredenciais -and
                 $NomeNormalizado -in @('password', 'senha', 'username', 'usuario') -and
                 $Valor -is [string] -and
-                -not [string]::IsNullOrWhiteSpace($Valor)) {
-                throw "Pacote bloqueado: credencial preenchida em $Origem."
+                -not [string]::IsNullOrWhiteSpace($Valor) -and
+                $Valor -notmatch '^DEFINIR_[A-Z0-9_]+$') {
+                throw "Pacote bloqueado: credencial real preenchida em $Origem. Use placeholder DEFINIR_*."
             }
 
             if ($NomeNormalizado -eq 'ignorarvalidacaocertificado' -and $Valor -eq $true) {

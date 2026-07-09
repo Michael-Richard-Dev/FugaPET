@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -38,7 +38,7 @@ internal sealed class ProductionOrderSapServico : IProductionOrderSapServico
         if (_consultarOverride is null && !_configuracao.ProductionOrderConfigurado)
         {
             return ResultadoConsultaOrdemProducaoSap.NaoConfigurado(
-                ConfiguracaoSap.MensagemProductionOrderNaoConfigurado);
+                _configuracao.MensagemProductionOrderAusente());
         }
 
         try
@@ -79,6 +79,31 @@ internal sealed class ProductionOrderSapServico : IProductionOrderSapServico
         }
     }
 
+    public async Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!_configuracao.ProductionOrderConfigurado)
+        {
+            RegistrarDiagnostico("Pre-carga OP ignorada: Production Order não configurado.");
+            return [];
+        }
+
+        try
+        {
+            using HttpClient httpClient = FabricaHttpClientSap.Criar(_configuracao);
+            ProductionOrderSapApiClient cliente = new(_configuracao, httpClient, RegistrarDiagnostico);
+            return await cliente.ListarOrdensRelevantesAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RegistrarDiagnostico($"Pre-carga OP falhou na listagem ({ex.GetType().Name}).");
+            return [];
+        }
+    }
     private async Task<OrdemProducaoSap?> ObterOrdemAsync(
         string numeroOrdem,
         CancellationToken cancellationToken)
@@ -96,3 +121,5 @@ internal sealed class ProductionOrderSapServico : IProductionOrderSapServico
     internal static void RegistrarDiagnostico(string mensagem)
         => System.Diagnostics.Trace.TraceWarning($"[SAP][ProductionOrder] {mensagem}");
 }
+
+

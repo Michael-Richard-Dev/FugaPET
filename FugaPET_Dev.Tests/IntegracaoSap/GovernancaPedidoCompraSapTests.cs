@@ -1,4 +1,4 @@
-using FugaPET_Dev.Servicos.IntegracaoSap;
+﻿using FugaPET_Dev.Servicos.IntegracaoSap;
 
 namespace FugaPET_Dev.Tests.IntegracaoSap;
 
@@ -127,7 +127,7 @@ public sealed class GovernancaPedidoCompraSapTests
         var resultado = await estado.ValidarAsync(OperacaoIntegracaoSap.Sincronizacao);
 
         Assert.False(resultado.Sucesso);
-        Assert.Equal(ConfiguracaoSap.MensagemConfiguracaoAusente, resultado.Mensagem);
+        Assert.Equal("base_url n?o configurada no configuracao.sap.json.", resultado.Mensagem);
     }
 
     [Fact]

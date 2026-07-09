@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -22,6 +22,8 @@ public sealed class ProductionOrderSapApiClient
     internal const string EtapaFallback = "GET_FALLBACK";
     internal const string EtapaParse = "PARSE_RESPOSTA";
     private const int LimiteTrechoResposta = 300;
+    private const int LimitePreCargaOrdens = 30;
+    private const string PlantaPreCargaFugaPet = "3007";
 
     private readonly ConfiguracaoSap _configuracao;
     private readonly HttpClient _httpClient;
@@ -105,6 +107,27 @@ public sealed class ProductionOrderSapApiClient
         return await ConsultarSeparadoAsync(numeroOrdem, cancellationToken);
     }
 
+    /// <summary>
+    /// Lista cabeçalhos de OP relevantes para pré-carga em memória. GET somente leitura,
+    /// sem CSRF/POST/PATCH; detalhes/componentes continuam sendo obtidos pelo GET específico.
+    /// </summary>
+    public async Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        Uri url = MontarUrlPreCargaOrdens();
+        using HttpRequestMessage requisicao = CriarRequisicao(HttpMethod.Get, url);
+        using HttpResponseMessage resposta = await _httpClient.SendAsync(requisicao, cancellationToken);
+        string corpo = await resposta.Content.ReadAsStringAsync(cancellationToken);
+        if (!resposta.IsSuccessStatusCode)
+        {
+            RegistrarDiagnostico(EtapaFallback, url, resposta, corpo);
+            return [];
+        }
+
+        return MapearColecao(corpo, MapearOrdemResumo, MapearOrdemResumoXml)
+            .Where(ordem => !string.IsNullOrWhiteSpace(ordem.NumeroOrdem))
+            .ToList();
+    }
     /// <summary>FALLBACK: cabecalho + componentes + operacoes + itens em chamadas OData separadas.</summary>
     private async Task<OrdemProducaoSap?> ConsultarSeparadoAsync(
         string numeroOrdem,
@@ -167,6 +190,22 @@ public sealed class ProductionOrderSapApiClient
         return MapearColecao(corpo, mapearJson, mapearXml);
     }
 
+    private Uri MontarUrlPreCargaOrdens()
+    {
+        DateTime dataMinima = DateTime.Today.AddDays(-30);
+        string filtro = string.Join(" and ",
+        [
+            $"ProductionPlant eq '{PlantaPreCargaFugaPet}'",
+            "OrderIsReleased eq 'X'",
+            "OrderIsConfirmed ne 'X'",
+            "OrderIsDeleted ne 'X'",
+            $"MfgOrderScheduledStartDate ge datetime'{dataMinima:yyyy-MM-ddT00:00:00}'"
+        ]).Replace(" ", "%20");
+
+        string select = "$select=ManufacturingOrder,ManufacturingOrderType,Material,ProductionPlant,TotalQuantity,ProductionUnit,StorageLocation,Batch,OrderIsReleased,OrderIsConfirmed,OrderIsDeleted,MfgOrderScheduledStartDate,MfgOrderPlannedStartDate,MfgOrderActualStartDate,CreationDate,ManufacturingOrderCreationDate";
+        string query = AnexarSapClient($"$format=json&$filter={filtro}&{select}&$orderby=MfgOrderScheduledStartDate desc&$top={LimitePreCargaOrdens}");
+        return ValidarDestino(new Uri($"{_baseUri.AbsoluteUri}A_ProductionOrder_2?{query}", UriKind.Absolute));
+    }
     private Uri MontarUrlOrdem(string numeroOrdem)
     {
         // OData escapa aspas simples duplicando-as.
@@ -404,6 +443,47 @@ public sealed class ProductionOrderSapApiClient
             Lote = LerTexto(i, "Batch")
         };
 
+    private static OrdemProducaoSap MapearOrdemResumo(JsonElement raiz)
+    {
+        (DateTime? dataOrdem, string origemData) = LerDataOrdem(campo => LerTexto(raiz, campo));
+        return new OrdemProducaoSap
+        {
+            NumeroOrdem = LerTexto(raiz, "ManufacturingOrder"),
+            TipoOrdem = LerTexto(raiz, "ManufacturingOrderType"),
+            MaterialProduzido = LerTexto(raiz, "Material"),
+            Centro = LerTexto(raiz, "ProductionPlant"),
+            QuantidadePrevista = LerDecimal(raiz, "TotalQuantity"),
+            Unidade = LerTexto(raiz, "ProductionUnit"),
+            Deposito = LerTexto(raiz, "StorageLocation"),
+            Lote = LerTexto(raiz, "Batch"),
+            Liberada = LerFlagX(raiz, "OrderIsReleased"),
+            Confirmada = LerFlagX(raiz, "OrderIsConfirmed"),
+            Excluida = LerFlagX(raiz, "OrderIsDeleted"),
+            DataOrdem = dataOrdem,
+            OrigemDataOrdem = origemData
+        };
+    }
+
+    private static OrdemProducaoSap MapearOrdemResumoXml(XElement props)
+    {
+        (DateTime? dataOrdem, string origemData) = LerDataOrdem(campo => LerXmlTexto(props, campo));
+        return new OrdemProducaoSap
+        {
+            NumeroOrdem = LerXmlTexto(props, "ManufacturingOrder"),
+            TipoOrdem = LerXmlTexto(props, "ManufacturingOrderType"),
+            MaterialProduzido = LerXmlTexto(props, "Material"),
+            Centro = LerXmlTexto(props, "ProductionPlant"),
+            QuantidadePrevista = LerXmlDecimal(props, "TotalQuantity"),
+            Unidade = LerXmlTexto(props, "ProductionUnit"),
+            Deposito = LerXmlTexto(props, "StorageLocation"),
+            Lote = LerXmlTexto(props, "Batch"),
+            Liberada = LerXmlFlagX(props, "OrderIsReleased"),
+            Confirmada = LerXmlFlagX(props, "OrderIsConfirmed"),
+            Excluida = LerXmlFlagX(props, "OrderIsDeleted"),
+            DataOrdem = dataOrdem,
+            OrigemDataOrdem = origemData
+        };
+    }
     // ----- Parsing XML/Atom (OData V2) -----
 
     private static readonly XNamespace Atom = "http://www.w3.org/2005/Atom";
@@ -717,3 +797,5 @@ public sealed class ProductionOrderSapConsultaException : Exception
     public string Etapa { get; }
     public int? StatusHttp { get; }
 }
+
+

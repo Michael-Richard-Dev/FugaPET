@@ -302,7 +302,9 @@ public sealed class PedidoCompraSapApiClient
 
     // Cabecalho inclui PurchasingGroup (escopo Jales). Plant e IsCompletelyDelivered sao de ITEM:
     // filtramos tambem dentro do $expand para reduzir volume no SAP; a guarda final segue em C#.
-    private const string SelectCabecalho = "$select=PurchaseOrder,Supplier,PurchaseOrderDate,DocumentCurrency,PurchaseOrderType,PurchasingGroup,IncotermsClassification,IncotermsTransferLocation,IncotermsLocation1";
+    // Tarefa Entrada 23.1: inclui os campos de aprovacao/liberacao do cabecalho (PurchasingProcessingStatus,
+    // ReleaseIsNotCompleted, PurchasingCompletenessStatus). ReleaseIsNotCompleted pode nao existir no ambiente.
+    private const string SelectCabecalho = "$select=PurchaseOrder,Supplier,PurchaseOrderDate,DocumentCurrency,PurchaseOrderType,PurchasingGroup,IncotermsClassification,IncotermsTransferLocation,IncotermsLocation1,PurchasingProcessingStatus,ReleaseIsNotCompleted,PurchasingCompletenessStatus";
 
     private Uri MontarUrlInicial()
     {
@@ -404,6 +406,10 @@ public sealed class PedidoCompraSapApiClient
                     IncotermsLocation1 = LerTextoNulo(item, "IncotermsLocation1"),
                     // SAP nao expoe um status de cabecalho neste $select; nulo ate confirmar o campo.
                     Status = LerTextoNulo(item, "PurchasingDocumentStatus"),
+                    // Tarefa Entrada 23.1: aprovacao/liberacao do cabecalho.
+                    StatusProcessamentoCompraSap = LerTexto(item, "PurchasingProcessingStatus").Trim(),
+                    LiberacaoNaoConcluidaSap = LerBooleano(item, "ReleaseIsNotCompleted"),
+                    StatusCompletudeCompraSap = LerTexto(item, "PurchasingCompletenessStatus").Trim(),
                     GrupoCompra = LerTextoNulo(item, "PurchasingGroup"),
                     PayloadOriginalJson = item.GetRawText(),
                     Itens = MapearItens(item)
@@ -448,6 +454,10 @@ public sealed class PedidoCompraSapApiClient
             IncotermsTransferLocation = LerTextoNulo(pedido, "IncotermsTransferLocation"),
             IncotermsLocation1 = LerTextoNulo(pedido, "IncotermsLocation1"),
             Status = LerTextoNulo(pedido, "PurchasingDocumentStatus"),
+            // Tarefa Entrada 23.1: aprovacao/liberacao do cabecalho.
+            StatusProcessamentoCompraSap = LerTexto(pedido, "PurchasingProcessingStatus").Trim(),
+            LiberacaoNaoConcluidaSap = LerBooleano(pedido, "ReleaseIsNotCompleted"),
+            StatusCompletudeCompraSap = LerTexto(pedido, "PurchasingCompletenessStatus").Trim(),
             GrupoCompra = LerTextoNulo(pedido, "PurchasingGroup"),
             PayloadOriginalJson = pedido.GetRawText(),
             Itens = MapearItens(pedido)

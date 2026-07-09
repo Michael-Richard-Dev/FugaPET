@@ -2,6 +2,12 @@
 
 public sealed class TaraCadastro
 {
+    // Tarefa Tara (Ajuste 8): limites de tamanho, alinhados a Setor/Cargo/Tipo de Tara.
+    public const int TamanhoMinimoNome = 2;
+    public const int TamanhoMaximoNome = 80;
+    public const int TamanhoMaximoTamanho = 80;
+    public const int TamanhoMaximoObservacao = 255;
+
     public long CodigoTara { get; set; }
     public long CodigoTipoTara { get; set; }
     public long CodigoSetor { get; set; }

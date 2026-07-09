@@ -1,3 +1,5 @@
+using FugaPET_Dev.Modelo.Processo;
+
 namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
@@ -41,4 +43,15 @@ public sealed record PedidoCompraSapItem
 
     /// <summary>JSON original do item retornado pela API.</summary>
     public string? PayloadOriginalJson { get; init; }
+
+    // Tarefa Entrada 24.1 (Ajuste 8): tipo mestre do material (Product Master) — enriquecido EM MEMÓRIA após
+    // consulta ao SAP (não persistido nesta tarefa). ProductType de A_Product; descrição de A_ProductDescription.
+    public string TipoMaterialSap { get; init; } = string.Empty;       // ProductType (ROH/HIBE/VERP/...)
+    public string DescricaoTipoMaterial { get; init; } = string.Empty; // texto amigável do ProductType
+    public string GrupoMaterialSap { get; init; } = string.Empty;      // ProductGroup
+    public string UnidadeBaseSap { get; init; } = string.Empty;        // BaseUnit
+    public string DescricaoProdutoSap { get; init; } = string.Empty;   // A_ProductDescription.ProductDescription
+
+    /// <summary>Classificação do item por modo de Entrada (Matéria-Prima/Químico/...), via ProductType.</summary>
+    public ClassificacaoEntradaMaterial ClassificacaoEntrada { get; init; } = ClassificacaoEntradaMaterial.Indefinido;
 }

@@ -27,6 +27,10 @@ internal sealed class PedidoCompraSapConfiguracaoInvalidaServico : IPedidoCompra
         string numeroPedido, CancellationToken cancellationToken = default)
         => throw new IntegracaoSapBloqueadaException(ConfiguracaoSap.MensagemConfiguracaoInvalida);
 
+    public Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
+        string numeroPedido, CancellationToken cancellationToken = default)
+        => throw new IntegracaoSapBloqueadaException(ConfiguracaoSap.MensagemConfiguracaoInvalida);
+
     public Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default)
         => throw new IntegracaoSapBloqueadaException(ConfiguracaoSap.MensagemConfiguracaoInvalida);
 

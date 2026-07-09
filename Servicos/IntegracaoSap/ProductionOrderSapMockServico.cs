@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -17,4 +17,7 @@ internal sealed class ProductionOrderSapMockServico : IProductionOrderSapServico
         CancellationToken cancellationToken = default)
         => Task.FromResult(ResultadoConsultaOrdemProducaoSap.Indisponivel(
             "Consulta de Ordem de Producao indisponivel em ambiente demonstrativo."));
+    public Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<OrdemProducaoSap>>([]);
 }
