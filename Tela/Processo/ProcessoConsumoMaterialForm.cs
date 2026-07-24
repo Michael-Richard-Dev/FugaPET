@@ -96,9 +96,10 @@ public partial class ProcessoConsumoMaterialForm : Form
     private readonly Dictionary<string, global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro> _tarasPorComponente = new();
     private bool _selecionandoTara;
 
-    // Tarefa Consumo 22.10.1: descrições reais dos componentes (A_ProductDescription), buscadas por consulta de OP.
-    // Preenchido em ConsultarOrdemProducaoAsync e lido pelo seam BuscarTipoMaterialSap no join lógico.
-    private IReadOnlyDictionary<string, ProdutoSapMestre> _descricoesProdutoPorCodigo =
+    // Mestre COMPLETO dos componentes: A_Product (ProductType/ProductGroup/BaseUnit) + A_ProductDescription
+    // (descrição real). Preenchido em ConsultarOrdemProducaoAsync e lido pelo seam BuscarMestreMaterialSap.
+    // É a fonte da CLASSIFICAÇÃO por componente que separa Matéria-Prima × Químico.
+    private IReadOnlyDictionary<string, ProdutoSapMestre> _mestresProdutoPorCodigo =
         new Dictionary<string, ProdutoSapMestre>(StringComparer.OrdinalIgnoreCase);
 
     // Tarefa 15.1: enquanto true, o Validated do campo OP NAO reconsulta (acao operacional em andamento).
@@ -116,6 +117,18 @@ public partial class ProcessoConsumoMaterialForm : Form
     // Ajuste 3 (Tarefa 14): mensagem de peso decimal invalido (KG).
     private const string MensagemPesoConsumoInvalido = "Informe o peso em KG. Exemplo: 0,400 ou 1,5.";
 
+    // Controle de Apontamentos: quando preenchido, a tela opera vinculada a um apontamento (OP travada).
+    // Null = abertura manual normal (comportamento preservado integralmente).
+    private readonly ContextoApontamentoProcesso? _contextoApontamento;
+
+    /// <summary>
+    /// Resultado devolvido ao Controle de Apontamentos, com o VÍNCULO do lançamento criado
+    /// (<c>codigo_lancamento</c>). Fechar a tela sem concluir mantém <c>NaoConcluido</c> — fechar NÃO
+    /// conclui a operação. Em abertura MANUAL (sem contexto) nada é registrado.
+    /// </summary>
+    internal ResultadoExecucaoProcesso ResultadoExecucaoApontamento { get; private set; }
+        = ResultadoExecucaoProcesso.NaoConcluido;
+
     public ProcessoConsumoMaterialForm()
         : this(ModoConsumoMaterial.MateriaPrima)
     {
@@ -126,10 +139,29 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
     }
 
+    /// <summary>
+    /// Abertura a partir do Controle de Apontamentos: a tela já nasce com a OP do apontamento, carrega-a
+    /// automaticamente e NÃO permite trocar de OP. Sem contexto, o funcionamento manual é integralmente
+    /// preservado (é o mesmo caminho dos construtores acima).
+    /// </summary>
+    public ProcessoConsumoMaterialForm(ModoConsumoMaterial modo, ContextoApontamentoProcesso contextoApontamento)
+        : this(modo, ClassificadorOrdemConsumoMaterial.Padrao, contextoApontamento)
+    {
+    }
+
     internal ProcessoConsumoMaterialForm(
         ModoConsumoMaterial modo,
         ClassificadorOrdemConsumoMaterial classificadorOrdemConsumo)
+        : this(modo, classificadorOrdemConsumo, null)
     {
+    }
+
+    internal ProcessoConsumoMaterialForm(
+        ModoConsumoMaterial modo,
+        ClassificadorOrdemConsumoMaterial classificadorOrdemConsumo,
+        ContextoApontamentoProcesso? contextoApontamento)
+    {
+        _contextoApontamento = contextoApontamento;
         _modoConsumo = modo;
         _configuracaoConsumo = ConfiguracaoTelaConsumoMaterialFactory.Criar(modo);
         _classificadorOrdemConsumo = classificadorOrdemConsumo ?? throw new ArgumentNullException(nameof(classificadorOrdemConsumo));
@@ -169,6 +201,46 @@ public partial class ProcessoConsumoMaterialForm : Form
         KeyPreview = true;
         Shown += ProcessoProdutoAcabadoForm_Shown;
         FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
+        AplicarContextoApontamento();
+    }
+
+    /// <summary>
+    /// <summary>
+    /// Só registra quando a tela está vinculada a um apontamento; sem contexto é no-op (o fluxo manual
+    /// do Consumo não é afetado de forma alguma).
+    /// </summary>
+    private void RegistrarResultadoApontamento(
+        ResultadoExecucaoProcessoApontamento resultado, long? codigoLancamento, string mensagem, bool confirmadoSap)
+    {
+        if (_contextoApontamento is not null)
+        {
+            ResultadoExecucaoApontamento = new ResultadoExecucaoProcesso(
+                resultado, codigoLancamento, mensagem, confirmadoSap);
+        }
+    }
+
+    /// <summary>
+    /// Com contexto de apontamento: trava a OP (não permite trocar) e carrega-a automaticamente ao exibir.
+    /// Sem contexto: não faz absolutamente nada — o fluxo manual permanece idêntico.
+    /// </summary>
+    private void AplicarContextoApontamento()
+    {
+        if (_contextoApontamento is null)
+        {
+            return;
+        }
+
+        // OP vem do apontamento e não pode ser trocada nesta sessão.
+        DefinirTextoCampoOrdem(_contextoApontamento.NumeroOrdem);
+        productionOrderComboBox.Enabled = false;
+
+        Shown += async (_, _) =>
+        {
+            statusLabel.Text =
+                $"OP {_contextoApontamento.NumeroOrdem} vinculada ao apontamento "
+                + $"(operação {_contextoApontamento.Operacao}).";
+            await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: false);
+        };
     }
 
     private void AplicarConfiguracaoModoConsumo()
@@ -794,9 +866,13 @@ public partial class ProcessoConsumoMaterialForm : Form
         _suprimirEventoOrdem = false;
     }
 
-    private void RegistrarOrdemRecenteSePermitida(OrdemProducaoConsumo ordem)
+    // A OP recente é registrada pela PRESENÇA de componentes do modo atual, nunca pela classificação do
+    // produto produzido. Assim a mesma OP aparece nas recentes das duas telas quando tem os dois tipos.
+    private void RegistrarOrdemRecenteSePermitida(
+        OrdemProducaoConsumo ordem,
+        IReadOnlyList<ComponenteConsumoMaterial> componentesModo)
     {
-        if (!OrdemPertenceAoModoAtual(ordem, out _))
+        if (componentesModo.Count == 0)
         {
             return;
         }
@@ -894,28 +970,48 @@ public partial class ProcessoConsumoMaterialForm : Form
             OrdemPertenceAoModoAtual(resultado.Ordem, out ResultadoClassificacaoOrdemConsumo classificacaoOrdem);
             RegistrarDiagnosticoClassificacaoOrdem(resultado.Ordem, classificacaoOrdem, aceita: true);
 
-            // Tarefa Consumo 22.10.1 (Ajuste 6): busca as descrições reais (A_ProductDescription) dos componentes
-            // ANTES do enriquecimento — o join lógico é feito por código de produto em BuscarTipoMaterialSap.
-            _descricoesProdutoPorCodigo = await _controller.ObterDescricoesComponentesAsync(
-                resultado.Ordem.Componentes.Select(componente => componente.CodigoMaterial));
+            IReadOnlyList<ComponenteConsumoMaterial> componentesOperacionais;
 
-            // Tarefa Consumo 22.9.2 (Ajustes 1/2/5): classifica/filtra os componentes pelo MODO da tela ANTES de
-            // carregar a operação. Se não sobrar nenhum componente compatível, a OP NÃO abre operacional (grid
-            // vazia parecendo sucesso): bloqueia com alerta e volta ao estado inicial (mantendo só o número da OP).
-            IReadOnlyList<ComponenteConsumoMaterial> componentesModo =
-                EnriquecerEClassificarComponentesDoModo(resultado.Ordem);
-
-            if (componentesModo.Count == 0)
+            if (_contextoApontamento is not null)
             {
-                BloquearOrdemIncompativelComModo(resultado.Ordem, resultado.NumeroOrdem);
-                return;
-            }
+                // Controle de Apontamentos: a tela já foi escolhida pela operação configurada. Primeiro filtra
+                // por ManufacturingOrderOperation/Sequence; ProductType e ProductGroup entram só depois, como
+                // complemento/diagnóstico dos componentes efetivamente vinculados à operação.
+                IReadOnlyList<ComponenteConsumoMaterial> componentesOperacao =
+                    FiltrarComponentesPorOperacaoDoApontamento(resultado.Ordem.Componentes);
+                if (componentesOperacao.Count == 0)
+                {
+                    BloquearOrdemSemComponenteDaOperacao(resultado.Ordem, resultado.NumeroOrdem);
+                    return;
+                }
 
+                _mestresProdutoPorCodigo = await ObterMestresComponentesDaOperacaoAsync(
+                    componentesOperacao,
+                    (codigos, ct) => _controller.ObterMestresComponentesAsync(codigos, ct),
+                    CancellationToken.None);
+                EnriquecerComponentesParaDiagnosticoApontamento(componentesOperacao, resultado.Ordem);
+                componentesOperacionais = componentesOperacao;
+            }
+            else
+            {
+                // Fluxo manual preservado: consulta Product Master de todos os componentes e classifica/filtra
+                // pelo MODO da tela. Se não sobrar nenhum componente compatível, a OP não abre operacional.
+                _mestresProdutoPorCodigo = await _controller.ObterMestresComponentesAsync(
+                    resultado.Ordem.Componentes.Select(componente => componente.CodigoMaterial));
+                componentesOperacionais = EnriquecerEClassificarComponentesDoModo(resultado.Ordem);
+                if (componentesOperacionais.Count == 0)
+                {
+                    BloquearOrdemIncompativelComModo(resultado.Ordem, resultado.NumeroOrdem);
+                    return;
+                }
+            }
             // OP carregada (liberada) ou nao liberada: cabecalho exibido; pesagem so libera com componente
             // pesavel selecionado.
-            PreencherOrdemCarregada(resultado.Ordem, componentesModo);
+            PreencherOrdemCarregada(resultado.Ordem, componentesOperacionais);
             DefinirTextoCampoOrdem(resultado.NumeroOrdem);
-            RegistrarOrdemRecenteSePermitida(resultado.Ordem); // OP aceita no modo atual entra na lista recente
+            // A OP entra na lista recente porque TEM componentes deste modo — não pelo produto produzido.
+            // A mesma OP pode figurar nas listas recentes das duas telas quando possuir os dois tipos.
+            RegistrarOrdemRecenteSePermitida(resultado.Ordem, componentesOperacionais);
             statusLabel.Text = resultado.Mensagem;
 
             if (resultado.Cenario is CenarioConsultaOrdemConsumo.NaoLiberada)
@@ -937,7 +1033,10 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
         // Reaproveita a limpeza padrao e, em seguida, preenche cabecalho + grid de componentes.
         LimparDadosOrdem(limparNumeroOrdem: false);
-        _ordemConsumoAtual = ordem;
+        // A ordem OPERACIONAL carrega o cabeçalho da OP, mas SOMENTE os componentes deste modo. Assim
+        // persistência, rotas, validações e o payload 261 nunca enxergam componentes da outra tela.
+        // Cópia: o objeto original do cache SAP não é alterado.
+        _ordemConsumoAtual = CopiarOrdemComComponentes(ordem, componentesModo);
         _componenteConsumoSelecionado = null;
 
         // Cabecalho da OP (Correcao 5): preenche campos existentes, sem redesenhar layout.
@@ -1002,6 +1101,23 @@ public partial class ProcessoConsumoMaterialForm : Form
         AtualizarApontamentoVisual(null);
     }
 
+    private void EnriquecerComponentesParaDiagnosticoApontamento(
+        IReadOnlyList<ComponenteConsumoMaterial> componentesOperacao,
+        OrdemProducaoConsumo ordem)
+    {
+        ConsumoMaterialServico.EnriquecerComponentesComTipoMaterial(
+            componentesOperacao,
+            BuscarMestreMaterialSap,
+            modoDaTela: ClassificadorOrdemConsumoMaterial.NomeModo(_modoConsumo),
+            opNumero: ordem.NumeroOrdem,
+            produtoProduzido: ordem.MaterialProduzido);
+    }
+
+    internal static Task<IReadOnlyDictionary<string, ProdutoSapMestre>> ObterMestresComponentesDaOperacaoAsync(
+        IReadOnlyList<ComponenteConsumoMaterial> componentesOperacao,
+        Func<IEnumerable<string>, CancellationToken, Task<IReadOnlyDictionary<string, ProdutoSapMestre>>> obterMestres,
+        CancellationToken cancellationToken = default)
+        => obterMestres(componentesOperacao.Select(componente => componente.CodigoMaterial), cancellationToken);
     // Tarefa Consumo 22.9.2 (Ajuste 1): enriquece os componentes com o tipo mestre (Product Master) e devolve
     // APENAS os compatíveis com o modo atual da tela. O enriquecimento roda UMA vez por consulta (evita Trace
     // duplicado); a classificação usa ProductType/ProductGroup quando disponível (rollout: Indefinido no filtro).
@@ -1009,12 +1125,35 @@ public partial class ProcessoConsumoMaterialForm : Form
     {
         ConsumoMaterialServico.EnriquecerComponentesComTipoMaterial(
             ordem.Componentes,
-            BuscarTipoMaterialSap,
+            BuscarMestreMaterialSap,
             modoDaTela: ClassificadorOrdemConsumoMaterial.NomeModo(_modoConsumo),
             opNumero: ordem.NumeroOrdem,
             produtoProduzido: ordem.MaterialProduzido);
 
-        return FiltrarComponentesPorModo(ordem.Componentes);
+        IReadOnlyList<ComponenteConsumoMaterial> componentesModo = FiltrarComponentesPorModo(ordem.Componentes);
+        RegistrarDiagnosticoInclusaoComponentes(ordem, componentesModo);
+        return componentesModo;
+    }
+
+    // Diagnóstico sanitizado por componente: mostra o que o SAP retornou e se o componente entrou nesta tela.
+    // Sem credencial/Authorization/URL — apenas dados funcionais do material.
+    private void RegistrarDiagnosticoInclusaoComponentes(
+        OrdemProducaoConsumo ordem,
+        IReadOnlyList<ComponenteConsumoMaterial> componentesModo)
+    {
+        foreach (ComponenteConsumoMaterial componente in ordem.Componentes)
+        {
+            bool incluido = componentesModo.Contains(componente);
+            System.Diagnostics.Trace.TraceInformation(
+                "[Consumo][InclusaoComponente] "
+                + $"OP: {ordem.NumeroOrdem}; Produto produzido da OP: {ordem.MaterialProduzido}; "
+                + $"Componente: {componente.CodigoMaterial}; ProductType: {componente.TipoMaterialSap}; "
+                + $"ProductGroup: {componente.GrupoMaterialSap}; BaseUnit: {componente.UnidadeBaseSap}; "
+                + $"Descricao: {componente.DescricaoMaterial}; "
+                + $"Classificacao final: {componente.ClassificacaoConsumo}; "
+                + $"Modo da tela: {ClassificadorOrdemConsumoMaterial.NomeModo(_modoConsumo)}; "
+                + $"Resultado: {(incluido ? "INCLUIDO" : "EXCLUIDO")}");
+        }
     }
 
     // Tarefa Consumo 22.9.2 (Ajustes 2/3/4/5/6/7): OP sem NENHUM componente compatível com o modo NÃO abre
@@ -1028,34 +1167,64 @@ public partial class ProcessoConsumoMaterialForm : Form
         DefinirTextoCampoOrdem(numeroOrdem);        // mantém o número consultado para o usuário saber o que tentou
 
         AtualizarApontamentoOpIncompativel();       // apontamentoInfoPanel + sapStatusPanel de bloqueio
-        statusLabel.Text = "OP incompatível com esta tela. Informe uma OP compatível.";
+
+        // Componentes sem ProductType (A_Product não respondeu) mudam a natureza do bloqueio: é falha de
+        // integração, não ausência de componentes do modo.
+        int totalIndefinidos = ordem.Componentes.Count(
+            componente => componente.ClassificacaoConsumo == ClassificacaoConsumoMaterial.Indefinido);
+
+        statusLabel.Text = totalIndefinidos > 0
+            ? "Componentes sem classificação SAP. Verifique a integração API_PRODUCT_SRV."
+            : "OP sem componentes classificados para esta tela.";
 
         (string titulo, string mensagem) = MontarMensagemOpIncompativel(
-            _modoConsumo, ordem.NumeroOrdem, ordem.MaterialProduzido, ordem.Componentes.Count);
+            _modoConsumo, ordem.NumeroOrdem, ordem.MaterialProduzido, ordem.Componentes.Count, totalIndefinidos);
         MessageBox.Show(mensagem, titulo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
         DevolverFocoParaCampoOrdem(); // foco de volta no campo OP (Ajuste 6/14)
     }
 
-    // Ajustes 3/4: título/mensagem por modo, com contagem de componentes quando a OP possuir componentes.
-    // internal static para permitir teste direto (InternalsVisibleTo) sem instanciar o Form.
+    /// <summary>
+    /// Título/mensagem do bloqueio, sempre em termos de CLASSIFICAÇÃO DE COMPONENTES — nunca "a OP não pertence
+    /// ao processo", porque a mesma OP pode ter componentes do outro modo e continuar sendo a mesma OP.
+    /// Quando há componentes Indefinidos (A_Product não retornou ProductType), a mensagem é a de falha de
+    /// integração (não se atribui o processo por chute). internal static para teste direto sem instanciar o Form.
+    /// </summary>
     internal static (string titulo, string mensagem) MontarMensagemOpIncompativel(
-        ModoConsumoMaterial modo, string? numeroOrdem, string? produtoProduzido, int totalComponentes)
+        ModoConsumoMaterial modo,
+        string? numeroOrdem,
+        string? produtoProduzido,
+        int totalComponentes,
+        int totalIndefinidos = 0)
     {
         string op = string.IsNullOrWhiteSpace(numeroOrdem) ? "(não informada)" : numeroOrdem.Trim();
         string produto = string.IsNullOrWhiteSpace(produtoProduzido) ? "(não informado)" : produtoProduzido.Trim();
 
+        // Falha do Product Master: não classificar por chute nem jogar tudo em Matéria-Prima.
+        if (totalIndefinidos > 0)
+        {
+            return (
+                "Classificação de componentes indisponível",
+                "Não foi possível classificar os componentes da OP porque o tipo do material não foi "
+                + "retornado pelo SAP.\r\n\r\n"
+                + "Verifique a integração API_PRODUCT_SRV.\r\n\r\n"
+                + $"OP: {op}\r\n"
+                + $"Produto da OP: {produto}\r\n"
+                + $"Componentes sem classificação: {totalIndefinidos}");
+        }
+
         bool quimico = modo == ModoConsumoMaterial.Quimico;
         string titulo = quimico
-            ? "OP não pertence ao Consumo Químico"
-            : "OP não pertence ao Consumo de Matéria-Prima";
-        string tipoCompativel = quimico ? "Consumo Químico" : "Consumo de Matéria-Prima";
+            ? "OP sem componentes de Consumo Químico"
+            : "OP sem componentes de Consumo de Matéria-Prima";
         string telaAlternativa = quimico ? "Consumo de Matéria-Prima" : "Consumo Químico";
         string rotuloContagem = quimico ? "Componentes químicos encontrados" : "Componentes de matéria-prima encontrados";
 
-        string mensagem =
-            $"Esta OP não possui componentes classificados para {tipoCompativel}.\r\n\r\n"
-            + $"OP: {op}\r\n"
+        string mensagem = quimico
+            ? "Esta OP não possui componentes classificados como Químicos.\r\n\r\n"
+            : "Esta OP não possui componentes classificados como Matéria-Prima.\r\n\r\n";
+
+        mensagem += $"OP: {op}\r\n"
             + $"Produto da OP: {produto}\r\n\r\n";
 
         if (totalComponentes > 0)
@@ -1064,7 +1233,8 @@ public partial class ProcessoConsumoMaterialForm : Form
                 + $"{rotuloContagem}: 0\r\n\r\n";
         }
 
-        mensagem += $"Use a tela de {telaAlternativa} ou verifique a classificação dos componentes no SAP.";
+        mensagem += $"A mesma OP pode ter componentes do outro processo. Use a tela de {telaAlternativa} "
+            + "ou verifique a classificação dos componentes no SAP.";
 
         return (titulo, mensagem);
     }
@@ -1128,25 +1298,203 @@ public partial class ProcessoConsumoMaterialForm : Form
             .Where(ComponentePertenceAoModoAtual)
             .ToList();
 
-    // Tarefa Consumo 22.10.1: seam do Product Master. A DESCRIÇÃO (A_ProductDescription) já é real — o mapa
-    // _descricoesProdutoPorCodigo é preenchido em ConsultarOrdemProducaoAsync (GET governado). O mestre retornado
-    // traz só a descrição (Consultado=false), então a CLASSIFICAÇÃO por ProductType (A_Product) segue no rollout
-    // atual (Indefinido) — separação Matéria-Prima/Químico inalterada. A_Product real fica para tarefa futura.
-    private ProdutoSapMestre? BuscarTipoMaterialSap(string codigoMaterial)
-        => _descricoesProdutoPorCodigo.GetValueOrDefault((codigoMaterial ?? string.Empty).Trim());
+    /// <summary>
+    /// Filtra os componentes pela OPERAÇÃO do apontamento (e pela sequência, quando ambos a possuírem).
+    /// Comparação tolerando zeros à esquerda, sem converter para número. Componente com operação VAZIA
+    /// NÃO é adivinhado nem usado como fallback: fica de fora e o vínculo é diagnosticado.
+    /// internal static para teste direto sem instanciar o Form.
+    /// </summary>
+    internal static IReadOnlyList<ComponenteConsumoMaterial> FiltrarComponentesPorOperacao(
+        IReadOnlyList<ComponenteConsumoMaterial> componentes,
+        string operacaoApontamento,
+        string sequenciaApontamento)
+        => componentes
+            .Where(componente => ComponentePertenceAOperacao(componente, operacaoApontamento, sequenciaApontamento))
+            .ToList();
+
+    private static bool ComponentePertenceAOperacao(
+        ComponenteConsumoMaterial componente, string operacaoApontamento, string sequenciaApontamento)
+    {
+        // Sem operação no componente não há vínculo comprovado: NÃO entra (nada de fallback).
+        if (string.IsNullOrWhiteSpace(componente.Operacao))
+        {
+            return false;
+        }
+
+        if (!CampoSapEquivalente(componente.Operacao, operacaoApontamento))
+        {
+            return false;
+        }
+
+        bool contextoPossuiSequencia = !string.IsNullOrWhiteSpace(sequenciaApontamento);
+        bool componentePossuiSequencia = !string.IsNullOrWhiteSpace(componente.SequenciaOperacao);
+
+        if (contextoPossuiSequencia != componentePossuiSequencia)
+        {
+            return false;
+        }
+
+        if (!contextoPossuiSequencia)
+        {
+            return true;
+        }
+
+        return CampoSapEquivalente(componente.SequenciaOperacao, sequenciaApontamento);
+    }
+
+    /// <summary>Compara campos SAP tolerando zeros à esquerda, sem converter para número.</summary>
+    private static bool CampoSapEquivalente(string? a, string? b)
+    {
+        string x = (a ?? string.Empty).Trim().TrimStart('0');
+        string y = (b ?? string.Empty).Trim().TrimStart('0');
+        return string.Equals(x, y, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private IReadOnlyList<ComponenteConsumoMaterial> FiltrarComponentesPorOperacaoDoApontamento(
+        IReadOnlyList<ComponenteConsumoMaterial> componentes)
+    {
+        if (_contextoApontamento is null)
+        {
+            return componentes;
+        }
+
+        IReadOnlyList<ComponenteConsumoMaterial> filtrados = FiltrarComponentesPorOperacao(
+            componentes, _contextoApontamento.Operacao, _contextoApontamento.Sequencia);
+
+        RegistrarDiagnosticoVinculoOperacao(componentes, filtrados);
+        return filtrados;
+    }
+
+    // Diagnóstico sanitizado do vínculo componente × operação (sem credencial/URL).
+    private void RegistrarDiagnosticoVinculoOperacao(
+        IReadOnlyList<ComponenteConsumoMaterial> candidatos,
+        IReadOnlyList<ComponenteConsumoMaterial> incluidos)
+    {
+        if (_contextoApontamento is null)
+        {
+            return;
+        }
+
+        foreach (ComponenteConsumoMaterial componente in candidatos)
+        {
+            bool semVinculo = string.IsNullOrWhiteSpace(componente.Operacao);
+            System.Diagnostics.Trace.TraceInformation(
+                "[Consumo][VinculoOperacao] "
+                + $"OP: {_contextoApontamento.NumeroOrdem}; "
+                + $"Operacao do apontamento: {_contextoApontamento.Operacao}; "
+                + $"Sequencia do apontamento: {_contextoApontamento.Sequencia}; "
+                + $"Componente: {componente.CodigoMaterial}; "
+                + $"ManufacturingOrderOperation: {componente.Operacao}; "                + $"ManufacturingOrderSequence: {componente.SequenciaOperacao}; "
+                + $"ProductType: {componente.TipoMaterialSap}; "
+                + $"ProductGroup: {componente.GrupoMaterialSap}; "
+                + $"ClassificacaoMaterial: {componente.ClassificacaoConsumo}; "
+                + "ClassificacaoBloqueante: false; "
+                + $"ResultadoVinculo: {(semVinculo ? "SEM_VINCULO_OPERACAO" : ResultadoVinculoOperacao(componente, incluidos, _contextoApontamento.Operacao, _contextoApontamento.Sequencia))}");
+        }
+    }
+
+    /// <summary>
+    /// OP carregada, mas nenhum componente vinculado à operação do apontamento. NÃO mostra todos como
+    /// fallback: volta ao estado inicial e orienta a verificar os campos de vínculo retornados pelo SAP.
+    /// </summary>
+    private static string ResultadoVinculoOperacao(
+        ComponenteConsumoMaterial componente,
+        IReadOnlyList<ComponenteConsumoMaterial> incluidos,
+        string operacaoApontamento,
+        string sequenciaApontamento)
+    {
+        if (incluidos.Contains(componente))
+        {
+            return "INCLUIDO_POR_OPERACAO";
+        }
+
+        if (!CampoSapEquivalente(componente.Operacao, operacaoApontamento))
+        {
+            return "EXCLUIDO";
+        }
+
+        bool contextoPossuiSequencia = !string.IsNullOrWhiteSpace(sequenciaApontamento);
+        bool componentePossuiSequencia = !string.IsNullOrWhiteSpace(componente.SequenciaOperacao);
+        return contextoPossuiSequencia != componentePossuiSequencia
+            ? "EXCLUIDO_SEQUENCIA_INCOMPLETA"
+            : "EXCLUIDO";
+    }
+
+    private void BloquearOrdemSemComponenteDaOperacao(OrdemProducaoConsumo ordem, string numeroOrdem)
+    {
+        LimparDadosOrdem(limparNumeroOrdem: false);
+        DefinirTextoCampoOrdem(numeroOrdem);
+        AtualizarApontamentoOpIncompativel();
+
+        string mensagem = MontarMensagemSemComponenteDaOperacao(_contextoApontamento?.Operacao);
+        statusLabel.Text = "Nenhum componente vinculado à operação do apontamento.";
+
+        System.Diagnostics.Trace.TraceWarning(
+            "[Consumo][VinculoOperacao] "
+            + $"OP: {ordem.NumeroOrdem}; Operacao do apontamento: {_contextoApontamento?.Operacao}; "
+            + $"Total de componentes do modo: {ordem.Componentes.Count}; "
+            + "Resultado: NENHUM componente vinculado a operacao (pesagem bloqueada).");
+
+        MessageBox.Show(mensagem, TituloMensagemConsumo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        DevolverFocoParaCampoOrdem();
+    }
+
+    /// <summary>internal static para teste direto da mensagem sem instanciar o Form.</summary>
+    internal static string MontarMensagemSemComponenteDaOperacao(string? operacao)
+        => $"Nenhum componente da OP foi vinculado à operação {(string.IsNullOrWhiteSpace(operacao) ? "(não informada)" : operacao.Trim())}. "
+           + "Verifique o ManufacturingOrderOperation e o ManufacturingOrderSequence retornados pelo SAP.";
+
+    /// <summary>
+    /// Cópia OPERACIONAL da OP: preserva todo o cabeçalho (OP, produto produzido, planta, quantidade, unidade,
+    /// lote, data, operações, liberação) e troca apenas a lista de componentes pela do modo atual. NÃO altera o
+    /// objeto original devolvido pelo cache SAP (a mesma OP continua íntegra para a outra tela).
+    /// internal static para teste direto sem instanciar o Form.
+    /// </summary>
+    internal static OrdemProducaoConsumo CopiarOrdemComComponentes(
+        OrdemProducaoConsumo ordem,
+        IReadOnlyList<ComponenteConsumoMaterial> componentes)
+        => new()
+        {
+            NumeroOrdem = ordem.NumeroOrdem,
+            TipoOrdem = ordem.TipoOrdem,
+            MaterialProduzido = ordem.MaterialProduzido,
+            Planta = ordem.Planta,
+            QuantidadePrevista = ordem.QuantidadePrevista,
+            Unidade = ordem.Unidade,
+            ItemOrdem = ordem.ItemOrdem,
+            DepositoConsumo = ordem.DepositoConsumo,
+            LoteProdutoProduzido = ordem.LoteProdutoProduzido,
+            Lote = ordem.Lote,
+            DataOrdem = ordem.DataOrdem,
+            OrigemDataOrdem = ordem.OrigemDataOrdem,
+            Liberada = ordem.Liberada,
+            Operacoes = ordem.Operacoes,
+            Componentes = componentes.ToList()
+        };
+
+    // Seam do Product Master COMPLETO: _mestresProdutoPorCodigo é preenchido em ConsultarOrdemProducaoAsync
+    // (A_Product técnico + A_ProductDescription). O join lógico é por CÓDIGO de produto (texto, sem conversão
+    // numérica). Só um mestre com Consultado=true (A_Product respondeu) libera a classificação do componente.
+    private ProdutoSapMestre? BuscarMestreMaterialSap(string codigoMaterial)
+        => _mestresProdutoPorCodigo.GetValueOrDefault((codigoMaterial ?? string.Empty).Trim());
 
     private bool ComponentePertenceAoModoAtual(ComponenteConsumoMaterial componente)
-        => _modoConsumo == ModoConsumoMaterial.MateriaPrima
+        => ComponentePertenceAoModo(componente, _modoConsumo);
+
+    /// <summary>
+    /// Regra ÚNICA de pertencimento do componente ao modo da tela. internal static para teste direto
+    /// (InternalsVisibleTo) sem instanciar o Form — os testes exercitam exatamente o predicado de produção.
+    /// </summary>
+    internal static bool ComponentePertenceAoModo(ComponenteConsumoMaterial componente, ModoConsumoMaterial modo)
+        => modo == ModoConsumoMaterial.MateriaPrima
             ? ComponenteEhMateriaPrima(componente)
             : ComponenteEhQuimico(componente);
 
-    // Ajuste 6 (rollout): enquanto o Product Master não estiver ligado à consulta real, os componentes
-    // ficam como Indefinido. Para NÃO reproduzir o bug (OP sumindo do modo Matéria-Prima), o modo
-    // Matéria-Prima aceita MatériaPrima E Indefinido; o modo Químico exige explicitamente Químico.
-    // Quando a consulta ao Product Master estiver homologada, Indefinido passará a bloquear (Ajuste 10).
+    // Filtro ESTRITO por classificação real do componente (ProductType do Product Master):
+    // ROH → Matéria-Prima; HIBE (ou grupo químico homologado) → Químico. Indefinido NUNCA entra em nenhuma
+    // das telas — sem ProductType o processo não é adivinhado pelo código do material (bloqueia e diagnostica).
     private static bool ComponenteEhMateriaPrima(ComponenteConsumoMaterial componente)
-        => componente.ClassificacaoConsumo is ClassificacaoConsumoMaterial.MateriaPrima
-            or ClassificacaoConsumoMaterial.Indefinido;
+        => componente.ClassificacaoConsumo == ClassificacaoConsumoMaterial.MateriaPrima;
 
     private static bool ComponenteEhQuimico(ComponenteConsumoMaterial componente)
         => componente.ClassificacaoConsumo == ClassificacaoConsumoMaterial.Quimico;
@@ -1175,10 +1523,19 @@ public partial class ProcessoConsumoMaterialForm : Form
             return "Sem depósito";
         }
 
+        if (componente.BackflushSap)
+        {
+            return "Backflush";
+        }
+
+        if (componente.QuantidadePendente <= 0m || !componente.PesagemLiberada)
+        {
+            return "Bloqueado";
+        }
+
         return componente.ClassificacaoEnvio switch
         {
             ClassificacaoEnvioConsumo261.MaterialDocument261Direto => "261 Direto",
-            ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao => "Backflush",
             _ => "Bloqueado"
         };
     }
@@ -1405,13 +1762,22 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private static void AplicarStatusVisualComponente(DataGridViewRow linha, ComponenteConsumoMaterial componente)
     {
-        if (componente.PesagemLiberada)
-        {
-            return;
-        }
+        bool visualBloqueado = !componente.PesagemLiberada
+            || componente.QuantidadePendente <= 0m
+            || string.Equals(componente.Status, ComponenteConsumoMaterial.StatusConsumido, StringComparison.OrdinalIgnoreCase);
+        Color foreColor = visualBloqueado
+            ? Color.FromArgb(107, 114, 128)
+            : Color.FromArgb(45, 49, 56);
+        Color selectionForeColor = Color.White;
 
-        linha.DefaultCellStyle.ForeColor = Color.FromArgb(107, 114, 128);
-        linha.DefaultCellStyle.SelectionForeColor = Color.White;
+        linha.DefaultCellStyle.ForeColor = foreColor;
+        linha.DefaultCellStyle.SelectionForeColor = selectionForeColor;
+
+        foreach (DataGridViewCell celula in linha.Cells)
+        {
+            celula.Style.ForeColor = foreColor;
+            celula.Style.SelectionForeColor = selectionForeColor;
+        }
     }
 
     private void MaterialDataGridView_SelectionChanged(object? sender, EventArgs e)
@@ -2103,6 +2469,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         _isProductionStarted = false;
         UpdateProductionState(false);
+        AtualizarBotaoConfirmar();
         statusLabel.Text = "Leitura de consumo parada.";
     }
 
@@ -2413,7 +2780,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     /// Peso Previsto (pendente local) e Peso Utilizado (total pesado local); e recalcula o status do
     /// componente (consumido/pendente), reabrindo a pesagem quando ficar abaixo do pendente.
     /// </summary>
-    private void AtualizarTotaisConsumo(ComponenteConsumoMaterial componente, string chave)
+    private void AtualizarTotaisConsumo(ComponenteConsumoMaterial componente, string chave, bool recalcularStatusLocal = true)
     {
         decimal totalLocal = SomarPesagensLocais(chave);
         decimal previstoInicial = ObterQuantidadePrevistaInicial(componente);
@@ -2428,7 +2795,11 @@ public partial class ProcessoConsumoMaterialForm : Form
             saldoRestanteCounterLabel.Text = $"Saldo: {FormatarPesoPainel(saldoRestante)}";
         }
 
-        ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, totalLocal);
+        if (recalcularStatusLocal)
+        {
+            ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, totalLocal);
+        }
+
         AtualizarLinhaComponenteSelecionado(componente);
         AtualizarLiberacaoInicioLeitura();
         AtualizarBotaoConfirmar();
@@ -2455,10 +2826,20 @@ public partial class ProcessoConsumoMaterialForm : Form
                 decimal saldo = Math.Max(0m, previstoInicial - totalUtilizado);
                 string unidade = string.IsNullOrWhiteSpace(componente.UnidadeMedida) ? "KG" : componente.UnidadeMedida;
                 // Ajuste 7: a coluna de Peso Previsto NAO e reescrita durante a pesagem local (fica fixa).
+                linha.Cells["productionTipoSapColumn"].Value = ObterTipoSapGrid(componente);
                 linha.Cells["productionWeightColumn"].Value = FormatarPesoGrid(totalUtilizado, unidade);
                 linha.Cells["productionSaldoColumn"].Value = FormatarPesoGrid(saldo, unidade);
                 AplicarStatusVisualComponente(linha, componente);
-                RestaurarSelecaoComponente(componente);
+                DefinirTooltipLinha(linha, ObterTooltipComponente(componente));
+                if (componente.PesagemLiberada)
+                {
+                    RestaurarSelecaoComponente(componente);
+                }
+                else
+                {
+                    ClearGridSelection(productionDataGridView);
+                }
+
                 break;
             }
         }
@@ -2514,7 +2895,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             componente.QuantidadeConsumida += enviadoKg;
             componente.QuantidadePendente = Math.Max(0m, componente.QuantidadePrevista - componente.QuantidadeConsumida);
             componente.QuantidadePendenteSapOriginal = componente.QuantidadePendente;
-            ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, 0m);
+            ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);
             AtualizarLinhaComponenteSelecionado(componente);
         }
 
@@ -2527,21 +2908,30 @@ public partial class ProcessoConsumoMaterialForm : Form
         ComponenteConsumoMaterial? selecionado = _componenteConsumoSelecionado;
         if (selecionado is not null)
         {
-            AtualizarTotaisConsumo(selecionado, ProcessoConsumoMaterialController.ChaveComponente(selecionado));
+            AtualizarTotaisConsumo(selecionado, ProcessoConsumoMaterialController.ChaveComponente(selecionado), recalcularStatusLocal: false);
             decimal saldoRestante = Math.Max(0m, selecionado.QuantidadePendente);
             decimal disponivelComTolerancia = ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(selecionado);
             if (disponivelComTolerancia > 0m && selecionado.PesagemLiberada)
             {
                 AtualizarApontamentoVisual(selecionado, "Consumo enviado ao SAP. Nova pesagem liberada para o saldo restante.");
+                AtualizarEstadoVisualIntegracaoSapConsumo(EstadoVisualIntegracaoSapConsumo.Enviado, mensagemSucesso);
+                productionDataGridView.Refresh();
+                materialDataGridView.Refresh();
                 AtualizarBotaoConfirmar();
                 return $"Consumo enviado ao SAP.\r\nSaldo restante: {saldoRestante:0.000} KG.\r\nVocê pode iniciar uma nova leitura para este componente.";
             }
 
             AtualizarApontamentoVisual(selecionado, "Consumo enviado ao SAP. Componente sem saldo disponível para nova pesagem.");
+            AtualizarEstadoVisualIntegracaoSapConsumo(EstadoVisualIntegracaoSapConsumo.Enviado, mensagemSucesso);
+            productionDataGridView.Refresh();
+            materialDataGridView.Refresh();
             AtualizarBotaoConfirmar();
             return "Consumo enviado ao SAP.\r\nLimite de consumo atingido para este componente.";
         }
 
+        AtualizarEstadoVisualIntegracaoSapConsumo(EstadoVisualIntegracaoSapConsumo.Enviado, mensagemSucesso);
+        productionDataGridView.Refresh();
+        materialDataGridView.Refresh();
         AtualizarBotaoConfirmar();
         return mensagemSucesso;
     }
@@ -2574,37 +2964,50 @@ public partial class ProcessoConsumoMaterialForm : Form
     /// o envio existente; Backflush não envia (yield-zero da Tarefa 17.11 intacta); Misto/Bloqueado não enviam.
     /// Não mostra preview JSON ao operador. Retorna (mensagem, ícone) para o MessageBox final.
     /// </summary>
-    private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync(long codigoLancamento, string usuario)
+    /// <summary>
+    /// Orquestra o envio após "Confirmar Consumo" e devolve um resultado TIPADO. O ícone deixou de ser
+    /// regra: quem decide se a operação pode ser finalizada é o <see cref="ResultadoOrquestracaoConsumoApontamento"/>.
+    /// Rotas que não enviam (Misto/Bloqueado/Backflush) NUNCA liberam o término.
+    /// </summary>
+    private async Task<ResultadoOrquestracaoConsumoApontamento> OrquestrarEnvioAposConfirmarAsync(
+        long codigoLancamento, string usuario)
     {
         if (_modoConsumo == ModoConsumoMaterial.Quimico)
         {
             ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
-            return envio is { Sucesso: true }
-                ? ("Consumo de químicos salvo localmente e enviado ao SAP por 261 direto com sucesso.", MessageBoxIcon.Information)
-                : (envio?.Mensagem
-                    ?? "Consumo de químicos salvo localmente, mas o envio SAP 261 direto não foi concluído. Verifique o histórico/diagnóstico antes de reenviar.",
-                    MessageBoxIcon.Warning);
+            return ResultadoOrquestracaoConsumoApontamento.DoEnvio261(
+                codigoLancamento,
+                envio,
+                "Consumo de químicos salvo localmente, mas o envio SAP 261 direto não foi concluído. "
+                + "Verifique o histórico/diagnóstico antes de reenviar.");
         }
 
         if (_rotaEnvioSalva == RotaEnvioConsumo.Direto261)
         {
             ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
-            return envio is { Sucesso: true }
-                ? ("Consumo salvo localmente e enviado ao SAP com sucesso.", MessageBoxIcon.Information)
-                : (envio?.Mensagem
-                    ?? "Consumo salvo localmente, mas o envio ao SAP falhou. Verifique o histórico/diagnóstico antes de reenviar.",
-                    MessageBoxIcon.Warning);
+            return ResultadoOrquestracaoConsumoApontamento.DoEnvio261(
+                codigoLancamento,
+                envio,
+                "Consumo salvo localmente, mas o envio ao SAP falhou. "
+                + "Verifique o histórico/diagnóstico antes de reenviar.");
         }
 
         if (_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao)
         {
-            return ("Consumo salvo localmente. Envio SAP não executado: componente Backflush exige apontamento real de produção ou validação SAP para consumo manual via 261.",
-                MessageBoxIcon.Warning);
+            // DECISÃO DOCUMENTADA: Backflush NÃO gera movimento 261 e não há regra funcional homologada
+            // que autorize concluir a operação localmente sem movimento SAP. Portanto NÃO é
+            // ConcluidoLocalmente — fica NaoConcluido e o término permanece bloqueado.
+            return ResultadoOrquestracaoConsumoApontamento.NaoConcluido(
+                codigoLancamento,
+                "Consumo salvo localmente. Envio SAP não executado: componente Backflush exige apontamento "
+                + "real de produção ou validação SAP para consumo manual via 261.");
         }
 
-        // Misto / Bloqueado: salva local, mas NAO tenta envio automatico.
-        return ("Consumo salvo localmente, mas o envio automático foi bloqueado (rota mista ou inconsistente). Verifique depósito, lote e componentes antes de enviar ao SAP.",
-            MessageBoxIcon.Warning);
+        // Misto / Bloqueado: salva local, mas NAO tenta envio automatico — e não libera término.
+        return ResultadoOrquestracaoConsumoApontamento.NaoConcluido(
+            codigoLancamento,
+            "Consumo salvo localmente, mas o envio automático foi bloqueado (rota mista ou inconsistente). "
+            + "Verifique depósito, lote e componentes antes de enviar ao SAP.");
     }
 
     /// <summary>Refatoração: envio 261 direto SEM depender de botão visual (reaproveita o método existente).</summary>
@@ -3452,16 +3855,27 @@ public partial class ProcessoConsumoMaterialForm : Form
 
                 // Ajuste 3/6 (Tarefa 18.2): CONFIRMAR CONSUMO e o fluxo UNICO — apos salvar, orquestra o envio
                 // pela rota (261 direto reaproveita o envio existente; Backflush/Misto/Bloqueado NAO enviam).
-                (string mensagemFinal, MessageBoxIcon icone) = await OrquestrarEnvioAposConfirmarAsync(resultado.CodigoLancamento.GetValueOrDefault(), usuario);
-                bool envioSapConfirmado = icone == MessageBoxIcon.Information
-                    && (_modoConsumo == ModoConsumoMaterial.Quimico || _rotaEnvioSalva == RotaEnvioConsumo.Direto261);
-                if (envioSapConfirmado)
+                // O resultado é TIPADO: o ícone é apenas apresentação, nunca regra.
+                ResultadoOrquestracaoConsumoApontamento orquestracao =
+                    await OrquestrarEnvioAposConfirmarAsync(resultado.CodigoLancamento.GetValueOrDefault(), usuario);
+
+                string mensagemFinal = orquestracao.Mensagem;
+                if (orquestracao.ConfirmadoSap)
                 {
                     mensagemFinal = FinalizarApontamentoEnviadoSapELiberarNovaPesagem(mensagemFinal);
                 }
 
+                // Controle de Apontamentos: informa o que REALMENTE aconteceu e VINCULA o lançamento criado
+                // (codigo_lancamento). ErroSap/DivergenciaSap/NaoConcluido não liberam o término.
+                RegistrarResultadoApontamento(
+                    orquestracao.Resultado, resultado.CodigoLancamento, mensagemFinal, orquestracao.ConfirmadoSap);
+
                 statusLabel.Text = mensagemFinal;
-                MessageBox.Show(mensagemFinal, TituloMensagemConsumo, MessageBoxButtons.OK, icone);
+                MessageBox.Show(
+                    mensagemFinal,
+                    TituloMensagemConsumo,
+                    MessageBoxButtons.OK,
+                    orquestracao.ExibirComoSucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             else
             {
@@ -4214,7 +4628,18 @@ public partial class ProcessoConsumoMaterialForm : Form
     private static void ApplyProductionRowStyle(DataGridViewRow row, int rowIndex)
     {
         row.DefaultCellStyle.BackColor = rowIndex % 2 == 0 ? RowLight : RowGreen;
-        row.DefaultCellStyle.ForeColor = Color.FromArgb(45, 49, 56);
+        if (row.Tag is ComponenteConsumoMaterial componente)
+        {
+            AplicarStatusVisualComponente(row, componente);
+            return;
+        }
+
+        Color foreColor = Color.FromArgb(45, 49, 56);
+        row.DefaultCellStyle.ForeColor = foreColor;
+        foreach (DataGridViewCell celula in row.Cells)
+        {
+            celula.Style.ForeColor = foreColor;
+        }
     }
 
     private void ClearGridSelections()
@@ -4229,6 +4654,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         grid.CurrentCell = null;
     }
 }
+
 
 
 

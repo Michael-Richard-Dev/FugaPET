@@ -852,6 +852,7 @@ public partial class PainelInicialForm : Form
         view.ProcessoSemiAcabadoRequested += async (_, _) => await OpenProcessoSemiAcabadoAsync();
         view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima);
         view.ProcessoConsumoQuimicosRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico);
+        view.ControleApontamentosRequested += async (_, _) => await OpenControleApontamentosAsync();
         view.HistoricoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialHistoricoAsync();
         view.DiagnosticoConsumoSap261Requested += async (_, _) => await OpenDiagnosticoConsumoSap261Async();
         view.OrdensAndamentoRequested += async (_, _) => await OpenConsultaOrdemProducaoAsync();
@@ -937,6 +938,69 @@ public partial class PainelInicialForm : Form
             Activate();
             NavigateToProcessoProducao();
         }
+    }
+
+    /// <summary>
+    /// Controle de Apontamentos (F8). A abertura é governada por
+    /// PROCESSO_PRODUCAO / CONTROLE_APONTAMENTOS / VISUALIZAR, através do serviço de autorização
+    /// específico do módulo — que decide o fallback pela EXISTÊNCIA da estrutura do 039, não por um OR
+    /// permanente com LEITURA_PRODUCAO. Hide/ShowDialog/Show/Activate preservados.
+    /// </summary>
+    private async Task OpenControleApontamentosAsync()
+    {
+        if (!await PermiteAbrirControleApontamentosAsync())
+        {
+            return;
+        }
+
+        if (!PodeAbrirProcesso())
+        {
+            return;
+        }
+
+        using Processo.ProcessoControleApontamentosForm form = new();
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            Activate();
+            NavigateToProcessoProducao();
+        }
+    }
+
+    /// <summary>
+    /// Gate de VISUALIZAÇÃO do Controle de Apontamentos. A negativa é auditada com a rotina PRÓPRIA
+    /// (CONTROLE_APONTAMENTOS), não com LEITURA_PRODUCAO.
+    /// </summary>
+    private async Task<bool> PermiteAbrirControleApontamentosAsync()
+    {
+        Controle.Processo.ProcessoControleApontamentosController controller = new();
+        if (await controller.PodeVisualizarAsync())
+        {
+            return true;
+        }
+
+        long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+        if (codigoUsuario.HasValue)
+        {
+            await RegistrarAcessoNegadoSeguroAsync(
+                codigoUsuario.Value,
+                PermissoesSistema.Modulos.ProcessoProducao,
+                PermissoesSistema.Rotinas.ControleApontamentos,
+                "Controle de Apontamentos");
+        }
+
+        MessageBox.Show(
+            "Você não possui permissão para acessar esta rotina.",
+            "Acesso negado",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+        return false;
     }
 
     private async Task OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial modo = global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima)
@@ -1143,16 +1207,17 @@ public partial class PainelInicialForm : Form
                 return;
             }
 
+            // Reordenação Modelo → Etiqueta: F6 abre Modelo de Etiqueta, F7 abre Etiqueta (alinhado aos cartões).
             if (e.KeyCode == Keys.F6)
             {
-                CadastroForm_EtiquetaRequested(this, EventArgs.Empty);
+                CadastroForm_ModeloEtiquetaRequested(this, EventArgs.Empty);
                 e.Handled = true;
                 return;
             }
 
             if (e.KeyCode == Keys.F7)
             {
-                CadastroForm_ModeloEtiquetaRequested(this, EventArgs.Empty);
+                CadastroForm_EtiquetaRequested(this, EventArgs.Empty);
                 e.Handled = true;
                 return;
             }
@@ -1269,6 +1334,18 @@ public partial class PainelInicialForm : Form
             }
 
             await OpenConsultaOrdemProducaoAsync();
+            e.Handled = true;
+        }
+
+        if (e.KeyCode == Keys.F8 && _currentContentView == _processoProducaoForm)
+        {
+            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            await OpenControleApontamentosAsync();
             e.Handled = true;
         }
     }

@@ -150,16 +150,18 @@ public sealed class ZebraEntradaRobustezTests
     }
 
     [Fact]
-    public void PesagemMultipla_DeveUsarImpressaoAutomaticaGenerica()
+    public void PesagemMultipla_ImprimePorPesagemIndividual_SemConsolidado()
     {
         string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
 
+        // Impressão automática genérica ainda existe (usada por pesagem individual).
         Assert.Contains("TentarImprimirEtiquetaAutomaticaAsync(", conteudo, StringComparison.Ordinal);
-        Assert.Contains("TentarImprimirEtiquetaAutomaticaAsync(etiqueta", conteudo, StringComparison.Ordinal);
-        Assert.Contains("pesagem", conteudo, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}. Etiqueta enviada para", conteudo, StringComparison.Ordinal);
-        Assert.Contains("mas a etiqueta", conteudo, StringComparison.Ordinal);
-        Assert.Contains("Use a reimpress", conteudo, StringComparison.Ordinal);
+        // Regra definitiva: imprime por pesagem (peso líquido dela), não o total consolidado.
+        Assert.Contains("ConstruirEtiquetaPorPesagem(", conteudo, StringComparison.Ordinal);
+        Assert.Contains("Pesagens atualizadas. Total do item:", conteudo, StringComparison.Ordinal);
+        // A expectativa antiga de etiqueta consolidada foi REMOVIDA.
+        Assert.DoesNotContain("Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}. Etiqueta enviada para", conteudo, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstruirDadosEtiquetaMateriaPrima(linhaAlvo)", conteudo, StringComparison.Ordinal);
     }
 
     [Fact]

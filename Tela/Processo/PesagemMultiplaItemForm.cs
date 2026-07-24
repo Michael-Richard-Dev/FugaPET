@@ -22,6 +22,17 @@ public sealed class PesagemMultiplaItemForm : Form
     private readonly List<EntradaProdutoPesagem> _pesagens = [];
     private readonly CultureInfo _cultura = CultureInfo.GetCultureInfo("pt-BR");
 
+    // Impressão por pesagem individual (regra definitiva). Callbacks injetados pelo formulário pai — a janela
+    // não fala com banco/impressora diretamente. Devolvem true se a etiqueta foi impressa.
+    private readonly Func<EntradaProdutoPesagem, Task<bool>>? _imprimirPesagemAsync;
+    private readonly Func<EntradaProdutoPesagem, Task<bool>>? _reimprimirPesagemAsync;
+
+    // Modo somente consulta/reimpressão (lançamento já persistido): bloqueia incluir/cancelar.
+    private readonly bool _somenteConsulta;
+
+    // Índices das pesagens que já dispararam impressão automática nesta sessão (para a mensagem de cancelamento).
+    private readonly HashSet<int> _pesagensImpressas = [];
+
     public IReadOnlyList<EntradaProdutoPesagem> Pesagens =>
         EntradaProdutoPesagemCalculos.ValidarSequencias(_pesagens);
     public decimal PesoTotal => EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(_pesagens);
@@ -32,11 +43,17 @@ public sealed class PesagemMultiplaItemForm : Form
         string itemPedido,
         TaraCadastro tara,
         long? codigoBalanca,
-        IReadOnlyList<EntradaProdutoPesagem> pesagensAtuais)
+        IReadOnlyList<EntradaProdutoPesagem> pesagensAtuais,
+        Func<EntradaProdutoPesagem, Task<bool>>? imprimirPesagemAsync = null,
+        Func<EntradaProdutoPesagem, Task<bool>>? reimprimirPesagemAsync = null,
+        bool somenteConsulta = false)
     {
         _balancaLeituraServico = balancaLeituraServico;
         _tara = tara;
         _codigoBalanca = codigoBalanca;
+        _imprimirPesagemAsync = imprimirPesagemAsync;
+        _reimprimirPesagemAsync = reimprimirPesagemAsync;
+        _somenteConsulta = somenteConsulta;
         _pesagens.AddRange(pesagensAtuais);
 
         Text = "Pesagens do Item";
@@ -123,11 +140,16 @@ public sealed class PesagemMultiplaItemForm : Form
         _pesagensGrid.RowHeadersVisible = false;
         _pesagensGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _pesagensGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "sequenciaColumn", HeaderText = "#", FillWeight = 10 });
-        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "pesoColumn", HeaderText = "Peso bruto", FillWeight = 25 });
-        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "origemColumn", HeaderText = "Origem", FillWeight = 22 });
-        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "horaColumn", HeaderText = "Hora", FillWeight = 20 });
-        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "statusColumn", HeaderText = "Status", FillWeight = 23 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "sequenciaColumn", HeaderText = "#", FillWeight = 8 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "pesoColumn", HeaderText = "Bruto", FillWeight = 16 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "taraColumn", HeaderText = "Tara", FillWeight = 14 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "liquidoColumn", HeaderText = "Líquido", FillWeight = 16 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "origemColumn", HeaderText = "Origem", FillWeight = 16 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "horaColumn", HeaderText = "Hora", FillWeight = 15 });
+        _pesagensGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "statusColumn", HeaderText = "Status", FillWeight = 15 });
+
+        // Duplo clique reimprime SOMENTE aquela pesagem (regra definitiva). Permissão é validada no callback do pai.
+        _pesagensGrid.CellDoubleClick += async (_, e) => await ReimprimirPesagemAsync(e.RowIndex);
     }
 
     private void ConfigurarEntradaManual()
@@ -148,16 +170,27 @@ public sealed class PesagemMultiplaItemForm : Form
         ConfigurarBotao(_cancelarButton, "Fechar", Color.White, Color.FromArgb(45, 49, 56), new Point(620, 454), new Size(110, 36));
 
         _lerBalancaButton.Click += async (_, _) => await LerBalancaAsync();
-        _adicionarManualButton.Click += (_, _) => AdicionarPesoManual();
+        _adicionarManualButton.Click += async (_, _) => await AdicionarPesoManualAsync();
         _removerButton.Click += (_, _) => CancelarPesoSelecionado();
-        _concluirButton.Click += (_, _) => Concluir();
+        _concluirButton.Click += async (_, _) => await ConcluirAsync();
+        // "Fechar" preserva as pesagens adicionadas (que já podem ter impresso etiqueta) — retorna OK ao pai,
+        // NUNCA descarta silenciosamente. Cancelar uma leitura específica é feito por "Cancelar leitura".
         _cancelarButton.Click += (_, _) =>
         {
-            DialogResult = DialogResult.Cancel;
+            DialogResult = DialogResult.OK;
             Close();
         };
         AcceptButton = _concluirButton;
-        CancelButton = _cancelarButton;
+
+        // Modo somente consulta/reimpressão: bloqueia incluir/cancelar; mantém duplo clique para reimpressão.
+        if (_somenteConsulta)
+        {
+            _lerBalancaButton.Enabled = false;
+            _adicionarManualButton.Enabled = false;
+            _removerButton.Enabled = false;
+            _pesoManualTextBox.Enabled = false;
+            _concluirButton.Text = "Fechar";
+        }
     }
 
     private static void ConfigurarBotao(
@@ -195,7 +228,7 @@ public sealed class PesagemMultiplaItemForm : Form
                 return;
             }
 
-            AdicionarPeso(peso, "BALANCA", leitura.Peso);
+            await AdicionarPesoAsync(peso, "BALANCA", leitura.Peso);
         }
         finally
         {
@@ -203,7 +236,7 @@ public sealed class PesagemMultiplaItemForm : Form
         }
     }
 
-    private void AdicionarPesoManual()
+    private async Task AdicionarPesoManualAsync()
     {
         string leituraOriginal = _pesoManualTextBox.Text;
         if (!TryParsePeso(leituraOriginal, out decimal peso))
@@ -212,13 +245,19 @@ public sealed class PesagemMultiplaItemForm : Form
             return;
         }
 
-        AdicionarPeso(peso, "MANUAL", leituraOriginal);
+        await AdicionarPesoAsync(peso, "MANUAL", leituraOriginal);
         _pesoManualTextBox.Clear();
         _pesoManualTextBox.Focus();
     }
 
-    private void AdicionarPeso(decimal peso, string origem, string leituraOriginal)
+    private async Task AdicionarPesoAsync(decimal peso, string origem, string leituraOriginal)
     {
+        if (_somenteConsulta)
+        {
+            _statusLabel.Text = "Lançamento já finalizado: pesagens em modo somente consulta/reimpressão.";
+            return;
+        }
+
         decimal pesoLiquido = peso - _tara.PesoKg;
         if (peso <= 0m || pesoLiquido <= 0m)
         {
@@ -226,7 +265,7 @@ public sealed class PesagemMultiplaItemForm : Form
             return;
         }
 
-        _pesagens.Add(new EntradaProdutoPesagem
+        EntradaProdutoPesagem nova = new()
         {
             Sequencia = _pesagens.Count + 1,
             PesoBrutoKg = peso,
@@ -238,14 +277,61 @@ public sealed class PesagemMultiplaItemForm : Form
             StatusPesagem = "VALIDA",
             LeituraOriginal = leituraOriginal,
             PesadoEm = DateTimeOffset.Now
-        });
+        };
+        int indice = _pesagens.Count;
+        _pesagens.Add(nova);
         RecarregarGrid();
         AtualizarResumo();
-        _statusLabel.Text = $"Peso {FormatarPeso(peso)} adicionado.";
+
+        // Regra definitiva: imprime imediatamente SOMENTE esta nova pesagem (peso líquido dela). Falha de
+        // impressão NÃO remove a pesagem — ela fica disponível para reimpressão por duplo clique.
+        if (_imprimirPesagemAsync is null)
+        {
+            _statusLabel.Text = $"Pesagem líquida {FormatarPeso(pesoLiquido)} kg adicionada.";
+            return;
+        }
+
+        bool impressa = await _imprimirPesagemAsync(nova);
+        if (impressa)
+        {
+            _pesagensImpressas.Add(indice);
+            _statusLabel.Text = $"Pesagem {nova.Sequencia} — {FormatarPeso(pesoLiquido)} kg: etiqueta impressa.";
+        }
+        else
+        {
+            _statusLabel.Text =
+                "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.";
+        }
+    }
+
+    private async Task ReimprimirPesagemAsync(int rowIndex)
+    {
+        if (_reimprimirPesagemAsync is null || rowIndex < 0 || rowIndex >= _pesagens.Count)
+        {
+            return;
+        }
+
+        EntradaProdutoPesagem pesagem = _pesagens[rowIndex];
+        if (!string.Equals(pesagem.StatusPesagem, "VALIDA", StringComparison.OrdinalIgnoreCase))
+        {
+            _statusLabel.Text = "Só é possível reimprimir pesagens com status VÁLIDA.";
+            return;
+        }
+
+        bool impressa = await _reimprimirPesagemAsync(pesagem);
+        _statusLabel.Text = impressa
+            ? $"Etiqueta da pesagem {pesagem.Sequencia} reimpressa com sucesso — {FormatarPeso(pesagem.PesoLiquidoKg)} kg."
+            : "Não foi possível reimprimir a etiqueta desta pesagem.";
     }
 
     private void CancelarPesoSelecionado()
     {
+        if (_somenteConsulta)
+        {
+            _statusLabel.Text = "Lançamento já finalizado: não é possível cancelar pesagens.";
+            return;
+        }
+
         DataGridViewRow? row = _pesagensGrid.SelectedRows
             .Cast<DataGridViewRow>()
             .FirstOrDefault();
@@ -255,10 +341,20 @@ public sealed class PesagemMultiplaItemForm : Form
             return;
         }
 
+        // A etiqueta desta pesagem já pode ter sido impressa: confirmar e orientar o descarte físico.
+        string aviso = _pesagensImpressas.Contains(row.Index)
+            ? "A etiqueta desta pesagem já pode ter sido impressa. Descarte fisicamente a etiqueta cancelada.\n\nConfirma o cancelamento desta leitura?"
+            : "Confirma o cancelamento desta leitura?";
+        if (MessageBox.Show(aviso, "Cancelar leitura", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        // Marca como CANCELADA (retira do total, preserva o histórico) — não tenta "desimprimir" a etiqueta física.
         _pesagens[row.Index] = _pesagens[row.Index] with { StatusPesagem = "CANCELADA" };
         RecarregarGrid();
         AtualizarResumo();
-        _statusLabel.Text = "Pesagem marcada como cancelada.";
+        _statusLabel.Text = "Pesagem marcada como cancelada. Descarte fisicamente a etiqueta, se impressa.";
     }
 
     private void RecarregarGrid()
@@ -270,6 +366,8 @@ public sealed class PesagemMultiplaItemForm : Form
             _pesagensGrid.Rows.Add(
                 index + 1,
                 FormatarPeso(pesagem.PesoBrutoKg),
+                FormatarPeso(pesagem.PesoTaraKg),
+                FormatarPeso(pesagem.PesoLiquidoKg),
                 pesagem.Origem,
                 pesagem.PesadoEm.ToLocalTime().ToString("HH:mm:ss", _cultura),
                 pesagem.StatusPesagem);
@@ -294,19 +392,15 @@ public sealed class PesagemMultiplaItemForm : Form
             ClientSize.Width - margemDireita - _totalValueLabel.PreferredWidth);
     }
 
-    private void Concluir()
+    private async Task ConcluirAsync()
     {
-        if (!string.IsNullOrWhiteSpace(_pesoManualTextBox.Text))
+        // Em consulta, "Concluir" apenas fecha (preservando).
+        if (!_somenteConsulta && !string.IsNullOrWhiteSpace(_pesoManualTextBox.Text))
         {
-            AdicionarPesoManual();
+            await AdicionarPesoManualAsync();
         }
 
-        if (!EntradaProdutoPesagemCalculos.PossuiLeituraValida(_pesagens))
-        {
-            _statusLabel.Text = "Adicione ao menos uma pesagem válida.";
-            return;
-        }
-
+        // Concluir NÃO imprime etiqueta consolidada — cada pesagem já imprimiu individualmente.
         DialogResult = DialogResult.OK;
         Close();
     }

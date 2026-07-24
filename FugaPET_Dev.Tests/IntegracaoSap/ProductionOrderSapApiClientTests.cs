@@ -102,6 +102,9 @@ public sealed class ProductionOrderSapApiClientTests
         Assert.Contains(handler.UrlsChamadas, u => u.Contains("A_ProductionOrderComponent_2", StringComparison.Ordinal));
         Assert.Contains(handler.UrlsChamadas, u => u.Contains("A_ProductionOrderOperation_2", StringComparison.Ordinal));
         Assert.Contains(handler.UrlsChamadas, u => u.Contains("A_ProductionOrderItem_2", StringComparison.Ordinal));
+        string urlOperacoes = Assert.Single(handler.UrlsChamadas, u => u.Contains("A_ProductionOrderOperation_2", StringComparison.Ordinal));
+        Assert.Contains("$orderby=ManufacturingOrderSequence,ManufacturingOrderOperation", urlOperacoes, StringComparison.Ordinal);
+        Assert.DoesNotContain("$orderby=ProductionOrderOperation", urlOperacoes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,6 +214,41 @@ public sealed class ProductionOrderSapApiClientTests
     }
 
     [Fact]
+    public void MapearOrdem_DevePriorizarCamposOficiaisDaOperacaoJson()
+    {
+        OrdemProducaoSap? ordem = ProductionOrderSapApiClient.MapearOrdem(RetornoOperacaoOficialJson);
+
+        Assert.NotNull(ordem);
+        OperacaoOrdemProducaoSap operacao = Assert.Single(ordem!.Operacoes);
+        Assert.Equal("0050", operacao.Operacao);
+        Assert.Equal("0", operacao.Sequencia);
+        Assert.Equal("", operacao.Suboperacao);
+        Assert.Equal("PESAGEM UMIDA", operacao.Descricao);
+        Assert.Equal("3007", operacao.Centro);
+        Assert.Equal("1", operacao.CentroTrabalho);
+        Assert.Equal("00000005", operacao.OrderOperationInternalId);
+        Assert.Equal(1000m, operacao.QuantidadePrevista);
+        Assert.Equal(0m, operacao.QuantidadeConfirmada);
+        Assert.Equal("KG", operacao.Unidade);
+    }
+
+    [Fact]
+    public void MapearOrdem_DevePriorizarCamposOficiaisDaOperacaoXml()
+    {
+        OrdemProducaoSap? ordem = ProductionOrderSapApiClient.MapearOrdem(RetornoOperacaoOficialXml);
+
+        Assert.NotNull(ordem);
+        OperacaoOrdemProducaoSap operacao = Assert.Single(ordem!.Operacoes);
+        Assert.Equal("0050", operacao.Operacao);
+        Assert.Equal("0", operacao.Sequencia);
+        Assert.Equal("", operacao.Suboperacao);
+        Assert.Equal("PESAGEM UMIDA", operacao.Descricao);
+        Assert.Equal("3007", operacao.Centro);
+        Assert.Equal("1", operacao.CentroTrabalho);
+        Assert.Equal("00000005", operacao.OrderOperationInternalId);
+    }
+
+    [Fact]
     public void MapearOrdem_DeveMapearRespostaXmlAtomComComponentesExpandidos()
     {
         OrdemProducaoSap? ordem = ProductionOrderSapApiClient.MapearOrdem(RetornoAtomXml);
@@ -299,6 +337,49 @@ public sealed class ProductionOrderSapApiClientTests
     </entry>
     """;
 
+    private const string RetornoOperacaoOficialXml = """
+    <?xml version="1.0" encoding="utf-8"?>
+    <entry xmlns="http://www.w3.org/2005/Atom"
+           xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"
+           xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices">
+      <link rel="http://schemas.microsoft.com/ado/2007/08/dataservices/related/to_ProductionOrderOperation"
+            title="to_ProductionOrderOperation" type="application/atom+xml;type=feed">
+        <m:inline>
+          <feed>
+            <entry>
+              <content type="application/xml">
+                <m:properties>
+                  <d:ManufacturingOrderOperation>0050</d:ManufacturingOrderOperation>
+                  <d:ManufacturingOrderSequence>0</d:ManufacturingOrderSequence>
+                  <d:ManufacturingOrderSubOperation></d:ManufacturingOrderSubOperation>
+                  <d:MfgOrderOperationText>PESAGEM UMIDA</d:MfgOrderOperationText>
+                  <d:ProductionPlant>3007</d:ProductionPlant>
+                  <d:WorkCenter>1</d:WorkCenter>
+                  <d:OrderInternalBillOfOperations>0000000001</d:OrderInternalBillOfOperations>
+                  <d:OrderIntBillOfOperationsItem>00000005</d:OrderIntBillOfOperationsItem>
+                  <d:OpPlannedTotalQuantity>1000.000</d:OpPlannedTotalQuantity>
+                  <d:OpTotalConfirmedYieldQty>0.000</d:OpTotalConfirmedYieldQty>
+                  <d:OperationUnit>KG</d:OperationUnit>
+                </m:properties>
+              </content>
+            </entry>
+          </feed>
+        </m:inline>
+      </link>
+      <content type="application/xml">
+        <m:properties>
+          <d:ManufacturingOrder>1001732</d:ManufacturingOrder>
+          <d:ManufacturingOrderType>ZP01</d:ManufacturingOrderType>
+          <d:Material>2000091</d:Material>
+          <d:ProductionPlant>3007</d:ProductionPlant>
+          <d:TotalQuantity>1000.000</d:TotalQuantity>
+          <d:ProductionUnit>KG</d:ProductionUnit>
+          <d:OrderIsReleased>X</d:OrderIsReleased>
+        </m:properties>
+      </content>
+    </entry>
+    """;
+
     private const string RetornoV2Completo = """
     {
       "d": {
@@ -375,6 +456,38 @@ public sealed class ProductionOrderSapApiClientTests
               "MfgOrderItemPlannedTotalQty": "100.000",
               "MfgOrderItemActualDeliveryQty": "0.000",
               "Batch": ""
+            }
+          ]
+        }
+      }
+    }
+    """;
+
+    private const string RetornoOperacaoOficialJson = """
+    {
+      "d": {
+        "ManufacturingOrder": "1001732",
+        "ManufacturingOrderType": "ZP01",
+        "Material": "2000091",
+        "ProductionPlant": "3007",
+        "TotalQuantity": "1000.000",
+        "ProductionUnit": "KG",
+        "OrderIsReleased": "X",
+        "to_ProductionOrderOperation": {
+          "results": [
+            {
+              "ManufacturingOrder": "1001732",
+              "ManufacturingOrderSequence": "0",
+              "ManufacturingOrderOperation": "0050",
+              "ManufacturingOrderSubOperation": "",
+              "MfgOrderOperationText": "PESAGEM UMIDA",
+              "ProductionPlant": "3007",
+              "WorkCenter": "1",
+              "OrderInternalBillOfOperations": "0000000001",
+              "OrderIntBillOfOperationsItem": "00000005",
+              "OpPlannedTotalQuantity": "1000.000",
+              "OpTotalConfirmedYieldQty": "0.000",
+              "OperationUnit": "KG"
             }
           ]
         }

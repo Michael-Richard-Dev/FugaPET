@@ -1,72 +1,100 @@
 namespace FugaPET_Dev.Tests.Tela;
 
+/// <summary>
+/// Regra definitiva: uma etiqueta por pesagem individual; o total fica só na linha (consulta). A janela imprime
+/// cada nova leitura imediatamente e NÃO imprime etiqueta consolidada ao concluir; Fechar preserva as leituras.
+/// </summary>
 public sealed class PesagemMultiplaItemFormTests
 {
     [Fact]
-    public void Concluir_DeveIncorporarPesoManualAindaNaoAdicionado()
-    {
-        string arquivo = Path.Combine(
-            RaizProjeto(),
-            "Tela",
-            "Processo",
-            "PesagemMultiplaItemForm.cs");
-        string conteudo = File.ReadAllText(arquivo);
-
-        int concluir = conteudo.IndexOf("private void Concluir()", StringComparison.Ordinal);
-        int validarPendente = conteudo.IndexOf(
-            "if (!string.IsNullOrWhiteSpace(_pesoManualTextBox.Text))",
-            concluir,
-            StringComparison.Ordinal);
-        int adicionarPendente = conteudo.IndexOf(
-            "AdicionarPesoManual();",
-            concluir,
-            StringComparison.Ordinal);
-        int validarLista = conteudo.IndexOf(
-            "EntradaProdutoPesagemCalculos.PossuiLeituraValida(_pesagens)",
-            concluir,
-            StringComparison.Ordinal);
-
-        Assert.True(concluir >= 0);
-        Assert.True(validarPendente > concluir);
-        Assert.True(adicionarPendente > validarPendente);
-        Assert.True(validarLista > adicionarPendente);
-    }
-
-    [Fact]
-    public void ConcluirEFechar_DevemRetornarDialogResultCorreto()
+    public void Concluir_IncorporaPesoManualPendente_SemImprimirConsolidado()
     {
         string conteudo = LerArquivo("Tela", "Processo", "PesagemMultiplaItemForm.cs");
 
-        int configurarEventos = conteudo.IndexOf("_concluirButton.Click += (_, _) => Concluir();", StringComparison.Ordinal);
-        int fechar = conteudo.IndexOf("_cancelarButton.Click += (_, _) =>", configurarEventos, StringComparison.Ordinal);
-        int dialogCancel = conteudo.IndexOf("DialogResult = DialogResult.Cancel;", fechar, StringComparison.Ordinal);
-        int concluir = conteudo.IndexOf("private void Concluir()", StringComparison.Ordinal);
-        int dialogOk = conteudo.IndexOf("DialogResult = DialogResult.OK;", concluir, StringComparison.Ordinal);
+        int concluir = conteudo.IndexOf("private async Task ConcluirAsync()", StringComparison.Ordinal);
+        Assert.True(concluir >= 0, "ConcluirAsync não encontrado.");
+        int pendente = conteudo.IndexOf("await AdicionarPesoManualAsync();", concluir, StringComparison.Ordinal);
+        int ok = conteudo.IndexOf("DialogResult = DialogResult.OK;", concluir, StringComparison.Ordinal);
+        Assert.True(pendente > concluir);
+        Assert.True(ok > pendente);
+        // Concluir não imprime etiqueta consolidada.
+        string corpoConcluir = conteudo.Substring(concluir, ok - concluir);
+        Assert.DoesNotContain("PesoTotalTexto", corpoConcluir, StringComparison.Ordinal);
+    }
 
-        Assert.True(configurarEventos >= 0);
-        Assert.True(fechar > configurarEventos);
-        Assert.True(dialogCancel > fechar);
-        Assert.True(concluir > configurarEventos);
-        Assert.True(dialogOk > concluir);
+    [Fact]
+    public void Fechar_PreservaPesagens_RetornandoOk()
+    {
+        string conteudo = LerArquivo("Tela", "Processo", "PesagemMultiplaItemForm.cs");
+        // "Fechar" agora retorna OK (preserva), nunca Cancel (descarte silencioso).
+        int fechar = conteudo.IndexOf("_cancelarButton.Click += (_, _) =>", StringComparison.Ordinal);
+        Assert.True(fechar >= 0);
+        int ok = conteudo.IndexOf("DialogResult = DialogResult.OK;", fechar, StringComparison.Ordinal);
+        Assert.True(ok > fechar);
+        Assert.DoesNotContain("DialogResult = DialogResult.Cancel;", conteudo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dialogo_ImprimeCadaNovaPesagem_ComCallbackPorPesagem()
+    {
+        string conteudo = LerArquivo("Tela", "Processo", "PesagemMultiplaItemForm.cs");
+        // Cada nova leitura dispara impressão individual (callback), não uma consolidada.
+        Assert.Contains("Func<EntradaProdutoPesagem, Task<bool>>? _imprimirPesagemAsync", conteudo, StringComparison.Ordinal);
+        Assert.Contains("await _imprimirPesagemAsync(nova)", conteudo, StringComparison.Ordinal);
+        // Duplo clique reimprime somente aquela pesagem.
+        Assert.Contains("_pesagensGrid.CellDoubleClick", conteudo, StringComparison.Ordinal);
+        Assert.Contains("await _reimprimirPesagemAsync(pesagem)", conteudo, StringComparison.Ordinal);
+        // Só pesagem VÁLIDA reimprime.
+        Assert.Contains("Só é possível reimprimir pesagens com status VÁLIDA.", conteudo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dialogo_FalhaImpressao_MantemPesagem()
+    {
+        string conteudo = LerArquivo("Tela", "Processo", "PesagemMultiplaItemForm.cs");
+        int adicionar = conteudo.IndexOf("private async Task AdicionarPesoAsync", StringComparison.Ordinal);
+        int addLista = conteudo.IndexOf("_pesagens.Add(nova);", adicionar, StringComparison.Ordinal);
+        int imprimir = conteudo.IndexOf("await _imprimirPesagemAsync(nova)", adicionar, StringComparison.Ordinal);
+        // A pesagem é adicionada ANTES da impressão; falha de impressão não a remove.
+        Assert.True(addLista > adicionar && addLista < imprimir);
+        int fim = conteudo.IndexOf("private async Task ReimprimirPesagemAsync", adicionar, StringComparison.Ordinal);
+        string corpo = conteudo.Substring(adicionar, fim - adicionar);
+        Assert.DoesNotContain("_pesagens.Remove", corpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("_pesagens.RemoveAt", corpo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CancelarLeitura_JaImpressa_ConfirmaEOrientaDescarteFisico()
+    {
+        string conteudo = LerArquivo("Tela", "Processo", "PesagemMultiplaItemForm.cs");
+        Assert.Contains("A etiqueta desta pesagem já pode ter sido impressa. Descarte fisicamente a etiqueta cancelada.", conteudo, StringComparison.Ordinal);
+        Assert.Contains("with { StatusPesagem = \"CANCELADA\" }", conteudo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TelaEntrada_PesagemMultipla_NaoImprimeConsolidadoAposDialogo()
+    {
+        string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
+        int abrir = conteudo.IndexOf("private async Task AbrirPesagemMultiplaParaLinhaAsync", StringComparison.Ordinal);
+        int fim = conteudo.IndexOf("private async Task<bool> TentarReimprimirEtiquetaPesagemAsync", abrir, StringComparison.Ordinal);
+        string corpo = conteudo.Substring(abrir, fim - abrir);
+        // Passa callbacks por pesagem e NÃO imprime etiqueta consolidada ao concluir.
+        Assert.Contains("Func<EntradaProdutoPesagem, Task<bool>> imprimirPesagem", corpo, StringComparison.Ordinal);
+        Assert.Contains("ConstruirEtiquetaPorPesagem(linhaItem, pesagem)", corpo, StringComparison.Ordinal);
+        Assert.Contains("Pesagens atualizadas. Total do item:", corpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("Peso bruto total", corpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstruirDadosEtiquetaMateriaPrima(linhaAlvo)", corpo, StringComparison.Ordinal);
     }
 
     [Fact]
     public void TelaEntrada_DevePreservarTaraAoRelocalizarLinha()
     {
-        string arquivo = Path.Combine(
-            RaizProjeto(),
-            "Tela",
-            "Processo",
-            "ProcessoEntradaProdutoForm.cs");
-        string conteudo = File.ReadAllText(arquivo);
+        string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
 
         int localizarLinha = conteudo.IndexOf(
             "DataGridViewRow linhaAlvo = LocalizarLinhaProducaoPorItemId(itemId) ?? linhaItem;",
             StringComparison.Ordinal);
-        int preservarTara = conteudo.IndexOf(
-            "linhaAlvo.Tag = tara;",
-            localizarLinha,
-            StringComparison.Ordinal);
+        int preservarTara = conteudo.IndexOf("linhaAlvo.Tag = tara;", localizarLinha, StringComparison.Ordinal);
         int consolidarPeso = conteudo.IndexOf(
             "AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem])",
             preservarTara,
@@ -78,57 +106,9 @@ public sealed class PesagemMultiplaItemFormTests
     }
 
     [Fact]
-    public void TelaEntrada_DeveImprimirEtiquetaSomenteAposConcluirPesagemMultipla()
-    {
-        string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
-
-        int dialogCancel = conteudo.IndexOf("form.ShowDialog(this) != DialogResult.OK", StringComparison.Ordinal);
-        int retornoCancelado = conteudo.IndexOf("return;", dialogCancel, StringComparison.Ordinal);
-        int consolidarPeso = conteudo.IndexOf(
-            "AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem])",
-            retornoCancelado,
-            StringComparison.Ordinal);
-        int atualizarContadores = conteudo.IndexOf("UpdateProductionCounters();", consolidarPeso, StringComparison.Ordinal);
-        int montarEtiqueta = conteudo.IndexOf("ConstruirDadosEtiquetaMateriaPrima(linhaAlvo)", atualizarContadores, StringComparison.Ordinal);
-        int imprimir = conteudo.IndexOf("TentarImprimirEtiquetaAutomaticaAsync(etiqueta", montarEtiqueta, StringComparison.Ordinal);
-
-        Assert.True(dialogCancel >= 0);
-        Assert.True(retornoCancelado > dialogCancel);
-        Assert.True(consolidarPeso > retornoCancelado);
-        Assert.True(atualizarContadores > consolidarPeso);
-        Assert.True(montarEtiqueta > atualizarContadores);
-        Assert.True(imprimir > montarEtiqueta);
-    }
-
-    [Fact]
-    public void TelaEntrada_FalhaImpressaoMultiplaNaoRemovePesoConsolidado()
-    {
-        string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
-
-        int consolidarPeso = conteudo.IndexOf(
-            "AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem])",
-            StringComparison.Ordinal);
-        int imprimir = conteudo.IndexOf("TentarImprimirEtiquetaAutomaticaAsync(etiqueta", consolidarPeso, StringComparison.Ordinal);
-        int falha = conteudo.IndexOf("mas a etiqueta", imprimir, StringComparison.Ordinal);
-        int retornoFalha = conteudo.IndexOf("return;", falha, StringComparison.Ordinal);
-
-        Assert.True(consolidarPeso >= 0);
-        Assert.True(imprimir > consolidarPeso);
-        Assert.True(falha > imprimir);
-        Assert.True(retornoFalha > falha);
-        Assert.DoesNotContain("_leiturasPorItem.Remove", conteudo.Substring(imprimir, retornoFalha - imprimir), StringComparison.Ordinal);
-        Assert.DoesNotContain("productionPesoLidoColumn\", string.Empty", conteudo.Substring(imprimir, retornoFalha - imprimir), StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void TelaEntrada_DeveGravarAntesDeAlterarEstadoVisual()
     {
-        string arquivo = Path.Combine(
-            RaizProjeto(),
-            "Tela",
-            "Processo",
-            "ProcessoEntradaProdutoForm.cs");
-        string conteudo = File.ReadAllText(arquivo);
+        string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
         int parar = conteudo.IndexOf("private async void StopProduction_Click", StringComparison.Ordinal);
         int gravar = conteudo.IndexOf("await GravarPesagensAsync();", parar, StringComparison.Ordinal);
         int atualizarEstado = conteudo.IndexOf("UpdateProductionState(false);", gravar, StringComparison.Ordinal);

@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.Processo;
+﻿using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Tela.Processo;
 
 namespace FugaPET_Dev.Tests.Tela;
@@ -12,37 +12,57 @@ public sealed class ProcessoConsumoMaterialBloqueio2292Tests
     // ---- Ajuste 3: mensagem do modo Químico ----
 
     [Fact]
-    public void Mensagem_Quimico_DeveTitularEOrientarParaMateriaPrima()
+    public void Mensagem_Quimico_DeveFalarDeComponentesENaoDePertencimentoDaOp()
     {
         (string titulo, string mensagem) = ProcessoConsumoMaterialForm.MontarMensagemOpIncompativel(
             ModoConsumoMaterial.Quimico, "1001180", "2000091", totalComponentes: 4);
 
-        Assert.Equal("OP não pertence ao Consumo Químico", titulo);
-        Assert.Contains("Esta OP não possui componentes classificados para Consumo Químico.", mensagem, StringComparison.Ordinal);
+        Assert.Equal("OP sem componentes de Consumo Químico", titulo);
+        Assert.Contains("Esta OP não possui componentes classificados como Químicos.", mensagem, StringComparison.Ordinal);
         Assert.Contains("OP: 1001180", mensagem, StringComparison.Ordinal);
         Assert.Contains("Produto da OP: 2000091", mensagem, StringComparison.Ordinal);
-        // Ajuste 3: contagem quando há componentes (mas nenhum químico).
         Assert.Contains("Componentes encontrados: 4", mensagem, StringComparison.Ordinal);
         Assert.Contains("Componentes químicos encontrados: 0", mensagem, StringComparison.Ordinal);
-        // Ajuste 6 da mensagem: orientar a usar a outra tela / verificar SAP.
-        Assert.Contains("Use a tela de Consumo de Matéria-Prima ou verifique a classificação dos componentes no SAP.", mensagem, StringComparison.Ordinal);
+        Assert.Contains("A mesma OP pode ter componentes do outro processo.", mensagem, StringComparison.Ordinal);
+        Assert.Contains("Use a tela de Consumo de Matéria-Prima", mensagem, StringComparison.Ordinal);
+        // A OP pode pertencer ao outro modo: nunca dizer que a OP não pertence ao processo.
+        Assert.DoesNotContain("não pertence", titulo, StringComparison.Ordinal);
+        Assert.DoesNotContain("não pertence", mensagem, StringComparison.Ordinal);
     }
 
     // ---- Ajuste 4: mensagem do modo Matéria-Prima ----
 
     [Fact]
-    public void Mensagem_MateriaPrima_DeveTitularEOrientarParaQuimico()
+    public void Mensagem_MateriaPrima_DeveFalarDeComponentesENaoDePertencimentoDaOp()
     {
         (string titulo, string mensagem) = ProcessoConsumoMaterialForm.MontarMensagemOpIncompativel(
             ModoConsumoMaterial.MateriaPrima, "1002000", "3000123", totalComponentes: 2);
 
-        Assert.Equal("OP não pertence ao Consumo de Matéria-Prima", titulo);
-        Assert.Contains("Esta OP não possui componentes classificados para Consumo de Matéria-Prima.", mensagem, StringComparison.Ordinal);
+        Assert.Equal("OP sem componentes de Consumo de Matéria-Prima", titulo);
+        Assert.Contains("Esta OP não possui componentes classificados como Matéria-Prima.", mensagem, StringComparison.Ordinal);
         Assert.Contains("OP: 1002000", mensagem, StringComparison.Ordinal);
         Assert.Contains("Produto da OP: 3000123", mensagem, StringComparison.Ordinal);
         Assert.Contains("Componentes encontrados: 2", mensagem, StringComparison.Ordinal);
         Assert.Contains("Componentes de matéria-prima encontrados: 0", mensagem, StringComparison.Ordinal);
-        Assert.Contains("Use a tela de Consumo Químico ou verifique a classificação dos componentes no SAP.", mensagem, StringComparison.Ordinal);
+        Assert.Contains("Use a tela de Consumo Químico", mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("não pertence", titulo, StringComparison.Ordinal);
+        Assert.DoesNotContain("não pertence", mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Mensagem_ComponentesIndefinidos_DeveOrientarIntegracaoProductSrv()
+    {
+        // Falha do Product Master: não se atribui processo por chute nem se joga tudo em Matéria-Prima.
+        (string titulo, string mensagem) = ProcessoConsumoMaterialForm.MontarMensagemOpIncompativel(
+            ModoConsumoMaterial.MateriaPrima, "1001327", "2000091", totalComponentes: 2, totalIndefinidos: 2);
+
+        Assert.Equal("Classificação de componentes indisponível", titulo);
+        Assert.Contains(
+            "Não foi possível classificar os componentes da OP porque o tipo do material não foi retornado pelo SAP.",
+            mensagem,
+            StringComparison.Ordinal);
+        Assert.Contains("Verifique a integração API_PRODUCT_SRV.", mensagem, StringComparison.Ordinal);
+        Assert.Contains("Componentes sem classificação: 2", mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -67,12 +87,12 @@ public sealed class ProcessoConsumoMaterialBloqueio2292Tests
 
         // Ajuste 1: enriquece/filtra e valida lista vazia ANTES de carregar operacional.
         Assert.Contains("EnriquecerEClassificarComponentesDoModo(resultado.Ordem)", consultar, StringComparison.Ordinal);
-        Assert.Contains("if (componentesModo.Count == 0)", consultar, StringComparison.Ordinal);
+        Assert.Contains("if (componentesOperacionais.Count == 0)", consultar, StringComparison.Ordinal);
         Assert.Contains("BloquearOrdemIncompativelComModo(resultado.Ordem, resultado.NumeroOrdem)", consultar, StringComparison.Ordinal);
 
         // Ajuste 5: o bloqueio retorna ANTES de PreencherOrdemCarregada (não carrega grid vazia como sucesso).
         int bloqueio = consultar.IndexOf("BloquearOrdemIncompativelComModo", StringComparison.Ordinal);
-        int preencher = consultar.IndexOf("PreencherOrdemCarregada(resultado.Ordem, componentesModo)", StringComparison.Ordinal);
+        int preencher = consultar.IndexOf("PreencherOrdemCarregada(resultado.Ordem, componentesOperacionais)", StringComparison.Ordinal);
         int retornoBloqueio = consultar.IndexOf("return;", bloqueio, StringComparison.Ordinal);
         Assert.True(bloqueio >= 0 && preencher > bloqueio);
         Assert.True(retornoBloqueio > bloqueio && retornoBloqueio < preencher);
@@ -133,8 +153,8 @@ public sealed class ProcessoConsumoMaterialBloqueio2292Tests
         string consultar = ExtrairMetodo(form, "private async Task ConsultarOrdemProducaoAsync");
 
         // Caminho normal preservado: quando NÃO está vazia, preenche a OP e registra recente.
-        Assert.Contains("PreencherOrdemCarregada(resultado.Ordem, componentesModo)", consultar, StringComparison.Ordinal);
-        Assert.Contains("RegistrarOrdemRecenteSePermitida(resultado.Ordem)", consultar, StringComparison.Ordinal);
+        Assert.Contains("PreencherOrdemCarregada(resultado.Ordem, componentesOperacionais)", consultar, StringComparison.Ordinal);
+        Assert.Contains("RegistrarOrdemRecenteSePermitida(resultado.Ordem, componentesOperacionais)", consultar, StringComparison.Ordinal);
     }
 
     private static string LerArquivoProjeto(params string[] partes)

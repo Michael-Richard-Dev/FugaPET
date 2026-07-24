@@ -47,6 +47,14 @@ partial class ProcessoProducaoForm
     private Label ordensStatusLabel;
     private Label ordensShortcutLabel;
     private Label ordensArrowLabel;
+    private RoundedPanel controleApontamentosCard;
+    private RoundedPanel apontamentosIconPanel;
+    private Label apontamentosIconLabel;
+    private Label apontamentosTitleLabel;
+    private Label apontamentosDescriptionLabel;
+    private Label apontamentosStatusLabel;
+    private Label apontamentosShortcutLabel;
+    private Label apontamentosArrowLabel;
     private RoundedPanel entradaProdutoCard;
     private RoundedPanel entradaIconPanel;
     private Label entradaIconLabel;
@@ -119,6 +127,14 @@ partial class ProcessoProducaoForm
         ordensStatusLabel = new Label();
         ordensShortcutLabel = new Label();
         ordensArrowLabel = new Label();
+        controleApontamentosCard = new RoundedPanel();
+        apontamentosIconPanel = new RoundedPanel();
+        apontamentosIconLabel = new Label();
+        apontamentosTitleLabel = new Label();
+        apontamentosDescriptionLabel = new Label();
+        apontamentosStatusLabel = new Label();
+        apontamentosShortcutLabel = new Label();
+        apontamentosArrowLabel = new Label();
         entradaProdutoCard = new RoundedPanel();
         entradaIconPanel = new RoundedPanel();
         entradaIconLabel = new Label();
@@ -162,6 +178,7 @@ partial class ProcessoProducaoForm
         contentPanel.Controls.Add(processoConsumoMaterialCard);
         contentPanel.Controls.Add(processoConsumoQuimicosCard);
         contentPanel.Controls.Add(ordensAndamentoCard);
+        contentPanel.Controls.Add(controleApontamentosCard);
         contentPanel.Controls.Add(entradaQuimicosCard);
         contentPanel.Dock = DockStyle.Fill;
         contentPanel.Location = new Point(0, 0);
@@ -743,6 +760,118 @@ partial class ProcessoProducaoForm
         ordensArrowLabel.TabIndex = 5;
         ordensArrowLabel.Text = "→";
         ordensArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // controleApontamentosCard
+        //
+        controleApontamentosCard.BackColor = Color.Transparent;
+        controleApontamentosCard.BorderColor = Color.FromArgb(226, 232, 240);
+        controleApontamentosCard.Controls.Add(apontamentosIconPanel);
+        controleApontamentosCard.Controls.Add(apontamentosTitleLabel);
+        controleApontamentosCard.Controls.Add(apontamentosDescriptionLabel);
+        controleApontamentosCard.Controls.Add(apontamentosStatusLabel);
+        controleApontamentosCard.Controls.Add(apontamentosShortcutLabel);
+        controleApontamentosCard.Controls.Add(apontamentosArrowLabel);
+        controleApontamentosCard.Cursor = Cursors.Hand;
+        controleApontamentosCard.Location = new Point(796, 336);
+        controleApontamentosCard.Name = "controleApontamentosCard";
+        controleApontamentosCard.ShadowBlur = 0;
+        controleApontamentosCard.ShadowOffsetY = 0;
+        controleApontamentosCard.Size = new Size(240, 250);
+        controleApontamentosCard.TabIndex = 4;
+        //
+        // apontamentosIconPanel
+        //
+        apontamentosIconPanel.BackColor = Color.Transparent;
+        apontamentosIconPanel.BorderRadius = 9;
+        apontamentosIconPanel.Controls.Add(apontamentosIconLabel);
+        apontamentosIconPanel.Cursor = Cursors.Hand;
+        apontamentosIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        apontamentosIconPanel.Location = new Point(92, 20);
+        apontamentosIconPanel.Name = "apontamentosIconPanel";
+        apontamentosIconPanel.ShadowBlur = 0;
+        apontamentosIconPanel.ShadowOffsetY = 0;
+        apontamentosIconPanel.Size = new Size(56, 56);
+        apontamentosIconPanel.TabIndex = 0;
+        //
+        // apontamentosIconLabel
+        //
+        apontamentosIconLabel.BackColor = Color.Transparent;
+        apontamentosIconLabel.Cursor = Cursors.Hand;
+        apontamentosIconLabel.Dock = DockStyle.Fill;
+        apontamentosIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        apontamentosIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        apontamentosIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
+        apontamentosIconLabel.Location = new Point(0, 0);
+        apontamentosIconLabel.Name = "apontamentosIconLabel";
+        apontamentosIconLabel.Size = new Size(56, 56);
+        apontamentosIconLabel.TabIndex = 0;
+        apontamentosIconLabel.Text = "";
+        apontamentosIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // apontamentosTitleLabel
+        //
+        apontamentosTitleLabel.BackColor = Color.Transparent;
+        apontamentosTitleLabel.Cursor = Cursors.Hand;
+        apontamentosTitleLabel.Font = new Font("Segoe UI", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentosTitleLabel.ForeColor = Color.FromArgb(17, 24, 39);
+        apontamentosTitleLabel.Location = new Point(20, 92);
+        apontamentosTitleLabel.Name = "apontamentosTitleLabel";
+        apontamentosTitleLabel.Size = new Size(202, 62);
+        apontamentosTitleLabel.TabIndex = 1;
+        apontamentosTitleLabel.Text = "Controle de\r\nApontamentos";
+        apontamentosTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // apontamentosDescriptionLabel
+        //
+        apontamentosDescriptionLabel.BackColor = Color.Transparent;
+        apontamentosDescriptionLabel.Cursor = Cursors.Hand;
+        apontamentosDescriptionLabel.Font = new Font("Segoe UI", 9.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        apontamentosDescriptionLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        apontamentosDescriptionLabel.Location = new Point(20, 156);
+        apontamentosDescriptionLabel.Name = "apontamentosDescriptionLabel";
+        apontamentosDescriptionLabel.Size = new Size(202, 46);
+        apontamentosDescriptionLabel.TabIndex = 2;
+        apontamentosDescriptionLabel.Text = "Leitura e controle das\r\noperações da ordem de produção.";
+        apontamentosDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // apontamentosStatusLabel
+        //
+        apontamentosStatusLabel.BackColor = Color.FromArgb(220, 252, 231);
+        apontamentosStatusLabel.Cursor = Cursors.Hand;
+        apontamentosStatusLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentosStatusLabel.ForeColor = Color.FromArgb(22, 163, 74);
+        apontamentosStatusLabel.Location = new Point(20, 214);
+        apontamentosStatusLabel.Name = "apontamentosStatusLabel";
+        apontamentosStatusLabel.Size = new Size(82, 28);
+        apontamentosStatusLabel.TabIndex = 3;
+        apontamentosStatusLabel.Text = "Disponível";
+        apontamentosStatusLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // apontamentosShortcutLabel
+        //
+        apontamentosShortcutLabel.BackColor = Color.FromArgb(243, 244, 246);
+        apontamentosShortcutLabel.Cursor = Cursors.Hand;
+        apontamentosShortcutLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
+        apontamentosShortcutLabel.ForeColor = Color.FromArgb(75, 85, 99);
+        apontamentosShortcutLabel.Location = new Point(110, 214);
+        apontamentosShortcutLabel.Name = "apontamentosShortcutLabel";
+        apontamentosShortcutLabel.Size = new Size(38, 28);
+        apontamentosShortcutLabel.TabIndex = 4;
+        apontamentosShortcutLabel.Text = "F8";
+        apontamentosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
+        //
+        // apontamentosArrowLabel
+        //
+        apontamentosArrowLabel.BackColor = Color.Transparent;
+        apontamentosArrowLabel.Cursor = Cursors.Hand;
+        apontamentosArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
+        apontamentosArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        apontamentosArrowLabel.Location = new Point(190, 207);
+        apontamentosArrowLabel.Name = "apontamentosArrowLabel";
+        apontamentosArrowLabel.Size = new Size(32, 36);
+        apontamentosArrowLabel.TabIndex = 5;
+        apontamentosArrowLabel.Text = "→";
+        apontamentosArrowLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // entradaProdutoCard
         //

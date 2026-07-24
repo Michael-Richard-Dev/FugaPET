@@ -63,6 +63,16 @@ public sealed class ProcessoConsumoMaterialController
         CancellationToken cancellationToken = default)
         => _consumoMaterialServico.ObterDescricoesComponentesAsync(codigosProduto, cancellationToken);
 
+    /// <summary>
+    /// Mestre COMPLETO dos componentes (A_Product técnico + A_ProductDescription), mapa Product → mestre.
+    /// É o que a tela usa para classificar o componente por ProductType/ProductGroup e separar
+    /// Matéria-Prima × Químico. Substitui <see cref="ObterDescricoesComponentesAsync"/> no fluxo da tela.
+    /// </summary>
+    public Task<IReadOnlyDictionary<string, ProdutoSapMestre>> ObterMestresComponentesAsync(
+        IEnumerable<string> codigosProduto,
+        CancellationToken cancellationToken = default)
+        => _consumoMaterialServico.ObterMestresComponentesAsync(codigosProduto, cancellationToken);
+
     /// <summary>Chave composta do componente (delega ao servico).</summary>
     public static string ChaveComponente(ComponenteConsumoMaterial componente)
         => ConsumoMaterialServico.ChaveComponente(componente);

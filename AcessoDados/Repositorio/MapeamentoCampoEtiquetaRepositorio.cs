@@ -12,7 +12,7 @@ public class MapeamentoCampoEtiquetaRepositorio : RepositorioBase
     {
     }
 
-    public async Task<MapeamentoCampoEtiquetaCadastro?> ObterPorIdAsync(long codigo, CancellationToken cancellationToken = default)
+    public virtual async Task<MapeamentoCampoEtiquetaCadastro?> ObterPorIdAsync(long codigo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT codigo_mapeamento_campo_etiqueta, codigo_campo_etiqueta, origem_dado, expressao_origem,
@@ -55,6 +55,25 @@ public class MapeamentoCampoEtiquetaRepositorio : RepositorioBase
         return MapearMapeamento(leitor);
     }
 
+    public virtual async Task<bool> CampoEstaAtivoAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM campo_etiqueta
+                 WHERE codigo_campo_etiqueta = @codigo_campo_etiqueta
+                   AND situacao_campo_etiqueta = true
+            );
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_campo_etiqueta", codigoCampoEtiqueta));
+
+        object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
+        return retorno is bool existe && existe;
+    }
+
     public virtual Task<long> InserirAsync(MapeamentoCampoEtiquetaCadastro mapa, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -85,7 +104,6 @@ public class MapeamentoCampoEtiquetaRepositorio : RepositorioBase
                    valor_padrao = @valor_padrao,
                    obrigatorio_para_impressao = @obrigatorio_para_impressao,
                    observacao = @observacao,
-                   situacao_mapeamento_campo_etiqueta = @situacao_mapeamento_campo_etiqueta,
                    mapeamento_campo_etiqueta_atualizado_por = @mapeamento_campo_etiqueta_atualizado_por
              WHERE codigo_mapeamento_campo_etiqueta = @codigo_mapeamento_campo_etiqueta;
             """;
@@ -100,7 +118,7 @@ public class MapeamentoCampoEtiquetaRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public Task<int> ExcluirAsync(long codigo, CancellationToken cancellationToken = default)
+    public virtual Task<int> ExcluirAsync(long codigo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE mapeamento_campo_etiqueta

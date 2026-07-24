@@ -1611,10 +1611,11 @@ public sealed class ProcessoConsumoMaterialFormTests
         // Selecao na lista consulta (selecao real nunca esta vazia -> mantem o aviso).
         string selChanged = ExtrairMetodo(form, "private async void ProductionOrderComboBox_SelectedIndexChanged");
         Assert.Contains("ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true)", selChanged, StringComparison.Ordinal);
-        // Parte 3/22.9: OP consultada e aceita no modo entra na lista recente, sem bloquear digitacao manual.
-        Assert.Contains("RegistrarOrdemRecenteSePermitida(resultado.Ordem)", form, StringComparison.Ordinal);
+        // A OP entra na lista recente por TER componentes do modo — não pela classificação do produto produzido.
+        Assert.Contains("RegistrarOrdemRecenteSePermitida(resultado.Ordem, componentesOperacionais)", form, StringComparison.Ordinal);
         string recenteFiltrada = ExtrairMetodo(form, "private void RegistrarOrdemRecenteSePermitida");
-        Assert.Contains("OrdemPertenceAoModoAtual(ordem, out _)", recenteFiltrada, StringComparison.Ordinal);
+        Assert.Contains("componentesModo.Count == 0", recenteFiltrada, StringComparison.Ordinal);
+        Assert.DoesNotContain("OrdemPertenceAoModoAtual", recenteFiltrada, StringComparison.Ordinal);
         string recente = ExtrairMetodo(form, "private void RegistrarOrdemRecente");
         Assert.Contains("productionOrderComboBox.Items.Insert(0, valor);", recente, StringComparison.Ordinal);
     }
@@ -2167,7 +2168,7 @@ public sealed class ProcessoConsumoMaterialFormTests
 
         // Tarefa 18.2 (Ajuste 3): a orquestracao por rota migrou para OrquestrarEnvioAposConfirmarAsync.
         // Somente a rota Direto261 reaproveita o envio 261; Backflush/Misto/Bloqueado NAO enviam.
-        string orquestrar = ExtrairMetodo(form, "private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync");
+        string orquestrar = ExtrairMetodo(form, "private async Task<ResultadoOrquestracaoConsumoApontamento> OrquestrarEnvioAposConfirmarAsync");
         Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.Direto261", orquestrar, StringComparison.Ordinal);
         Assert.Contains("ExecutarEnvioSap261AposConfirmarAsync(", orquestrar, StringComparison.Ordinal);
 
@@ -2297,7 +2298,7 @@ public sealed class ProcessoConsumoMaterialFormTests
         // Ajuste 3: Confirmar Consumo e o unico botao de fim de processo; apos salvar local,
         // orquestra o envio por rota (Direto261 envia; Backflush/Misto/Bloqueado nao enviam).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
-        string orquestrar = ExtrairMetodo(form, "private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync");
+        string orquestrar = ExtrairMetodo(form, "private async Task<ResultadoOrquestracaoConsumoApontamento> OrquestrarEnvioAposConfirmarAsync");
 
         Assert.Contains("_rotaEnvioSalva == RotaEnvioConsumo.Direto261", orquestrar, StringComparison.Ordinal);
         Assert.Contains("ExecutarEnvioSap261AposConfirmarAsync(", orquestrar, StringComparison.Ordinal);
@@ -2322,7 +2323,55 @@ public sealed class ProcessoConsumoMaterialFormTests
 
         string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
         Assert.Contains("_confirmarConsumoButton.Visible = !_isProductionStarted", atualizar, StringComparison.Ordinal);
-        Assert.Contains("_salvandoConsumo", atualizar, StringComparison.Ordinal);
+        Assert.Contains("PossuiPesagemPendenteParaNovoApontamento()", atualizar, StringComparison.Ordinal);
+        Assert.Contains("&& _ordemConsumoAtual is not null", atualizar, StringComparison.Ordinal);
+        Assert.Contains("&& possuiPesagem", atualizar, StringComparison.Ordinal);
+        Assert.Contains("&& !_consumoSalvoNaSessao", atualizar, StringComparison.Ordinal);
+        Assert.Contains("&& !_lancamentoComFalhaSap", atualizar, StringComparison.Ordinal);
+        Assert.Contains("!_salvandoConsumo", atualizar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PararLeitura_DeveReavaliarBotaoConfirmarDepoisDeDesativarLeitura()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string stop = ExtrairMetodo(form, "private async void StopProduction_Click");
+
+        int posDesativarLeitura = stop.IndexOf("_isProductionStarted = false;", StringComparison.Ordinal);
+        int posAtualizarEstado = stop.IndexOf("UpdateProductionState(false);", StringComparison.Ordinal);
+        int posAtualizarBotao = stop.IndexOf("AtualizarBotaoConfirmar();", StringComparison.Ordinal);
+        int posStatusParado = stop.IndexOf("statusLabel.Text = \"Leitura de consumo parada.\";", StringComparison.Ordinal);
+
+        Assert.True(posDesativarLeitura >= 0, "StopProduction_Click deve desativar a leitura antes de reavaliar o botao.");
+        Assert.True(posAtualizarEstado > posDesativarLeitura, "UpdateProductionState(false) deve ocorrer depois de _isProductionStarted = false.");
+        Assert.True(posAtualizarBotao > posAtualizarEstado, "AtualizarBotaoConfirmar deve ser chamado depois que a leitura estiver parada.");
+        Assert.True(posStatusParado > posAtualizarBotao, "A mensagem de leitura parada deve vir depois da reavaliacao visual.");
+    }
+
+    [Fact]
+    public void ConfirmarConsumo_DeveUsarPesagensPendentesComoFonteOficial()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string possuiPesagem = ExtrairMetodo(form, "private bool PossuiPesagemPendenteParaNovoApontamento");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
+
+        Assert.Contains("_pesagensPorComponente.Values.Any(lista => lista.Count > 0)", possuiPesagem, StringComparison.Ordinal);
+        Assert.Contains("bool possuiPesagem = PossuiPesagemPendenteParaNovoApontamento();", atualizar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Peso Utilizado", atualizar, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DataGridView", atualizar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ConfirmarConsumo_ComPesagemELeituraParada_PodeAparecerSemPesagemNaoAparece()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
+
+        Assert.Contains("!_isProductionStarted", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_ordemConsumoAtual is not null", atualizar, StringComparison.Ordinal);
+        Assert.Contains("possuiPesagem", atualizar, StringComparison.Ordinal);
+        Assert.Contains("!_consumoSalvoNaSessao", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_confirmarConsumoButton.Enabled = _confirmarConsumoButton.Visible && !_salvandoConsumo;", atualizar, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2496,7 +2545,8 @@ public sealed class ProcessoConsumoMaterialFormTests
         // Testes 1/2/8/9: grid mantém "Backflush"; o 261 direto bloqueia Backflush (não gera payload/envio).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
         string tipoSap = ExtrairMetodo(form, "private static string ObterTipoSapGrid(ComponenteConsumoMaterial componente)");
-        Assert.Contains("ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao => \"Backflush\"", tipoSap, StringComparison.Ordinal);
+        Assert.Contains("if (componente.BackflushSap)", tipoSap, StringComparison.Ordinal);
+        Assert.Contains("return \"Backflush\";", tipoSap, StringComparison.Ordinal);
 
         string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialServico.cs");
         // Bloqueio de pesagem por Backflush na regra central.
@@ -2562,11 +2612,37 @@ public sealed class ProcessoConsumoMaterialFormTests
         string atualizar = ExtrairMetodo(form, "private void AtualizarBotaoConfirmar");
 
         Assert.Contains("FinalizarApontamentoEnviadoSapELiberarNovaPesagem(mensagemFinal)", confirmar, StringComparison.Ordinal);
-        Assert.Contains("bool envioSapConfirmado = icone == MessageBoxIcon.Information", confirmar, StringComparison.Ordinal);
+        // O resultado da orquestração é TIPADO: o ícone deixou de ser regra de domínio.
+        Assert.Contains("if (orquestracao.ConfirmadoSap)", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("icone == MessageBoxIcon.Information", confirmar, StringComparison.Ordinal);
         Assert.Contains("Nenhuma nova pesagem pendente para envio SAP.", confirmar, StringComparison.Ordinal);
         Assert.Contains("componente.QuantidadeConsumida += enviadoKg;", finalizar, StringComparison.Ordinal);
         Assert.Contains("componente.QuantidadePendente = Math.Max(0m, componente.QuantidadePrevista - componente.QuantidadeConsumida);", finalizar, StringComparison.Ordinal);
-        Assert.Contains("ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, 0m);", finalizar, StringComparison.Ordinal);
+        Assert.Contains("ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);", finalizar, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConsumoMaterialServico.AtualizarStatusComponentePorTotalLocal(componente, 0m);", finalizar, StringComparison.Ordinal);
+        Assert.Contains("recalcularStatusLocal: false", finalizar, StringComparison.Ordinal);
+        Assert.Contains("AtualizarEstadoVisualIntegracaoSapConsumo(EstadoVisualIntegracaoSapConsumo.Enviado, mensagemSucesso);", finalizar, StringComparison.Ordinal);
+        Assert.Contains("productionDataGridView.Refresh();", finalizar, StringComparison.Ordinal);
+        Assert.Contains("materialDataGridView.Refresh();", finalizar, StringComparison.Ordinal);
+        string atualizarLinha = ExtrairMetodo(form, "private void AtualizarLinhaComponenteSelecionado");
+        Assert.Contains("if (componente.PesagemLiberada)", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("RestaurarSelecaoComponente(componente);", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("ClearGridSelection(productionDataGridView);", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("productionTipoSapColumn", atualizarLinha, StringComparison.Ordinal);
+        Assert.Contains("DefinirTooltipLinha(linha, ObterTooltipComponente(componente));", atualizarLinha, StringComparison.Ordinal);
+        string visual = ExtrairMetodo(form, "private static void AplicarStatusVisualComponente");
+        Assert.Contains("foreach (DataGridViewCell celula in linha.Cells)", visual, StringComparison.Ordinal);
+        Assert.Contains("celula.Style.ForeColor = foreColor;", visual, StringComparison.Ordinal);
+        Assert.Contains("bool visualBloqueado = !componente.PesagemLiberada", visual, StringComparison.Ordinal);
+        Assert.Contains("componente.QuantidadePendente <= 0m", visual, StringComparison.Ordinal);
+        Assert.Contains("ComponenteConsumoMaterial.StatusConsumido", visual, StringComparison.Ordinal);
+        Assert.Contains("Color.FromArgb(107, 114, 128)", visual, StringComparison.Ordinal);
+        string rowStyle = ExtrairMetodo(form, "private static void ApplyProductionRowStyle");
+        Assert.Contains("row.Tag is ComponenteConsumoMaterial componente", rowStyle, StringComparison.Ordinal);
+        Assert.Contains("AplicarStatusVisualComponente(row, componente);", rowStyle, StringComparison.Ordinal);
+        string tipoSap = ExtrairMetodo(form, "private static string ObterTipoSapGrid");
+        Assert.Contains("componente.QuantidadePendente <= 0m || !componente.PesagemLiberada", tipoSap, StringComparison.Ordinal);
+        Assert.Contains("return \"Bloqueado\";", tipoSap, StringComparison.Ordinal);
         Assert.Contains("_pesagensPorComponente.Clear();", finalizar, StringComparison.Ordinal);
         Assert.Contains("_ultimoCodigoLancamentoSalvo = null;", finalizar, StringComparison.Ordinal);
         Assert.Contains("_consumoSalvoNaSessao = false;", finalizar, StringComparison.Ordinal);
@@ -2574,6 +2650,84 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("Limite de consumo atingido para este componente", finalizar, StringComparison.Ordinal);
         Assert.Contains("PossuiPesagemPendenteParaNovoApontamento()", atualizar, StringComparison.Ordinal);
         Assert.Contains("&& !_consumoSalvoNaSessao", atualizar, StringComparison.Ordinal);
+    }
+
+    private static ComponenteConsumoMaterial CriarComponentePosSap(decimal previsto, decimal consumido, decimal pendente)
+        => new()
+        {
+            CodigoMaterial = "COMP-POS-SAP",
+            UnidadeMedida = "KG",
+            DepositoConsumo = "3007",
+            Lote = "LOTE1",
+            NumeroReserva = "RES1",
+            ItemReserva = "0001",
+            QuantidadePrevista = previsto,
+            QuantidadeConsumida = consumido,
+            QuantidadePendente = pendente,
+            Status = ComponenteConsumoMaterial.StatusPendente,
+            PesagemLiberada = true
+        };
+
+    [Fact]
+    public void Consumo_PosSap_ComponenteTotalmenteConsumidoFicaBloqueado()
+    {
+        ComponenteConsumoMaterial componente = CriarComponentePosSap(100m, 100m, 0m);
+
+        ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);
+
+        Assert.Equal(ComponenteConsumoMaterial.StatusConsumido, componente.Status);
+        Assert.False(componente.PesagemLiberada);
+        Assert.Contains("consumido", componente.MotivoBloqueioPesagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Consumo_PosSap_ComponenteParcialContinuaPendenteELiberado()
+    {
+        ComponenteConsumoMaterial componente = CriarComponentePosSap(100m, 40m, 60m);
+
+        ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);
+
+        Assert.Equal(ComponenteConsumoMaterial.StatusPendente, componente.Status);
+        Assert.True(componente.PesagemLiberada);
+        Assert.Equal(string.Empty, componente.MotivoBloqueioPesagem);
+    }
+
+    [Fact]
+    public void Consumo_PosSap_SaldoZeroNaoUsaToleranciaParaReabrir()
+    {
+        ComponenteConsumoMaterial componente = CriarComponentePosSap(100m, 100m, 0m);
+
+        ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);
+
+        Assert.Equal(ComponenteConsumoMaterial.StatusConsumido, componente.Status);
+        Assert.False(componente.PesagemLiberada);
+        Assert.Equal(5m, ConsumoMaterialServico.CalcularDisponivelConsumoComTolerancia(componente));
+    }
+
+    [Fact]
+    public void Consumo_PosSap_ComponenteSemDepositoPermanecePendenteBloqueado()
+    {
+        ComponenteConsumoMaterial componente = CriarComponentePosSap(100m, 40m, 60m);
+        componente.DepositoConsumo = string.Empty;
+
+        ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);
+
+        Assert.Equal(ComponenteConsumoMaterial.StatusPendente, componente.Status);
+        Assert.False(componente.PesagemLiberada);
+        Assert.Contains("depósito", componente.MotivoBloqueioPesagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Consumo_PosSap_ComponenteUnidadeNaoKgPermanecePendenteBloqueado()
+    {
+        ComponenteConsumoMaterial componente = CriarComponentePosSap(100m, 40m, 60m);
+        componente.UnidadeMedida = "UN";
+
+        ConsumoMaterialServico.AtualizarStatusComponenteAposConfirmacaoSap(componente);
+
+        Assert.Equal(ComponenteConsumoMaterial.StatusPendente, componente.Status);
+        Assert.False(componente.PesagemLiberada);
+        Assert.Contains("unidade", componente.MotivoBloqueioPesagem, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -2797,6 +2951,10 @@ public sealed class ProcessoConsumoMaterialFormTests
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
     }
 }
+
+
+
+
 
 
 

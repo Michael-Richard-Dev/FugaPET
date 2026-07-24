@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
@@ -25,6 +25,7 @@ public sealed class SemiAcabadoMaterialDocument101ItemRequest
     public string Plant { get; init; } = string.Empty;
     public string StorageLocation { get; init; } = string.Empty;
     public string GoodsMovementType { get; init; } = "101";
+    public string GoodsMovementRefDocType { get; init; } = "F";
     public string QuantityInEntryUnit { get; init; } = string.Empty;
     public string EntryUnit { get; init; } = "KG";
     public string ManufacturingOrder { get; init; } = string.Empty;

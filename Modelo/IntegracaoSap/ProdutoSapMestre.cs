@@ -72,4 +72,54 @@ public sealed class ProdutoSapMestre
 
         return mestre;
     }
+
+    /// <summary>
+    /// Combina o mestre TÉCNICO (A_Product: ProductType/ProductGroup/BaseUnit) com o mestre de DESCRIÇÃO
+    /// (A_ProductDescription). Cada fonte só alimenta o que lhe compete:
+    /// <list type="bullet">
+    /// <item>técnico → tipo/grupo/unidade e <see cref="Consultado"/>=true (única fonte que libera classificação);</item>
+    /// <item>descrição → <see cref="DescricaoProdutoSap"/>/<see cref="IdiomaDescricaoSap"/>.</item>
+    /// </list>
+    /// Um resultado contendo SOMENTE descrição NUNCA marca <see cref="Consultado"/>=true nem substitui um mestre
+    /// técnico já consultado — sem ProductType a classificação permanece Indefinido (bloqueia, não chuta o processo).
+    /// O código é preservado como texto (Trim), sem conversão numérica (mantém zeros à esquerda).
+    /// </summary>
+    public static ProdutoSapMestre Combinar(string codigoProduto, ProdutoSapMestre? tecnico, ProdutoSapMestre? descricao)
+    {
+        ProdutoSapMestre mestre = new()
+        {
+            CodigoProduto = (codigoProduto ?? string.Empty).Trim()
+        };
+
+        // Dados TÉCNICOS: só de A_Product e só quando efetivamente consultado.
+        if (tecnico is not null && tecnico.Consultado)
+        {
+            mestre.TipoMaterialSap = (tecnico.TipoMaterialSap ?? string.Empty).Trim();
+            mestre.GrupoMaterialSap = (tecnico.GrupoMaterialSap ?? string.Empty).Trim();
+            mestre.UnidadeBaseSap = (tecnico.UnidadeBaseSap ?? string.Empty).Trim();
+            mestre.DescricaoTipoMaterial = tecnico.DescricaoTipoMaterial;
+            mestre.Consultado = true;
+
+            if (!string.IsNullOrWhiteSpace(tecnico.CodigoProduto))
+            {
+                mestre.CodigoProduto = tecnico.CodigoProduto.Trim();
+            }
+        }
+
+        // DESCRIÇÃO: só de A_ProductDescription; jamais altera tipo/grupo/unidade nem Consultado.
+        if (descricao is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(descricao.DescricaoProdutoSap))
+            {
+                mestre.DescricaoProdutoSap = descricao.DescricaoProdutoSap.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(descricao.IdiomaDescricaoSap))
+            {
+                mestre.IdiomaDescricaoSap = descricao.IdiomaDescricaoSap.Trim();
+            }
+        }
+
+        return mestre;
+    }
 }

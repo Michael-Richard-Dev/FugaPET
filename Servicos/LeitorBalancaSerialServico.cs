@@ -120,7 +120,7 @@ internal sealed class LeitorBalancaSerialServico
 
                         if (contadorEstabilidade >= 2)
                         {
-                            return FormatarPeso(valorAtual.Value);
+                            return FormatarPeso(valorAtual.Value, configuracao.Protocolo);
                         }
                     }
                 }
@@ -132,7 +132,7 @@ internal sealed class LeitorBalancaSerialServico
             }
         }
 
-        string? peso = TentarExtrairPeso(buffer.ToString());
+        string? peso = TentarExtrairPeso(buffer.ToString(), configuracao.Protocolo);
         if (!string.IsNullOrWhiteSpace(peso))
         {
             return peso;
@@ -141,7 +141,8 @@ internal sealed class LeitorBalancaSerialServico
         throw new ErroOperacionalEsperadoException($"Nenhum peso foi recebido na porta {nomePorta}.");
     }
 
-    private static string? TentarExtrairPeso(string textoSerial)
+    // internal para teste direto (InternalsVisibleTo="FugaPET_Dev.Tests"). Caminho final de buffer.
+    internal static string? TentarExtrairPeso(string textoSerial, string protocolo)
     {
         string[] quadros = textoSerial
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -181,10 +182,11 @@ internal sealed class LeitorBalancaSerialServico
             .First()
             .Key;
 
-        return FormatarPeso(valorEstavel);
+        return FormatarPeso(valorEstavel, protocolo);
     }
 
-    private static int? TentarExtrairValorBrutoEstavel(string textoSerial)
+    // internal para teste direto: extrai o valor bruto (6 primeiros dígitos de um quadro de 12) do último quadro válido.
+    internal static int? TentarExtrairValorBrutoEstavel(string textoSerial)
     {
         string[] quadros = textoSerial
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -213,9 +215,32 @@ internal sealed class LeitorBalancaSerialServico
         return null;
     }
 
-    private static string FormatarPeso(int valor)
+    // internal para teste direto: formata o peso já convertido pela escala do protocolo.
+    internal static string FormatarPeso(int valor, string protocolo)
     {
-        decimal peso = valor / 10m;
+        decimal peso = ConverterValorBrutoParaKg(valor, protocolo);
         return peso.ToString("N2", new CultureInfo("pt-BR"));
+    }
+
+    /// <summary>
+    /// Conversão CENTRALIZADA do valor bruto (6 primeiros dígitos do quadro) para KG, conforme o protocolo
+    /// da balança. Única regra de divisor — não replicar em nenhuma tela.
+    /// </summary>
+    /// <remarks>
+    /// P03 (evidência de campo): 000165 → 1,65 kg, ou seja divisor 100 (duas casas decimais).
+    /// Fallback (divisor 10) é COMPATIBILIDADE TEMPORÁRIA para protocolos vazios/diferentes, mantendo o
+    /// comportamento legado até haver evidência específica de cada protocolo. Não alterar sem dado de campo.
+    /// </remarks>
+    internal static decimal ConverterValorBrutoParaKg(int valorBruto, string protocolo)
+    {
+        string protocoloNormalizado = (protocolo ?? string.Empty).Trim().ToUpperInvariant();
+
+        decimal divisor = protocoloNormalizado switch
+        {
+            "P03" => 100m,
+            _ => 10m // fallback legado temporário
+        };
+
+        return valorBruto / divisor;
     }
 }

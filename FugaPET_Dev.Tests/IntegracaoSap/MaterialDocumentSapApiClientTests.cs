@@ -426,6 +426,107 @@ public sealed class MaterialDocumentSapApiClientTests
         Assert.Contains("causa raiz interna", texto);
     }
 
+
+    [Fact]
+    public async Task Post_ErroSap12007_DeveTraduzirVidaUtilRemanescente()
+    {
+        HttpResponseMessage fetch = new(HttpStatusCode.OK);
+        fetch.Headers.TryAddWithoutValidation("X-CSRF-Token", "token-ok");
+        HttpResponseMessage erro = new(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(
+                """{"error":{"code":"12/007","message":{"value":"Shortfall of 1 days against remaining shelf life in current item (570 Day)"},"innererror":{"errordetails":[{"code":"12/007","message":"Shortfall of 1 days against remaining shelf life in current item (570 Day)","severity":"error"}]}}}""",
+                Encoding.UTF8, "application/json")
+        };
+        RespostaHandler handler = new(fetch, erro);
+        using HttpClient http = new(handler);
+        MaterialDocumentSapApiClient cliente = new(CriarConfiguracao(), http);
+
+        ResultadoMaterialDocumentSap resultado = await cliente.CriarDocumentoMaterialAsync(Requisicao());
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(400, resultado.StatusHttp);
+        Assert.Equal(MaterialDocumentSapApiClient.EtapaPost, resultado.Etapa);
+        Assert.Contains("validade remanescente do lote", resultado.MensagemSanitizada);
+        Assert.Contains("Exigência SAP: 570 dias", resultado.MensagemSanitizada);
+        Assert.Contains("Diferença encontrada: 1 dia", resultado.MensagemSanitizada);
+        Assert.Contains("12/007", resultado.MensagemSanitizada);
+    }
+
+    [Fact]
+    public void SerializarPayload_ComDatasOpcionais_DeveSerializarDataCivilODataV2()
+    {
+        MaterialDocumentSapRequest requisicao = Requisicao() with
+        {
+            Itens =
+            [
+                Requisicao().Itens[0] with
+                {
+                    ManufactureDate = new DateTime(2026, 7, 15, 23, 30, 0, DateTimeKind.Local),
+                    ShelfLifeExpirationDate = new DateTime(2028, 2, 5, 1, 0, 0, DateTimeKind.Utc)
+                }
+            ]
+        };
+
+        string json = MaterialDocumentSapApiClient.SerializarPayload(requisicao);
+
+        Assert.Contains("\"ManufactureDate\":\"" + MaterialDocumentSapApiClient.FormatarDataODataV2(new DateTime(2026, 7, 15)) + "\"", json);
+        Assert.Contains("\"ShelfLifeExpirationDate\":\"" + MaterialDocumentSapApiClient.FormatarDataODataV2(new DateTime(2028, 2, 5)) + "\"", json);
+        Assert.DoesNotContain("2026-07-14", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-07-16", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializarPayload_DatasNulas_NaoAlteraPayloadEntrada()
+    {
+        string json = MaterialDocumentSapApiClient.SerializarPayload(Requisicao());
+
+        Assert.Contains("\"GoodsMovementRefDocType\":\"B\"", json);
+        Assert.Contains("\"PurchaseOrder\":\"4500001253\"", json);
+        Assert.DoesNotContain("ManufactureDate", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShelfLifeExpirationDate", json, StringComparison.Ordinal);
+        Assert.DoesNotContain(":null", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DescreverPayloadSanitizado_DeveExporDatasOpcionaisSemSegredo()
+    {
+        MaterialDocumentSapRequest requisicao = Requisicao() with
+        {
+            Itens =
+            [
+                Requisicao().Itens[0] with
+                {
+                    Batch = "LOTE123",
+                    ManufactureDate = new DateTime(2026, 7, 15),
+                    ShelfLifeExpirationDate = new DateTime(2028, 2, 5)
+                }
+            ]
+        };
+
+        string descricao = MaterialDocumentSapApiClient.DescreverPayloadSanitizado(requisicao);
+
+        Assert.Contains("Batch=LOTE123", descricao);
+        Assert.Contains("ManufactureDate=" + MaterialDocumentSapApiClient.FormatarDataODataV2(new DateTime(2026, 7, 15)), descricao);
+        Assert.Contains("ShelfLifeExpirationDate=" + MaterialDocumentSapApiClient.FormatarDataODataV2(new DateTime(2028, 2, 5)), descricao);
+        Assert.DoesNotContain("senha-teste", descricao);
+    }
+
+    [Fact]
+    public void DiagnosticoVidaUtil_NaoDeveUsarRegraFixaAddDays570Ou571()
+    {
+        string raiz = EncontrarRaizProjeto();
+        string[] arquivos =
+        [
+            Path.Combine(raiz, "Modelo", "IntegracaoSap", "MaterialDocumentSapItemRequest.cs"),
+            Path.Combine(raiz, "Servicos", "IntegracaoSap", "MaterialDocumentSapApiClient.cs"),
+            Path.Combine(raiz, "Servicos", "IntegracaoSap", "SemiAcabadoMaterialDocument101PayloadBuilder.cs")
+        ];
+        string conteudo = string.Join("\n", arquivos.Select(File.ReadAllText));
+
+        Assert.DoesNotContain("AddDays(570", conteudo, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddDays(571", conteudo, StringComparison.Ordinal);
+    }
     private static MaterialDocumentSapRequest Requisicao()
         => new()
         {
@@ -463,6 +564,22 @@ public sealed class MaterialDocumentSapApiClientTests
             EscritaHabilitada = true
         };
 
+
+    private static string EncontrarRaizProjeto()
+    {
+        DirectoryInfo? atual = new(AppContext.BaseDirectory);
+        while (atual is not null)
+        {
+            if (File.Exists(Path.Combine(atual.FullName, "FugaPET_Dev.slnx")))
+            {
+                return atual.FullName;
+            }
+
+            atual = atual.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev não encontrada.");
+    }
     private sealed class RespostaHandler : HttpMessageHandler
     {
         private readonly Queue<HttpResponseMessage> _respostas;
@@ -511,3 +628,4 @@ public sealed class MaterialDocumentSapApiClientTests
         }
     }
 }
+

@@ -58,12 +58,20 @@ public sealed record ComponenteOrdemProducaoSap
 /// <summary>Operacao da OP (to_ProductionOrderOperation / A_ProductionOrderOperation_2).</summary>
 public sealed record OperacaoOrdemProducaoSap
 {
-    public string Operacao { get; init; } = string.Empty;            // ProductionOrderOperation
-    public string OrderOperationInternalId { get; init; } = string.Empty; // OrderOperationInternalID
-    public string Sequencia { get; init; } = string.Empty;           // ProductionOrderSequence
+    public string Operacao { get; init; } = string.Empty;            // ManufacturingOrderOperation
+    public string OrderOperationInternalId { get; init; } = string.Empty; // OrderIntBillOfOperationsItem (aliases defensivos: OrderOperationInternalID/Id, ManufacturingOrderOperationInternalID)
+    public string Sequencia { get; init; } = string.Empty;           // ManufacturingOrderSequence
+
+    /// <summary>
+    /// Suboperação (ManufacturingOrderSubOperation / ProductionOrderSubOperation). LEITURA DEFENSIVA:
+    /// fica VAZIA quando o SAP não retorna o campo — o metadata da Fuga ainda não confirmou sua existência.
+    /// Nenhum consumo existente depende dela; compõe a chave técnica da operação quando disponível.
+    /// </summary>
+    public string Suboperacao { get; init; } = string.Empty;
+
     public string CentroTrabalho { get; init; } = string.Empty;      // WorkCenter
-    public string Centro { get; init; } = string.Empty;             // Plant
-    public string Descricao { get; init; } = string.Empty;          // OperationText
+    public string Centro { get; init; } = string.Empty;             // ProductionPlant
+    public string Descricao { get; init; } = string.Empty;          // MfgOrderOperationText
     public decimal QuantidadePrevista { get; init; }                 // OpPlannedTotalQuantity
     public decimal QuantidadeConfirmada { get; init; }               // OpTotalConfirmedYieldQty (pode nao vir)
     public string Unidade { get; init; } = string.Empty;            // OperationUnit

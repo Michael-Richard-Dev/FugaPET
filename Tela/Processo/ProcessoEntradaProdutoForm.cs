@@ -688,9 +688,9 @@ public partial class ProcessoEntradaProdutoForm : Form
         DataGridViewButtonColumn colunaReimpressao = new()
         {
             Name = ColunaReimpressaoEtiqueta,
-            HeaderText = "Imprimir",
+            HeaderText = "Pesagens",
             Text = "🖨",
-            ToolTipText = "Reimprimir etiqueta",
+            ToolTipText = "Ver pesagens e reimprimir etiquetas",
             UseColumnTextForButtonValue = true,
             ReadOnly = true,
             Width = 72,
@@ -1690,24 +1690,25 @@ public partial class ProcessoEntradaProdutoForm : Form
             }
 
             string weight = leitura.Peso;
-            if (!RegistrarPesoLido(linhaItem, weight))
+            if (!RegistrarPesoLido(linhaItem, weight, out EntradaProdutoPesagem? pesagemCriada) || pesagemCriada is null)
             {
                 return;
             }
 
             statusLabel.Text = "Peso registrado localmente. Finalize a leitura para gravar o lançamento.";
-            DadosEtiquetaMateriaPrima label = ConstruirDadosEtiquetaMateriaPrima(linhaItem);
+            // Regra definitiva: imprime SOMENTE a pesagem recém-criada (peso líquido dela), nunca o total da linha.
+            DadosEtiquetaMateriaPrima label = ConstruirEtiquetaPorPesagem(linhaItem, pesagemCriada);
             if (!await TentarImprimirEtiquetaAposLeituraAsync(label))
             {
                 MessageBox.Show(
-                    "Peso registrado, mas a etiqueta não foi impressa.",
+                    "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.",
                     "Etiqueta não impressa",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 return;
             }
 
-            statusLabel.Text = $"Peso {weight} registrado no item {GetCellValue(linhaItem, "productionCodeColumn")} e etiqueta {label.CodigoProduto} enviada para impressao.";
+            statusLabel.Text = $"Pesagem {FormatarPesoEtiquetaMateriaPrima(pesagemCriada.PesoLiquidoKg.ToString(System.Globalization.CultureInfo.InvariantCulture))} kg registrada no item {GetCellValue(linhaItem, "productionCodeColumn")} e etiqueta enviada para impressão.";
         }
         catch (Exception ex)
         {
@@ -1776,9 +1777,12 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
     }
 
-    // Grava o peso lido da balanca na coluna Peso da linha do item selecionado.
-    private bool RegistrarPesoLido(DataGridViewRow linhaItem, string weight)
+    // Grava o peso lido da balanca na coluna Peso da linha do item selecionado e devolve a pesagem criada
+    // (para imprimir SOMENTE aquela pesagem, não o total consolidado).
+    private bool RegistrarPesoLido(DataGridViewRow linhaItem, string weight, out EntradaProdutoPesagem? pesagemCriada)
     {
+        pesagemCriada = null;
+
         if (!TryParsePesoKg(weight, out decimal pesoBruto))
         {
             statusLabel.Text = "Peso lido invalido.";
@@ -1789,7 +1793,8 @@ public partial class ProcessoEntradaProdutoForm : Form
                 linhaItem,
                 pesoBruto,
                 "BALANCA",
-                weight))
+                weight,
+                out pesagemCriada))
         {
             return false;
         }
@@ -2183,7 +2188,9 @@ public partial class ProcessoEntradaProdutoForm : Form
                 selectedRow,
                 pesoManual,
                 "MANUAL",
-                manualWeight))
+                manualWeight,
+                out EntradaProdutoPesagem? pesagemManual)
+            || pesagemManual is null)
         {
             return;
         }
@@ -2193,7 +2200,18 @@ public partial class ProcessoEntradaProdutoForm : Form
         selectedRow.Selected = true;
         SetCurrentProductionCell(selectedRow, "productionPesoLidoColumn");
         UpdateProductionCounters();
-        statusLabel.Text = "Peso registrado localmente. Finalize a leitura para gravar o lançamento.";
+
+        // Peso manual também é UMA pesagem individual: imprime a etiqueta dela (peso líquido). Falha de impressão
+        // mantém a pesagem (permite reimprimir pelo detalhe).
+        DadosEtiquetaMateriaPrima labelManual = ConstruirEtiquetaPorPesagem(selectedRow, pesagemManual);
+        if (!await TentarImprimirEtiquetaAutomaticaAsync(labelManual, "peso manual"))
+        {
+            statusLabel.Text =
+                "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.";
+            return;
+        }
+
+        statusLabel.Text = $"Pesagem manual {pesagemManual.PesoLiquidoKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg registrada e etiqueta enviada para impressão.";
     }
 
     private void UpdateProductionState(bool started)
@@ -2309,9 +2327,10 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
+        // Coluna "Pesagens": abre a relação de pesagens (ver/reimprimir), nunca imprime o total do item.
         if (e.ColumnIndex >= 0 && productionDataGridView.Columns[e.ColumnIndex].Name == ColunaReimpressaoEtiqueta)
         {
-            await ReimprimirEtiquetaComConfirmacaoAsync(row);
+            await AbrirDetalhePesagensAsync(row);
             return;
         }
 
@@ -2331,85 +2350,83 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        await AbrirPesagemMultiplaParaLinhaAsync(row);
+        await AbrirDetalhePesagensAsync(row);
     }
 
-    private async Task ReimprimirEtiquetaComConfirmacaoAsync(DataGridViewRow row)
+    private DateTime _ultimaAberturaDetalhePesagens = DateTime.MinValue;
+
+    // Ponto único de abertura da relação de pesagens. Anti-dupla-abertura (CellClick + CellDoubleClick).
+    // Se o lançamento já foi persistido, abre em modo consulta/reimpressão com as pesagens do banco.
+    private async Task AbrirDetalhePesagensAsync(DataGridViewRow row)
     {
-        if (await BloquearImpressaoSemPermissaoAsync(
-                PermissoesSistema.Acoes.Reimprimir,
-                "reimprimir etiqueta"))
+        if ((DateTime.Now - _ultimaAberturaDetalhePesagens).TotalMilliseconds < 800)
         {
             return;
         }
-
-        if (_codigoLancamentoPersistido is not long codigoLancamento
-            || codigoLancamento <= 0)
-        {
-            statusLabel.Text = "Finalize e persista o lancamento antes de reimprimir.";
-            MessageBox.Show(
-                "A reimpressao usa os dados persistidos.\n\nFinalize o lancamento antes de reimprimir a etiqueta.",
-                "Reimpressao indisponivel",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-            return;
-        }
-
-        if (!long.TryParse(
-                GetCellValue(row, "productionItemIdColumn"),
-                out long codigoSapItem)
-            || codigoSapItem <= 0)
-        {
-            statusLabel.Text = "Item invalido para reimpressao.";
-            return;
-        }
-
-        string itemPedido = GetCellValue(row, "productionCodeColumn");
-        using ConfirmarReimpressaoEtiquetaForm confirmacao = new(itemPedido);
-        if (confirmacao.ShowDialog(this) != DialogResult.Yes)
-        {
-            statusLabel.Text = "Reimpressão cancelada.";
-            return;
-        }
+        _ultimaAberturaDetalhePesagens = DateTime.Now;
 
         try
         {
-            EntradaProdutoItemPersistido? itemPersistido =
-                await _entradaServico.ObterItemPersistidoAsync(
-                    codigoLancamento,
-                    codigoSapItem,
-                    _fechamentoTelaCts.Token);
-            if (itemPersistido is null || itemPersistido.PesoLiquidoTotalKg <= 0m)
+            if (_codigoLancamentoPersistido is long codigoLancamento && codigoLancamento > 0)
             {
-                statusLabel.Text = "Dados persistidos nao encontrados para reimpressao.";
-                MessageBox.Show(
-                    "Nao foi encontrada pesagem valida persistida para este item.",
-                    "Reimpressao indisponivel",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                return;
+                await AbrirPesagensPersistidasParaLinhaAsync(row, codigoLancamento);
             }
-
-            DadosEtiquetaMateriaPrima etiqueta =
-                ImpressaoEntradaServico.MontarEtiqueta(itemPersistido, expirationDateTextBox.Text);
-            await _impressaoEntrada.ReimprimirEtiquetaMateriaPrimaAsync(etiqueta);
-            statusLabel.Text =
-                $"Etiqueta reimpressa com dados do lancamento {codigoLancamento}.";
+            else
+            {
+                await AbrirPesagemMultiplaParaLinhaAsync(row);
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            string mensagem = await ErroUsuarioHelper.TratarAsync(
-                "REIMPRESSAO_ETIQUETA_ERRO",
-                ex,
-                "ProcessoEntradaProdutoForm",
-                "Nao foi possivel reimprimir a etiqueta. Acione o suporte.");
-            statusLabel.Text = mensagem;
-            MessageBox.Show(
-                mensagem,
-                "Erro ao reimprimir etiqueta",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+            _ultimaAberturaDetalhePesagens = DateTime.Now;
         }
+    }
+
+    // Modo consulta/reimpressão: carrega cada pesagem persistida (não SUM) e reimprime por pesagem individual.
+    private async Task AbrirPesagensPersistidasParaLinhaAsync(DataGridViewRow row, long codigoLancamento)
+    {
+        if (!long.TryParse(GetCellValue(row, "productionItemIdColumn"), out long codigoSapItem) || codigoSapItem <= 0)
+        {
+            statusLabel.Text = "Item invalido para consultar as pesagens.";
+            return;
+        }
+
+        EntradaProdutoItemPersistido? itemPersistido =
+            await _entradaServico.ObterItemPersistidoAsync(codigoLancamento, codigoSapItem, _fechamentoTelaCts.Token);
+        IReadOnlyList<EntradaProdutoPesagem> pesagens =
+            await _entradaServico.ListarPesagensPersistidasAsync(codigoLancamento, codigoSapItem, _fechamentoTelaCts.Token);
+        if (itemPersistido is null || pesagens.Count == 0)
+        {
+            statusLabel.Text = "Nao foram encontradas pesagens persistidas para este item.";
+            MessageBox.Show(
+                "Nao ha pesagens persistidas para este item.",
+                "Pesagens",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro tara =
+            row.Tag as global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro
+            ?? new global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro { NomeTara = "-", PesoKg = 0m };
+
+        // Reimpressão persistida: monta a etiqueta com dados do item + peso LÍQUIDO da pesagem individual.
+        Func<EntradaProdutoPesagem, Task<bool>> reimprimirPesagem = pesagem =>
+            TentarReimprimirEtiquetaPesagemAsync(
+                ImpressaoEntradaServico.MontarEtiquetaPorPesagem(itemPersistido, pesagem, expirationDateTextBox.Text));
+
+        string itemPedido = GetCellValue(row, "productionCodeColumn");
+        using PesagemMultiplaItemForm form = new(
+            _balancaLeituraServico,
+            itemPedido,
+            tara,
+            _idBalancaSelecionada,
+            pesagens,
+            imprimirPesagemAsync: null,
+            reimprimirPesagemAsync: reimprimirPesagem,
+            somenteConsulta: true);
+        form.ShowDialog(this);
+        statusLabel.Text = $"Pesagens do item {itemPedido}. Total: {itemPersistido.PesoLiquidoTotalKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg.";
     }
 
     private async Task AbrirPesagemMultiplaParaLinhaAsync(DataGridViewRow linhaItem)
@@ -2439,20 +2456,27 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         IReadOnlyList<EntradaProdutoPesagem> leiturasAtuais =
             ObterLeiturasItem(codigoItem);
+
+        // Callbacks de impressão POR PESAGEM: a janela imprime cada nova leitura imediatamente (não há mais
+        // impressão consolidada ao concluir). Cada etiqueta usa pesagem.PesoLiquidoKg.
+        Func<EntradaProdutoPesagem, Task<bool>> imprimirPesagem = pesagem =>
+            TentarImprimirEtiquetaAutomaticaAsync(ConstruirEtiquetaPorPesagem(linhaItem, pesagem), "pesagem");
+        Func<EntradaProdutoPesagem, Task<bool>> reimprimirPesagem = pesagem =>
+            TentarReimprimirEtiquetaPesagemAsync(ConstruirEtiquetaPorPesagem(linhaItem, pesagem));
+
         using PesagemMultiplaItemForm form = new(
             _balancaLeituraServico,
             itemPedido,
             tara,
             _idBalancaSelecionada,
-            leiturasAtuais);
-        if (form.ShowDialog(this) != DialogResult.OK)
-        {
-            statusLabel.Text = "Pesagem múltipla cancelada.";
-            return;
-        }
+            leiturasAtuais,
+            imprimirPesagem,
+            reimprimirPesagem);
+        // A janela sempre retorna OK (Fechar preserva as pesagens adicionadas). Nenhuma etiqueta consolidada aqui.
+        form.ShowDialog(this);
 
         // Re-localiza a linha pelo id do item: apos o dialogo, a referencia original pode estar
-        // desatualizada se o grid foi recarregado. Garante que o peso somado seja gravado na linha viva.
+        // desatualizada se o grid foi recarregado. Garante que o total acumulado seja gravado na linha viva.
         DataGridViewRow linhaAlvo = LocalizarLinhaProducaoPorItemId(itemId) ?? linhaItem;
         linhaAlvo.Tag = tara;
         _leiturasPorItem[codigoItem] = form.Pesagens.ToList();
@@ -2460,11 +2484,6 @@ public partial class ProcessoEntradaProdutoForm : Form
         if (!AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem]))
         {
             statusLabel.Text = "Nao foi possivel consolidar o peso na linha do item.";
-            MessageBox.Show(
-                $"Nao foi possivel gravar o peso somado ({form.PesoTotalTexto}) na linha do item {itemPedido}.\n\nSelecione o item novamente e repita a pesagem.",
-                "Pesagem múltipla",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
             return;
         }
 
@@ -2473,27 +2492,35 @@ public partial class ProcessoEntradaProdutoForm : Form
         linhaAlvo.Selected = true;
         SetCurrentProductionCell(linhaAlvo, "productionPesoLidoColumn");
         UpdateProductionCounters();
-        DadosEtiquetaMateriaPrima etiqueta = ConstruirDadosEtiquetaMateriaPrima(linhaAlvo);
-        bool etiquetaImpressa = await TentarImprimirEtiquetaAutomaticaAsync(etiqueta, "pesagem múltipla");
-        if (!etiquetaImpressa)
+
+        // Total apenas para consulta na linha — as etiquetas já foram impressas individualmente.
+        statusLabel.Text = $"Pesagens atualizadas. Total do item: {form.PesoTotalTexto} kg.";
+    }
+
+    // Reimpressão por pesagem individual (permissão Reimprimir). Usada pela janela de pesagens (duplo clique).
+    private async Task<bool> TentarReimprimirEtiquetaPesagemAsync(DadosEtiquetaMateriaPrima label)
+    {
+        if (!AutorizacaoEntradaProdutoServico.PossuiPermissaoImpressao(PermissoesSistema.Acoes.Reimprimir))
         {
-            statusLabel.Text =
-                $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}, mas a etiqueta não foi impressa. Use a reimpressão após corrigir a impressora.";
-            MessageBox.Show(
-                statusLabel.Text,
-                "Etiqueta não impressa",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-            return;
+            statusLabel.Text = "Reimpressão não realizada: usuário sem permissão de reimpressão.";
+            return false;
         }
 
-        statusLabel.Text =
-            $"Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}. Etiqueta enviada para impressão.";
-        MessageBox.Show(
-            statusLabel.Text,
-            "Pesagem múltipla",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        try
+        {
+            await _impressaoEntrada.GarantirImpressoraDisponivelAsync();
+            await _impressaoEntrada.ReimprimirEtiquetaMateriaPrimaAsync(label);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            await ErroUsuarioHelper.TratarAsync(
+                "REIMPRESSAO_ETIQUETA_ERRO",
+                ex,
+                "ProcessoEntradaProdutoForm",
+                "Não foi possível reimprimir a etiqueta da pesagem.");
+            return false;
+        }
     }
 
     private async Task SelecionarTaraParaLinhaAsync(DataGridViewRow linhaItem)
@@ -2645,51 +2672,18 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (await BloquearImpressaoSemPermissaoAsync(
-                PermissoesSistema.Acoes.Imprimir,
-                "imprimir etiqueta"))
-        {
-            return;
-        }
+        // Duplo clique na LINHA principal abre a relação de pesagens (não imprime mais o total consolidado).
+        // A reimpressão é feita por duplo clique em UMA pesagem, dentro da janela de detalhe.
+        await AbrirDetalhePesagensAsync(row);
+    }
 
-        await ImprimirEtiquetaDaLinhaAsync(
+    // Etiqueta de UMA pesagem individual (regra definitiva): peso = pesagem.PesoLiquidoKg; demais campos da linha.
+    private DadosEtiquetaMateriaPrima ConstruirEtiquetaPorPesagem(DataGridViewRow row, EntradaProdutoPesagem pesagem)
+        => ConstruirEtiquetaComPeso(
             row,
-            "Etiqueta enviada para impressao.",
-            reimpressao: false);
-    }
+            pesagem.PesoLiquidoKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")));
 
-    private async Task ImprimirEtiquetaDaLinhaAsync(
-        DataGridViewRow row,
-        string mensagemSucesso,
-        bool reimpressao)
-    {
-        try
-        {
-            DadosEtiquetaMateriaPrima label = ConstruirDadosEtiquetaMateriaPrima(row);
-            if (reimpressao)
-            {
-                await _impressaoEntrada.ReimprimirEtiquetaMateriaPrimaAsync(label);
-            }
-            else
-            {
-                await _impressaoEntrada.ImprimirEtiquetaMateriaPrimaAsync(label);
-            }
-            statusLabel.Text = $"{mensagemSucesso} Item {label.CodigoProduto}.";
-        }
-        catch (Exception ex)
-        {
-            string msg = await ErroUsuarioHelper.TratarAsync("IMPRESSAO_ETIQUETA_ERRO", ex, "ProcessoEntradaProdutoForm",
-                "Não foi possível imprimir a etiqueta. Acione o suporte.");
-            statusLabel.Text = msg;
-            MessageBox.Show(
-                msg,
-                "Erro ao imprimir etiqueta",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-    }
-
-    private DadosEtiquetaMateriaPrima ConstruirDadosEtiquetaMateriaPrima(DataGridViewRow row)
+    private DadosEtiquetaMateriaPrima ConstruirEtiquetaComPeso(DataGridViewRow row, string pesoFormatado)
     {
         string numeroPedido = pedidoComboBox.Text.Trim();
         string numeroItem = GetCellValue(row, "productionNumeroItemColumn");
@@ -2707,7 +2701,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             Sif = string.Empty,
             Fornecedor = lotTextBox.Text,
             NumeroNotaFiscal = string.Empty,
-            Peso = FormatarPesoEtiquetaMateriaPrima(GetCellValue(row, "productionPesoLidoColumn")),
+            Peso = pesoFormatado,
             NumeroPedido = numeroPedido,
             NumeroItem = numeroItem
         };
@@ -2762,8 +2756,11 @@ public partial class ProcessoEntradaProdutoForm : Form
         DataGridViewRow linhaItem,
         decimal pesoBruto,
         string origem,
-        string leituraOriginal)
+        string leituraOriginal,
+        out EntradaProdutoPesagem? pesagemCriada)
     {
+        pesagemCriada = null;
+
         if (!long.TryParse(
                 GetCellValue(linhaItem, "productionItemIdColumn"),
                 out long codigoItem)
@@ -2793,7 +2790,9 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         List<EntradaProdutoPesagem> leituras =
             _leiturasPorItem.GetValueOrDefault(codigoItem) ?? [];
-        leituras.Add(EntradaProdutoPesagemCalculos.MontarLeitura(
+        // Regra definitiva: cada leitura é UMA pesagem = UMA etiqueta. Guardamos a pesagem criada para
+        // imprimir SOMENTE ela (pesagem.PesoLiquidoKg), nunca o total consolidado da linha.
+        EntradaProdutoPesagem nova = EntradaProdutoPesagemCalculos.MontarLeitura(
             leituras,
             pesoBruto,
             taraKg,
@@ -2801,8 +2800,10 @@ public partial class ProcessoEntradaProdutoForm : Form
             origem,
             _idBalancaSelecionada,
             leituraOriginal,
-            DateTimeOffset.Now));
+            DateTimeOffset.Now);
+        leituras.Add(nova);
         _leiturasPorItem[codigoItem] = leituras;
+        pesagemCriada = nova;
         return AtualizarTotaisDaLinha(linhaItem, leituras);
     }
 

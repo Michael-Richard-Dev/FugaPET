@@ -5,13 +5,13 @@ using Npgsql;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
-public sealed class CampoEtiquetaRepositorio : RepositorioBase
+public class CampoEtiquetaRepositorio : RepositorioBase
 {
     public CampoEtiquetaRepositorio(IFabricaConexaoBanco fabricaConexaoBanco) : base(fabricaConexaoBanco)
     {
     }
 
-    public async Task<IReadOnlyList<CampoEtiquetaCadastro>> ListarPorEtiquetaAsync(long codigoEtiqueta, CancellationToken cancellationToken = default)
+    public virtual async Task<IReadOnlyList<CampoEtiquetaCadastro>> ListarPorEtiquetaAsync(long codigoEtiqueta, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT codigo_campo_etiqueta, codigo_etiqueta, nome_campo, descricao_campo_etiqueta,
@@ -36,7 +36,7 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         return campos;
     }
 
-    public async Task<CampoEtiquetaCadastro?> ObterPorIdAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
+    public virtual async Task<CampoEtiquetaCadastro?> ObterPorIdAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT codigo_campo_etiqueta, codigo_etiqueta, nome_campo, descricao_campo_etiqueta,
@@ -55,7 +55,7 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         return MapearCampo(leitor);
     }
 
-    public async Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(
+    public virtual async Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(
         long codigoCampoEtiqueta,
         CancellationToken cancellationToken = default)
     {
@@ -110,16 +110,15 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         };
     }
 
-    public async Task<bool> ExisteNomeNaEtiquetaAsync(long codigoEtiqueta, string nomeCampo, long? ignorarCodigo = null, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> ExisteNomeNaEtiquetaAsync(long codigoEtiqueta, string nomeCampo, long? ignorarCodigo = null, CancellationToken cancellationToken = default)
     {
-        // Espelha uq_campo_etiqueta_nome (codigo_etiqueta, upper(trim(nome_campo))) WHERE situacao = true.
+        // Regra global: nome unico por etiqueta independentemente da situacao.
         const string sql = """
             SELECT EXISTS (
                 SELECT 1
                 FROM campo_etiqueta
                 WHERE codigo_etiqueta = @codigo_etiqueta
                   AND upper(trim(nome_campo)) = upper(trim(@nome_campo))
-                  AND situacao_campo_etiqueta = true
                   AND (@ignorar_codigo IS NULL OR codigo_campo_etiqueta <> @ignorar_codigo)
             );
             """;
@@ -134,7 +133,45 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         return retorno is bool existe && existe;
     }
 
-    public Task<long> InserirAsync(CampoEtiquetaCadastro campo, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> EtiquetaEstaAtivaAsync(long codigoEtiqueta, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM etiqueta
+                 WHERE codigo_etiqueta = @codigo_etiqueta
+                   AND situacao_etiqueta = true
+            );
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_etiqueta", codigoEtiqueta));
+
+        object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
+        return retorno is bool existe && existe;
+    }
+
+    public virtual async Task<bool> CampoEstaAtivoAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM campo_etiqueta
+                 WHERE codigo_campo_etiqueta = @codigo_campo_etiqueta
+                   AND situacao_campo_etiqueta = true
+            );
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_campo_etiqueta", codigoCampoEtiqueta));
+
+        object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
+        return retorno is bool existe && existe;
+    }
+
+    public virtual Task<long> InserirAsync(CampoEtiquetaCadastro campo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             INSERT INTO campo_etiqueta
@@ -155,7 +192,7 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public Task<int> AtualizarAsync(CampoEtiquetaCadastro campo, CancellationToken cancellationToken = default)
+    public virtual Task<int> AtualizarAsync(CampoEtiquetaCadastro campo, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE campo_etiqueta
@@ -166,7 +203,6 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
                    tamanho_maximo = @tamanho_maximo,
                    formato_saida = @formato_saida,
                    ordem = @ordem,
-                   situacao_campo_etiqueta = @situacao_campo_etiqueta,
                    campo_etiqueta_atualizado_por = @campo_etiqueta_atualizado_por
              WHERE codigo_campo_etiqueta = @codigo_campo_etiqueta;
             """;
@@ -175,13 +211,13 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         {
             await using NpgsqlCommand comando = new(sql, conexao, transacao);
             comando.Parameters.Add(ParametroLongo("@codigo_campo_etiqueta", campo.CodigoCampoEtiqueta));
-            PreencherParametros(comando, campo);
+            PreencherParametrosEdicao(comando, campo);
             comando.Parameters.Add(ParametroLongoNulo("@campo_etiqueta_atualizado_por", campo.CampoEtiquetaAtualizadoPor ?? ObterCodigoUsuarioSessao()));
             return await comando.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
     }
 
-    public Task<int> ExcluirAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
+    public virtual Task<int> ExcluirAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE campo_etiqueta
@@ -200,14 +236,27 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
-    public Task<int> ReativarAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
+    public virtual Task<int> ReativarAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
     {
         const string sql = """
             UPDATE campo_etiqueta
                SET situacao_campo_etiqueta = true,
                    campo_etiqueta_atualizado_por = @campo_etiqueta_atualizado_por
              WHERE codigo_campo_etiqueta = @codigo_campo_etiqueta
-               AND situacao_campo_etiqueta = false;
+               AND situacao_campo_etiqueta = false
+               AND EXISTS (
+                   SELECT 1
+                     FROM etiqueta e
+                    WHERE e.codigo_etiqueta = campo_etiqueta.codigo_etiqueta
+                      AND e.situacao_etiqueta = true
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM campo_etiqueta outro
+                    WHERE outro.codigo_etiqueta = campo_etiqueta.codigo_etiqueta
+                      AND outro.codigo_campo_etiqueta <> campo_etiqueta.codigo_campo_etiqueta
+                      AND upper(trim(outro.nome_campo)) = upper(trim(campo_etiqueta.nome_campo))
+               );
             """;
 
         return ExecutarEmTransacaoAuditavelAsync(async (conexao, transacao) =>
@@ -230,6 +279,17 @@ public sealed class CampoEtiquetaRepositorio : RepositorioBase
         comando.Parameters.Add(new NpgsqlParameter("@formato_saida", string.IsNullOrWhiteSpace(campo.FormatoSaida) ? DBNull.Value : campo.FormatoSaida));
         comando.Parameters.Add(ParametroInteiro("@ordem", campo.Ordem));
         comando.Parameters.Add(ParametroBooleano("@situacao_campo_etiqueta", campo.SituacaoCampoEtiqueta));
+    }
+
+    private static void PreencherParametrosEdicao(NpgsqlCommand comando, CampoEtiquetaCadastro campo)
+    {
+        comando.Parameters.Add(ParametroTexto("@nome_campo", campo.NomeCampo));
+        comando.Parameters.Add(new NpgsqlParameter("@descricao_campo_etiqueta", string.IsNullOrWhiteSpace(campo.DescricaoCampoEtiqueta) ? DBNull.Value : campo.DescricaoCampoEtiqueta));
+        comando.Parameters.Add(ParametroTexto("@tipo_dado", string.IsNullOrWhiteSpace(campo.TipoDado) ? "TEXTO" : campo.TipoDado));
+        comando.Parameters.Add(ParametroBooleano("@obrigatorio", campo.Obrigatorio));
+        comando.Parameters.Add(ParametroInteiroNulo("@tamanho_maximo", campo.TamanhoMaximo));
+        comando.Parameters.Add(new NpgsqlParameter("@formato_saida", string.IsNullOrWhiteSpace(campo.FormatoSaida) ? DBNull.Value : campo.FormatoSaida));
+        comando.Parameters.Add(ParametroInteiro("@ordem", campo.Ordem));
     }
 
     private static CampoEtiquetaCadastro MapearCampo(NpgsqlDataReader leitor)

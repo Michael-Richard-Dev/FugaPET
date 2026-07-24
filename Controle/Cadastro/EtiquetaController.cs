@@ -32,4 +32,7 @@ public sealed class EtiquetaController
 
     public Task<ResultadoOperacao> ReativarAsync(long id, CancellationToken cancellationToken = default)
         => _etiquetaServico.ReativarAsync(id, cancellationToken);
+
+    public Task<ResumoDependenciasEtiqueta> ObterResumoDependenciasAtivasAsync(long id, CancellationToken cancellationToken = default)
+        => _etiquetaServico.ObterResumoDependenciasAtivasAsync(id, cancellationToken);
 }

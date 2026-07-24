@@ -141,6 +141,16 @@ public sealed class EntradaProdutoServico
             codigoSapPedidoCompraItem,
             cancellationToken);
 
+    /// <summary>Pesagens INDIVIDUAIS persistidas de um item (para detalhe/reimpressão por pesagem, não SUM).</summary>
+    public Task<IReadOnlyList<EntradaProdutoPesagem>> ListarPesagensPersistidasAsync(
+        long codigoLancamento,
+        long codigoSapPedidoCompraItem,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ListarPesagensPersistidasAsync(
+            codigoLancamento,
+            codigoSapPedidoCompraItem,
+            cancellationToken);
+
     /// <summary>Itens ja persistidos do lancamento, com pesos consolidados, para envio controlado ao SAP.</summary>
     public Task<IReadOnlyList<EntradaProdutoItemEnvioSap>> ListarItensParaEnvioSapAsync(
         long codigoLancamento,

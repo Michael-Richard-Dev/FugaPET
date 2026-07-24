@@ -14,9 +14,6 @@ partial class ModeloEtiquetaForm
     private PictureBox headerTitleIconPictureBox;
     private Label headerTitleLabel;
     private Label headerSubtitleLabel;
-    private RoundedPanel sapStatusPanel;
-    private Label sapStatusDotLabel;
-    private Label sapStatusLabel;
     private Label minimizeWindowLabel;
     private Label maximizeWindowLabel;
     private Label closeWindowLabel;
@@ -188,9 +185,6 @@ partial class ModeloEtiquetaForm
         headerTitleIconPictureBox = new PictureBox();
         headerTitleLabel = new Label();
         headerSubtitleLabel = new Label();
-        sapStatusPanel = new RoundedPanel();
-        sapStatusDotLabel = new Label();
-        sapStatusLabel = new Label();
         minimizeWindowLabel = new Label();
         maximizeWindowLabel = new Label();
         closeWindowLabel = new Label();
@@ -238,7 +232,6 @@ partial class ModeloEtiquetaForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).BeginInit();
         headerTitleIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
-        sapStatusPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)profilesDataGridView).BeginInit();
         heroPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).BeginInit();
@@ -411,7 +404,7 @@ partial class ModeloEtiquetaForm
         searchTextBox.Font = new Font("Segoe UI", 9F);
         searchTextBox.Location = new Point(36, 8);
         searchTextBox.Name = "searchTextBox";
-        searchTextBox.PlaceholderText = "Buscar setor...";
+        searchTextBox.PlaceholderText = "Buscar modelo...";
         searchTextBox.Size = new Size(340, 16);
         searchTextBox.TabIndex = 4;
         // 
@@ -776,7 +769,7 @@ partial class ModeloEtiquetaForm
         summaryUsuariosCaptionLabel.Name = "summaryUsuariosCaptionLabel";
         summaryUsuariosCaptionLabel.Size = new Size(180, 18);
         summaryUsuariosCaptionLabel.TabIndex = 16;
-        summaryUsuariosCaptionLabel.Text = "Referência";
+        summaryUsuariosCaptionLabel.Text = "Versão";
         // 
         // summaryUsuariosValueLabel
         // 
@@ -1170,7 +1163,6 @@ partial class ModeloEtiquetaForm
         customTitleBarPanel.Controls.Add(headerTitleIconPanel);
         customTitleBarPanel.Controls.Add(headerTitleLabel);
         customTitleBarPanel.Controls.Add(headerSubtitleLabel);
-        customTitleBarPanel.Controls.Add(sapStatusPanel);
         customTitleBarPanel.Controls.Add(minimizeWindowLabel);
         customTitleBarPanel.Controls.Add(maximizeWindowLabel);
         customTitleBarPanel.Controls.Add(closeWindowLabel);
@@ -1255,47 +1247,7 @@ partial class ModeloEtiquetaForm
         headerSubtitleLabel.Size = new Size(560, 17);
         headerSubtitleLabel.TabIndex = 5;
         headerSubtitleLabel.Text = "Cadastro e manutenção de modelos de etiqueta (ZPL)";
-        // 
-        // sapStatusPanel
-        // 
-        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
-        sapStatusPanel.BorderRadius = 12;
-        sapStatusPanel.Controls.Add(sapStatusDotLabel);
-        sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(910, 10);
-        sapStatusPanel.Name = "sapStatusPanel";
-        sapStatusPanel.ShadowBlur = 0;
-        sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(190, 27);
-        sapStatusPanel.TabIndex = 6;
-        // 
-        // sapStatusDotLabel
-        // 
-        sapStatusDotLabel.BackColor = Color.Transparent;
-        sapStatusDotLabel.Font = new Font("Segoe UI Symbol", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusDotLabel.Location = new Point(11, 4);
-        sapStatusDotLabel.Name = "sapStatusDotLabel";
-        sapStatusDotLabel.Size = new Size(14, 18);
-        sapStatusDotLabel.TabIndex = 0;
-        sapStatusDotLabel.Text = "●";
-        sapStatusDotLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // sapStatusLabel
-        // 
-        sapStatusLabel.BackColor = Color.Transparent;
-        sapStatusLabel.Font = new Font("Cascadia Code", 7.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        sapStatusLabel.ForeColor = Color.White;
-        sapStatusLabel.Location = new Point(27, 5);
-        sapStatusLabel.Name = "sapStatusLabel";
-        sapStatusLabel.Size = new Size(151, 17);
-        sapStatusLabel.TabIndex = 0;
-        sapStatusLabel.Text = "SAP: não configurado";
-        sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
+        //
         // minimizeWindowLabel
         // 
         minimizeWindowLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -1431,7 +1383,7 @@ partial class ModeloEtiquetaForm
         dataGridViewTextBoxColumn3.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
         dataGridViewCellStyle3.Alignment = DataGridViewContentAlignment.MiddleCenter;
         dataGridViewTextBoxColumn3.DefaultCellStyle = dataGridViewCellStyle3;
-        dataGridViewTextBoxColumn3.HeaderText = "Referência";
+        dataGridViewTextBoxColumn3.HeaderText = "Versão";
         dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
         dataGridViewTextBoxColumn3.ReadOnly = true;
         // 
@@ -1569,7 +1521,7 @@ partial class ModeloEtiquetaForm
         profilesHeaderUsersLabel.Name = "profilesHeaderUsersLabel";
         profilesHeaderUsersLabel.Size = new Size(122, 20);
         profilesHeaderUsersLabel.TabIndex = 1;
-        profilesHeaderUsersLabel.Text = "Referência";
+        profilesHeaderUsersLabel.Text = "Versão";
         profilesHeaderUsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profilesHeaderProfileLabel
@@ -1641,7 +1593,6 @@ partial class ModeloEtiquetaForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).EndInit();
         headerTitleIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
-        sapStatusPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)profilesDataGridView).EndInit();
         heroPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).EndInit();
@@ -1688,25 +1639,7 @@ partial class ModeloEtiquetaForm
         headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
         headerSubtitleLabel.Location = new Point(279, 29);
         headerSubtitleLabel.Size = new Size(560, 17);
-        headerSubtitleLabel.Text = "Permissões e níveis de acesso / Administração do sistema";
-        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
-        sapStatusPanel.BorderRadius = 12;
-        sapStatusPanel.Controls.Add(sapStatusDotLabel);
-        sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(910, 10);
-        sapStatusPanel.Size = new Size(190, 27);
-        sapStatusDotLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusDotLabel.Location = new Point(11, 4);
-        sapStatusDotLabel.Size = new Size(14, 18);
-        sapStatusDotLabel.Text = "●";
-        sapStatusLabel.Font = new Font("Cascadia Code", 7F, FontStyle.Bold);
-        sapStatusLabel.ForeColor = Color.White;
-        sapStatusLabel.Location = new Point(27, 5);
-        sapStatusLabel.Size = new Size(151, 17);
-        sapStatusLabel.Text = "SAP: não configurado";
+        headerSubtitleLabel.Text = "Cadastro e manutenção de modelos de etiqueta (ZPL)";
         ConfigureWindowButton(minimizeWindowLabel, "–", new Point(1218, 0), new Font("Segoe UI", 12F));
         ConfigureWindowButton(maximizeWindowLabel, "\uE922", new Point(1266, 0), new Font("Segoe MDL2 Assets", 9F));
         ConfigureWindowButton(closeWindowLabel, "\uE8BB", new Point(1314, 0), new Font("Segoe MDL2 Assets", 9F));

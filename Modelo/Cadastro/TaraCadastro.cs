@@ -27,3 +27,14 @@ public sealed class TaraCadastro
     public string Nome { get => NomeTara; set => NomeTara = value; }
     public bool Ativo { get => SituacaoTara; set => SituacaoTara = value; }
 }
+
+/// <summary>
+/// Tarefa Tara (Ajuste 3): resultado da validação de vínculos ativos para reativar uma tara
+/// (setor e tipo de tara vinculados precisam estar ativos). Somente leitura.
+/// </summary>
+public sealed class ResumoValidacaoReativacaoTara
+{
+    public bool Encontrado { get; init; }
+    public bool SetorAtivo { get; init; }
+    public bool TipoAtivo { get; init; }
+}

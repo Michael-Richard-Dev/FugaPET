@@ -63,6 +63,9 @@ public sealed class MapeamentoCampoEtiquetaServicoTests : IDisposable
         public override Task<MapeamentoCampoEtiquetaCadastro?> ObterAtivoPorCampoAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
             => Task.FromResult<MapeamentoCampoEtiquetaCadastro?>(null);
 
+        public override Task<bool> CampoEstaAtivoAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
         public override Task<long> InserirAsync(MapeamentoCampoEtiquetaCadastro mapa, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("falha simulada");
     }

@@ -66,7 +66,7 @@ partial class EtiquetaForm
     private Label profileRow5UsersLabel;
     private RoundedPanel profileRow5StatusPanel;
     private Label profileRow5StatusLabel;
-    private DataGridView profilesDataGridView;
+    private DataGridView etiquetasDataGridView;
     private TextBox searchTextBox;
     private Button novoPerfilButton;
     private Button duplicarButton;
@@ -90,8 +90,8 @@ partial class EtiquetaForm
     private Label summaryUsuariosCaptionLabel;
     private Label summaryUsuariosValueLabel;
     private Button salvarButton;
-    private Button novoButton;
-    private Button excluirButton;
+    private Button editarButton;
+    private Button situacaoButton;
     private Panel footerBar;
     private Panel cellUser;
     private Label cellUserIcon;
@@ -184,22 +184,22 @@ partial class EtiquetaForm
         textBox2 = new TextBox();
         label2 = new Label();
         roundedPanel2 = new RoundedPanel();
-        textBox1 = new TextBox();
+        codigoInternoTextBox = new TextBox();
         label1 = new Label();
         RdpSetor = new RoundedPanel();
-        CmbSetor = new ComboBox();
+        modeloEtiquetaComboBox = new ComboBox();
         LblSetorTara = new Label();
         roundedPanel1 = new RoundedPanel();
-        TxtPeso = new TextBox();
+        tipoEtiquetaComboBox = new ComboBox();
         LblPeso = new Label();
         detailsTitleIconLabel = new Label();
         detailsTitleLabel = new Label();
         nomePerfilLabel = new Label();
         nomePerfilInputPanel = new RoundedPanel();
-        nomePerfilTextBox = new TextBox();
+        nomeEtiquetaTextBox = new TextBox();
         descricaoLabel = new Label();
         descricaoInputPanel = new RoundedPanel();
-        descricaoTextBox = new TextBox();
+        descricaoEtiquetaTextBox = new TextBox();
         situacaoInputPanel = new RoundedPanel();
         situacaoComboBox = new ComboBox();
         detailsTopDividerLabel = new Label();
@@ -223,8 +223,8 @@ partial class EtiquetaForm
         summaryUsuariosCaptionLabel = new Label();
         summaryUsuariosValueLabel = new Label();
         salvarButton = new Button();
-        novoButton = new Button();
-        excluirButton = new Button();
+        editarButton = new Button();
+        situacaoButton = new Button();
         footerBar = new Panel();
         footerBarLayout = new TableLayoutPanel();
         cellUser = new Panel();
@@ -266,7 +266,7 @@ partial class EtiquetaForm
         closeWindowLabel = new Label();
         novoPerfilButton = new Button();
         duplicarButton = new Button();
-        profilesDataGridView = new DataGridView();
+        etiquetasDataGridView = new DataGridView();
         dataGridViewTextBoxColumn1 = new DataGridViewTextBoxColumn();
         dataGridViewTextBoxColumn2 = new DataGridViewTextBoxColumn();
         dataGridViewTextBoxColumn3 = new DataGridViewTextBoxColumn();
@@ -320,7 +320,7 @@ partial class EtiquetaForm
         headerTitleIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
         sapStatusPanel.SuspendLayout();
-        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)etiquetasDataGridView).BeginInit();
         heroPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).BeginInit();
         heroIllustrationPanel.SuspendLayout();
@@ -525,7 +525,7 @@ partial class EtiquetaForm
         profilesHeaderProfileLabel.Name = "profilesHeaderProfileLabel";
         profilesHeaderProfileLabel.Size = new Size(138, 20);
         profilesHeaderProfileLabel.TabIndex = 0;
-        profilesHeaderProfileLabel.Text = "Nome";
+        profilesHeaderProfileLabel.Text = "Etiqueta";
         profilesHeaderProfileLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // profilesHeaderUsersLabel
@@ -537,7 +537,7 @@ partial class EtiquetaForm
         profilesHeaderUsersLabel.Name = "profilesHeaderUsersLabel";
         profilesHeaderUsersLabel.Size = new Size(121, 20);
         profilesHeaderUsersLabel.TabIndex = 1;
-        profilesHeaderUsersLabel.Text = "Setor";
+        profilesHeaderUsersLabel.Text = "Tipo";
         profilesHeaderUsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profilesHeaderStatusLabel
@@ -571,7 +571,7 @@ partial class EtiquetaForm
         profileRow1NameLabel.Name = "profileRow1NameLabel";
         profileRow1NameLabel.Size = new Size(142, 24);
         profileRow1NameLabel.TabIndex = 1;
-        profileRow1NameLabel.Text = "Etiqueta Entrada MP";
+        profileRow1NameLabel.Text = "";
         profileRow1NameLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // profileRow1UsersLabel
@@ -582,7 +582,7 @@ partial class EtiquetaForm
         profileRow1UsersLabel.Name = "profileRow1UsersLabel";
         profileRow1UsersLabel.Size = new Size(121, 24);
         profileRow1UsersLabel.TabIndex = 2;
-        profileRow1UsersLabel.Text = "Entrada de Produtos";
+        profileRow1UsersLabel.Text = "";
         profileRow1UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow1StatusPanel
@@ -609,7 +609,7 @@ partial class EtiquetaForm
         profileRow1StatusLabel.Name = "profileRow1StatusLabel";
         profileRow1StatusLabel.Size = new Size(50, 24);
         profileRow1StatusLabel.TabIndex = 0;
-        profileRow1StatusLabel.Text = "Ativo";
+        profileRow1StatusLabel.Text = "";
         profileRow1StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow2Panel
@@ -631,7 +631,7 @@ partial class EtiquetaForm
         profileRow2NameLabel.Name = "profileRow2NameLabel";
         profileRow2NameLabel.Size = new Size(142, 24);
         profileRow2NameLabel.TabIndex = 1;
-        profileRow2NameLabel.Text = "Etiqueta Palete Produção";
+        profileRow2NameLabel.Text = "";
         profileRow2NameLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // profileRow2UsersLabel
@@ -642,7 +642,7 @@ partial class EtiquetaForm
         profileRow2UsersLabel.Name = "profileRow2UsersLabel";
         profileRow2UsersLabel.Size = new Size(121, 24);
         profileRow2UsersLabel.TabIndex = 2;
-        profileRow2UsersLabel.Text = "Produção";
+        profileRow2UsersLabel.Text = "";
         profileRow2UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow2StatusPanel
@@ -669,7 +669,7 @@ partial class EtiquetaForm
         profileRow2StatusLabel.Name = "profileRow2StatusLabel";
         profileRow2StatusLabel.Size = new Size(50, 24);
         profileRow2StatusLabel.TabIndex = 0;
-        profileRow2StatusLabel.Text = "Ativo";
+        profileRow2StatusLabel.Text = "";
         profileRow2StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow3Panel
@@ -691,7 +691,7 @@ partial class EtiquetaForm
         profileRow3NameLabel.Name = "profileRow3NameLabel";
         profileRow3NameLabel.Size = new Size(157, 24);
         profileRow3NameLabel.TabIndex = 2;
-        profileRow3NameLabel.Text = "Etiqueta Produto Acabado";
+        profileRow3NameLabel.Text = "";
         profileRow3NameLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // profileRow3UsersLabel
@@ -702,7 +702,7 @@ partial class EtiquetaForm
         profileRow3UsersLabel.Name = "profileRow3UsersLabel";
         profileRow3UsersLabel.Size = new Size(121, 24);
         profileRow3UsersLabel.TabIndex = 3;
-        profileRow3UsersLabel.Text = "Expedição";
+        profileRow3UsersLabel.Text = "";
         profileRow3UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow3StatusPanel
@@ -729,7 +729,7 @@ partial class EtiquetaForm
         profileRow3StatusLabel.Name = "profileRow3StatusLabel";
         profileRow3StatusLabel.Size = new Size(50, 24);
         profileRow3StatusLabel.TabIndex = 0;
-        profileRow3StatusLabel.Text = "Ativo";
+        profileRow3StatusLabel.Text = "";
         profileRow3StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow4Panel
@@ -751,7 +751,7 @@ partial class EtiquetaForm
         profileRow4NameLabel.Name = "profileRow4NameLabel";
         profileRow4NameLabel.Size = new Size(142, 24);
         profileRow4NameLabel.TabIndex = 1;
-        profileRow4NameLabel.Text = "Etiqueta de Reprocesso";
+        profileRow4NameLabel.Text = "";
         profileRow4NameLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // profileRow4UsersLabel
@@ -762,7 +762,7 @@ partial class EtiquetaForm
         profileRow4UsersLabel.Name = "profileRow4UsersLabel";
         profileRow4UsersLabel.Size = new Size(121, 24);
         profileRow4UsersLabel.TabIndex = 2;
-        profileRow4UsersLabel.Text = "Reprocesso";
+        profileRow4UsersLabel.Text = "";
         profileRow4UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow4StatusPanel
@@ -789,7 +789,7 @@ partial class EtiquetaForm
         profileRow4StatusLabel.Name = "profileRow4StatusLabel";
         profileRow4StatusLabel.Size = new Size(50, 24);
         profileRow4StatusLabel.TabIndex = 0;
-        profileRow4StatusLabel.Text = "Ativo";
+        profileRow4StatusLabel.Text = "";
         profileRow4StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow5Panel
@@ -811,7 +811,7 @@ partial class EtiquetaForm
         profileRow5NameLabel.Name = "profileRow5NameLabel";
         profileRow5NameLabel.Size = new Size(142, 24);
         profileRow5NameLabel.TabIndex = 1;
-        profileRow5NameLabel.Text = "Etiqueta Químicos";
+        profileRow5NameLabel.Text = "";
         profileRow5NameLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // profileRow5UsersLabel
@@ -822,7 +822,7 @@ partial class EtiquetaForm
         profileRow5UsersLabel.Name = "profileRow5UsersLabel";
         profileRow5UsersLabel.Size = new Size(121, 24);
         profileRow5UsersLabel.TabIndex = 2;
-        profileRow5UsersLabel.Text = "Produção";
+        profileRow5UsersLabel.Text = "";
         profileRow5UsersLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profileRow5StatusPanel
@@ -849,7 +849,7 @@ partial class EtiquetaForm
         profileRow5StatusLabel.Name = "profileRow5StatusLabel";
         profileRow5StatusLabel.Size = new Size(50, 24);
         profileRow5StatusLabel.TabIndex = 0;
-        profileRow5StatusLabel.Text = "Ativo";
+        profileRow5StatusLabel.Text = "";
         profileRow5StatusLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // profilesFooterLabel
@@ -861,7 +861,7 @@ partial class EtiquetaForm
         profilesFooterLabel.Name = "profilesFooterLabel";
         profilesFooterLabel.Size = new Size(180, 22);
         profilesFooterLabel.TabIndex = 6;
-        profilesFooterLabel.Text = "Exibindo 5 de 5 etiquetas";
+        profilesFooterLabel.Text = "Exibindo 0 de 0 etiquetas";
         // 
         // profilesTitleLabel
         // 
@@ -917,6 +917,7 @@ partial class EtiquetaForm
         roundedPanel3.ShadowOffsetY = 0;
         roundedPanel3.Size = new Size(238, 33);
         roundedPanel3.TabIndex = 43;
+        roundedPanel3.Visible = false;
         // 
         // textBox2
         // 
@@ -927,7 +928,7 @@ partial class EtiquetaForm
         textBox2.Name = "textBox2";
         textBox2.Size = new Size(214, 16);
         textBox2.TabIndex = 3;
-        textBox2.Text = "80";
+        textBox2.Text = "";
         // 
         // label2
         // 
@@ -937,14 +938,15 @@ partial class EtiquetaForm
         label2.Name = "label2";
         label2.Size = new Size(180, 14);
         label2.TabIndex = 42;
-        label2.Text = "Largura Etiqueta (mm) *";
+        label2.Text = "";
+        label2.Visible = false;
         // 
         // roundedPanel2
         // 
         roundedPanel2.BackColor = Color.Transparent;
         roundedPanel2.BorderColor = Color.FromArgb(203, 213, 225);
         roundedPanel2.BorderRadius = 5;
-        roundedPanel2.Controls.Add(textBox1);
+        roundedPanel2.Controls.Add(codigoInternoTextBox);
         roundedPanel2.Location = new Point(24, 140);
         roundedPanel2.Name = "roundedPanel2";
         roundedPanel2.ShadowBlur = 0;
@@ -952,16 +954,16 @@ partial class EtiquetaForm
         roundedPanel2.Size = new Size(238, 33);
         roundedPanel2.TabIndex = 41;
         // 
-        // textBox1
+        // codigoInternoTextBox
         // 
-        textBox1.BackColor = Color.White;
-        textBox1.BorderStyle = BorderStyle.None;
-        textBox1.Font = new Font("Segoe UI", 9F);
-        textBox1.Location = new Point(12, 10);
-        textBox1.Name = "textBox1";
-        textBox1.Size = new Size(214, 16);
-        textBox1.TabIndex = 3;
-        textBox1.Text = "100";
+        codigoInternoTextBox.BackColor = Color.White;
+        codigoInternoTextBox.BorderStyle = BorderStyle.None;
+        codigoInternoTextBox.Font = new Font("Segoe UI", 9F);
+        codigoInternoTextBox.Location = new Point(12, 10);
+        codigoInternoTextBox.Name = "codigoInternoTextBox";
+        codigoInternoTextBox.Size = new Size(214, 16);
+        codigoInternoTextBox.TabIndex = 3;
+        codigoInternoTextBox.Text = "";
         // 
         // label1
         // 
@@ -971,14 +973,14 @@ partial class EtiquetaForm
         label1.Name = "label1";
         label1.Size = new Size(180, 14);
         label1.TabIndex = 40;
-        label1.Text = "Altura Etiqueta (mm) *";
+        label1.Text = "Código Interno *";
         // 
         // RdpSetor
         // 
         RdpSetor.BackColor = Color.Transparent;
         RdpSetor.BorderColor = Color.FromArgb(203, 213, 225);
         RdpSetor.BorderRadius = 5;
-        RdpSetor.Controls.Add(CmbSetor);
+        RdpSetor.Controls.Add(modeloEtiquetaComboBox);
         RdpSetor.Location = new Point(292, 204);
         RdpSetor.Name = "RdpSetor";
         RdpSetor.ShadowBlur = 0;
@@ -986,16 +988,15 @@ partial class EtiquetaForm
         RdpSetor.Size = new Size(238, 33);
         RdpSetor.TabIndex = 39;
         // 
-        // CmbSetor
+        // modeloEtiquetaComboBox
         // 
-        CmbSetor.FlatStyle = FlatStyle.Flat;
-        CmbSetor.Font = new Font("Segoe UI", 9F);
-        CmbSetor.Items.AddRange(new object[] { "Ativo", "Inativo" });
-        CmbSetor.Location = new Point(3, 4);
-        CmbSetor.Name = "CmbSetor";
-        CmbSetor.Size = new Size(223, 23);
-        CmbSetor.TabIndex = 9;
-        CmbSetor.Text = "Entrada de Produtos";
+        modeloEtiquetaComboBox.FlatStyle = FlatStyle.Flat;
+        modeloEtiquetaComboBox.Font = new Font("Segoe UI", 9F);
+        modeloEtiquetaComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        modeloEtiquetaComboBox.Location = new Point(3, 4);
+        modeloEtiquetaComboBox.Name = "modeloEtiquetaComboBox";
+        modeloEtiquetaComboBox.Size = new Size(223, 23);
+        modeloEtiquetaComboBox.TabIndex = 9;
         // 
         // LblSetorTara
         // 
@@ -1005,14 +1006,14 @@ partial class EtiquetaForm
         LblSetorTara.Name = "LblSetorTara";
         LblSetorTara.Size = new Size(180, 19);
         LblSetorTara.TabIndex = 38;
-        LblSetorTara.Text = "Setor *";
+        LblSetorTara.Text = "Modelo da Etiqueta *";
         // 
         // roundedPanel1
         // 
         roundedPanel1.BackColor = Color.Transparent;
         roundedPanel1.BorderColor = Color.FromArgb(203, 213, 225);
         roundedPanel1.BorderRadius = 5;
-        roundedPanel1.Controls.Add(TxtPeso);
+        roundedPanel1.Controls.Add(tipoEtiquetaComboBox);
         roundedPanel1.Location = new Point(292, 140);
         roundedPanel1.Name = "roundedPanel1";
         roundedPanel1.ShadowBlur = 0;
@@ -1020,16 +1021,15 @@ partial class EtiquetaForm
         roundedPanel1.Size = new Size(238, 33);
         roundedPanel1.TabIndex = 35;
         // 
-        // TxtPeso
+        // tipoEtiquetaComboBox
         // 
-        TxtPeso.BackColor = Color.White;
-        TxtPeso.BorderStyle = BorderStyle.None;
-        TxtPeso.Font = new Font("Segoe UI", 9F);
-        TxtPeso.Location = new Point(12, 8);
-        TxtPeso.Name = "TxtPeso";
-        TxtPeso.Size = new Size(214, 16);
-        TxtPeso.TabIndex = 4;
-        TxtPeso.Text = "Zebra ZT411";
+        tipoEtiquetaComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        tipoEtiquetaComboBox.FlatStyle = FlatStyle.Flat;
+        tipoEtiquetaComboBox.Font = new Font("Segoe UI", 9F);
+        tipoEtiquetaComboBox.Location = new Point(3, 4);
+        tipoEtiquetaComboBox.Name = "tipoEtiquetaComboBox";
+        tipoEtiquetaComboBox.Size = new Size(223, 23);
+        tipoEtiquetaComboBox.TabIndex = 4;
         // 
         // LblPeso
         // 
@@ -1039,7 +1039,7 @@ partial class EtiquetaForm
         LblPeso.Name = "LblPeso";
         LblPeso.Size = new Size(180, 19);
         LblPeso.TabIndex = 34;
-        LblPeso.Text = "Impressora *";
+        LblPeso.Text = "Tipo da Etiqueta *";
         // 
         // detailsTitleIconLabel
         // 
@@ -1078,7 +1078,7 @@ partial class EtiquetaForm
         nomePerfilInputPanel.BackColor = Color.Transparent;
         nomePerfilInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
         nomePerfilInputPanel.BorderRadius = 5;
-        nomePerfilInputPanel.Controls.Add(nomePerfilTextBox);
+        nomePerfilInputPanel.Controls.Add(nomeEtiquetaTextBox);
         nomePerfilInputPanel.Location = new Point(24, 73);
         nomePerfilInputPanel.Name = "nomePerfilInputPanel";
         nomePerfilInputPanel.ShadowBlur = 0;
@@ -1086,16 +1086,16 @@ partial class EtiquetaForm
         nomePerfilInputPanel.Size = new Size(238, 33);
         nomePerfilInputPanel.TabIndex = 3;
         // 
-        // nomePerfilTextBox
+        // nomeEtiquetaTextBox
         // 
-        nomePerfilTextBox.BackColor = Color.White;
-        nomePerfilTextBox.BorderStyle = BorderStyle.None;
-        nomePerfilTextBox.Font = new Font("Segoe UI", 9F);
-        nomePerfilTextBox.Location = new Point(12, 10);
-        nomePerfilTextBox.Name = "nomePerfilTextBox";
-        nomePerfilTextBox.Size = new Size(214, 16);
-        nomePerfilTextBox.TabIndex = 3;
-        nomePerfilTextBox.Text = "Etiqueta Entrada MP";
+        nomeEtiquetaTextBox.BackColor = Color.White;
+        nomeEtiquetaTextBox.BorderStyle = BorderStyle.None;
+        nomeEtiquetaTextBox.Font = new Font("Segoe UI", 9F);
+        nomeEtiquetaTextBox.Location = new Point(12, 10);
+        nomeEtiquetaTextBox.Name = "nomeEtiquetaTextBox";
+        nomeEtiquetaTextBox.Size = new Size(214, 16);
+        nomeEtiquetaTextBox.TabIndex = 3;
+        nomeEtiquetaTextBox.Text = "";
         // 
         // descricaoLabel
         // 
@@ -1112,7 +1112,7 @@ partial class EtiquetaForm
         descricaoInputPanel.BackColor = Color.Transparent;
         descricaoInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
         descricaoInputPanel.BorderRadius = 5;
-        descricaoInputPanel.Controls.Add(descricaoTextBox);
+        descricaoInputPanel.Controls.Add(descricaoEtiquetaTextBox);
         descricaoInputPanel.Location = new Point(24, 264);
         descricaoInputPanel.Name = "descricaoInputPanel";
         descricaoInputPanel.ShadowBlur = 0;
@@ -1120,16 +1120,16 @@ partial class EtiquetaForm
         descricaoInputPanel.Size = new Size(506, 97);
         descricaoInputPanel.TabIndex = 7;
         // 
-        // descricaoTextBox
+        // descricaoEtiquetaTextBox
         // 
-        descricaoTextBox.BorderStyle = BorderStyle.None;
-        descricaoTextBox.Font = new Font("Segoe UI", 9F);
-        descricaoTextBox.Location = new Point(3, 3);
-        descricaoTextBox.Multiline = true;
-        descricaoTextBox.Name = "descricaoTextBox";
-        descricaoTextBox.Size = new Size(500, 88);
-        descricaoTextBox.TabIndex = 7;
-        descricaoTextBox.Text = "Etiqueta de entrada de Matéria Prima.";
+        descricaoEtiquetaTextBox.BorderStyle = BorderStyle.None;
+        descricaoEtiquetaTextBox.Font = new Font("Segoe UI", 9F);
+        descricaoEtiquetaTextBox.Location = new Point(3, 3);
+        descricaoEtiquetaTextBox.Multiline = true;
+        descricaoEtiquetaTextBox.Name = "descricaoEtiquetaTextBox";
+        descricaoEtiquetaTextBox.Size = new Size(500, 88);
+        descricaoEtiquetaTextBox.TabIndex = 7;
+        descricaoEtiquetaTextBox.Text = "";
         // 
         // situacaoInputPanel
         // 
@@ -1148,12 +1148,12 @@ partial class EtiquetaForm
         // 
         situacaoComboBox.FlatStyle = FlatStyle.Flat;
         situacaoComboBox.Font = new Font("Segoe UI", 9F);
+        situacaoComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         situacaoComboBox.Items.AddRange(new object[] { "Ativo", "Inativo" });
         situacaoComboBox.Location = new Point(3, 4);
         situacaoComboBox.Name = "situacaoComboBox";
         situacaoComboBox.Size = new Size(223, 23);
         situacaoComboBox.TabIndex = 9;
-        situacaoComboBox.Text = "Ativo";
         // 
         // detailsTopDividerLabel
         // 
@@ -1197,8 +1197,8 @@ partial class EtiquetaForm
         summaryCard.Controls.Add(summaryUsuariosCaptionLabel);
         summaryCard.Controls.Add(summaryUsuariosValueLabel);
         summaryCard.Controls.Add(salvarButton);
-        summaryCard.Controls.Add(novoButton);
-        summaryCard.Controls.Add(excluirButton);
+        summaryCard.Controls.Add(editarButton);
+        summaryCard.Controls.Add(situacaoButton);
         summaryCard.Dock = DockStyle.Fill;
         summaryCard.Location = new Point(995, 3);
         summaryCard.Name = "summaryCard";
@@ -1215,7 +1215,7 @@ partial class EtiquetaForm
         tipTextLabel.Name = "tipTextLabel";
         tipTextLabel.Size = new Size(210, 24);
         tipTextLabel.TabIndex = 24;
-        tipTextLabel.Text = "Último cadastro: 13/05/2026 13:37";
+        tipTextLabel.Text = "Tipo: -\r\nModelo: -\r\nÚltimo cadastro: -";
         // 
         // summaryTitleIconLabel
         // 
@@ -1308,7 +1308,7 @@ partial class EtiquetaForm
         summaryPerfilValueLabel.Name = "summaryPerfilValueLabel";
         summaryPerfilValueLabel.Size = new Size(180, 24);
         summaryPerfilValueLabel.TabIndex = 5;
-        summaryPerfilValueLabel.Text = "Etiqueta Entrada MP";
+        summaryPerfilValueLabel.Text = "-";
         // 
         // summarySituacaoIconLabel
         // 
@@ -1339,7 +1339,7 @@ partial class EtiquetaForm
         summarySituacaoValueLabel.Name = "summarySituacaoValueLabel";
         summarySituacaoValueLabel.Size = new Size(180, 24);
         summarySituacaoValueLabel.TabIndex = 11;
-        summarySituacaoValueLabel.Text = "Ativo";
+        summarySituacaoValueLabel.Text = "-";
         // 
         // summaryUsuariosIconLabel
         // 
@@ -1360,7 +1360,7 @@ partial class EtiquetaForm
         summaryUsuariosCaptionLabel.Name = "summaryUsuariosCaptionLabel";
         summaryUsuariosCaptionLabel.Size = new Size(180, 18);
         summaryUsuariosCaptionLabel.TabIndex = 16;
-        summaryUsuariosCaptionLabel.Text = "Setores vinculados";
+        summaryUsuariosCaptionLabel.Text = "Código interno";
         // 
         // summaryUsuariosValueLabel
         // 
@@ -1370,7 +1370,7 @@ partial class EtiquetaForm
         summaryUsuariosValueLabel.Name = "summaryUsuariosValueLabel";
         summaryUsuariosValueLabel.Size = new Size(180, 24);
         summaryUsuariosValueLabel.TabIndex = 17;
-        summaryUsuariosValueLabel.Text = "1";
+        summaryUsuariosValueLabel.Text = "-";
         // 
         // salvarButton
         // 
@@ -1385,34 +1385,34 @@ partial class EtiquetaForm
         salvarButton.TabIndex = 20;
         salvarButton.Text = "Salvar Etiqueta         F5";
         salvarButton.UseVisualStyleBackColor = false;
-        // 
-        // novoButton
-        // 
-        novoButton.BackColor = Color.White;
-        novoButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        novoButton.FlatStyle = FlatStyle.Flat;
-        novoButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        novoButton.ForeColor = Color.FromArgb(15, 23, 42);
-        novoButton.Location = new Point(24, 434);
-        novoButton.Name = "novoButton";
-        novoButton.Size = new Size(280, 28);
-        novoButton.TabIndex = 21;
-        novoButton.Text = "Editar Etiqueta          F6";
-        novoButton.UseVisualStyleBackColor = false;
-        // 
-        // excluirButton
-        // 
-        excluirButton.BackColor = Color.White;
-        excluirButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        excluirButton.FlatStyle = FlatStyle.Flat;
-        excluirButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
-        excluirButton.Location = new Point(24, 466);
-        excluirButton.Name = "excluirButton";
-        excluirButton.Size = new Size(280, 28);
-        excluirButton.TabIndex = 22;
-        excluirButton.Text = "Excluir Etiqueta          F8";
-        excluirButton.UseVisualStyleBackColor = false;
+        //
+        // editarButton
+        //
+        editarButton.BackColor = Color.White;
+        editarButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        editarButton.FlatStyle = FlatStyle.Flat;
+        editarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        editarButton.ForeColor = Color.FromArgb(15, 23, 42);
+        editarButton.Location = new Point(24, 434);
+        editarButton.Name = "editarButton";
+        editarButton.Size = new Size(280, 28);
+        editarButton.TabIndex = 21;
+        editarButton.Text = "Salvar Alterações       F6";
+        editarButton.UseVisualStyleBackColor = false;
+        //
+        // situacaoButton
+        //
+        situacaoButton.BackColor = Color.White;
+        situacaoButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        situacaoButton.FlatStyle = FlatStyle.Flat;
+        situacaoButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+        situacaoButton.ForeColor = Color.FromArgb(229, 27, 43);
+        situacaoButton.Location = new Point(24, 466);
+        situacaoButton.Name = "situacaoButton";
+        situacaoButton.Size = new Size(280, 28);
+        situacaoButton.TabIndex = 22;
+        situacaoButton.Text = "Inativar Etiqueta        F8";
+        situacaoButton.UseVisualStyleBackColor = false;
         // 
         // footerBar
         // 
@@ -1838,7 +1838,7 @@ partial class EtiquetaForm
         headerSubtitleLabel.Name = "headerSubtitleLabel";
         headerSubtitleLabel.Size = new Size(560, 17);
         headerSubtitleLabel.TabIndex = 5;
-        headerSubtitleLabel.Text = "Cadastro e manutenção de etiqueta / Integração SAP";
+        headerSubtitleLabel.Text = "Cadastro e manutenção de etiqueta";
         // 
         // sapStatusPanel
         // 
@@ -1855,6 +1855,7 @@ partial class EtiquetaForm
         sapStatusPanel.ShadowOffsetY = 0;
         sapStatusPanel.Size = new Size(190, 27);
         sapStatusPanel.TabIndex = 6;
+        sapStatusPanel.Visible = false;
         // 
         // sapStatusDotLabel
         // 
@@ -1877,7 +1878,7 @@ partial class EtiquetaForm
         sapStatusLabel.Name = "sapStatusLabel";
         sapStatusLabel.Size = new Size(151, 17);
         sapStatusLabel.TabIndex = 0;
-        sapStatusLabel.Text = "SAP: não configurado";
+        sapStatusLabel.Text = "";
         sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // minimizeWindowLabel
@@ -1949,18 +1950,18 @@ partial class EtiquetaForm
         duplicarButton.TabIndex = 3;
         duplicarButton.Text = "⧉  Duplicar";
         duplicarButton.UseVisualStyleBackColor = false;
-        // 
-        // profilesDataGridView
-        // 
-        profilesDataGridView.AllowUserToAddRows = false;
-        profilesDataGridView.AllowUserToDeleteRows = false;
-        profilesDataGridView.AllowUserToResizeColumns = false;
-        profilesDataGridView.AllowUserToResizeRows = false;
-        profilesDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        profilesDataGridView.BackgroundColor = Color.White;
-        profilesDataGridView.BorderStyle = BorderStyle.None;
-        profilesDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        profilesDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        //
+        // etiquetasDataGridView
+        //
+        etiquetasDataGridView.AllowUserToAddRows = false;
+        etiquetasDataGridView.AllowUserToDeleteRows = false;
+        etiquetasDataGridView.AllowUserToResizeColumns = false;
+        etiquetasDataGridView.AllowUserToResizeRows = false;
+        etiquetasDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        etiquetasDataGridView.BackgroundColor = Color.White;
+        etiquetasDataGridView.BorderStyle = BorderStyle.None;
+        etiquetasDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        etiquetasDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
         dataGridViewCellStyle1.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dataGridViewCellStyle1.BackColor = Color.White;
         dataGridViewCellStyle1.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
@@ -1968,9 +1969,9 @@ partial class EtiquetaForm
         dataGridViewCellStyle1.SelectionBackColor = Color.White;
         dataGridViewCellStyle1.SelectionForeColor = Color.FromArgb(51, 65, 85);
         dataGridViewCellStyle1.WrapMode = DataGridViewTriState.False;
-        profilesDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
-        profilesDataGridView.ColumnHeadersHeight = 31;
-        profilesDataGridView.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4 });
+        etiquetasDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
+        etiquetasDataGridView.ColumnHeadersHeight = 31;
+        etiquetasDataGridView.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4 });
         dataGridViewCellStyle4.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dataGridViewCellStyle4.BackColor = Color.White;
         dataGridViewCellStyle4.Font = new Font("Segoe UI", 8F);
@@ -1978,18 +1979,18 @@ partial class EtiquetaForm
         dataGridViewCellStyle4.SelectionBackColor = Color.FromArgb(254, 242, 242);
         dataGridViewCellStyle4.SelectionForeColor = Color.FromArgb(51, 65, 85);
         dataGridViewCellStyle4.WrapMode = DataGridViewTriState.False;
-        profilesDataGridView.DefaultCellStyle = dataGridViewCellStyle4;
-        profilesDataGridView.EnableHeadersVisualStyles = false;
-        profilesDataGridView.GridColor = Color.FromArgb(229, 231, 235);
-        profilesDataGridView.Location = new Point(20, 107);
-        profilesDataGridView.Name = "profilesDataGridView";
-        profilesDataGridView.ReadOnly = true;
-        profilesDataGridView.RowHeadersVisible = false;
-        profilesDataGridView.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
-        profilesDataGridView.RowTemplate.Height = 42;
-        profilesDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        profilesDataGridView.Size = new Size(372, 448);
-        profilesDataGridView.TabIndex = 5;
+        etiquetasDataGridView.DefaultCellStyle = dataGridViewCellStyle4;
+        etiquetasDataGridView.EnableHeadersVisualStyles = false;
+        etiquetasDataGridView.GridColor = Color.FromArgb(229, 231, 235);
+        etiquetasDataGridView.Location = new Point(20, 107);
+        etiquetasDataGridView.Name = "etiquetasDataGridView";
+        etiquetasDataGridView.ReadOnly = true;
+        etiquetasDataGridView.RowHeadersVisible = false;
+        etiquetasDataGridView.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
+        etiquetasDataGridView.RowTemplate.Height = 42;
+        etiquetasDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        etiquetasDataGridView.Size = new Size(372, 448);
+        etiquetasDataGridView.TabIndex = 5;
         // 
         // dataGridViewTextBoxColumn1
         // 
@@ -2192,7 +2193,7 @@ partial class EtiquetaForm
         headerTitleIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
         sapStatusPanel.ResumeLayout(false);
-        ((System.ComponentModel.ISupportInitialize)profilesDataGridView).EndInit();
+        ((System.ComponentModel.ISupportInitialize)etiquetasDataGridView).EndInit();
         heroPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)heroLogoPictureBox).EndInit();
         heroIllustrationPanel.ResumeLayout(false);
@@ -2237,7 +2238,7 @@ partial class EtiquetaForm
         headerSubtitleLabel.ForeColor = Color.FromArgb(211, 218, 228);
         headerSubtitleLabel.Location = new Point(279, 29);
         headerSubtitleLabel.Size = new Size(560, 17);
-        headerSubtitleLabel.Text = "Permissões e níveis de acesso / Administração do sistema";
+        headerSubtitleLabel.Text = "Cadastro e manutenção de etiqueta";
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
         sapStatusPanel.BorderRadius = 12;
@@ -2255,7 +2256,7 @@ partial class EtiquetaForm
         sapStatusLabel.ForeColor = Color.White;
         sapStatusLabel.Location = new Point(27, 5);
         sapStatusLabel.Size = new Size(151, 17);
-        sapStatusLabel.Text = "SAP: não configurado";
+        sapStatusLabel.Text = "";
         ConfigureWindowButton(minimizeWindowLabel, "–", new Point(1218, 0), new Font("Segoe UI", 12F));
         ConfigureWindowButton(maximizeWindowLabel, "\uE922", new Point(1266, 0), new Font("Segoe MDL2 Assets", 9F));
         ConfigureWindowButton(closeWindowLabel, "\uE8BB", new Point(1314, 0), new Font("Segoe MDL2 Assets", 9F));
@@ -2282,10 +2283,10 @@ partial class EtiquetaForm
     private Label detailsTitleLabel;
     private Label nomePerfilLabel;
     private RoundedPanel nomePerfilInputPanel;
-    private TextBox nomePerfilTextBox;
+    private TextBox nomeEtiquetaTextBox;
     private Label descricaoLabel;
     private RoundedPanel descricaoInputPanel;
-    private TextBox descricaoTextBox;
+    private TextBox descricaoEtiquetaTextBox;
     private Label situacaoLabel;
     private RoundedPanel situacaoInputPanel;
     private ComboBox situacaoComboBox;
@@ -2294,24 +2295,15 @@ partial class EtiquetaForm
     private Label tipTextLabel;
     private Label LblPeso;
     private RoundedPanel RdpSetor;
-    private ComboBox CmbSetor;
+    private ComboBox modeloEtiquetaComboBox;
     private Label LblSetorTara;
     private RoundedPanel roundedPanel1;
-    private TextBox TxtPeso;
+    private ComboBox tipoEtiquetaComboBox;
     private RoundedPanel roundedPanel2;
-    private TextBox textBox1;
+    private TextBox codigoInternoTextBox;
     private Label label1;
     private RoundedPanel roundedPanel3;
     private TextBox textBox2;
     private Label label2;
 }
-
-
-
-
-
-
-
-
-
 

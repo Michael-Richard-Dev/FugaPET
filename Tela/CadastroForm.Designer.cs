@@ -176,8 +176,8 @@ partial class CadastroForm
         modulesFlowLayoutPanel.Controls.Add(balancaCard);
         modulesFlowLayoutPanel.Controls.Add(tipoTaraCard);
         modulesFlowLayoutPanel.Controls.Add(taraCard);
-        modulesFlowLayoutPanel.Controls.Add(etiquetaCard);
         modulesFlowLayoutPanel.Controls.Add(modeloEtiquetaCard);
+        modulesFlowLayoutPanel.Controls.Add(etiquetaCard);
         modulesFlowLayoutPanel.Location = new Point(28, 70);
         modulesFlowLayoutPanel.Name = "modulesFlowLayoutPanel";
         modulesFlowLayoutPanel.Padding = new Padding(0, 0, 8, 8);
@@ -644,7 +644,7 @@ partial class CadastroForm
         etiquetaCard.ShadowBlur = 0;
         etiquetaCard.ShadowOffsetY = 0;
         etiquetaCard.Size = new Size(240, 250);
-        etiquetaCard.TabIndex = 5;
+        etiquetaCard.TabIndex = 8;
         // 
         // etiquetaIconPanel
         // 
@@ -721,7 +721,7 @@ partial class CadastroForm
         etiquetaShortcutLabel.Name = "etiquetaShortcutLabel";
         etiquetaShortcutLabel.Size = new Size(38, 28);
         etiquetaShortcutLabel.TabIndex = 4;
-        etiquetaShortcutLabel.Text = "F6";
+        etiquetaShortcutLabel.Text = "F7";
         etiquetaShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // etiquetaArrowLabel
@@ -866,7 +866,7 @@ partial class CadastroForm
         modeloEtiquetaCard.ShadowBlur = 0;
         modeloEtiquetaCard.ShadowOffsetY = 0;
         modeloEtiquetaCard.Size = new Size(240, 250);
-        modeloEtiquetaCard.TabIndex = 8;
+        modeloEtiquetaCard.TabIndex = 5;
         //
         // modeloEtiquetaIconPanel
         //
@@ -945,7 +945,7 @@ partial class CadastroForm
         modeloEtiquetaShortcutLabel.Name = "modeloEtiquetaShortcutLabel";
         modeloEtiquetaShortcutLabel.Size = new Size(42, 28);
         modeloEtiquetaShortcutLabel.TabIndex = 4;
-        modeloEtiquetaShortcutLabel.Text = "F7";
+        modeloEtiquetaShortcutLabel.Text = "F6";
         modeloEtiquetaShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // modeloEtiquetaArrowLabel

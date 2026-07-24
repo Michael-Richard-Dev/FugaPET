@@ -201,15 +201,16 @@ public partial class CadastroForm : UserControl
             return true;
         }
 
-        if (keyData == Keys.F6 && etiquetaCard.Visible)
+        // Reordenação Modelo → Etiqueta: F6 abre Modelo de Etiqueta, F7 abre Etiqueta.
+        if (keyData == Keys.F6 && modeloEtiquetaCard.Visible)
         {
-            OnEtiquetaClick(this, EventArgs.Empty);
+            OnModeloEtiquetaClick(this, EventArgs.Empty);
             return true;
         }
 
-        if (keyData == Keys.F7 && modeloEtiquetaCard.Visible)
+        if (keyData == Keys.F7 && etiquetaCard.Visible)
         {
-            OnModeloEtiquetaClick(this, EventArgs.Empty);
+            OnEtiquetaClick(this, EventArgs.Empty);
             return true;
         }
 

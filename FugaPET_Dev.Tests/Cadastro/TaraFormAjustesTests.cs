@@ -109,6 +109,190 @@ public sealed class TaraFormAjustesTests
         Assert.DoesNotContain("string.Equals(situacaoComboBox.Text, \"Ativo\"", form, StringComparison.Ordinal);
     }
 
+    // ---- Ajuste 1: ConfigurarCard real (habilita/desabilita + limpa no Vazio) ----
+
+    [Fact]
+    public void Form_ConfigurarCard_HabilitaCamposELimpaNoVazio()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private void ConfigurarCard");
+        Assert.Contains("nomePerfilTextBox.Enabled = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("CmbTipoTara.Enabled = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("CmbSetor.Enabled = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("TxtPeso.Enabled = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("situacaoComboBox.Enabled = novo", metodo, StringComparison.Ordinal);
+        Assert.Contains("LimparCamposCard()", metodo, StringComparison.Ordinal);
+    }
+
+    // ---- Ajuste 2: filtro que oculta a linha selecionada limpa estado (card Vazio) ----
+
+    [Fact]
+    public void Form_FiltroSemSelecaoVisivel_VaiParaVazio()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private void RestaurarSelecaoAposFiltro");
+        Assert.Contains("_idTaraAtual = 0", metodo, StringComparison.Ordinal);
+        Assert.Contains("ClearRowSelection()", metodo, StringComparison.Ordinal);
+        Assert.Contains("ConfigurarCard(ModoCard.Vazio)", metodo, StringComparison.Ordinal);
+    }
+
+    // ---- Ajuste 4: peso >3 casas bloqueado na UI ----
+
+    [Fact]
+    public void Form_PesoUiValido_BloqueiaMaisDe3Casas()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private bool PesoUiValido");
+        Assert.Contains("Math.Round(pesoKg, 3)", metodo, StringComparison.Ordinal);
+        Assert.Contains("Peso da tara deve ter no máximo 3 casas decimais.", metodo, StringComparison.Ordinal);
+    }
+
+    // ---- Ajuste 5: repositório ReativarAsync com NOT EXISTS de duplicidade global ----
+
+    [Fact]
+    public void Repositorio_ReativarTemNotExistsDuplicidadeGlobal()
+    {
+        string repo = LerArquivo("AcessoDados", "Repositorio", "TaraRepositorio.cs");
+        string metodo = ExtrairMetodoRepo(repo, "public virtual async Task<int> ReativarAsync");
+        Assert.Contains("AND NOT EXISTS", metodo, StringComparison.Ordinal);
+        Assert.Contains("FROM tara outra", metodo, StringComparison.Ordinal);
+        Assert.Contains("upper(trim(outra.nome_tara)) = upper(trim(t.nome_tara))", metodo, StringComparison.Ordinal);
+    }
+
+    // ---- Ajuste 6: CarregarTarasAsync em erro limpa estado ----
+
+    [Fact]
+    public void Form_CarregarEmErro_LimpaEstadoVisual()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private async Task CarregarTarasAsync");
+        Assert.Contains("catch", metodo, StringComparison.Ordinal);
+        Assert.Contains("_tarasCarregadas.Clear()", metodo, StringComparison.Ordinal);
+        Assert.Contains("ConfigurarCard(ModoCard.Vazio)", metodo, StringComparison.Ordinal);
+        Assert.Contains("AtualizarRodapePerfis(0)", metodo, StringComparison.Ordinal);
+        Assert.Contains("TARA_CARREGAR_ERRO", metodo, StringComparison.Ordinal);
+    }
+
+    // ---- Refinamento UX (3): header sem SAP, estado vazio limpo, resumo lateral coerente ----
+
+    [Fact]
+    public void Designer_SubtituloSemIntegracaoSap()
+    {
+        string designer = LerDesigner();
+        Assert.DoesNotContain("Integração SAP", designer, StringComparison.Ordinal);
+        Assert.Contains("headerSubtitleLabel.Text = \"Cadastro e manutenção de tara\"", designer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Designer_SemChipStatusSap()
+    {
+        string designer = LerDesigner();
+        Assert.DoesNotContain("SAP: não configurado", designer, StringComparison.Ordinal);
+        Assert.DoesNotContain("sapStatusPanel", designer, StringComparison.Ordinal);
+        Assert.DoesNotContain("sapStatusLabel", designer, StringComparison.Ordinal);
+        Assert.DoesNotContain("sapStatusDotLabel", designer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Designer_ResumoUsaPesoKgNaoSetoresVinculados()
+    {
+        string designer = LerDesigner();
+        Assert.DoesNotContain("Setores vinculados", designer, StringComparison.Ordinal);
+        Assert.Contains("summaryUsuariosCaptionLabel.Text = \"Peso (kg)\"", designer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_AbreEmModoCardVazio()
+    {
+        string form = LerForm();
+        // Ctor aplica o estado vazio ao abrir a tela (nada de campos cinzas no carregamento).
+        Assert.Contains("ConfigurarCard(ModoCard.Vazio);", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_ConfigurarCard_OcultaCamposNoVazioEExibeMensagem()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private void ConfigurarCard");
+        // No modo Vazio os campos não ficam visíveis (visibilidade controlada por operacional/novo).
+        Assert.Contains("nomePerfilLabel.Visible = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("nomePerfilInputPanel.Visible = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("situacaoLabel.Visible = novo", metodo, StringComparison.Ordinal);
+        Assert.Contains("roundedPanel1.Visible = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("RdpTipoTara.Visible = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("RdpSetor.Visible = operacional", metodo, StringComparison.Ordinal);
+        Assert.Contains("_lblEstadoVazio.Visible = modo == ModoCard.Vazio", metodo, StringComparison.Ordinal);
+        Assert.Contains("LimparCamposCard()", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_TemMensagemEstadoVazioAmigavel()
+    {
+        string form = LerForm();
+        Assert.Contains("Selecione uma tara cadastrada ou clique em Nova Tara para iniciar.", form, StringComparison.Ordinal);
+    }
+
+    // ---- Refinamento UX (4): estado limpo padronizado pós-operação ----
+
+    [Fact]
+    public void Form_FinalizarOperacao_DeixaTelaLimpa()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private async Task FinalizarOperacaoComTelaLimpaAsync");
+        Assert.Contains("_idTaraAtual = 0", metodo, StringComparison.Ordinal);
+        Assert.Contains("ClearRowSelection()", metodo, StringComparison.Ordinal);
+        Assert.Contains("ClearSummarySelectionValues()", metodo, StringComparison.Ordinal);
+        Assert.Contains("ConfigurarCard(ModoCard.Vazio)", metodo, StringComparison.Ordinal);
+        Assert.Contains("AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum)", metodo, StringComparison.Ordinal);
+        Assert.Contains("await CarregarTarasAsync()", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_AposSalvar_UsaTelaLimpaSemPrepareNew()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private async Task SalvarTaraAsync");
+        Assert.Contains("await FinalizarOperacaoComTelaLimpaAsync()", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrepareNewTara()", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_AposEditar_UsaTelaLimpa()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private async Task EditarTaraAsync");
+        Assert.Contains("await FinalizarOperacaoComTelaLimpaAsync()", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_AposInativar_UsaTelaLimpaSemPrepareNew()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private async Task ExcluirTaraAsync");
+        Assert.Contains("await FinalizarOperacaoComTelaLimpaAsync()", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrepareNewTara()", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_AposReativar_UsaTelaLimpaSemPrepareNew()
+    {
+        string form = LerForm();
+        string metodo = ExtrairMetodo(form, "private async Task ReativarTaraAsync");
+        Assert.Contains("await FinalizarOperacaoComTelaLimpaAsync()", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrepareNewTara()", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Form_BotaoNovaTara_ContinuaUsandoPrepareNew()
+    {
+        string form = LerForm();
+        // "Nova Tara" é o único fluxo que entra em modo Novo.
+        string metodo = ExtrairMetodo(form, "private void AttachNovoTaraClick");
+        Assert.Contains("PrepareNewTara()", metodo, StringComparison.Ordinal);
+    }
+
+    private static string LerDesigner() => LerArquivo("Tela", "Cadastro", "TaraForm.Designer.cs");
+
     private static string LerForm() => LerArquivo("Tela", "Cadastro", "TaraForm.cs");
 
     private static string LerArquivo(params string[] partes)

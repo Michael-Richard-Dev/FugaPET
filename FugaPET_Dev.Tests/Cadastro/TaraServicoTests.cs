@@ -193,6 +193,61 @@ public sealed class TaraServicoTests : IDisposable
         Assert.Equal(0, repo.ReativarChamadas);
     }
 
+    // ---- Ajuste 3: reativação exige setor e tipo vinculados ATIVOS ----
+
+    [Fact]
+    public async Task Reativar_ComSetorInativo_DeveBloquear()
+    {
+        DefinirPermissao(PermissoesSistema.Acoes.Editar);
+        RepositorioFake repo = new() { Existente = Comp(10, false), SetorAtivo = false, TipoAtivo = true };
+
+        ResultadoOperacao r = await Servico(repo).ReativarAsync(10);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(TaraServico.MensagemSetorInativo, r.Mensagem);
+        Assert.Equal(0, repo.ReativarChamadas);
+    }
+
+    [Fact]
+    public async Task Reativar_ComTipoInativo_DeveBloquear()
+    {
+        DefinirPermissao(PermissoesSistema.Acoes.Editar);
+        RepositorioFake repo = new() { Existente = Comp(10, false), SetorAtivo = true, TipoAtivo = false };
+
+        ResultadoOperacao r = await Servico(repo).ReativarAsync(10);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(TaraServico.MensagemTipoInativo, r.Mensagem);
+        Assert.Equal(0, repo.ReativarChamadas);
+    }
+
+    // ---- Ajuste 4: peso com mais de 3 casas é bloqueado, não arredondado ----
+
+    [Fact]
+    public async Task Inserir_PesoComQuatroCasas_DeveBloquearSemArredondar()
+    {
+        DefinirPermissao(PermissoesSistema.Acoes.Criar);
+        RepositorioFake repo = new();
+
+        ResultadoOperacao r = await Servico(repo).InserirAsync(Nova(peso: 1.5001m));
+
+        Assert.False(r.Sucesso);
+        Assert.Contains("3 casas decimais", r.Mensagem, StringComparison.Ordinal);
+        Assert.Null(repo.Inserido);
+    }
+
+    [Fact]
+    public async Task Inserir_PesoComTresCasas_DevePermitir()
+    {
+        DefinirPermissao(PermissoesSistema.Acoes.Criar);
+        RepositorioFake repo = new();
+
+        ResultadoOperacao r = await Servico(repo).InserirAsync(Nova(peso: 1.234m));
+
+        Assert.True(r.Sucesso);
+        Assert.Equal(1.234m, repo.Inserido!.PesoKg);
+    }
+
     public void Dispose() => EstadoSessaoUsuarioAtual.Limpar();
 
     private static TaraServico Servico(RepositorioFake repo)
@@ -222,6 +277,8 @@ public sealed class TaraServicoTests : IDisposable
     private sealed class RepositorioFake : TaraRepositorio
     {
         public bool NomeExiste { get; init; }
+        public bool SetorAtivo { get; init; } = true;
+        public bool TipoAtivo { get; init; } = true;
         public TaraCadastro? Existente { get; init; }
         public TaraCadastro? Inserido { get; private set; }
         public TaraCadastro? Atualizado { get; private set; }
@@ -234,6 +291,9 @@ public sealed class TaraServicoTests : IDisposable
 
         public override Task<TaraCadastro?> ObterPorIdAsync(long codigoTara, CancellationToken cancellationToken = default)
             => Task.FromResult(Existente);
+
+        public override Task<ResumoValidacaoReativacaoTara> ObterResumoValidacaoReativacaoAsync(long codigoTara, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ResumoValidacaoReativacaoTara { Encontrado = true, SetorAtivo = SetorAtivo, TipoAtivo = TipoAtivo });
 
         public override Task<bool> ExisteNomeNoSetorTipoAsync(string nome, long codigoSetor, long codigoTipoTara, long? ignorarCodigo, CancellationToken cancellationToken = default)
             => Task.FromResult(NomeExiste);

@@ -34,8 +34,28 @@ public sealed class ImpressaoEntradaServico
     public Task ReimprimirEtiquetaMateriaPrimaAsync(DadosEtiquetaMateriaPrima etiqueta)
         => _impressora.ReimprimirEtiquetaMateriaPrimaAsync(etiqueta);
 
-    /// <summary>Monta a etiqueta de materia-prima a partir do item ja persistido (reimpressao).</summary>
+    /// <summary>
+    /// Monta a etiqueta de materia-prima a partir do item ja persistido usando o TOTAL do item.
+    /// Uso interno/legado — NAO deve ser conectado a impressao/reimpressao operacional (cada etiqueta e por
+    /// pesagem individual). Preservado para consultas internas; a impressao operacional usa MontarEtiquetaPorPesagem.
+    /// </summary>
     public static DadosEtiquetaMateriaPrima MontarEtiqueta(EntradaProdutoItemPersistido item, string dataVencimento)
+        => MontarEtiquetaBase(item, dataVencimento, item.PesoLiquidoTotalKg);
+
+    /// <summary>
+    /// Monta a etiqueta de UMA pesagem individual (regra definitiva: uma etiqueta por pesagem). O peso impresso
+    /// e o LIQUIDO da pesagem (pesagem.PesoLiquidoKg), NUNCA o total do item. Demais campos vem do item.
+    /// </summary>
+    public static DadosEtiquetaMateriaPrima MontarEtiquetaPorPesagem(
+        EntradaProdutoItemPersistido item,
+        EntradaProdutoPesagem pesagem,
+        string dataVencimento)
+        => MontarEtiquetaBase(item, dataVencimento, pesagem.PesoLiquidoKg);
+
+    private static DadosEtiquetaMateriaPrima MontarEtiquetaBase(
+        EntradaProdutoItemPersistido item,
+        string dataVencimento,
+        decimal pesoKg)
         => new()
         {
             CodigoProduto = item.Material,
@@ -48,7 +68,7 @@ public sealed class ImpressaoEntradaServico
             Sif = string.Empty,
             Fornecedor = item.Fornecedor,
             NumeroNotaFiscal = string.Empty,
-            Peso = item.PesoLiquidoTotalKg.ToString("0.###", CulturaPtBr),
+            Peso = pesoKg.ToString("0.###", CulturaPtBr),
             NumeroPedido = item.NumeroPedido,
             NumeroItem = item.NumeroItem
         };

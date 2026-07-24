@@ -20,6 +20,41 @@ public sealed class ResultadoEnvioConsumoSap261
     public string? DetalhesErroSap { get; init; }
     public string? PayloadJson { get; init; }
 
+    /// <summary>
+    /// Classifica a falha como INDETERMINADA: o documento PODE ter sido criado no SAP, então o
+    /// resultado não é uma rejeição comprovada. Consumidores devem BLOQUEAR (não liberar término,
+    /// não reenviar automaticamente) em vez de tratar como erro seguro.
+    ///
+    /// Indeterminado quando:
+    ///  - não há status HTTP (queda de conexão/timeout — possivelmente durante o POST);
+    ///  - HTTP 2xx sem MaterialDocument/Year (pode ter criado sem rastreabilidade);
+    ///  - HTTP 408 (timeout) ou 5xx (falha do servidor durante o POST).
+    ///
+    /// Conservador por segurança: uma falha ANTES do POST (validação/CSRF) também chega sem status e
+    /// será classificada como indeterminada. O efeito é apenas bloquear o término — nunca liberá-lo
+    /// indevidamente. Quando o cliente 261 expuser a ETAPA, esta regra pode ser refinada.
+    /// </summary>
+    public bool ResultadoIndeterminado
+    {
+        get
+        {
+            if (Sucesso)
+            {
+                return false;
+            }
+
+            if (StatusHttp is not int status)
+            {
+                return true;
+            }
+
+            return status is (>= 200 and <= 299) or 408 or (>= 500 and <= 599);
+        }
+    }
+
+    /// <summary>Rejeição COMPROVADA pelo SAP (4xx de negócio, exceto 408): falha segura e reenviável.</summary>
+    public bool RejeicaoComprovada => !Sucesso && !ResultadoIndeterminado;
+
     public static ResultadoEnvioConsumoSap261 Ok(string documento, string exercicio, int? statusHttp, string? correlationId)
         => new()
         {

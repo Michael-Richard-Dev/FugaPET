@@ -105,6 +105,9 @@ public sealed class ConsumoMaterialServico
     private readonly Func<IConfirmacaoProducaoSapClient> _criarConfirmacaoProducaoServico;
     // Tarefa Consumo 22.10.1: serviço de descrição (A_ProductDescription) LAZY — só construído ao consultar a OP.
     private readonly Func<IProductDescriptionSapServico> _criarDescricaoServico;
+    // Product Master TÉCNICO (A_Product: ProductType/ProductGroup/BaseUnit) LAZY — reusa o serviço COMPARTILHADO
+    // já existente (mesmo cliente HTTP da Entrada). É a única fonte que libera a classificação do componente.
+    private readonly Func<IProductMasterSapServico> _criarProductMasterServico;
     private readonly IOrdemProducaoCacheServico _cacheOrdensProducao;
 
     public ConsumoMaterialServico()
@@ -149,6 +152,26 @@ public sealed class ConsumoMaterialServico
         Func<IConfirmacaoProducaoSapClient> criarConfirmacaoProducaoServico,
         Func<IProductDescriptionSapServico>? criarDescricaoServico = null,
         IOrdemProducaoCacheServico? cacheOrdensProducao = null)
+        : this(
+            ordemProducaoServico,
+            criarRepositorio,
+            criarSap261Servico,
+            criarConfirmacaoProducaoServico,
+            criarDescricaoServico,
+            null,
+            cacheOrdensProducao)
+    {
+    }
+
+    /// <summary>Sobrecarga com o Product Master técnico injetável (testes). Demais construtores usam a fábrica padrão.</summary>
+    internal ConsumoMaterialServico(
+        IProductionOrderSapServico ordemProducaoServico,
+        Func<IConsumoMaterialRepositorio> criarRepositorio,
+        Func<IConsumoMaterialSap261Servico> criarSap261Servico,
+        Func<IConfirmacaoProducaoSapClient> criarConfirmacaoProducaoServico,
+        Func<IProductDescriptionSapServico>? criarDescricaoServico,
+        Func<IProductMasterSapServico>? criarProductMasterServico,
+        IOrdemProducaoCacheServico? cacheOrdensProducao = null)
     {
         _ordemProducaoServico = ordemProducaoServico
             ?? throw new ArgumentNullException(nameof(ordemProducaoServico));
@@ -159,6 +182,7 @@ public sealed class ConsumoMaterialServico
         _criarConfirmacaoProducaoServico = criarConfirmacaoProducaoServico
             ?? throw new ArgumentNullException(nameof(criarConfirmacaoProducaoServico));
         _criarDescricaoServico = criarDescricaoServico ?? FabricaProductDescriptionSapServico.Criar;
+        _criarProductMasterServico = criarProductMasterServico ?? FabricaProductMasterSapServico.Criar;
         _cacheOrdensProducao = cacheOrdensProducao ?? new OrdemProducaoCacheServico(() => _ordemProducaoServico);
     }
 
@@ -1568,6 +1592,28 @@ public sealed class ConsumoMaterialServico
     }
 
     /// <summary>
+    /// Recalcula o status do componente apos confirmacao real do SAP. Nao usa total local
+    /// nem tolerancia de pesagem pendente: reflete a pendencia confirmada, igual ao mapeamento inicial.
+    /// </summary>
+    public static void AtualizarStatusComponenteAposConfirmacaoSap(ComponenteConsumoMaterial componente)
+    {
+        ArgumentNullException.ThrowIfNull(componente);
+
+        if (componente.QuantidadePendente <= 0m)
+        {
+            componente.Status = ComponenteConsumoMaterial.StatusConsumido;
+            componente.PesagemLiberada = false;
+            componente.MotivoBloqueioPesagem = "componente já consumido.";
+            return;
+        }
+
+        componente.Status = ComponenteConsumoMaterial.StatusPendente;
+        bool regraLiberou = AvaliarLiberacaoPesagem(componente, out string motivo);
+        componente.PesagemLiberada = regraLiberou;
+        componente.MotivoBloqueioPesagem = regraLiberou ? string.Empty : motivo;
+    }
+
+    /// <summary>
     /// REGRA CENTRAL de liberacao de pesagem de um componente (Ajuste 4/5). Bloqueia sem deposito,
     /// pendente &lt;= 0 (inclui saldo SAP negativo), unidade != KG ou ja consumido. Pura/testavel.
     /// </summary>
@@ -1604,6 +1650,61 @@ public sealed class ConsumoMaterialServico
             if (mestre is not null && !string.IsNullOrWhiteSpace(mestre.DescricaoProdutoSap))
             {
                 mapa[codigo] = mestre;
+            }
+        }
+
+        return mapa;
+    }
+
+    /// <summary>
+    /// Mestre COMPLETO dos componentes: junta os dados TÉCNICOS de A_Product (ProductType/ProductGroup/BaseUnit,
+    /// via <see cref="IProductMasterSapServico"/> — o mesmo serviço compartilhado da Entrada) com a DESCRIÇÃO real
+    /// de A_ProductDescription. Consulta cada código UMA vez (cache local por código na mesma OP) e preserva o
+    /// código como texto (sem conversão numérica). Só A_Product marca <c>Consultado=true</c>; sem ele o componente
+    /// fica Indefinido e é BLOQUEADO — nunca cai por padrão em Matéria-Prima.
+    /// Consultar somente os COMPONENTES da OP; o produto produzido não decide a tela.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, ProdutoSapMestre>> ObterMestresComponentesAsync(
+        IEnumerable<string> codigosProduto,
+        CancellationToken cancellationToken = default)
+    {
+        Dictionary<string, ProdutoSapMestre> mapa = new(StringComparer.OrdinalIgnoreCase);
+        if (codigosProduto is null)
+        {
+            return mapa;
+        }
+
+        List<string> codigosUnicos = codigosProduto
+            .Select(codigo => (codigo ?? string.Empty).Trim())
+            .Where(codigo => !string.IsNullOrWhiteSpace(codigo))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (codigosUnicos.Count == 0)
+        {
+            return mapa;
+        }
+
+        IProductMasterSapServico productMaster = _criarProductMasterServico();
+        IProductDescriptionSapServico descricaoServico = _criarDescricaoServico();
+
+        foreach (string codigo in codigosUnicos)
+        {
+            ProdutoSapMestre? tecnico = await productMaster.ObterProdutoAsync(codigo, cancellationToken);
+            ProdutoSapMestre? descricao = await descricaoServico.ObterDescricaoAsync(codigo, cancellationToken);
+
+            ProdutoSapMestre mestre = ProdutoSapMestre.Combinar(codigo, tecnico, descricao);
+            mapa[codigo] = mestre;
+
+            if (!mestre.Consultado)
+            {
+                // Diagnóstico sanitizado (sem credencial/URL): o tipo não veio do SAP → classificação bloqueada.
+                System.Diagnostics.Trace.TraceWarning(
+                    "[Consumo][ProductMaster] "
+                    + $"Componente: {codigo}; ProductType nao retornado por A_Product; "
+                    + $"ProductMaster configurado: {productMaster.Configurado}; Simulado: {productMaster.EhSimulado}; "
+                    + "Resultado: classificacao Indefinida (componente bloqueado). "
+                    + "Verifique a integracao API_PRODUCT_SRV.");
             }
         }
 

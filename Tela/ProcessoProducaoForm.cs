@@ -17,6 +17,9 @@ public partial class ProcessoProducaoForm : UserControl
     public event EventHandler? DiagnosticoConsumoSap261Requested;
     public event EventHandler? OrdensAndamentoRequested;
 
+    /// <summary>Controle de Apontamentos (F8): leitura/início/término das operações da OP.</summary>
+    public event EventHandler? ControleApontamentosRequested;
+
     public ProcessoProducaoForm()
     {
         InitializeComponent();
@@ -84,6 +87,7 @@ public partial class ProcessoProducaoForm : UserControl
         quimicosIconLabel.Image = new Bitmap(source);
         semiAcabadoIconLabel.Image = new Bitmap(source);
         ordensIconLabel.Image = new Bitmap(source);
+        apontamentosIconLabel.Image = new Bitmap(source);
         entradaIconLabel.Text = string.Empty;
         entradaQuimicosIconLabel.Text = string.Empty;
         processIconLabel.Text = string.Empty;
@@ -91,6 +95,7 @@ public partial class ProcessoProducaoForm : UserControl
         quimicosIconLabel.Text = string.Empty;
         semiAcabadoIconLabel.Text = string.Empty;
         ordensIconLabel.Text = string.Empty;
+        apontamentosIconLabel.Text = string.Empty;
     }
 
     private static string? ResolveProductionIconPath()
@@ -184,6 +189,16 @@ public partial class ProcessoProducaoForm : UserControl
         ordensStatusLabel.Click += OnOrdensAndamentoClick;
         ordensShortcutLabel.Click += OnOrdensAndamentoClick;
         ordensArrowLabel.Click += OnOrdensAndamentoClick;
+
+        // Controle de Apontamentos (F8): todos os controles do card acionam o mesmo evento.
+        controleApontamentosCard.Click += OnControleApontamentosClick;
+        apontamentosIconPanel.Click += OnControleApontamentosClick;
+        apontamentosIconLabel.Click += OnControleApontamentosClick;
+        apontamentosTitleLabel.Click += OnControleApontamentosClick;
+        apontamentosDescriptionLabel.Click += OnControleApontamentosClick;
+        apontamentosStatusLabel.Click += OnControleApontamentosClick;
+        apontamentosShortcutLabel.Click += OnControleApontamentosClick;
+        apontamentosArrowLabel.Click += OnControleApontamentosClick;
     }
 
     private void OnEntradaMateriaPrimaClick(object? sender, EventArgs e)
@@ -232,6 +247,11 @@ public partial class ProcessoProducaoForm : UserControl
     private void OnOrdensAndamentoClick(object? sender, EventArgs e)
     {
         OrdensAndamentoRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnControleApontamentosClick(object? sender, EventArgs e)
+    {
+        ControleApontamentosRequested?.Invoke(this, EventArgs.Empty);
     }
 }
 

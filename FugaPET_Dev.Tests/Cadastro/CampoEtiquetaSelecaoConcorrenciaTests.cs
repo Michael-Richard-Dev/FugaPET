@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tests.Cadastro;
+﻿namespace FugaPET_Dev.Tests.Cadastro;
 
 public sealed class CampoEtiquetaSelecaoConcorrenciaTests
 {
@@ -9,8 +9,8 @@ public sealed class CampoEtiquetaSelecaoConcorrenciaTests
 
         Assert.Contains("private Task _carregarCamposTask = Task.CompletedTask;", tela, StringComparison.Ordinal);
         Assert.Contains("private Task _selecaoCampoTask = Task.CompletedTask;", tela, StringComparison.Ordinal);
-        Assert.Contains("_carregarCamposTask = CarregarCamposAsync();", tela, StringComparison.Ordinal);
-        Assert.Contains("_selecaoCampoTask = AoSelecionarCampoAsync();", tela, StringComparison.Ordinal);
+        Assert.Contains("await CarregarCamposAsync();", tela, StringComparison.Ordinal);
+        Assert.Contains("_selecaoCampoTask = AoSelecionarCampoAsync(campo.CodigoCampoEtiqueta);", tela, StringComparison.Ordinal);
         Assert.Contains("Interlocked.Exchange(ref _carregarCamposCts, atual)", tela, StringComparison.Ordinal);
         Assert.Contains("Interlocked.Exchange(ref _selecaoCampoCts, atual)", tela, StringComparison.Ordinal);
         Assert.Contains("anterior?.Cancel();", tela, StringComparison.Ordinal);
@@ -21,9 +21,9 @@ public sealed class CampoEtiquetaSelecaoConcorrenciaTests
     {
         string tela = LerArquivo("Tela", "Cadastro", "CamposEtiquetaForm.cs");
 
-        Assert.Contains("EtiquetaSolicitadaAindaEhAtual(idEtiqueta, atual)", tela, StringComparison.Ordinal);
+        Assert.Contains("EtiquetaSolicitadaAindaEhAtual(atual)", tela, StringComparison.Ordinal);
         Assert.Contains("CampoSolicitadoAindaEhAtual(idSolicitado, atual)", tela, StringComparison.Ordinal);
-        Assert.Contains("EtiquetaSelecionada == idEtiqueta", tela, StringComparison.Ordinal);
+        Assert.Contains("_etiquetaPreSelecionada > 0", tela, StringComparison.Ordinal);
         Assert.Contains("_idCampoAtual == idCampo", tela, StringComparison.Ordinal);
         Assert.DoesNotContain("_ = CarregarMapeamentoAsync", tela, StringComparison.Ordinal);
     }
@@ -45,10 +45,10 @@ public sealed class CampoEtiquetaSelecaoConcorrenciaTests
     {
         string repositorio = LerArquivo("AcessoDados", "Repositorio", "CampoEtiquetaRepositorio.cs");
         int inicio = repositorio.IndexOf(
-            "public async Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(",
+            "public virtual async Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(",
             StringComparison.Ordinal);
         int fim = repositorio.IndexOf(
-            "public async Task<bool> ExisteNomeNaEtiquetaAsync",
+            "public virtual async Task<bool> ExisteNomeNaEtiquetaAsync",
             inicio,
             StringComparison.Ordinal);
         string metodo = repositorio[inicio..fim];
@@ -92,3 +92,4 @@ public sealed class CampoEtiquetaSelecaoConcorrenciaTests
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
     }
 }
+

@@ -1,9 +1,10 @@
-using FugaPET_Dev.Controle;
+﻿using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
+using FugaPET_Dev.Servicos.Operacao;
 
 namespace FugaPET_Dev.Controle.Processo;
 
@@ -11,6 +12,7 @@ public sealed class SemiAcabadoController
 {
     private readonly IProductionOrderSapServico _productionOrderSapServico;
     private readonly SemiAcabadoMaterialDocument101PayloadBuilder _materialDocument101Builder;
+    private readonly SemiAcabadoServico _semiAcabadoServico;
     private readonly TaraController _taraController;
 
     public SemiAcabadoController()
@@ -21,10 +23,12 @@ public sealed class SemiAcabadoController
     public SemiAcabadoController(
         IProductionOrderSapServico productionOrderSapServico,
         SemiAcabadoMaterialDocument101PayloadBuilder? materialDocument101Builder = null,
+        SemiAcabadoServico? semiAcabadoServico = null,
         TaraController? taraController = null)
     {
         _productionOrderSapServico = productionOrderSapServico ?? throw new ArgumentNullException(nameof(productionOrderSapServico));
         _materialDocument101Builder = materialDocument101Builder ?? new SemiAcabadoMaterialDocument101PayloadBuilder();
+        _semiAcabadoServico = semiAcabadoServico ?? new SemiAcabadoServico();
         _taraController = taraController ?? FabricaControladoresCadastro.CriarTaraController();
     }
 
@@ -91,6 +95,48 @@ public sealed class SemiAcabadoController
         LancamentoSemiAcabado lancamento,
         DateTime dataLancamentoUtc)
         => _materialDocument101Builder.MontarPreview101(lancamento, dataLancamentoUtc);
+
+    public Task<ResultadoEnvioSemiAcabadoSap> SalvarEEnviarMaterialDocument101Async(
+        LancamentoSemiAcabado lancamento,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.SalvarEEnviarSap101Async(lancamento, cancellationToken);
+
+    public Task<LancamentoSemiAcabado?> ObterLancamentoCompletoAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.ObterLancamentoCompletoAsync(codigoLancamento, cancellationToken);
+
+
+    public Task<ResultadoEnvioSemiAcabadoSap> CancelarLancamentoLocalAsync(
+        long codigoLancamento,
+        string motivo,
+        string usuario,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.CancelarLancamentoLocalAsync(codigoLancamento, motivo, usuario, cancellationToken);
+    /// <summary>Histórico persistido de pesagens (reimpressão após fechar/reabrir; mesmo CodigoEtiqueta).</summary>
+    public Task<IReadOnlyList<PesagemSemiAcabado>> ListarPesagensPorLancamentoAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.ListarPesagensPorLancamentoAsync(codigoLancamento, cancellationToken);
+
+    public Task<LancamentoSemiAcabadoPersistido?> ObterLancamentoPorOpItemAsync(
+        string numeroOrdem,
+        string itemOrdem,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.ObterLancamentoPorOpItemAsync(numeroOrdem, itemOrdem, cancellationToken);
+
+    /// <summary>Lançamento ABERTO (bloqueante) mais recente de uma OP/item (proteção entre reinicializações).</summary>
+    public Task<LancamentoSemiAcabadoPersistido?> ObterLancamentoAbertoPorOpItemAsync(
+        string numeroOrdem,
+        string itemOrdem,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.ObterLancamentoAbertoPorOpItemAsync(numeroOrdem, itemOrdem, cancellationToken);
+
+    public Task<IReadOnlyList<LancamentoSemiAcabadoPersistido>> ListarLancamentosPorOpItemAsync(
+        string numeroOrdem,
+        string itemOrdem,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.ListarLancamentosPorOpItemAsync(numeroOrdem, itemOrdem, cancellationToken);
 
     public Task<IReadOnlyList<TaraCadastro>> ListarTarasAtivasPorSetorAsync(
         long codigoSetor,
@@ -177,3 +223,4 @@ public sealed class ResultadoConsultaSemiAcabado
     public static ResultadoConsultaSemiAcabado Falha(string mensagem)
         => new(false, mensagem, string.Empty, []);
 }
+

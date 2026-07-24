@@ -124,7 +124,7 @@ public sealed class ProcessoConsumoMaterialModoTests
         // O produto produzido segue como CONTEXTO/diagnóstico, sem impedir o carregamento da OP.
         Assert.Contains("OrdemPertenceAoModoAtual(resultado.Ordem", consultar, StringComparison.Ordinal);
         Assert.Contains("RegistrarDiagnosticoClassificacaoOrdem(resultado.Ordem", consultar, StringComparison.Ordinal);
-        Assert.Contains("PreencherOrdemCarregada(resultado.Ordem, componentesModo)", consultar, StringComparison.Ordinal);
+        Assert.Contains("PreencherOrdemCarregada(resultado.Ordem, componentesOperacionais)", consultar, StringComparison.Ordinal);
 
         // A separação Matéria-Prima × Químico passa a ser feita pelos COMPONENTES.
         Assert.Contains("FiltrarComponentesPorModo", form, StringComparison.Ordinal);
@@ -193,7 +193,7 @@ public sealed class ProcessoConsumoMaterialModoTests
     public void Form_Quimicos_DeveUsar261DiretoSemPreviewOuConfirmacaoBackflush()
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
-        string orquestrar = ExtrairMetodo(form, "private async Task<(string mensagem, MessageBoxIcon icone)> OrquestrarEnvioAposConfirmarAsync");
+        string orquestrar = ExtrairMetodo(form, "private async Task<ResultadoOrquestracaoConsumoApontamento> OrquestrarEnvioAposConfirmarAsync");
 
         int quimico = orquestrar.IndexOf("_modoConsumo == ModoConsumoMaterial.Quimico", StringComparison.Ordinal);
         int envio261 = orquestrar.IndexOf("ExecutarEnvioSap261AposConfirmarAsync", quimico, StringComparison.Ordinal);

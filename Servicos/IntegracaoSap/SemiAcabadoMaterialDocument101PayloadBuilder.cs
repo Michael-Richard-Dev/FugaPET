@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -10,6 +10,7 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
 {
     public const string GoodsMovementCodeSemiAcabado = "02";
     public const string GoodsMovementTypeSemiAcabado = "101";
+    public const string GoodsMovementRefDocTypeOrdemProducao = "F";
     public const string EndpointMaterialDocumentHeader = "API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader";
 
     public ResultadoPreviewSemiAcabado101 MontarPreview101(
@@ -73,6 +74,7 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
                         Plant = ordem.Centro.Trim(),
                         StorageLocation = ordem.DepositoDestino.Trim(),
                         GoodsMovementType = GoodsMovementTypeSemiAcabado,
+                        GoodsMovementRefDocType = GoodsMovementRefDocTypeOrdemProducao,
                         QuantityInEntryUnit = quantidade.ToString("0.###", CultureInfo.InvariantCulture),
                         EntryUnit = unidade,
                         ManufacturingOrder = ordem.NumeroOrdem.Trim(),
@@ -85,6 +87,45 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
         };
 
         return ResultadoPreviewSemiAcabado101.Ok(payload, SerializarPreview(payload));
+    }
+
+    public ResultadoMaterialDocumentSemiAcabadoRequest MontarRequisicao101(
+        LancamentoSemiAcabado lancamento,
+        DateTime dataLancamentoUtc)
+    {
+        ResultadoPreviewSemiAcabado101 preview = MontarPreview101(lancamento, dataLancamentoUtc);
+        if (!preview.Sucesso || preview.Payload is null)
+        {
+            return ResultadoMaterialDocumentSemiAcabadoRequest.Falha(preview.Mensagem);
+        }
+
+        SemiAcabadoMaterialDocument101ItemRequest item = preview.Payload.ToMaterialDocumentItem.Results[0];
+        MaterialDocumentSapRequest requisicao = new()
+        {
+            GoodsMovementCode = GoodsMovementCodeSemiAcabado,
+            PostingDate = dataLancamentoUtc,
+            DocumentDate = dataLancamentoUtc,
+            MaterialDocumentHeaderText = preview.Payload.MaterialDocumentHeaderText,
+            Itens =
+            [
+                new MaterialDocumentSapItemRequest
+                {
+                    Material = item.Material,
+                    Plant = item.Plant,
+                    StorageLocation = item.StorageLocation,
+                    GoodsMovementType = item.GoodsMovementType,
+                    GoodsMovementRefDocType = item.GoodsMovementRefDocType,
+                    QuantityInEntryUnit = item.QuantityInEntryUnit,
+                    EntryUnit = item.EntryUnit,
+                    ManufacturingOrder = item.ManufacturingOrder,
+                    ManufacturingOrderItem = item.ManufacturingOrderItem,
+                    Batch = item.Batch,
+                    MaterialDocumentItemText = item.MaterialDocumentItemText
+                }
+            ]
+        };
+
+        return ResultadoMaterialDocumentSemiAcabadoRequest.Ok(requisicao);
     }
 
     public static ResultadoEnvioSemiAcabado101 ValidarRespostaConfirmada(
@@ -112,6 +153,7 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
             ["Plant"] = payload.ToMaterialDocumentItem.Results[0].Plant,
             ["StorageLocation"] = payload.ToMaterialDocumentItem.Results[0].StorageLocation,
             ["GoodsMovementType"] = payload.ToMaterialDocumentItem.Results[0].GoodsMovementType,
+            ["GoodsMovementRefDocType"] = payload.ToMaterialDocumentItem.Results[0].GoodsMovementRefDocType,
             ["QuantityInEntryUnit"] = payload.ToMaterialDocumentItem.Results[0].QuantityInEntryUnit,
             ["EntryUnit"] = payload.ToMaterialDocumentItem.Results[0].EntryUnit,
             ["ManufacturingOrder"] = payload.ToMaterialDocumentItem.Results[0].ManufacturingOrder,
@@ -148,4 +190,24 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
 
     private static string LimitarTexto(string texto, int limite)
         => texto.Length <= limite ? texto : texto[..limite];
+}
+
+public sealed class ResultadoMaterialDocumentSemiAcabadoRequest
+{
+    private ResultadoMaterialDocumentSemiAcabadoRequest(bool sucesso, string mensagem, MaterialDocumentSapRequest? requisicao)
+    {
+        Sucesso = sucesso;
+        Mensagem = mensagem;
+        Requisicao = requisicao;
+    }
+
+    public bool Sucesso { get; }
+    public string Mensagem { get; }
+    public MaterialDocumentSapRequest? Requisicao { get; }
+
+    public static ResultadoMaterialDocumentSemiAcabadoRequest Ok(MaterialDocumentSapRequest requisicao)
+        => new(true, string.Empty, requisicao);
+
+    public static ResultadoMaterialDocumentSemiAcabadoRequest Falha(string mensagem)
+        => new(false, mensagem, null);
 }

@@ -83,7 +83,9 @@ public sealed class BalancaLeituraServico
             BaudRate = balanca.BaudRate ?? 4800,
             DataBits = balanca.DataBits ?? 7,
             Paridade = ConverterParidade(balanca.Paridade),
-            StopBits = ConverterStopBits(balanca.StopBits)
+            StopBits = ConverterStopBits(balanca.StopBits),
+            // Protocolo transportado ao leitor: define a escala decimal do valor bruto (ex.: P03 divide por 100).
+            Protocolo = balanca.Protocolo?.Trim().ToUpperInvariant() ?? string.Empty
         };
     }
 

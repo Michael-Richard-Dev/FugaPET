@@ -256,6 +256,70 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
     }
 
     /// <summary>
+    /// Lista CADA pesagem persistida de um item (não usa SUM): usada para o detalhe e a reimpressão por
+    /// pesagem individual. Ordenada por sequência e pesado_em. Parametrizada.
+    /// </summary>
+    public async Task<IReadOnlyList<EntradaProdutoPesagem>> ListarPesagensPersistidasAsync(
+        long codigoLancamento,
+        long codigoSapPedidoCompraItem,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT pesagem.codigo_entrada_produto_pesagem,
+                   pesagem.sequencia,
+                   pesagem.peso_bruto_kg,
+                   pesagem.peso_tara_kg,
+                   pesagem.peso_liquido_kg,
+                   pesagem.codigo_tara,
+                   pesagem.codigo_balanca,
+                   COALESCE(pesagem.origem, 'BALANCA'),
+                   COALESCE(pesagem.status_pesagem, 'VALIDA'),
+                   pesagem.leitura_original,
+                   pesagem.pesado_em
+              FROM entrada_produto_lancamento lancamento
+              JOIN entrada_produto_item item
+                ON item.codigo_entrada_produto_lancamento =
+                   lancamento.codigo_entrada_produto_lancamento
+              JOIN entrada_produto_pesagem pesagem
+                ON pesagem.codigo_entrada_produto_item =
+                   item.codigo_entrada_produto_item
+             WHERE lancamento.codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND item.codigo_sap_pedido_compra_item = @codigo_sap_item
+               AND lancamento.situacao_entrada_produto_lancamento = true
+               AND item.situacao_entrada_produto_item = true
+               AND pesagem.situacao_entrada_produto_pesagem = true
+             ORDER BY pesagem.sequencia, pesagem.pesado_em;
+            """;
+
+        List<EntradaProdutoPesagem> pesagens = [];
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        comando.Parameters.Add(ParametroLongo("@codigo_sap_item", codigoSapPedidoCompraItem));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+
+        while (await leitor.ReadAsync(cancellationToken))
+        {
+            pesagens.Add(new EntradaProdutoPesagem
+            {
+                CodigoEntradaProdutoPesagem = leitor.GetInt64(0),
+                Sequencia = leitor.GetInt32(1),
+                PesoBrutoKg = leitor.GetDecimal(2),
+                PesoTaraKg = leitor.GetDecimal(3),
+                PesoLiquidoKg = leitor.GetDecimal(4),
+                CodigoTara = leitor.IsDBNull(5) ? null : leitor.GetInt64(5),
+                CodigoBalanca = leitor.IsDBNull(6) ? null : leitor.GetInt64(6),
+                Origem = leitor.GetString(7),
+                StatusPesagem = leitor.GetString(8),
+                LeituraOriginal = leitor.IsDBNull(9) ? null : leitor.GetString(9),
+                PesadoEm = leitor.GetFieldValue<DateTimeOffset>(10)
+            });
+        }
+
+        return pesagens;
+    }
+
+    /// <summary>
     /// Itens de um lancamento ja persistido, com pesos consolidados das pesagens VALIDAS, para o
     /// envio CONTROLADO de peso ao SAP. Retorna apenas itens com peso liquido positivo.
     /// </summary>

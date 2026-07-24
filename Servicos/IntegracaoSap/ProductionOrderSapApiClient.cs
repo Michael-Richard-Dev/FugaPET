@@ -162,7 +162,7 @@ public sealed class ProductionOrderSapApiClient
             MontarUrlColecao("A_ProductionOrderComponent_2", numeroOrdem, ordenarPor: null),
             MapearComponente, MapearComponenteXml, cancellationToken);
         IReadOnlyList<OperacaoOrdemProducaoSap> operacoes = await ConsultarColecaoAsync(
-            MontarUrlColecao("A_ProductionOrderOperation_2", numeroOrdem, ordenarPor: "ProductionOrderOperation"),
+            MontarUrlColecao("A_ProductionOrderOperation_2", numeroOrdem, ordenarPor: "ManufacturingOrderSequence,ManufacturingOrderOperation"),
             MapearOperacao, MapearOperacaoXml, cancellationToken);
         IReadOnlyList<ItemOrdemProducaoSap> itens = await ConsultarColecaoAsync(
             MontarUrlColecao("A_ProductionOrderItem_2", numeroOrdem, ordenarPor: null),
@@ -419,12 +419,13 @@ public sealed class ProductionOrderSapApiClient
     private static OperacaoOrdemProducaoSap MapearOperacao(JsonElement o)
         => new()
         {
-            Operacao = LerTexto(o, "ProductionOrderOperation"),
-            OrderOperationInternalId = LerPrimeiroTexto(o, "OrderOperationInternalID", "OrderOperationInternalId", "ManufacturingOrderOperationInternalID"),
-            Sequencia = LerTexto(o, "ProductionOrderSequence"),
+            Operacao = LerPrimeiroTexto(o, "ManufacturingOrderOperation", "ProductionOrderOperation"),
+            OrderOperationInternalId = LerPrimeiroTexto(o, "OrderIntBillOfOperationsItem", "OrderOperationInternalID", "OrderOperationInternalId", "ManufacturingOrderOperationInternalID"),
+            Sequencia = LerPrimeiroTexto(o, "ManufacturingOrderSequence", "ProductionOrderSequence"),
+            Suboperacao = LerPrimeiroTexto(o, "ManufacturingOrderSubOperation", "ProductionOrderSubOperation"),
             CentroTrabalho = LerTexto(o, "WorkCenter"),
-            Centro = LerTexto(o, "Plant"),
-            Descricao = LerTexto(o, "OperationText"),
+            Centro = LerPrimeiroTexto(o, "ProductionPlant", "Plant"),
+            Descricao = LerPrimeiroTexto(o, "MfgOrderOperationText", "OperationText"),
             QuantidadePrevista = LerDecimal(o, "OpPlannedTotalQuantity"),
             QuantidadeConfirmada = LerDecimal(o, "OpTotalConfirmedYieldQty"),
             Unidade = LerTexto(o, "OperationUnit")
@@ -569,12 +570,13 @@ public sealed class ProductionOrderSapApiClient
     private static OperacaoOrdemProducaoSap MapearOperacaoXml(XElement p)
         => new()
         {
-            Operacao = LerXmlTexto(p, "ProductionOrderOperation"),
-            OrderOperationInternalId = LerXmlPrimeiroTexto(p, "OrderOperationInternalID", "OrderOperationInternalId", "ManufacturingOrderOperationInternalID"),
-            Sequencia = LerXmlTexto(p, "ProductionOrderSequence"),
+            Operacao = LerXmlPrimeiroTexto(p, "ManufacturingOrderOperation", "ProductionOrderOperation"),
+            OrderOperationInternalId = LerXmlPrimeiroTexto(p, "OrderIntBillOfOperationsItem", "OrderOperationInternalID", "OrderOperationInternalId", "ManufacturingOrderOperationInternalID"),
+            Sequencia = LerXmlPrimeiroTexto(p, "ManufacturingOrderSequence", "ProductionOrderSequence"),
+            Suboperacao = LerXmlPrimeiroTexto(p, "ManufacturingOrderSubOperation", "ProductionOrderSubOperation"),
             CentroTrabalho = LerXmlTexto(p, "WorkCenter"),
-            Centro = LerXmlTexto(p, "Plant"),
-            Descricao = LerXmlTexto(p, "OperationText"),
+            Centro = LerXmlPrimeiroTexto(p, "ProductionPlant", "Plant"),
+            Descricao = LerXmlPrimeiroTexto(p, "MfgOrderOperationText", "OperationText"),
             QuantidadePrevista = LerXmlDecimal(p, "OpPlannedTotalQuantity"),
             QuantidadeConfirmada = LerXmlDecimal(p, "OpTotalConfirmedYieldQty"),
             Unidade = LerXmlTexto(p, "OperationUnit")
@@ -797,5 +799,4 @@ public sealed class ProductionOrderSapConsultaException : Exception
     public string Etapa { get; }
     public int? StatusHttp { get; }
 }
-
 

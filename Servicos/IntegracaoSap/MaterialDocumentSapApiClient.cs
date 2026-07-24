@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Authentication;
 using System.Text;
@@ -182,18 +182,27 @@ public sealed class MaterialDocumentSapApiClient
         List<Dictionary<string, object?>> itens = [];
         foreach (MaterialDocumentSapItemRequest item in requisicao.Itens)
         {
-            itens.Add(new Dictionary<string, object?>
+            Dictionary<string, object?> itemJson = new()
             {
                 ["Material"] = item.Material,
                 ["Plant"] = item.Plant,
                 ["StorageLocation"] = item.StorageLocation,
                 ["GoodsMovementType"] = item.GoodsMovementType,
-                ["GoodsMovementRefDocType"] = item.GoodsMovementRefDocType,
                 ["QuantityInEntryUnit"] = item.QuantityInEntryUnit,
-                ["EntryUnit"] = item.EntryUnit,
-                ["PurchaseOrder"] = item.PurchaseOrder,
-                ["PurchaseOrderItem"] = item.PurchaseOrderItem
-            });
+                ["EntryUnit"] = item.EntryUnit
+            };
+
+            AdicionarSePreenchido(itemJson, "GoodsMovementRefDocType", item.GoodsMovementRefDocType);
+            AdicionarSePreenchido(itemJson, "PurchaseOrder", item.PurchaseOrder);
+            AdicionarSePreenchido(itemJson, "PurchaseOrderItem", item.PurchaseOrderItem);
+            AdicionarSePreenchido(itemJson, "ManufacturingOrder", item.ManufacturingOrder);
+            AdicionarSePreenchido(itemJson, "ManufacturingOrderItem", item.ManufacturingOrderItem);
+            AdicionarSePreenchido(itemJson, "Batch", item.Batch);
+            AdicionarDataSePreenchida(itemJson, "ManufactureDate", item.ManufactureDate);
+            AdicionarDataSePreenchida(itemJson, "ShelfLifeExpirationDate", item.ShelfLifeExpirationDate);
+            AdicionarSePreenchido(itemJson, "MaterialDocumentItemText", item.MaterialDocumentItemText);
+
+            itens.Add(itemJson);
         }
 
         Dictionary<string, object?> payload = new()
@@ -208,10 +217,25 @@ public sealed class MaterialDocumentSapApiClient
         return JsonSerializer.Serialize(payload);
     }
 
+    private static void AdicionarSePreenchido(Dictionary<string, object?> destino, string nome, string? valor)
+    {
+        if (!string.IsNullOrWhiteSpace(valor))
+        {
+            destino[nome] = valor.Trim();
+        }
+    }
+    private static void AdicionarDataSePreenchida(Dictionary<string, object?> destino, string nome, DateTime? valor)
+    {
+        if (valor.HasValue)
+        {
+            destino[nome] = FormatarDataODataV2(valor.Value);
+        }
+    }
+
     /// <summary>
     /// Formata uma DATA em OData V2 (/Date(unixMillis)/) na meia-noite UTC do dia, de forma SEGURA
     /// para qualquer DateTimeKind (Utc/Local/Unspecified). Nunca constroi DateTimeOffset com offset
-    /// incompativel — evita o ArgumentException "The UTC Offset of the local dateTime parameter does
+    /// incompativel â€” evita o ArgumentException "The UTC Offset of the local dateTime parameter does
     /// not match the offset argument". PostingDate/DocumentDate sao datas; o horario/fuso de origem
     /// nao deslocam o dia.
     /// </summary>
@@ -224,7 +248,7 @@ public sealed class MaterialDocumentSapApiClient
         return $"/Date({ms.ToString(CultureInfo.InvariantCulture)})/";
     }
 
-    private static ResultadoMaterialDocumentSap InterpretarSucesso(int statusHttp, string corpo)
+    internal static ResultadoMaterialDocumentSap InterpretarSucesso(int statusHttp, string corpo)
     {
         string? documento = null;
         string? exercicio = null;
@@ -299,6 +323,12 @@ public sealed class MaterialDocumentSapApiClient
             ? string.Empty
             : " " + resposta.ReasonPhrase;
         string detalhe = SintetizarErroSap(corpo);
+        string? mensagemVidaUtil = TraduzirErroVidaUtilRemanescente(detalhe);
+        if (mensagemVidaUtil is not null)
+        {
+            detalhe = mensagemVidaUtil + " " + detalhe;
+        }
+
         if (RejeicaoUnidadeEntradaKg(detalhe))
         {
             detalhe =
@@ -323,6 +353,36 @@ public sealed class MaterialDocumentSapApiClient
         };
     }
 
+
+    private static string? TraduzirErroVidaUtilRemanescente(string detalhe)
+    {
+        if (string.IsNullOrWhiteSpace(detalhe)
+            || !detalhe.Contains("12/007", StringComparison.OrdinalIgnoreCase)
+            || !detalhe.Contains("shelf life", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string exigencia = ExtrairPrimeiroGrupo(detalhe, @"current item \((\d+) Day\)");
+        string diferenca = ExtrairPrimeiroGrupo(detalhe, @"Shortfall of (\d+) days?");
+        string complementoExigencia = string.IsNullOrWhiteSpace(exigencia)
+            ? string.Empty
+            : $" Exigência SAP: {exigencia} dias.";
+        string complementoDiferenca = string.IsNullOrWhiteSpace(diferenca)
+            ? string.Empty
+            : $" Diferença encontrada: {diferenca} dia(s).";
+
+        return "O SAP rejeitou o lançamento porque a validade remanescente do lote é menor que a exigida para o material."
+            + complementoExigencia
+            + complementoDiferenca
+            + " Confira o lote, a data de fabricação, a data de validade e o cadastro de vida útil do material no SAP.";
+    }
+
+    private static string ExtrairPrimeiroGrupo(string texto, string padrao)
+    {
+        Match match = Regex.Match(texto, padrao, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups[1].Value : string.Empty;
+    }
     private static bool RejeicaoUnidadeEntradaKg(string detalhe)
     {
         if (string.IsNullOrWhiteSpace(detalhe))
@@ -482,7 +542,12 @@ public sealed class MaterialDocumentSapApiClient
               .Append(" QuantityInEntryUnit=").Append(item.QuantityInEntryUnit)
               .Append(" EntryUnit=").Append(item.EntryUnit)
               .Append(" PurchaseOrder=").Append(item.PurchaseOrder)
-              .Append(" PurchaseOrderItem=").Append(item.PurchaseOrderItem);
+              .Append(" PurchaseOrderItem=").Append(item.PurchaseOrderItem)
+              .Append(" ManufacturingOrder=").Append(item.ManufacturingOrder)
+              .Append(" ManufacturingOrderItem=").Append(item.ManufacturingOrderItem)
+              .Append(" Batch=").Append(item.Batch)
+              .Append(" ManufactureDate=").Append(item.ManufactureDate.HasValue ? FormatarDataODataV2(item.ManufactureDate.Value) : null)
+              .Append(" ShelfLifeExpirationDate=").Append(item.ShelfLifeExpirationDate.HasValue ? FormatarDataODataV2(item.ShelfLifeExpirationDate.Value) : null);
             indice++;
         }
 
@@ -654,3 +719,5 @@ public sealed class MaterialDocumentClienteException : Exception
         : base($"Falha tecnica na etapa {etapa} do cliente de Material Document.", innerException)
         => Etapa = etapa;
 }
+
+

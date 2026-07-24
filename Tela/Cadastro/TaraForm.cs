@@ -47,6 +47,9 @@ public partial class TaraForm : Form
     private RoundedPanel? _tamanhoInputPanel;
     private TextBox? _txtTamanho;
 
+    // Mensagem amigável de estado vazio (card sem seleção), criada em runtime.
+    private Label? _lblEstadoVazio;
+
     private static readonly Color StatusAtivoFundo = Color.FromArgb(220, 252, 231);
     private static readonly Color StatusAtivoTexto = Color.FromArgb(22, 163, 74);
     private static readonly Color StatusInativoFundo = Color.FromArgb(255, 237, 213);
@@ -77,6 +80,7 @@ public partial class TaraForm : Form
         ConfigureProfilesSearchFilter();
 
         CriarCampoTamanhoRuntime();
+        CriarMensagemEstadoVazioRuntime();
 
         profilesCard.Resize += (_, _) => LayoutProfilesCard();
         detailsCard.Resize += (_, _) => LayoutDetailsCard();
@@ -195,17 +199,71 @@ public partial class TaraForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    // Ajuste 4: modo do card (Vazio/Novo/Edição) controla a visibilidade dos campos editáveis.
+    // Ajuste 1/2: modo do card (Vazio/Novo/Edição) controla a VISIBILIDADE dos campos (padrão Setor/Cargo/TipoTara).
+    // No estado Vazio o bloco central não mostra campos cinzas — exibe uma mensagem amigável central.
     private void ConfigurarCard(ModoCard modo)
     {
-        if (_modoCard == modo)
+        _modoCard = modo;
+        bool novo = modo == ModoCard.Novo;
+        bool edicao = modo == ModoCard.Edicao;
+        bool operacional = novo || edicao;
+
+        // Campos editáveis: visíveis e habilitados em Novo/Edição; ocultos em Vazio (nada de cinza no carregamento).
+        nomePerfilLabel.Visible = operacional;
+        nomePerfilInputPanel.Visible = operacional;
+        nomePerfilTextBox.Enabled = operacional;
+
+        descricaoLabel.Visible = operacional;
+        descricaoInputPanel.Visible = operacional;
+        descricaoTextBox.Enabled = operacional;
+
+        LblPeso.Visible = operacional;
+        roundedPanel1.Visible = operacional;
+        TxtPeso.Enabled = operacional;
+
+        LblTipoTara.Visible = operacional;
+        RdpTipoTara.Visible = operacional;
+        CmbTipoTara.Enabled = operacional;
+
+        LblSetorTara.Visible = operacional;
+        RdpSetor.Visible = operacional;
+        CmbSetor.Enabled = operacional;
+
+        if (_lblTamanho is not null) _lblTamanho.Visible = operacional;
+        if (_tamanhoInputPanel is not null) _tamanhoInputPanel.Visible = operacional;
+        if (_txtTamanho is not null) _txtTamanho.Enabled = operacional;
+
+        detailsTopDividerLabel.Visible = operacional;
+
+        // Situação só é escolhível na CRIAÇÃO; na edição fica oculta (status muda por Inativar/Reativar).
+        situacaoLabel.Visible = novo;
+        situacaoInputPanel.Visible = novo;
+        situacaoComboBox.Enabled = novo;
+
+        // Mensagem amigável central quando não há tara selecionada / em criação.
+        if (_lblEstadoVazio is not null)
         {
-            return;
+            _lblEstadoVazio.Visible = modo == ModoCard.Vazio;
         }
 
-        _modoCard = modo;
-        // Situação só é escolhível na CRIAÇÃO; na edição fica bloqueada (status muda por Inativar/Reativar).
-        situacaoComboBox.Enabled = modo == ModoCard.Novo;
+        if (modo == ModoCard.Vazio)
+        {
+            LimparCamposCard();
+        }
+    }
+
+    // Ajuste 1/2/6: limpa os campos operacionais do card (usado no modo Vazio).
+    private void LimparCamposCard()
+    {
+        nomePerfilTextBox.Text = string.Empty;
+        descricaoTextBox.Text = string.Empty;
+        if (_txtTamanho is not null) _txtTamanho.Text = string.Empty;
+        TxtPeso.Text = string.Empty;
+        situacaoComboBox.SelectedIndex = -1;
+        CmbTipoTara.SelectedIndex = -1;
+        CmbSetor.SelectedIndex = -1;
+        nomePerfilTextBox.ReadOnly = false;
+        nomePerfilTextBox.BackColor = Color.White;
     }
 
     private enum ModoCard
@@ -269,6 +327,14 @@ public partial class TaraForm : Form
         }
         catch (Exception ex)
         {
+            // Ajuste 6: em erro de banco, NÃO deixar a lista antiga como válida — limpa estado visual.
+            _tarasCarregadas.Clear();
+            _idTaraAtual = 0;
+            RemoverLinhasPerfisExistentes();
+            ClearRowSelection();
+            ConfigurarCard(ModoCard.Vazio);
+            AtualizarRodapePerfis(0);
+
             MessageBox.Show(
                 await ErroUsuarioHelper.TratarAsync("TARA_CARREGAR_ERRO", ex, "TaraForm",
                     "Não foi possível carregar as taras. Acione o suporte."),
@@ -279,6 +345,18 @@ public partial class TaraForm : Form
     // ============================================================
     // Acoes CRUD
     // ============================================================
+
+    // Ajuste (UX): estado padrão pós-operação concluída com sucesso. Deixa a tela LIMPA (sem card em modo Novo,
+    // sem resumo/seleção antigos). O usuário só entra em modo Novo ao clicar em "Nova Tara" (PrepareNewTara).
+    private async Task FinalizarOperacaoComTelaLimpaAsync()
+    {
+        _idTaraAtual = 0;
+        ClearRowSelection();                        // limpa seleção visual (e já zera o resumo lateral)
+        ClearSummarySelectionValues();              // garante resumo lateral limpo
+        ConfigurarCard(ModoCard.Vazio);             // oculta campos + LimparCamposCard + mensagem central
+        AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum); // sem Salvar/Editar/Inativar até nova seleção ou "Nova Tara"
+        await CarregarTarasAsync();                 // recarrega a lista já no estado limpo
+    }
 
     private void ConectarAcoesCadastro()
     {
@@ -324,9 +402,7 @@ public partial class TaraForm : Form
 
         if (resultado.Sucesso)
         {
-            _idTaraAtual = 0;
-            PrepareNewTara();
-            await CarregarTarasAsync();
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
     }
 
@@ -338,10 +414,9 @@ public partial class TaraForm : Form
             return;
         }
 
-        // Ajuste 9: peso válido em KG (> 0), sem parse silencioso para zero.
-        if (!TryParsePesoKg(TxtPeso.Text, out decimal pesoKg))
+        // Ajuste 9/4: peso válido em KG (> 0, no máx. 3 casas — sem parse silencioso para zero, sem arredondar).
+        if (!PesoUiValido(out decimal pesoKg))
         {
-            MessageBox.Show("Informe um peso de tara válido em KG, maior que zero.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -370,9 +445,7 @@ public partial class TaraForm : Form
 
         if (resultado.Sucesso)
         {
-            _idTaraAtual = resultado.IdGerado ?? 0;
-            PrepareNewTara();
-            await CarregarTarasAsync();
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
     }
 
@@ -397,10 +470,9 @@ public partial class TaraForm : Form
             return;
         }
 
-        // Ajuste 9: peso válido em KG (> 0).
-        if (!TryParsePesoKg(TxtPeso.Text, out decimal pesoKg))
+        // Ajuste 9/4: peso válido em KG (> 0, no máx. 3 casas).
+        if (!PesoUiValido(out decimal pesoKg))
         {
-            MessageBox.Show("Informe um peso de tara válido em KG, maior que zero.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -424,7 +496,8 @@ public partial class TaraForm : Form
 
         if (resultado.Sucesso)
         {
-            await CarregarTarasAsync();
+            // Ajuste (UX): após editar não deixa resumo antigo/seleção ambígua — volta para estado limpo.
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
     }
 
@@ -459,9 +532,7 @@ public partial class TaraForm : Form
 
         if (resultado.Sucesso)
         {
-            _idTaraAtual = 0;
-            PrepareNewTara();
-            await CarregarTarasAsync();
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
     }
 
@@ -493,6 +564,24 @@ public partial class TaraForm : Form
         if (value is int i) return i;
         if (value is string s && long.TryParse(s, out long p)) return p;
         return 0;
+    }
+
+    // Ajuste 9/4: valida o peso da UI (KG > 0 e no máximo 3 casas decimais) exibindo a mensagem específica.
+    private bool PesoUiValido(out decimal pesoKg)
+    {
+        if (!TryParsePesoKg(TxtPeso.Text, out pesoKg))
+        {
+            MessageBox.Show("Informe um peso de tara válido em KG, maior que zero.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if (pesoKg != Math.Round(pesoKg, 3))
+        {
+            MessageBox.Show("Peso da tara deve ter no máximo 3 casas decimais.", "Cadastro de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        return true;
     }
 
     // Ajuste 9: peso da tara em KG. Aceita vírgula OU ponto. Retorna false para vazio/inválido/<= 0 (nunca
@@ -1121,6 +1210,15 @@ public partial class TaraForm : Form
         SetBounds(detailsTopDividerLabel, col1,
             (_tamanhoInputPanel?.Bottom ?? descricaoInputPanel.Bottom) + Scale(12, scaleY),
             layoutWidth, 1);
+
+        // Mensagem de estado vazio ocupa a área central do card (abaixo do título).
+        if (_lblEstadoVazio is not null)
+        {
+            ApplyScaledFont(_lblEstadoVazio, 10F, contentScale, 9.5F, 13F);
+            int estadoVazioTop = Scale(60, scaleY);
+            int estadoVazioHeight = Math.Max(60, detailsCard.Height - estadoVazioTop - Scale(60, scaleY));
+            SetBounds(_lblEstadoVazio, leftPadding, estadoVazioTop, cardInnerWidth, estadoVazioHeight);
+        }
     }
 
     private void LayoutProfilesCard()
@@ -1365,6 +1463,25 @@ public partial class TaraForm : Form
         _lblTamanho.BringToFront();
         _tamanhoInputPanel.BringToFront();
         _txtTamanho.BringToFront();
+    }
+
+    // Ajuste 1/2: mensagem amigável exibida no centro do card quando não há tara selecionada nem em criação.
+    private void CriarMensagemEstadoVazioRuntime()
+    {
+        _lblEstadoVazio = new Label
+        {
+            Name = "lblEstadoVazioRuntime",
+            Text = "Selecione uma tara cadastrada ou clique em Nova Tara para iniciar.",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = Color.FromArgb(100, 116, 139),
+            Font = new Font("Segoe UI", 10F),
+            BackColor = Color.Transparent,
+            Visible = false
+        };
+
+        detailsCard.Controls.Add(_lblEstadoVazio);
+        _lblEstadoVazio.BringToFront();
     }
 
     // ============================================================

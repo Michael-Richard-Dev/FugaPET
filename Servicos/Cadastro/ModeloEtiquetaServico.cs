@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Seguranca;
@@ -10,6 +10,18 @@ public sealed class ModeloEtiquetaServico
 {
     private const string Entidade = PermissoesSistema.Rotinas.ModeloEtiqueta;
     private const string Tela = "ModeloEtiquetaForm";
+
+    // Mensagens públicas para testes e para consistência de UX com Tara/TipoTara.
+    public const string MensagemDuplicidadeGlobal =
+        "Já existe um modelo com este nome e versão, mesmo que esteja inativo. Localize o registro existente e utilize a ação Reativar.";
+    public const string MensagemInativarPelaAcao =
+        "A inativação do modelo deve ser feita pela ação Inativar.";
+    public const string MensagemReativarPelaAcao =
+        "A reativação do modelo deve ser feita pela ação Reativar.";
+    public const string MensagemEtiquetaAtivaVinculada =
+        "Não é possível inativar este modelo porque existem etiquetas ativas vinculadas a ele.";
+    public const string MensagemNovoDeveSerAtivo =
+        "Novo modelo de etiqueta deve ser cadastrado como Ativo. Utilize a ação Inativar após o cadastro, quando necessário.";
 
     private readonly ModeloEtiquetaRepositorio _repositorio;
     private readonly AuditoriaServico _auditoriaServico;
@@ -31,27 +43,30 @@ public sealed class ModeloEtiquetaServico
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarEtiquetaAsync(Entidade, PermissoesSistema.Acoes.Criar, _auditoriaServico, Tela, cancellationToken);
         if (bloqueio is not null) return bloqueio;
 
-        ResultadoOperacao? validacao = ValidarBasico(modelo);
-        if (validacao is not null) return validacao;
+        // Defesa de servidor: todo novo modelo nasce Ativo. Não corrige false→true silenciosamente; falha explícita
+        // (a regra não pode depender só da View).
+        if (!modelo.SituacaoModeloEtiqueta)
+            return ResultadoOperacao.Falha(MensagemNovoDeveSerAtivo);
 
-        modelo.NomeModeloEtiqueta = modelo.NomeModeloEtiqueta.Trim();
+        ResultadoOperacao? validacao = ValidarENormalizar(modelo);
+        if (validacao is not null) return validacao;
 
         try
         {
             if (await _repositorio.ExisteNomeVersaoAsync(modelo.NomeModeloEtiqueta, modelo.Versao, null, cancellationToken))
             {
-                return ResultadoOperacao.Falha("Ja existe um modelo ativo com este nome e versao.");
+                return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
             }
 
             long id = await _repositorio.InserirAsync(modelo, cancellationToken);
-            if (id <= 0) return ResultadoOperacao.Falha("Nao foi possivel cadastrar o modelo de etiqueta.");
+            if (id <= 0) return ResultadoOperacao.Falha("Não foi possível cadastrar o modelo de etiqueta.");
 
             await _auditoriaServico.RegistrarCadastroCriadoAsync(Entidade, id, $"Modelo '{modelo.NomeModeloEtiqueta}' v{modelo.Versao}", Tela, cancellationToken);
             return ResultadoOperacao.Ok("Modelo de etiqueta cadastrado com sucesso.", id);
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
-            return ResultadoOperacao.Falha("Ja existe um modelo com este nome e versao.");
+            return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
         }
         catch (Exception ex)
         {
@@ -65,45 +80,38 @@ public sealed class ModeloEtiquetaServico
         if (bloqueio is not null) return bloqueio;
 
         if (modelo.CodigoModeloEtiqueta <= 0)
-            return ResultadoOperacao.Falha("Id do modelo invalido para edicao.");
+            return ResultadoOperacao.Falha("Id do modelo inválido para edição.");
 
-        ResultadoOperacao? validacao = ValidarBasico(modelo);
+        ResultadoOperacao? validacao = ValidarENormalizar(modelo);
         if (validacao is not null) return validacao;
-
-        modelo.NomeModeloEtiqueta = modelo.NomeModeloEtiqueta.Trim();
 
         try
         {
+            ModeloEtiquetaCadastro? anterior = await _repositorio.ObterPorIdAsync(modelo.CodigoModeloEtiqueta, cancellationToken);
+            if (anterior is null) return ResultadoOperacao.Falha("Modelo não encontrado para edição.");
+
+            // Situação NÃO muda pela edição: bloqueia tentativa de alterá-la e reforça a situação anterior.
+            if (anterior.SituacaoModeloEtiqueta && !modelo.SituacaoModeloEtiqueta)
+                return ResultadoOperacao.Falha(MensagemInativarPelaAcao);
+            if (!anterior.SituacaoModeloEtiqueta && modelo.SituacaoModeloEtiqueta)
+                return ResultadoOperacao.Falha(MensagemReativarPelaAcao);
+            modelo.SituacaoModeloEtiqueta = anterior.SituacaoModeloEtiqueta;
+
             if (await _repositorio.ExisteNomeVersaoAsync(modelo.NomeModeloEtiqueta, modelo.Versao, modelo.CodigoModeloEtiqueta, cancellationToken))
             {
-                return ResultadoOperacao.Falha("Ja existe outro modelo ativo com este nome e versao.");
+                return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
             }
-
-            ModeloEtiquetaCadastro? anterior = await _repositorio.ObterPorIdAsync(modelo.CodigoModeloEtiqueta, cancellationToken);
-            if (anterior is null) return ResultadoOperacao.Falha("Modelo nao encontrado para edicao.");
 
             int atualizados = await _repositorio.AtualizarAsync(modelo, cancellationToken);
-            if (atualizados <= 0) return ResultadoOperacao.Falha("Modelo nao encontrado para edicao.");
+            if (atualizados <= 0) return ResultadoOperacao.Falha("Modelo não encontrado para edição.");
 
             string descricao = $"Modelo '{modelo.NomeModeloEtiqueta}' v{modelo.Versao}";
-            if (anterior.SituacaoModeloEtiqueta && !modelo.SituacaoModeloEtiqueta)
-            {
-                await _auditoriaServico.RegistrarCadastroExcluidoAsync(Entidade, modelo.CodigoModeloEtiqueta, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Modelo inativado com sucesso.");
-            }
-
-            if (!anterior.SituacaoModeloEtiqueta && modelo.SituacaoModeloEtiqueta)
-            {
-                await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, modelo.CodigoModeloEtiqueta, descricao, Tela, cancellationToken);
-                return ResultadoOperacao.Ok("Modelo reativado com sucesso.");
-            }
-
             await _auditoriaServico.RegistrarCadastroAtualizadoAsync(Entidade, modelo.CodigoModeloEtiqueta, descricao, Tela, cancellationToken);
-            return ResultadoOperacao.Ok("Edicao concluida com sucesso.");
+            return ResultadoOperacao.Ok("Edição concluída com sucesso.");
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
-            return ResultadoOperacao.Falha("Ja existe um modelo com este nome e versao.");
+            return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
         }
         catch (Exception ex)
         {
@@ -116,20 +124,30 @@ public sealed class ModeloEtiquetaServico
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarEtiquetaAsync(Entidade, PermissoesSistema.Acoes.Excluir, _auditoriaServico, Tela, cancellationToken);
         if (bloqueio is not null) return bloqueio;
 
-        if (id <= 0) return ResultadoOperacao.Falha("Id do modelo invalido.");
+        if (id <= 0) return ResultadoOperacao.Falha("Id do modelo inválido.");
 
         try
         {
+            // Verificação explícita: modelo com etiqueta ativa vinculada não pode ser inativado.
+            if (await _repositorio.ExisteEtiquetaAtivaVinculadaAsync(id, cancellationToken))
+            {
+                return ResultadoOperacao.Falha(MensagemEtiquetaAtivaVinculada);
+            }
+
             int excluidos = await _repositorio.ExcluirAsync(id, cancellationToken);
-            if (excluidos <= 0) return ResultadoOperacao.Falha("Modelo nao encontrado ou ja estava inativo.");
+            if (excluidos <= 0)
+            {
+                // O UPDATE atômico (NOT EXISTS) pode ter retornado 0: diferencia o motivo real.
+                ModeloEtiquetaCadastro? atual = await _repositorio.ObterPorIdAsync(id, cancellationToken);
+                if (atual is null) return ResultadoOperacao.Falha("Modelo não encontrado.");
+                if (!atual.SituacaoModeloEtiqueta) return ResultadoOperacao.Falha("Modelo já estava inativo.");
+                if (await _repositorio.ExisteEtiquetaAtivaVinculadaAsync(id, cancellationToken))
+                    return ResultadoOperacao.Falha(MensagemEtiquetaAtivaVinculada);
+                return ResultadoOperacao.Falha("Não foi possível inativar o modelo. Acione o suporte.");
+            }
 
             await _auditoriaServico.RegistrarCadastroExcluidoAsync(Entidade, id, tela: Tela, cancellationToken: cancellationToken);
             return ResultadoOperacao.Ok("Modelo inativado com sucesso.");
-        }
-        catch (PostgresException ex) when (ex.SqlState == "23503")
-        {
-            // FK RESTRICT: ha etiquetas vinculadas a este modelo.
-            return ResultadoOperacao.Falha("Nao e possivel inativar: existem etiquetas vinculadas a este modelo.");
         }
         catch (Exception ex)
         {
@@ -142,12 +160,30 @@ public sealed class ModeloEtiquetaServico
         ResultadoOperacao? bloqueio = await AutorizacaoCadastroServico.BloquearSeNaoPodeGerenciarEtiquetaAsync(Entidade, PermissoesSistema.Acoes.Editar, _auditoriaServico, Tela, cancellationToken);
         if (bloqueio is not null) return bloqueio;
 
-        if (id <= 0) return ResultadoOperacao.Falha("Id do modelo invalido.");
+        if (id <= 0) return ResultadoOperacao.Falha("Id do modelo inválido.");
 
         try
         {
+            ModeloEtiquetaCadastro? modelo = await _repositorio.ObterPorIdAsync(id, cancellationToken);
+            if (modelo is null) return ResultadoOperacao.Falha("Modelo não encontrado.");
+            if (modelo.SituacaoModeloEtiqueta) return ResultadoOperacao.Falha("Modelo já estava ativo.");
+
+            if (await _repositorio.ExisteNomeVersaoAsync(modelo.NomeModeloEtiqueta, modelo.Versao, id, cancellationToken))
+            {
+                return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
+            }
+
             int reativados = await _repositorio.ReativarAsync(id, cancellationToken);
-            if (reativados <= 0) return ResultadoOperacao.Falha("Modelo nao encontrado ou ja estava ativo.");
+            if (reativados <= 0)
+            {
+                // O UPDATE atômico (NOT EXISTS) pode ter retornado 0: diferencia o motivo real.
+                ModeloEtiquetaCadastro? atual = await _repositorio.ObterPorIdAsync(id, cancellationToken);
+                if (atual is null) return ResultadoOperacao.Falha("Modelo não encontrado.");
+                if (atual.SituacaoModeloEtiqueta) return ResultadoOperacao.Falha("Modelo já estava ativo.");
+                if (await _repositorio.ExisteNomeVersaoAsync(atual.NomeModeloEtiqueta, atual.Versao, id, cancellationToken))
+                    return ResultadoOperacao.Falha(MensagemDuplicidadeGlobal);
+                return ResultadoOperacao.Falha("Não foi possível reativar o modelo. Acione o suporte.");
+            }
 
             await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, id, tela: Tela, cancellationToken: cancellationToken);
             return ResultadoOperacao.Ok("Modelo reativado com sucesso.");
@@ -158,22 +194,48 @@ public sealed class ModeloEtiquetaServico
         }
     }
 
-    private static ResultadoOperacao? ValidarBasico(ModeloEtiquetaCadastro modelo)
+    // Valida e normaliza (Trim de nome/observação; ZPL preservado integralmente — sem Trim).
+    private static ResultadoOperacao? ValidarENormalizar(ModeloEtiquetaCadastro modelo)
     {
+        modelo.NomeModeloEtiqueta = (modelo.NomeModeloEtiqueta ?? string.Empty).Trim();
+        modelo.Observacao = (modelo.Observacao ?? string.Empty).Trim();
+
         if (string.IsNullOrWhiteSpace(modelo.NomeModeloEtiqueta))
-            return ResultadoOperacao.Falha("Nome do modelo e obrigatorio.");
+            return ResultadoOperacao.Falha("Nome do modelo é obrigatório.");
+        if (modelo.NomeModeloEtiqueta.Length < ModeloEtiquetaCadastro.TamanhoMinimoNome)
+            return ResultadoOperacao.Falha($"Nome do modelo deve ter ao menos {ModeloEtiquetaCadastro.TamanhoMinimoNome} caracteres.");
+        if (modelo.NomeModeloEtiqueta.Length > ModeloEtiquetaCadastro.TamanhoMaximoNome)
+            return ResultadoOperacao.Falha($"Nome do modelo deve ter no máximo {ModeloEtiquetaCadastro.TamanhoMaximoNome} caracteres.");
+
         if (modelo.Versao <= 0)
-            return ResultadoOperacao.Falha("Versao deve ser maior que zero.");
+            return ResultadoOperacao.Falha("Versão deve ser um inteiro maior que zero.");
+
+        if (!modelo.Dpi.HasValue || modelo.Dpi.Value <= 0)
+            return ResultadoOperacao.Falha("DPI deve ser um inteiro maior que zero.");
+
+        if (modelo.LarguraMm.HasValue)
+        {
+            if (modelo.LarguraMm.Value <= 0)
+                return ResultadoOperacao.Falha("Largura deve ser maior que zero.");
+            if (modelo.LarguraMm.Value != Math.Round(modelo.LarguraMm.Value, 2))
+                return ResultadoOperacao.Falha("Largura e altura devem possuir no máximo duas casas decimais.");
+        }
+
+        if (modelo.AlturaMm.HasValue)
+        {
+            if (modelo.AlturaMm.Value <= 0)
+                return ResultadoOperacao.Falha("Altura deve ser maior que zero.");
+            if (modelo.AlturaMm.Value != Math.Round(modelo.AlturaMm.Value, 2))
+                return ResultadoOperacao.Falha("Largura e altura devem possuir no máximo duas casas decimais.");
+        }
+
+        // ZPL obrigatório, mas preservado exatamente como digitado (sem Trim) — só verifica se está vazio.
         if (string.IsNullOrWhiteSpace(modelo.ConteudoZpl))
-            return ResultadoOperacao.Falha("Conteudo ZPL e obrigatorio.");
-        if (modelo.LarguraMm.HasValue && modelo.LarguraMm.Value < 0)
-            return ResultadoOperacao.Falha("Largura nao pode ser negativa.");
-        if (modelo.AlturaMm.HasValue && modelo.AlturaMm.Value < 0)
-            return ResultadoOperacao.Falha("Altura nao pode ser negativa.");
-        if (modelo.Dpi.HasValue && modelo.Dpi.Value <= 0)
-            return ResultadoOperacao.Falha("DPI deve ser maior que zero.");
+            return ResultadoOperacao.Falha("Conteúdo ZPL é obrigatório.");
+
+        if (modelo.Observacao.Length > ModeloEtiquetaCadastro.TamanhoMaximoObservacao)
+            return ResultadoOperacao.Falha($"Observação deve ter no máximo {ModeloEtiquetaCadastro.TamanhoMaximoObservacao} caracteres.");
+
         return null;
     }
 }
-
-

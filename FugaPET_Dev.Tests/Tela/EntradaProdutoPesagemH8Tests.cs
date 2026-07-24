@@ -70,10 +70,14 @@ public sealed class EntradaProdutoPesagemH8Tests
             "Processo",
             "ProcessoEntradaProdutoForm.cs"));
 
-        Assert.Contains("_codigoLancamentoPersistido is not long codigoLancamento", conteudo);
+        // Reimpressão persistida agora abre a relação de pesagens e reimprime POR PESAGEM (peso líquido),
+        // usando os dados persistidos (não o total do item).
+        Assert.Contains("_codigoLancamentoPersistido is long codigoLancamento", conteudo);
         Assert.Contains("ObterItemPersistidoAsync", conteudo);
-        // H9 Etapa 4: a montagem da etiqueta a partir do item persistido vive no servico de impressao.
-        Assert.Contains("ImpressaoEntradaServico.MontarEtiqueta(itemPersistido", conteudo);
+        Assert.Contains("ListarPesagensPersistidasAsync", conteudo);
+        Assert.Contains("MontarEtiquetaPorPesagem(itemPersistido", conteudo);
+        // Não usa mais a etiqueta consolidada do item na reimpressão.
+        Assert.DoesNotContain("MontarEtiqueta(itemPersistido", conteudo);
     }
 
     private static EntradaProdutoPesagem Leitura(

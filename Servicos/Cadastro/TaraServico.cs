@@ -21,6 +21,15 @@ public sealed class TaraServico
     internal const string MensagemReativarPelaAcao =
         "A reativação da tara deve ser feita pela ação Reativar.";
 
+    internal const string MensagemDuplicidadeReativacao =
+        "Já existe outra tara com este nome no mesmo setor e tipo. Não é possível reativar este registro.";
+
+    // Ajuste 3: mensagens de vínculo inativo na reativação.
+    internal const string MensagemSetorInativo =
+        "Não é possível reativar esta tara porque o setor vinculado está inativo.";
+    internal const string MensagemTipoInativo =
+        "Não é possível reativar esta tara porque o tipo de tara vinculado está inativo.";
+
     private readonly TaraRepositorio _taraRepositorio;
     private readonly AuditoriaServico _auditoriaServico;
 
@@ -153,21 +162,41 @@ public sealed class TaraServico
 
         try
         {
-            // Ajuste 7/11: reativar respeitando duplicidade GLOBAL (não pode existir OUTRA tara com o mesmo
-            // nome no mesmo setor+tipo, ativa OU inativa).
             TaraCadastro? tara = await _taraRepositorio.ObterPorIdAsync(id, cancellationToken);
             if (tara is null)
             {
                 return ResultadoOperacao.Falha("Tara nao encontrada.");
             }
 
+            // Ajuste 3: não reativar se o setor/tipo vinculado estiver inativo.
+            ResultadoOperacao? vinculoInvalido = await ValidarVinculosAtivosParaReativacaoAsync(id, cancellationToken);
+            if (vinculoInvalido is not null) return vinculoInvalido;
+
+            // Ajuste 7/11: reativar respeitando duplicidade GLOBAL (não pode existir OUTRA tara com o mesmo
+            // nome no mesmo setor+tipo, ativa OU inativa).
             if (await _taraRepositorio.ExisteNomeNoSetorTipoAsync(tara.NomeTara, tara.CodigoSetor, tara.CodigoTipoTara, id, cancellationToken))
             {
-                return ResultadoOperacao.Falha("Já existe outra tara com este nome no mesmo setor e tipo. Não é possível reativar este registro.");
+                return ResultadoOperacao.Falha(MensagemDuplicidadeReativacao);
             }
 
             int reativados = await _taraRepositorio.ReativarAsync(id, cancellationToken);
-            if (reativados <= 0) return ResultadoOperacao.Falha("Tara nao encontrada ou ja estava ativa.");
+            if (reativados <= 0)
+            {
+                // Ajuste 5: o UPDATE também protege atomicamente (NOT EXISTS). Se 0, reconsulta a causa exata.
+                TaraCadastro? atual = await _taraRepositorio.ObterPorIdAsync(id, cancellationToken);
+                if (atual is null) return ResultadoOperacao.Falha("Tara não encontrada.");
+                if (atual.SituacaoTara) return ResultadoOperacao.Falha("Tara já estava ativa.");
+
+                if (await _taraRepositorio.ExisteNomeNoSetorTipoAsync(atual.NomeTara, atual.CodigoSetor, atual.CodigoTipoTara, id, cancellationToken))
+                {
+                    return ResultadoOperacao.Falha(MensagemDuplicidadeReativacao);
+                }
+
+                ResultadoOperacao? vinculoInvalido2 = await ValidarVinculosAtivosParaReativacaoAsync(id, cancellationToken);
+                if (vinculoInvalido2 is not null) return vinculoInvalido2;
+
+                return ResultadoOperacao.Falha("Não foi possível reativar a tara. Acione o suporte.");
+            }
 
             await _auditoriaServico.RegistrarCadastroReativadoAsync(Entidade, id, tela: Tela, cancellationToken: cancellationToken);
             return ResultadoOperacao.Ok("Tara reativada com sucesso.");
@@ -176,6 +205,20 @@ public sealed class TaraServico
         {
             return await TratamentoErroCadastroServico.TratarFalhaAsync(_auditoriaServico, Entidade + "_ERRO", ex, Tela, cancellationToken);
         }
+    }
+
+    // Ajuste 3: bloqueia reativação quando setor OU tipo de tara vinculado está inativo. Null = vínculos OK.
+    private async Task<ResultadoOperacao?> ValidarVinculosAtivosParaReativacaoAsync(long codigoTara, CancellationToken cancellationToken)
+    {
+        ResumoValidacaoReativacaoTara resumo = await _taraRepositorio.ObterResumoValidacaoReativacaoAsync(codigoTara, cancellationToken);
+        if (!resumo.Encontrado)
+        {
+            return null; // trata "não encontrada" no fluxo principal.
+        }
+
+        if (!resumo.SetorAtivo) return ResultadoOperacao.Falha(MensagemSetorInativo);
+        if (!resumo.TipoAtivo) return ResultadoOperacao.Falha(MensagemTipoInativo);
+        return null;
     }
 
     // Ajuste 8: validação/normalização no padrão Setor/Cargo/TipoTara. Peso em KG (> 0, até 3 casas — numeric(14,3)).
@@ -209,8 +252,12 @@ public sealed class TaraServico
             return ResultadoOperacao.Falha("Informe um peso de tara válido em KG, maior que zero.");
         }
 
-        // Até 3 casas decimais (coerente com numeric(14,3)); mantém KG (nunca gramas).
-        tara.PesoKg = Math.Round(tara.PesoKg, 3, MidpointRounding.AwayFromZero);
+        // Ajuste 4: no máximo 3 casas decimais (numeric(14,3)); NÃO arredonda silenciosamente — bloqueia.
+        if (tara.PesoKg != Math.Round(tara.PesoKg, 3))
+        {
+            return ResultadoOperacao.Falha("Peso da tara deve ter no máximo 3 casas decimais.");
+        }
+
         return null;
     }
 }

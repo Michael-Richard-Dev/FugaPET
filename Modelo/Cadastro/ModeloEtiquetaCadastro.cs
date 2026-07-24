@@ -2,6 +2,11 @@
 
 public sealed class ModeloEtiquetaCadastro
 {
+    // Limites de validação alinhados ao padrão maduro Setor/Cargo/Tara/TipoTara.
+    public const int TamanhoMinimoNome = 2;
+    public const int TamanhoMaximoNome = 80;
+    public const int TamanhoMaximoObservacao = 255;
+
     public long CodigoModeloEtiqueta { get; set; }
     public string NomeModeloEtiqueta { get; set; } = string.Empty;
     public int Versao { get; set; } = 1;

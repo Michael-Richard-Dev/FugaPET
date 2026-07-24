@@ -2,6 +2,8 @@
 
 public sealed class MapeamentoCampoEtiquetaCadastro
 {
+    public const int TamanhoMaximoObservacao = 255;
+
     public long CodigoMapeamentoCampoEtiqueta { get; set; }
     public long CodigoCampoEtiqueta { get; set; }
     public string OrigemDado { get; set; } = "USUARIO";

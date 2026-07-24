@@ -36,6 +36,19 @@ public static class PermissoesSistema
         public const string Tara = "TARA";
         public const string TipoTara = "TIPO_TARA";
         public const string LeituraProducao = "LEITURA_PRODUCAO";
+
+        /// <summary>
+        /// Controle de Apontamentos (módulo PROCESSO_PRODUCAO). A autorização vive em
+        /// <c>ControleApontamentosAutorizacaoServico</c>:
+        /// <list type="bullet">
+        /// <item>VISUALIZAR governa a abertura (PainelInicialForm.PermiteAbrirControleApontamentosAsync);</item>
+        /// <item>INICIAR/FINALIZAR são exigidos em ProcessoControleApontamentosServico.ProcessarLeituraAsync,
+        /// antes de qualquer consulta SAP, confirmação ou alteração de banco.</item>
+        /// </list>
+        /// O FALLBACK para <see cref="LeituraProducao"/> vale SOMENTE para VISUALIZAR e SOMENTE enquanto a
+        /// estrutura do pacote Gaia 039 não estiver aplicada. Ver o pacote 039 (ainda não executado).
+        /// </summary>
+        public const string ControleApontamentos = "CONTROLE_APONTAMENTOS";
         public const string EntradaProduto = "ENTRADA_PRODUTO";
         public const string OrdemAndamento = "ORDEM_ANDAMENTO";
         public const string Etiqueta = "ETIQUETA";
@@ -79,5 +92,11 @@ public static class PermissoesSistema
         public const string Sincronizar = "SINCRONIZAR";
         public const string Bloquear = "BLOQUEAR";
         public const string Desbloquear = "DESBLOQUEAR";
+
+        // Ações do Controle de Apontamentos (rotina CONTROLE_APONTAMENTOS).
+        public const string Iniciar = "INICIAR";
+        public const string ConsultarHistorico = "CONSULTAR_HISTORICO";
+        public const string Reabrir = "REABRIR";
+        public const string IgnorarSequencia = "IGNORAR_SEQUENCIA";
     }
 }

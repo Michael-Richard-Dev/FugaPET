@@ -6,6 +6,9 @@ namespace FugaPET_Dev.Modelo.Entrada;
 /// </summary>
 public sealed record EntradaProdutoPesagem
 {
+    /// <summary>PK persistida (desenvolvimento.entrada_produto_pesagem); null quando ainda não gravada.</summary>
+    public long? CodigoEntradaProdutoPesagem { get; init; }
+
     public int Sequencia { get; init; }
     public decimal PesoBrutoKg { get; init; }
     public decimal PesoTaraKg { get; init; }

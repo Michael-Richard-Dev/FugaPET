@@ -1,304 +1,1063 @@
-﻿using System.Runtime.InteropServices;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
+using FugaPET_Dev.Servicos.Seguranca;
+using FugaPET_Dev.Tela.Comum;
 using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela.Cadastro;
 
 public partial class EtiquetaForm : Form
 {
-    private readonly bool _integracaoBancoHabilitada = EstadoIntegracaoBanco.Habilitado;
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
     private static readonly Color MarkerColor = Color.FromArgb(239, 68, 68);
-    private readonly List<RowSelection> _rowSelections = new();
-    private readonly List<ProfileSearchRow> _profileSearchRows = new();
-    private readonly Dictionary<Panel, Panel> _rowSelectionMarkers = new();
-    private long _idEtiquetaAtual;
-    private readonly EtiquetaController _etiquetaController;
-    private Button? _btnCampos;
+    private static readonly string[] TiposEtiqueta = ["CAIXA", "PALETE", "HU", "INTERNA", "OUTRA"];
 
-    public EtiquetaForm(EtiquetaController? etiquetaController = null)
+    private readonly EtiquetaController _etiquetaController;
+    private readonly ModeloEtiquetaController _modeloEtiquetaController;
+    private readonly AuditoriaServico _auditoriaServico;
+    private readonly System.Windows.Forms.Timer _relogioTimer = new() { Interval = 1000 };
+    private readonly Panel _etiquetasRowsPanel = new();
+    private readonly Label _estadoVazioListaLabel = new();
+    private readonly Label _detailsEmptyLabel = new();
+    private readonly List<LinhaEtiquetaUi> _linhasEtiquetas = [];
+    private IReadOnlyList<EtiquetaCadastro> _etiquetasCarregadas = [];
+    private IReadOnlyList<ModeloEtiquetaCadastro> _modelosCarregados = [];
+    private Button? camposEtiquetaButton;
+    private long _idEtiquetaAtual;
+    private bool _situacaoSelecionadaAtiva = true;
+    private bool _operacaoEmAndamento;
+    private ModoCard _modoCard = ModoCard.Vazio;
+
+    public EtiquetaForm(
+        EtiquetaController? etiquetaController = null,
+        ModeloEtiquetaController? modeloEtiquetaController = null,
+        AuditoriaServico? auditoriaServico = null)
     {
         _etiquetaController = etiquetaController ?? FabricaControladoresCadastro.CriarEtiquetaController();
+        _modeloEtiquetaController = modeloEtiquetaController ?? FabricaControladoresCadastro.CriarModeloEtiquetaController();
+        _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
+
         InitializeComponent();
-        global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
-        cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
-        cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
-        cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";
-        ConfigureWindowButtons();
-        ConfigureDragOnTitleBar();
-        ConfigureNovoEtiquetaAction();
-        ConfigureProfilesSearchFilter();
-        CriarBotaoCampos();
-        profilesCard.Resize += (_, _) => LayoutProfilesCard();
-        detailsCard.Resize += (_, _) => LayoutDetailsCard();
-        detailsCard.Resize += (_, _) => PosicionarBotaoCampos();
-        summaryCard.Resize += (_, _) => LayoutSummaryCard();
-        InitializeProfilesTableSelection();
+        IconeJanelaHelper.AplicarIconePadrao(this);
+        ConfigurarTela();
+        ConfigurarListaDinamica();
+        CriarControlesAuxiliaresOriginais();
+        ConectarEventos();
         LayoutProfilesCard();
         LayoutDetailsCard();
         LayoutSummaryCard();
-        PosicionarBotaoCampos();
-        ApplyProfilesFilter();
-        ConectarAcoesCadastro();
+        AplicarModoCard(ModoCard.Vazio);
+        AtualizarBotoes();
+        Shown += async (_, _) => await ExecutarOperacaoProtegidaAsync(InicializarTelaAsync, "ETIQUETA_INICIALIZAR_ERRO");
     }
 
-    // Botao runtime que abre o dialogo de campos+mapeamento da etiqueta.
-    private void CriarBotaoCampos()
+    private enum ModoCard
     {
-        _btnCampos = new Button
+        Vazio,
+        Novo,
+        Edicao
+    }
+
+    private sealed record ModeloEtiquetaOpcao(long Codigo, string Texto, bool Ativo);
+
+    private sealed record LinhaEtiquetaUi(
+        Panel RowPanel,
+        Label NameLabel,
+        Label TypeLabel,
+        RoundedPanel StatusPanel,
+        Label StatusLabel,
+        Panel MarkerPanel,
+        EtiquetaCadastro Etiqueta);
+
+    private void ConfigurarTela()
+    {
+        sapStatusPanel.Visible = false;
+        headerSubtitleLabel.Text = "Cadastro e manutenção de etiqueta";
+        cellUserText.Text = UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
+        cellBancoText.Text = RodapeBancoHelper.ObterTextoBancoDados();
+        cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";
+        AtualizarDataHora();
+
+        tipoEtiquetaComboBox.Items.Clear();
+        tipoEtiquetaComboBox.Items.AddRange(TiposEtiqueta);
+        tipoEtiquetaComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        modeloEtiquetaComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        situacaoComboBox.Items.Clear();
+        situacaoComboBox.Items.Add(SituacaoCadastroHelper.Ativo);
+        situacaoComboBox.SelectedItem = SituacaoCadastroHelper.Ativo;
+        situacaoComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+
+        codigoInternoTextBox.MaxLength = EtiquetaCadastro.TamanhoMaximoCodigoInterno;
+        nomeEtiquetaTextBox.MaxLength = EtiquetaCadastro.TamanhoMaximoNome;
+        descricaoEtiquetaTextBox.MaxLength = EtiquetaCadastro.TamanhoMaximoDescricao;
+        searchTextBox.MaxLength = 120;
+
+        profilesHeaderProfileLabel.Text = "Etiqueta";
+        profilesHeaderUsersLabel.Text = "Tipo";
+        summaryUsuariosCaptionLabel.Text = "Código interno";
+        profilesFooterLabel.Text = "Exibindo 0 de 0 etiquetas";
+
+        _relogioTimer.Tick += (_, _) => AtualizarDataHora();
+        _relogioTimer.Start();
+        FormClosed += (_, _) => _relogioTimer.Dispose();
+    }
+
+    private void ConfigurarListaDinamica()
+    {
+        Panel[] linhasEstaticas =
+        [
+            profileRow1Panel,
+            profileRow2Panel,
+            profileRow3Panel,
+            profileRow4Panel,
+            profileRow5Panel
+        ];
+
+        foreach (Panel linha in linhasEstaticas)
         {
-            Name = "btnCamposEtiquetaRuntime",
-            Text = "Campos da Etiqueta...",
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(243, 244, 246),
-            ForeColor = Color.FromArgb(31, 41, 55),
-            Cursor = Cursors.Hand,
-            Width = 180,
-            Height = 30
-        };
-        _btnCampos.Click += (_, _) => AbrirCamposEtiqueta();
-        detailsCard.Controls.Add(_btnCampos);
-        _btnCampos.BringToFront();
+            linha.Visible = false;
+        }
+
+        _etiquetasRowsPanel.Name = "etiquetasRowsPanel";
+        _etiquetasRowsPanel.BackColor = Color.White;
+        _etiquetasRowsPanel.AutoScroll = true;
+        _etiquetasRowsPanel.TabIndex = 10;
+        profilesTablePanel.Controls.Add(_etiquetasRowsPanel);
+        _etiquetasRowsPanel.BringToFront();
+
+        _estadoVazioListaLabel.Name = "estadoVazioListaLabel";
+        _estadoVazioListaLabel.BackColor = Color.White;
+        _estadoVazioListaLabel.Font = new Font("Segoe UI", 9F);
+        _estadoVazioListaLabel.ForeColor = Color.FromArgb(100, 116, 139);
+        _estadoVazioListaLabel.Text = "Nenhuma etiqueta cadastrada.";
+        _estadoVazioListaLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _estadoVazioListaLabel.Visible = false;
+        _etiquetasRowsPanel.Controls.Add(_estadoVazioListaLabel);
     }
 
-    private void PosicionarBotaoCampos()
+    private void CriarControlesAuxiliaresOriginais()
     {
-        if (_btnCampos is null || detailsCard.Width <= 0) return;
-        _btnCampos.Location = new Point(Math.Max(12, detailsCard.Width - _btnCampos.Width - 24), 18);
+        camposEtiquetaButton = new Button
+        {
+            Name = "camposEtiquetaButton",
+            Text = "Campos da Etiqueta",
+            Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.White,
+            ForeColor = Color.FromArgb(15, 23, 42),
+            Width = 180,
+            Height = 28,
+            Cursor = Cursors.Hand
+        };
+        camposEtiquetaButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+        detailsCard.Controls.Add(camposEtiquetaButton);
+        camposEtiquetaButton.BringToFront();
+
+        _detailsEmptyLabel.Name = "detailsEmptyLabel";
+        _detailsEmptyLabel.Font = new Font("Segoe UI", 9F);
+        _detailsEmptyLabel.ForeColor = Color.FromArgb(100, 116, 139);
+        _detailsEmptyLabel.Text = "Selecione uma etiqueta cadastrada ou clique em Nova Etiqueta para iniciar.";
+        _detailsEmptyLabel.TextAlign = ContentAlignment.MiddleCenter;
+        detailsCard.Controls.Add(_detailsEmptyLabel);
+        _detailsEmptyLabel.BringToFront();
+        PosicionarControlesAuxiliares();
+    }
+
+    private void ConectarEventos()
+    {
+        menuHeaderLabel.Click += (_, _) => Close();
+        minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        maximizeWindowLabel.Click += (_, _) =>
+            WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+        closeWindowLabel.Click += (_, _) => Close();
+        customTitleBarPanel.MouseDown += ArrastarJanela;
+        headerTitleLabel.MouseDown += ArrastarJanela;
+        headerSubtitleLabel.MouseDown += ArrastarJanela;
+        companyLogoPictureBox.MouseDown += ArrastarJanela;
+
+        ConfigurarCliqueNovaEtiqueta(novoPerfilButtonPanel);
+        searchTextBox.TextChanged += (_, _) => AplicarFiltro();
+        salvarButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(SalvarEtiquetaAsync, "ETIQUETA_SALVAR_ERRO");
+        editarButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(EditarEtiquetaAsync, "ETIQUETA_EDITAR_ERRO");
+        situacaoButton.Click += async (_, _) =>
+            await ExecutarOperacaoProtegidaAsync(AlternarSituacaoEtiquetaAsync, "ETIQUETA_SITUACAO_ERRO");
+        camposEtiquetaButton!.Click += (_, _) => AbrirCamposEtiqueta();
+
+        profilesCard.Resize += (_, _) => LayoutProfilesCard();
+        detailsCard.Resize += (_, _) => LayoutDetailsCard();
+        summaryCard.Resize += (_, _) => LayoutSummaryCard();
+    }
+
+    private void ConfigurarCliqueNovaEtiqueta(Control controle)
+    {
+        controle.Cursor = Cursors.Hand;
+        controle.Click += (_, _) => PrepararNovaEtiqueta();
+        foreach (Control filho in controle.Controls)
+            ConfigurarCliqueNovaEtiqueta(filho);
+    }
+
+    private async Task InicializarTelaAsync()
+    {
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Etiqueta,
+                PermissoesSistema.Rotinas.Etiqueta))
+        {
+            await AuditarAcessoDiretoNegadoSeguroAsync();
+            MessageBox.Show(
+                "Você não possui permissão para acessar o Cadastro de Etiqueta.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            Close();
+            return;
+        }
+
+        if (!EstadoIntegracaoBanco.Habilitado)
+        {
+            MessageBox.Show(
+                "A conexão com o banco está desabilitada neste ambiente.",
+                "Cadastro de Etiqueta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        await CarregarModelosAtivosAsync();
+        await CarregarEtiquetasAsync();
+        VoltarAoModoVazio();
+    }
+
+    private async Task AuditarAcessoDiretoNegadoSeguroAsync()
+    {
+        long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+        if (!codigoUsuario.HasValue) return;
+
+        try
+        {
+            await _auditoriaServico.RegistrarAcessoNegadoAsync(
+                codigoUsuario.Value,
+                $"Acesso direto negado a {PermissoesSistema.Modulos.Etiqueta}/{PermissoesSistema.Rotinas.Etiqueta}/CONSULTAR ou VISUALIZAR.",
+                nameof(EtiquetaForm));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError($"Falha ao auditar acesso direto negado ao EtiquetaForm: {ex}");
+        }
+    }
+
+    private async Task ExecutarOperacaoProtegidaAsync(Func<Task> operacao, string codigoErro)
+    {
+        if (_operacaoEmAndamento) return;
+
+        _operacaoEmAndamento = true;
+        AtualizarBotoes();
+        try
+        {
+            await operacao();
+        }
+        catch (Exception ex)
+        {
+            string mensagem = await ErroUsuarioHelper.TratarAsync(
+                codigoErro,
+                ex,
+                nameof(EtiquetaForm),
+                "Não foi possível concluir a operação de etiqueta. Acione o suporte.");
+            MessageBox.Show(mensagem, "Cadastro de Etiqueta", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoes();
+        }
+    }
+
+    private async Task CarregarModelosAtivosAsync()
+    {
+        try
+        {
+            _modelosCarregados = await _modeloEtiquetaController.ListarAsync();
+            ConfigurarComboModelos();
+        }
+        catch (Exception ex)
+        {
+            _modelosCarregados = [];
+            ConfigurarComboModelos();
+            throw new InvalidOperationException("Falha ao carregar modelos de etiqueta.", ex);
+        }
+    }
+
+    private async Task CarregarEtiquetasAsync()
+    {
+        try
+        {
+            _etiquetasCarregadas = await _etiquetaController.ListarAsync();
+            AplicarFiltro();
+        }
+        catch (Exception ex)
+        {
+            _etiquetasCarregadas = [];
+            LimparLinhasDinamicas();
+            AtualizarRodapeLista(0);
+            ExibirEstadoVazioLista("Não foi possível carregar as etiquetas.");
+            VoltarAoModoVazio();
+
+            string mensagem = await ErroUsuarioHelper.TratarAsync(
+                "ETIQUETA_CARREGAR_ERRO",
+                ex,
+                nameof(EtiquetaForm),
+                "Não foi possível carregar as etiquetas. Acione o suporte.");
+            MessageBox.Show(mensagem, "Cadastro de Etiqueta", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void AplicarFiltro()
+    {
+        long idSelecionado = _idEtiquetaAtual;
+        string filtro = NormalizarPesquisa(searchTextBox.Text);
+        IReadOnlyList<EtiquetaCadastro> filtradas = _etiquetasCarregadas
+            .Where(etiqueta => string.IsNullOrEmpty(filtro)
+                || NormalizarPesquisa(etiqueta.NomeEtiqueta).Contains(filtro, StringComparison.Ordinal)
+                || NormalizarPesquisa(etiqueta.CodigoInterno).Contains(filtro, StringComparison.Ordinal)
+                || NormalizarPesquisa(etiqueta.TipoEtiqueta).Contains(filtro, StringComparison.Ordinal))
+            .ToList();
+
+        _etiquetasRowsPanel.SuspendLayout();
+        LimparLinhasDinamicas();
+        LinhaEtiquetaUi? linhaSelecionada = null;
+        foreach (EtiquetaCadastro etiqueta in filtradas)
+        {
+            LinhaEtiquetaUi linha = CriarLinhaEtiqueta(etiqueta, _linhasEtiquetas.Count);
+            linha.RowPanel.Tag = etiqueta;
+            _linhasEtiquetas.Add(linha);
+            _etiquetasRowsPanel.Controls.Add(linha.RowPanel);
+            if (etiqueta.CodigoEtiqueta == idSelecionado) linhaSelecionada = linha;
+        }
+
+        _estadoVazioListaLabel.Text = string.IsNullOrWhiteSpace(searchTextBox.Text)
+            ? "Nenhuma etiqueta cadastrada."
+            : "Nenhuma etiqueta encontrada para o filtro informado.";
+        _estadoVazioListaLabel.Visible = filtradas.Count == 0;
+        _estadoVazioListaLabel.BringToFront();
+        AtualizarRodapeLista(filtradas.Count);
+        ReposicionarLinhasDinamicas();
+        _etiquetasRowsPanel.ResumeLayout();
+
+        if (linhaSelecionada is not null)
+            SelecionarEtiqueta(linhaSelecionada);
+        else if (idSelecionado > 0)
+            VoltarAoModoVazio();
+    }
+
+    private LinhaEtiquetaUi CriarLinhaEtiqueta(EtiquetaCadastro etiqueta, int indice)
+    {
+        Panel linha = new()
+        {
+            BackColor = Color.White,
+            Cursor = Cursors.Hand,
+            Height = 46,
+            Name = $"etiquetaRow{etiqueta.CodigoEtiqueta}Panel",
+            Tag = etiqueta
+        };
+        linha.Tag = etiqueta;
+        Panel marcador = new()
+        {
+            BackColor = MarkerColor,
+            Dock = DockStyle.Left,
+            Name = $"etiquetaRow{etiqueta.CodigoEtiqueta}MarkerPanel",
+            Visible = false,
+            Width = 3
+        };
+        Label nome = new()
+        {
+            AutoEllipsis = true,
+            Font = new Font("Segoe UI", 8.25F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(15, 23, 42),
+            Text = etiqueta.NomeEtiqueta,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        Label tipo = new()
+        {
+            AutoEllipsis = true,
+            Font = new Font("Segoe UI", 8.25F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(15, 23, 42),
+            Text = etiqueta.TipoEtiqueta,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        RoundedPanel statusPanel = new()
+        {
+            BackColor = Color.Transparent,
+            BorderColor = Color.Transparent,
+            BorderRadius = 11,
+            FillColor = etiqueta.SituacaoEtiqueta
+                ? Color.FromArgb(220, 252, 231)
+                : Color.FromArgb(254, 226, 226),
+            ShadowBlur = 0,
+            ShadowOffsetY = 0
+        };
+        Label status = new()
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+            ForeColor = etiqueta.SituacaoEtiqueta
+                ? Color.FromArgb(22, 163, 74)
+                : Color.FromArgb(220, 38, 38),
+            Text = etiqueta.SituacaoEtiqueta ? SituacaoCadastroHelper.Ativo : SituacaoCadastroHelper.Inativo,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        Panel separador = new()
+        {
+            BackColor = Color.FromArgb(241, 245, 249),
+            Dock = DockStyle.Bottom,
+            Height = 1
+        };
+
+        statusPanel.Controls.Add(status);
+        linha.Controls.AddRange([nome, tipo, statusPanel, separador, marcador]);
+        LinhaEtiquetaUi item = new(linha, nome, tipo, statusPanel, status, marcador, etiqueta);
+        AnexarCliqueLinha(linha, item);
+        return item;
+    }
+
+    private void AnexarCliqueLinha(Control controle, LinhaEtiquetaUi linha)
+    {
+        controle.Cursor = Cursors.Hand;
+        controle.Click += (_, _) => SelecionarEtiqueta(linha);
+        foreach (Control filho in controle.Controls)
+            AnexarCliqueLinha(filho, linha);
+    }
+
+    private void SelecionarEtiqueta(LinhaEtiquetaUi linhaSelecionada)
+    {
+        foreach (LinhaEtiquetaUi linha in _linhasEtiquetas)
+        {
+            bool selecionada = ReferenceEquals(linha, linhaSelecionada);
+            linha.RowPanel.BackColor = selecionada ? Color.FromArgb(254, 242, 242) : Color.White;
+            linha.MarkerPanel.Visible = selecionada;
+        }
+
+        EtiquetaCadastro etiqueta = linhaSelecionada.Etiqueta;
+        _idEtiquetaAtual = etiqueta.CodigoEtiqueta;
+        _situacaoSelecionadaAtiva = etiqueta.SituacaoEtiqueta;
+        PreencherCampos(etiqueta);
+        PreencherResumo(etiqueta);
+        AplicarModoCard(ModoCard.Edicao);
+        AtualizarBotoes();
+    }
+
+    private void PrepararNovaEtiqueta()
+    {
+        if (_operacaoEmAndamento || !Pode(PermissoesSistema.Acoes.Criar)) return;
+        if (!_modelosCarregados.Any(modelo => modelo.SituacaoModeloEtiqueta))
+        {
+            VoltarAoModoVazio();
+            MessageBox.Show(
+                "Cadastre ou reative um Modelo de Etiqueta antes de cadastrar uma Etiqueta.",
+                "Cadastro de Etiqueta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _idEtiquetaAtual = 0;
+        _situacaoSelecionadaAtiva = true;
+        LimparSelecaoLinhas();
+        LimparCampos();
+        LimparResumo();
+        ConfigurarComboModelos();
+        situacaoComboBox.SelectedItem = SituacaoCadastroHelper.Ativo;
+        AplicarModoCard(ModoCard.Novo);
+        AtualizarBotoes();
+        nomeEtiquetaTextBox.Focus();
+    }
+
+    private async Task SalvarEtiquetaAsync()
+    {
+        if (_modoCard != ModoCard.Novo) return;
+        EtiquetaCadastro? etiqueta = CriarEtiquetaDaTela();
+        if (etiqueta is null) return;
+
+        ResultadoOperacao resultado = await _etiquetaController.InserirAsync(etiqueta);
+        ExibirResultado(resultado);
+        if (!resultado.Sucesso) return;
+
+        await CarregarEtiquetasAsync();
+        VoltarAoModoVazio();
+    }
+
+    private async Task EditarEtiquetaAsync()
+    {
+        if (_modoCard != ModoCard.Edicao || _idEtiquetaAtual <= 0) return;
+        EtiquetaCadastro? etiqueta = CriarEtiquetaDaTela();
+        if (etiqueta is null) return;
+
+        etiqueta.CodigoEtiqueta = _idEtiquetaAtual;
+        etiqueta.SituacaoEtiqueta = _situacaoSelecionadaAtiva;
+        ResultadoOperacao resultado = await _etiquetaController.AtualizarAsync(etiqueta);
+        ExibirResultado(resultado);
+        if (!resultado.Sucesso) return;
+
+        await CarregarEtiquetasAsync();
+        VoltarAoModoVazio();
+    }
+
+    private async Task AlternarSituacaoEtiquetaAsync()
+    {
+        if (_modoCard != ModoCard.Edicao || _idEtiquetaAtual <= 0) return;
+
+        string acao = _situacaoSelecionadaAtiva ? "inativar" : "reativar";
+        if (MessageBox.Show(
+                $"Deseja realmente {acao} esta etiqueta?",
+                "Cadastro de Etiqueta",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        ResultadoOperacao resultado = _situacaoSelecionadaAtiva
+            ? await _etiquetaController.ExcluirAsync(_idEtiquetaAtual)
+            : await _etiquetaController.ReativarAsync(_idEtiquetaAtual);
+
+        ExibirResultado(resultado);
+        if (!resultado.Sucesso) return;
+
+        await CarregarEtiquetasAsync();
+        VoltarAoModoVazio();
+    }
+
+    private EtiquetaCadastro? CriarEtiquetaDaTela()
+    {
+        bool situacaoAtiva;
+        if (_modoCard == ModoCard.Novo)
+        {
+            situacaoAtiva = true;
+        }
+        else if (_modoCard == ModoCard.Edicao)
+        {
+            situacaoAtiva = _situacaoSelecionadaAtiva;
+        }
+        else if (!SituacaoCadastroHelper.TryInterpretarSituacao(situacaoComboBox.Text, out situacaoAtiva))
+        {
+            MessageBox.Show(
+                "Selecione uma situação válida para a etiqueta.",
+                "Cadastro de Etiqueta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return null;
+        }
+
+        return new EtiquetaCadastro
+        {
+            CodigoEtiqueta = _idEtiquetaAtual,
+            CodigoModeloEtiqueta = ObterCodigoModeloSelecionado(),
+            CodigoInterno = codigoInternoTextBox.Text,
+            NomeEtiqueta = nomeEtiquetaTextBox.Text,
+            TipoEtiqueta = tipoEtiquetaComboBox.Text,
+            DescricaoEtiqueta = descricaoEtiquetaTextBox.Text,
+            SituacaoEtiqueta = situacaoAtiva
+        };
     }
 
     private void AbrirCamposEtiqueta()
     {
-        // Abre o dialogo; pre-seleciona a etiqueta atual se houver. O dialogo tem combo proprio.
+        if (_idEtiquetaAtual <= 0 || _modoCard != ModoCard.Edicao) return;
+        if (!_situacaoSelecionadaAtiva)
+        {
+            MessageBox.Show(
+                "Reative a etiqueta antes de configurar seus campos.",
+                "Cadastro de Etiqueta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Etiqueta,
+                PermissoesSistema.Rotinas.CampoEtiqueta))
+        {
+            MessageBox.Show(
+                "Você não possui permissão para acessar os Campos da Etiqueta.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         using CamposEtiquetaForm form = new(_idEtiquetaAtual);
         form.ShowDialog(this);
     }
 
-    private void ConfigureProfilesSearchFilter()
+    private void PreencherCampos(EtiquetaCadastro etiqueta)
     {
-        _profileSearchRows.Clear();
-        _profileSearchRows.Add(new ProfileSearchRow(profileRow1Panel, profileRow1NameLabel, profileRow1UsersLabel, profileRow1StatusLabel));
-        _profileSearchRows.Add(new ProfileSearchRow(profileRow2Panel, profileRow2NameLabel, profileRow2UsersLabel, profileRow2StatusLabel));
-        _profileSearchRows.Add(new ProfileSearchRow(profileRow3Panel, profileRow3NameLabel, profileRow3UsersLabel, profileRow3StatusLabel));
-        _profileSearchRows.Add(new ProfileSearchRow(profileRow4Panel, profileRow4NameLabel, profileRow4UsersLabel, profileRow4StatusLabel));
-        _profileSearchRows.Add(new ProfileSearchRow(profileRow5Panel, profileRow5NameLabel, profileRow5UsersLabel, profileRow5StatusLabel));
-
-        searchTextBox.TextChanged += (_, _) => ApplyProfilesFilter();
+        nomeEtiquetaTextBox.Text = etiqueta.NomeEtiqueta;
+        codigoInternoTextBox.Text = etiqueta.CodigoInterno;
+        tipoEtiquetaComboBox.SelectedItem = TiposEtiqueta.FirstOrDefault(tipo =>
+            string.Equals(tipo, etiqueta.TipoEtiqueta, StringComparison.OrdinalIgnoreCase));
+        ConfigurarComboModelos(etiqueta.CodigoModeloEtiqueta);
+        situacaoComboBox.SelectedItem = etiqueta.SituacaoEtiqueta
+            ? SituacaoCadastroHelper.Ativo
+            : SituacaoCadastroHelper.Inativo;
+        descricaoEtiquetaTextBox.Text = etiqueta.DescricaoEtiqueta;
     }
 
-    private void ApplyProfilesFilter()
+    private void ConfigurarComboModelos(long? codigoModeloSelecionado = null)
     {
-        string query = NormalizeForSearch(searchTextBox.Text.Trim());
-        int visibleIndex = 0;
+        List<ModeloEtiquetaOpcao> opcoes = _modelosCarregados
+            .Where(modelo => modelo.SituacaoModeloEtiqueta || modelo.CodigoModeloEtiqueta == codigoModeloSelecionado)
+            .OrderBy(modelo => modelo.NomeModeloEtiqueta)
+            .ThenBy(modelo => modelo.Versao)
+            .Select(modelo => new ModeloEtiquetaOpcao(
+                modelo.CodigoModeloEtiqueta,
+                $"{modelo.NomeModeloEtiqueta} - v{modelo.Versao}{(modelo.SituacaoModeloEtiqueta ? string.Empty : " (Inativo)")}",
+                modelo.SituacaoModeloEtiqueta))
+            .ToList();
 
-        foreach (ProfileSearchRow row in _profileSearchRows)
-        {
-            string rowName = NormalizeForSearch(row.NameLabel.Text);
-
-            bool match = string.IsNullOrWhiteSpace(query)
-                || rowName.Contains(query, StringComparison.Ordinal);
-
-            row.RowPanel.Visible = match;
-
-            if (!match)
-            {
-                continue;
-            }
-
-            int top = profileRow1Panel.Top + (profileRow1Panel.Height * visibleIndex);
-            row.RowPanel.Location = new Point(profileRow1Panel.Left, top);
-            visibleIndex++;
-        }
-
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            ClearRowSelection();
-            return;
-        }
-
-        if (visibleIndex > 0)
-        {
-            SetFilteredRowsSelected();
-            return;
-        }
-
-        HideAllMarkers();
+        modeloEtiquetaComboBox.DataSource = opcoes;
+        modeloEtiquetaComboBox.DisplayMember = nameof(ModeloEtiquetaOpcao.Texto);
+        modeloEtiquetaComboBox.ValueMember = nameof(ModeloEtiquetaOpcao.Codigo);
+        modeloEtiquetaComboBox.SelectedIndex = -1;
+        if (codigoModeloSelecionado.HasValue)
+            modeloEtiquetaComboBox.SelectedValue = codigoModeloSelecionado.Value;
     }
 
-    private void ClearRowSelection()
-    {
-        foreach (RowSelection row in _rowSelections)
+    private long ObterCodigoModeloSelecionado()
+        => modeloEtiquetaComboBox.SelectedValue switch
         {
-            row.RowPanel.BackColor = row.NormalBackColor;
-        }
+            long codigo => codigo,
+            int codigo => codigo,
+            _ => 0
+        };
 
-        HideAllMarkers();
-        ClearSummarySelectionValues();
+    private void AplicarModoCard(ModoCard modo)
+    {
+        _modoCard = modo;
+        bool exibirCampos = modo is ModoCard.Novo or ModoCard.Edicao;
+        bool novo = modo == ModoCard.Novo;
+        Control[] controlesCampos =
+        [
+            nomePerfilLabel,
+            nomePerfilInputPanel,
+            situacaoLabel,
+            situacaoInputPanel,
+            label1,
+            roundedPanel2,
+            LblPeso,
+            roundedPanel1,
+            LblSetorTara,
+            RdpSetor,
+            descricaoLabel,
+            descricaoInputPanel,
+            detailsTopDividerLabel
+        ];
+
+        foreach (Control controle in controlesCampos)
+            controle.Visible = exibirCampos;
+
+        situacaoLabel.Visible = novo;
+        situacaoInputPanel.Visible = novo;
+        situacaoComboBox.Enabled = novo;
+        label2.Visible = false;
+        roundedPanel3.Visible = false;
+        _detailsEmptyLabel.Visible = !exibirCampos;
+        PosicionarControlesAuxiliares();
+        AtualizarBotoes();
     }
 
-    private void SetFilteredRowsSelected()
+    private void AtualizarBotoes()
     {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-        Panel? firstVisibleRow = null;
+        bool livre = !_operacaoEmAndamento;
+        bool podeCriar = Pode(PermissoesSistema.Acoes.Criar);
+        novoPerfilButtonPanel.Enabled = livre && podeCriar;
 
-        foreach (RowSelection row in _rowSelections)
+        salvarButton.Visible = _modoCard == ModoCard.Novo;
+        salvarButton.Enabled = livre && salvarButton.Visible && podeCriar;
+
+        editarButton.Visible = _modoCard == ModoCard.Edicao;
+        editarButton.Enabled = livre && editarButton.Visible && Pode(PermissoesSistema.Acoes.Editar);
+
+        situacaoButton.Visible = _modoCard == ModoCard.Edicao;
+        situacaoButton.Text = _situacaoSelecionadaAtiva
+            ? "Inativar Etiqueta        F8"
+            : "Reativar Etiqueta        F8";
+        situacaoButton.ForeColor = _situacaoSelecionadaAtiva
+            ? Color.FromArgb(229, 27, 43)
+            : Color.FromArgb(22, 163, 74);
+        situacaoButton.FlatAppearance.BorderColor = _situacaoSelecionadaAtiva
+            ? Color.FromArgb(203, 213, 225)
+            : Color.FromArgb(22, 163, 74);
+        situacaoButton.Enabled = livre
+            && situacaoButton.Visible
+            && (_situacaoSelecionadaAtiva
+                ? Pode(PermissoesSistema.Acoes.Excluir)
+                : Pode(PermissoesSistema.Acoes.Editar));
+
+        if (camposEtiquetaButton is not null)
         {
-            bool isVisible = row.RowPanel.Visible;
-            row.RowPanel.BackColor = isVisible ? selectedBackColor : row.NormalBackColor;
-            if (isVisible)
-            {
-                ShowMarkerForRow(row.RowPanel);
-                firstVisibleRow ??= row.RowPanel;
-            }
-            else
-            {
-                HideMarkerForRow(row.RowPanel);
-            }
+            camposEtiquetaButton.Enabled = livre
+                && _modoCard == ModoCard.Edicao
+                && _idEtiquetaAtual > 0
+                && _situacaoSelecionadaAtiva
+                && AutorizacaoServico.PodeVisualizarRotina(
+                    PermissoesSistema.Modulos.Etiqueta,
+                    PermissoesSistema.Rotinas.CampoEtiqueta);
         }
 
-        if (firstVisibleRow is null)
-        {
-            HideAllMarkers();
-            ClearSummarySelectionValues();
-            return;
-        }
-        ClearSummarySelectionValues();
+        _etiquetasRowsPanel.Enabled = livre;
+        searchTextBox.Enabled = livre;
     }
 
-    private static string NormalizeForSearch(string text)
+    private bool Pode(string acao)
+        => AutorizacaoServico.PossuiPermissao(
+            PermissoesSistema.Modulos.Etiqueta,
+            PermissoesSistema.Rotinas.Etiqueta,
+            acao);
+
+    private void VoltarAoModoVazio()
     {
-        if (string.IsNullOrWhiteSpace(text))
+        _idEtiquetaAtual = 0;
+        _situacaoSelecionadaAtiva = true;
+        etiquetasDataGridView.ClearSelection();
+        LimparSelecaoLinhas();
+        LimparCampos();
+        LimparResumo();
+        AplicarModoCard(ModoCard.Vazio);
+    }
+
+    private void LimparSelecaoLinhas()
+    {
+        foreach (LinhaEtiquetaUi linha in _linhasEtiquetas)
         {
-            return string.Empty;
+            linha.RowPanel.BackColor = Color.White;
+            linha.MarkerPanel.Visible = false;
         }
+    }
 
-        string normalized = text.Normalize(NormalizationForm.FormD);
-        StringBuilder builder = new(normalized.Length);
+    private void LimparLinhasDinamicas()
+    {
+        foreach (LinhaEtiquetaUi linha in _linhasEtiquetas)
+            linha.RowPanel.Dispose();
+        _linhasEtiquetas.Clear();
+    }
 
-        foreach (char c in normalized)
+    private void ExibirEstadoVazioLista(string mensagem)
+    {
+        _estadoVazioListaLabel.Text = mensagem;
+        _estadoVazioListaLabel.Visible = true;
+        _estadoVazioListaLabel.BringToFront();
+    }
+
+    private void LimparCampos()
+    {
+        nomeEtiquetaTextBox.Clear();
+        codigoInternoTextBox.Clear();
+        tipoEtiquetaComboBox.SelectedIndex = -1;
+        modeloEtiquetaComboBox.SelectedIndex = -1;
+        situacaoComboBox.SelectedIndex = -1;
+        descricaoEtiquetaTextBox.Clear();
+    }
+
+    private void PreencherResumo(EtiquetaCadastro etiqueta)
+    {
+        summaryPerfilValueLabel.Text = etiqueta.NomeEtiqueta;
+        summarySituacaoValueLabel.Text = etiqueta.SituacaoEtiqueta
+            ? SituacaoCadastroHelper.Ativo
+            : SituacaoCadastroHelper.Inativo;
+        summarySituacaoValueLabel.ForeColor = etiqueta.SituacaoEtiqueta
+            ? Color.FromArgb(22, 163, 74)
+            : Color.FromArgb(220, 38, 38);
+        summaryUsuariosValueLabel.Text = etiqueta.CodigoInterno;
+        tipTextLabel.Text = $"Tipo: {etiqueta.TipoEtiqueta}\r\nModelo: {etiqueta.ModeloExibicao}\r\nÚltimo cadastro: {etiqueta.EtiquetaCriadoEm?.ToString("dd/MM/yyyy HH:mm") ?? "-"}";
+    }
+
+    private void LimparResumo()
+    {
+        summaryPerfilValueLabel.Text = "-";
+        summarySituacaoValueLabel.Text = "-";
+        summarySituacaoValueLabel.ForeColor = Color.FromArgb(100, 116, 139);
+        summaryUsuariosValueLabel.Text = "-";
+        tipTextLabel.Text = "Tipo: -\r\nModelo: -\r\nÚltimo cadastro: -";
+    }
+
+    private void AtualizarRodapeLista(int quantidadeVisivel)
+        => profilesFooterLabel.Text = $"Exibindo {quantidadeVisivel} de {_etiquetasCarregadas.Count} etiquetas";
+
+    private void ExibirResultado(ResultadoOperacao resultado)
+        => MessageBox.Show(
+            resultado.Mensagem,
+            "Cadastro de Etiqueta",
+            MessageBoxButtons.OK,
+            resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+    private void AtualizarDataHora()
+    {
+        DateTime agora = DateTime.Now;
+        cellHoraText.Text = agora.ToString("HH:mm");
+        cellDataText.Text = agora.ToString("dd/MM/yyyy");
+    }
+
+    private static string NormalizarPesquisa(string? texto)
+    {
+        string valor = (texto ?? string.Empty).Trim().Normalize(NormalizationForm.FormD);
+        StringBuilder builder = new(valor.Length);
+        foreach (char caractere in valor)
         {
-            UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(c);
-            if (category != UnicodeCategory.NonSpacingMark)
-            {
-                builder.Append(char.ToUpperInvariant(c));
-            }
+            if (CharUnicodeInfo.GetUnicodeCategory(caractere) != UnicodeCategory.NonSpacingMark)
+                builder.Append(char.ToUpperInvariant(caractere));
         }
 
         return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 
-    private void ConfigureNovoEtiquetaAction()
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        SetHandCursor(novoPerfilButtonPanel);
-        AttachNovoEtiquetaClick(novoPerfilButtonPanel);
-    }
-
-    private static void SetHandCursor(Control control)
-    {
-        control.Cursor = Cursors.Hand;
-
-        foreach (Control child in control.Controls)
+        switch (keyData)
         {
-            SetHandCursor(child);
+            case Keys.F5 when salvarButton.Visible && salvarButton.Enabled:
+                salvarButton.PerformClick();
+                return true;
+            case Keys.F6 when editarButton.Visible && editarButton.Enabled:
+                editarButton.PerformClick();
+                return true;
+            case Keys.F8 when situacaoButton.Visible && situacaoButton.Enabled:
+                situacaoButton.PerformClick();
+                return true;
+            default:
+                return base.ProcessCmdKey(ref msg, keyData);
         }
     }
 
-    private void AttachNovoEtiquetaClick(Control control)
+    private void LayoutProfilesCard()
     {
-        control.Click += (_, _) => PrepareNewEtiqueta();
+        const int baseCardWidth = 411;
+        const int baseCardHeight = 596;
+        if (profilesCard.Width <= 0 || profilesCard.Height <= 0) return;
 
-        foreach (Control child in control.Controls)
+        float scaleX = profilesCard.Width / (float)baseCardWidth;
+        float scaleY = profilesCard.Height / (float)baseCardHeight;
+        float contentScale = Math.Min(scaleX, scaleY);
+        static int Scale(int value, float scale) => Math.Max(0, (int)Math.Round(value * scale));
+
+        int side = Scale(16, scaleX);
+        int cardWidth = Math.Max(230, profilesCard.Width - side * 2);
+        profilesTitleLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 12F), FontStyle.Bold);
+        profilesFooterLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 11F));
+        novoPerfilTextLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
+        searchTextBox.Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 9F, 12F));
+        profilesSearchIconLabel.Font = new Font("Segoe MDL2 Assets", Math.Clamp(11F * contentScale, 11F, 14F));
+        profilesHeaderProfileLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
+        profilesHeaderUsersLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
+        profilesHeaderStatusLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
+        _estadoVazioListaLabel.Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 8.5F, 12F));
+
+        profilesCheckMarkLabel.Bounds = new Rectangle(Scale(16, scaleX), Scale(19, scaleY), Scale(26, scaleX), Scale(26, scaleY));
+        profilesTitleLabel.Bounds = new Rectangle(Scale(43, scaleX), Scale(21, scaleY), Scale(190, scaleX), Scale(24, scaleY));
+        int quickW = Math.Max(118, Scale(118, scaleX));
+        int quickH = Math.Max(27, Scale(27, scaleY));
+        novoPerfilButtonPanel.Bounds = new Rectangle(Math.Max(side, profilesCard.Width - side - quickW), Scale(18, scaleY), quickW, quickH);
+        novoPerfilIconLabel.Bounds = new Rectangle(Scale(8, scaleX), Scale(3, scaleY), Math.Max(16, Scale(18, scaleX)), Math.Max(18, Scale(21, scaleY)));
+        novoPerfilTextLabel.Bounds = new Rectangle(Scale(29, scaleX), Scale(3, scaleY), Math.Max(72, quickW - Scale(32, scaleX)), Math.Max(18, Scale(21, scaleY)));
+
+        int searchY = Scale(60, scaleY);
+        int searchH = Math.Max(34, Scale(34, scaleY));
+        profilesSearchPanel.Bounds = new Rectangle(side, searchY, cardWidth, searchH);
+        int searchIconWidth = Math.Max(20, Scale(22, scaleX));
+        int searchIconHeight = Math.Max(20, Scale(24, scaleY));
+        int searchTextHeight = Math.Max(16, searchTextBox.PreferredHeight);
+        int searchTextY = Math.Max(2, (profilesSearchPanel.Height - searchTextHeight) / 2);
+        int searchIconY = Math.Max(2, searchTextY + ((searchTextHeight - searchIconHeight) / 2));
+        profilesSearchIconLabel.Bounds = new Rectangle(Scale(8, scaleX), searchIconY, searchIconWidth, searchIconHeight);
+        searchTextBox.Bounds = new Rectangle(Scale(36, scaleX), searchTextY, Math.Max(120, cardWidth - Scale(44, scaleX)), searchTextHeight);
+
+        int tableY = Scale(108, scaleY);
+        int footerY = Math.Max(tableY + 180, profilesCard.Height - Scale(28, scaleY));
+        int tableH = Math.Max(220, footerY - tableY - Scale(10, scaleY));
+        profilesTablePanel.Bounds = new Rectangle(side, tableY, cardWidth, tableH);
+        profilesFooterLabel.Bounds = new Rectangle(Scale(20, scaleX), footerY, Math.Max(180, Scale(220, scaleX)), Scale(22, scaleY));
+
+        int typeX = Math.Max(Scale(150, scaleX), cardWidth - Scale(185, scaleX));
+        int statusW = Math.Max(50, Scale(58, scaleX));
+        int statusX = Math.Max(Scale(250, scaleX), cardWidth - statusW - Scale(13, scaleX));
+        profilesHeaderProfileLabel.Bounds = new Rectangle(Scale(16, scaleX), Scale(8, scaleY), Math.Max(120, typeX - Scale(26, scaleX)), Math.Max(24, Scale(24, scaleY)));
+        profilesHeaderUsersLabel.Bounds = new Rectangle(typeX, Scale(8, scaleY), Math.Max(60, statusX - typeX - Scale(8, scaleX)), Math.Max(24, Scale(24, scaleY)));
+        profilesHeaderStatusLabel.Bounds = new Rectangle(statusX, Scale(8, scaleY), statusW, Math.Max(24, Scale(24, scaleY)));
+        AtualizarAreaLinhasDinamicas();
+    }
+
+    private void AtualizarAreaLinhasDinamicas()
+    {
+        if (profilesTablePanel.Width <= 0 || profilesTablePanel.Height <= 0) return;
+        int linhasTop = 44;
+        _etiquetasRowsPanel.Bounds = new Rectangle(3, linhasTop, Math.Max(1, profilesTablePanel.Width - 6), Math.Max(1, profilesTablePanel.Height - linhasTop - 3));
+        _estadoVazioListaLabel.Bounds = new Rectangle(0, 0, _etiquetasRowsPanel.ClientSize.Width, _etiquetasRowsPanel.ClientSize.Height);
+        ReposicionarLinhasDinamicas();
+    }
+
+    private void ReposicionarLinhasDinamicas()
+    {
+        float scaleX = profilesCard.Width / 411f;
+        float scaleY = profilesCard.Height / 596f;
+        float contentScale = Math.Min(scaleX, scaleY);
+        int rowLeft = Math.Max(0, (int)Math.Round(3 * scaleX));
+        int nameX = Math.Max(0, (int)Math.Round(12 * scaleX));
+        int statusW = Math.Max(50, (int)Math.Round(58 * scaleX));
+        int rowRightPadding = Math.Max(12, (int)Math.Round(16 * scaleX));
+        int rowHeight = Math.Max(40, (int)Math.Round(46 * scaleY));
+        int statusInnerRightPadding = Math.Max(8, (int)Math.Round(10 * scaleX));
+        int largura = Math.Max(200, profilesTablePanel.ClientSize.Width - rowLeft - rowRightPadding - (_etiquetasRowsPanel.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0));
+        int typeX = Math.Max((int)Math.Round(150 * scaleX), largura - (int)Math.Round(185 * scaleX));
+        int statusXMin = Math.Max((int)Math.Round(250 * scaleX), nameX + 120);
+        int statusX = Math.Max(statusXMin, largura - statusW - statusInnerRightPadding);
+
+        profilesHeaderProfileLabel.Left = rowLeft + nameX;
+        profilesHeaderProfileLabel.Width = Math.Max(120, typeX - nameX - Math.Max(0, (int)Math.Round(8 * scaleX)));
+        profilesHeaderUsersLabel.Left = rowLeft + typeX;
+        profilesHeaderUsersLabel.Width = Math.Max(60, statusX - typeX - Math.Max(0, (int)Math.Round(8 * scaleX)));
+        profilesHeaderStatusLabel.Left = rowLeft + statusX;
+        profilesHeaderStatusLabel.Width = statusW;
+
+        for (int indice = 0; indice < _linhasEtiquetas.Count; indice++)
         {
-            AttachNovoEtiquetaClick(child);
+            LinhaEtiquetaUi linha = _linhasEtiquetas[indice];
+            linha.NameLabel.Font = new Font("Segoe UI", Math.Clamp(8.25F * contentScale, 8.25F, 11.5F), FontStyle.Bold);
+            linha.TypeLabel.Font = new Font("Segoe UI", Math.Clamp(8.25F * contentScale, 8.25F, 11.5F), FontStyle.Bold);
+            linha.StatusLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10F), FontStyle.Bold);
+            linha.RowPanel.Bounds = new Rectangle(0, indice * rowHeight, largura, rowHeight);
+            int textoY = Math.Max(0, (int)Math.Round(11 * scaleY));
+            int textoH = Math.Max(16, (int)Math.Round(24 * scaleY));
+            linha.NameLabel.Bounds = new Rectangle(nameX, textoY, Math.Max(90, typeX - nameX - Math.Max(0, (int)Math.Round(8 * scaleX))), textoH);
+            linha.TypeLabel.Bounds = new Rectangle(typeX, textoY, Math.Max(55, statusX - typeX - Math.Max(0, (int)Math.Round(8 * scaleX))), textoH);
+            linha.StatusPanel.Bounds = new Rectangle(statusX, textoY, statusW, textoH);
         }
+        _estadoVazioListaLabel.BringToFront();
     }
 
-    private void PrepareNewEtiqueta()
+    private void LayoutDetailsCard()
     {
-        _idEtiquetaAtual = 0;
-        nomePerfilTextBox.Text = string.Empty;
-        descricaoTextBox.Text = string.Empty;
-        situacaoComboBox.SelectedIndex = -1;
-        situacaoComboBox.Text = string.Empty;
+        const int baseCardWidth = 557;
+        const int baseCardHeight = 596;
+        if (detailsCard.Width <= 0 || detailsCard.Height <= 0) return;
 
-        nomePerfilTextBox.Focus();
-        nomePerfilTextBox.SelectionStart = 0;
-        nomePerfilTextBox.SelectionLength = 0;
+        float scaleX = detailsCard.Width / (float)baseCardWidth;
+        float scaleY = detailsCard.Height / (float)baseCardHeight;
+        float contentScale = Math.Min(scaleX, scaleY);
+        static int Scale(int value, float scale) => Math.Max(0, (int)Math.Round(value * scale));
+
+        int left = Scale(24, scaleX);
+        int inner = Math.Max(260, detailsCard.Width - left - Scale(24, scaleX));
+        int gap = Scale(30, scaleX);
+        int fieldWidth = Math.Max(170, Math.Min(Scale(300, scaleX), (inner - gap) / 2));
+        int layoutWidth = fieldWidth * 2 + gap;
+        int col1 = left + Math.Max(0, (inner - layoutWidth) / 2);
+        int col2 = col1 + fieldWidth + gap;
+
+        ApplyScaledFont(detailsTitleLabel, 8.5F, contentScale, 9F, 12.5F);
+        ApplyScaledFont(detailsTitleIconLabel, 14F, contentScale, 14F, 18F);
+        ApplyScaledFont(nomePerfilLabel, 7.75F, contentScale, 8.5F, 11F);
+        ApplyScaledFont(situacaoLabel, 7.75F, contentScale, 8.5F, 11F);
+        ApplyScaledFont(label1, 7.75F, contentScale, 8.5F, 11F);
+        ApplyScaledFont(LblPeso, 7.75F, contentScale, 8.5F, 11F);
+        ApplyScaledFont(LblSetorTara, 7.75F, contentScale, 8.5F, 11F);
+        ApplyScaledFont(descricaoLabel, 7.75F, contentScale, 8.5F, 11F);
+        ApplyScaledFont(nomeEtiquetaTextBox, 9F, contentScale, 9F, 12F);
+        ApplyScaledFont(situacaoComboBox, 9F, contentScale, 9F, 12F);
+        ApplyScaledFont(codigoInternoTextBox, 9F, contentScale, 9F, 12F);
+        ApplyScaledFont(tipoEtiquetaComboBox, 9F, contentScale, 9F, 12F);
+        ApplyScaledFont(modeloEtiquetaComboBox, 9F, contentScale, 9F, 12F);
+        ApplyScaledFont(descricaoEtiquetaTextBox, 9F, contentScale, 9F, 12F);
+        ApplyScaledFont(_detailsEmptyLabel, 10F, contentScale, 9.5F, 13F);
+        if (camposEtiquetaButton is not null)
+            camposEtiquetaButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
+
+        situacaoComboBox.IntegralHeight = false;
+        situacaoComboBox.DropDownHeight = Math.Max(96, Scale(120, scaleY));
+        tipoEtiquetaComboBox.IntegralHeight = false;
+        tipoEtiquetaComboBox.DropDownHeight = Math.Max(96, Scale(120, scaleY));
+        modeloEtiquetaComboBox.IntegralHeight = false;
+        modeloEtiquetaComboBox.DropDownHeight = Math.Max(96, Scale(120, scaleY));
+
+        detailsTitleIconLabel.Bounds = new Rectangle(Scale(20, scaleX), Scale(18, scaleY), Scale(26, scaleX), Scale(26, scaleY));
+        detailsTitleLabel.Bounds = new Rectangle(Scale(52, scaleX), Scale(22, scaleY), Math.Max(190, Scale(220, scaleX)), Scale(24, scaleY));
+        nomePerfilLabel.Bounds = new Rectangle(col1, Scale(56, scaleY), fieldWidth, Scale(16, scaleY));
+        nomePerfilInputPanel.Bounds = new Rectangle(col1, Scale(73, scaleY), fieldWidth, Scale(33, scaleY));
+        int campoTextoWidth = Math.Max(80, fieldWidth - Scale(24, scaleX));
+        int campoTextoHeight = Math.Max(16, nomeEtiquetaTextBox.PreferredHeight);
+        int campoTextoY = Math.Max(2, (nomePerfilInputPanel.Height - campoTextoHeight) / 2);
+        nomeEtiquetaTextBox.Bounds = new Rectangle(Scale(12, scaleX), campoTextoY, campoTextoWidth, campoTextoHeight);
+        situacaoLabel.Bounds = new Rectangle(col2, Scale(56, scaleY), fieldWidth, Scale(16, scaleY));
+        situacaoInputPanel.Bounds = new Rectangle(col2, Scale(73, scaleY), fieldWidth, Scale(33, scaleY));
+        int situacaoComboWidth = Math.Max(80, fieldWidth - Scale(24, scaleX));
+        int situacaoComboHeight = Math.Max(22, situacaoComboBox.PreferredHeight);
+        int situacaoComboY = Math.Max(2, (situacaoInputPanel.Height - situacaoComboHeight) / 2);
+        situacaoComboBox.Bounds = new Rectangle(Scale(12, scaleX), situacaoComboY, situacaoComboWidth, situacaoComboHeight);
+
+        label1.Bounds = new Rectangle(col1, Scale(117, scaleY), fieldWidth, Scale(19, scaleY));
+        roundedPanel2.Bounds = new Rectangle(col1, Scale(140, scaleY), fieldWidth, Scale(33, scaleY));
+        int codigoHeight = Math.Max(16, codigoInternoTextBox.PreferredHeight);
+        int codigoY = Math.Max(2, (roundedPanel2.Height - codigoHeight) / 2);
+        codigoInternoTextBox.Bounds = new Rectangle(Scale(12, scaleX), codigoY, campoTextoWidth, codigoHeight);
+        LblPeso.Bounds = new Rectangle(col2, Scale(117, scaleY), fieldWidth, Scale(19, scaleY));
+        roundedPanel1.Bounds = new Rectangle(col2, Scale(140, scaleY), fieldWidth, Scale(33, scaleY));
+        int tipoComboHeight = Math.Max(22, tipoEtiquetaComboBox.PreferredHeight);
+        int tipoComboY = Math.Max(2, (roundedPanel1.Height - tipoComboHeight) / 2);
+        tipoEtiquetaComboBox.Bounds = new Rectangle(Scale(12, scaleX), tipoComboY, campoTextoWidth, tipoComboHeight);
+
+        LblSetorTara.Bounds = new Rectangle(col2, Scale(182, scaleY), fieldWidth, Scale(19, scaleY));
+        RdpSetor.Bounds = new Rectangle(col2, Scale(204, scaleY), fieldWidth, Scale(33, scaleY));
+        int modeloComboHeight = Math.Max(22, modeloEtiquetaComboBox.PreferredHeight);
+        int modeloComboY = Math.Max(2, (RdpSetor.Height - modeloComboHeight) / 2);
+        modeloEtiquetaComboBox.Bounds = new Rectangle(Scale(12, scaleX), modeloComboY, campoTextoWidth, modeloComboHeight);
+        descricaoLabel.Bounds = new Rectangle(col1, Scale(246, scaleY), layoutWidth, Scale(19, scaleY));
+        descricaoInputPanel.Bounds = new Rectangle(col1, Scale(269, scaleY), layoutWidth, Math.Max(95, Scale(108, scaleY)));
+        descricaoEtiquetaTextBox.Bounds = new Rectangle(Scale(12, scaleX), Scale(10, scaleY), Math.Max(140, layoutWidth - Scale(24, scaleX)), Math.Max(60, descricaoInputPanel.Height - Scale(16, scaleY)));
+        detailsTopDividerLabel.Bounds = new Rectangle(col1, descricaoInputPanel.Bottom + Scale(12, scaleY), layoutWidth, 1);
+        PosicionarControlesAuxiliares();
     }
 
-    [DllImport("user32.dll")]
-    private static extern bool ReleaseCapture();
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
-
-    private void ConfigureWindowButtons()
+    private void PosicionarControlesAuxiliares()
     {
-        menuHeaderLabel.Click += (_, _) => Close();
-        minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        maximizeWindowLabel.Click += (_, _) =>
+        if (camposEtiquetaButton is not null)
         {
-            WindowState = WindowState == FormWindowState.Maximized
-                ? FormWindowState.Normal
-                : FormWindowState.Maximized;
-        };
-        closeWindowLabel.Click += (_, _) => Close();
-    }
-
-    private void ConfigureDragOnTitleBar()
-    {
-        customTitleBarPanel.MouseDown += HandleTitleBarMouseDown;
-        headerTitleLabel.MouseDown += HandleTitleBarMouseDown;
-        headerSubtitleLabel.MouseDown += HandleTitleBarMouseDown;
-        companyLogoPictureBox.MouseDown += HandleTitleBarMouseDown;
-    }
-
-    private void HandleTitleBarMouseDown(object? sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Left)
-        {
-            return;
+            int largura = Math.Max(170, Math.Min(210, detailsCard.Width / 3));
+            int altura = Math.Max(28, (int)Math.Round(28 * Math.Min(detailsCard.Width / 557f, detailsCard.Height / 596f)));
+            camposEtiquetaButton.Bounds = new Rectangle(Math.Max(250, detailsCard.Width - largura - 24), 18, largura, altura);
         }
-
-        ReleaseCapture();
-        SendMessage(Handle, WmNclButtonDown, HtCaption, 0);
+        _detailsEmptyLabel.Bounds = new Rectangle(40, 70, Math.Max(100, detailsCard.Width - 80), Math.Max(100, detailsCard.Height - 150));
     }
 
     private void LayoutSummaryCard()
     {
         const int baseCardWidth = 326;
         const int baseCardHeight = 590;
-
-        if (summaryCard.Width <= 0 || summaryCard.Height <= 0)
-        {
-            return;
-        }
+        if (summaryCard.Width <= 0 || summaryCard.Height <= 0) return;
 
         float scaleX = summaryCard.Width / (float)baseCardWidth;
         float scaleY = summaryCard.Height / (float)baseCardHeight;
         float contentScale = Math.Min(scaleX, scaleY);
-
         static int Scale(int value, float scale) => Math.Max(0, (int)Math.Round(value * scale));
-        static void SetBounds(Control control, int x, int y, int width, int height) =>
-            control.Bounds = new Rectangle(x, y, width, height);
 
-        int innerLeft = Scale(32, scaleX);
         int textLeft = Scale(74, scaleX);
-        int labelWidth = Math.Max(160, summaryCard.Width - Scale(98, scaleX));
+        int labelWidth = Math.Max(140, summaryCard.Width - Scale(98, scaleX));
         int dividerWidth = Math.Max(120, summaryCard.Width - Scale(52, scaleX));
         int buttonX = Scale(24, scaleX);
-        int buttonWidth = Math.Max(220, summaryCard.Width - Scale(48, scaleX));
+        int buttonWidth = Math.Max(200, summaryCard.Width - Scale(48, scaleX));
         int buttonHeight = Math.Max(28, Scale(28, scaleY));
         int iconSize = Math.Max(32, Scale(32, scaleX));
         int titleHeight = Math.Max(24, Scale(24, scaleY));
+        int tipY = Scale(314, scaleY);
+        int salvarY = Scale(402, scaleY);
+        int tipHeight = Math.Min(
+            Math.Max(56, Scale(66, scaleY)),
+            Math.Max(32, salvarY - tipY - Scale(16, scaleY)));
 
         summaryTitleLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 9F, 12.5F), FontStyle.Bold);
         summaryPerfilCaptionLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 11.5F));
@@ -309,497 +1068,48 @@ public partial class EtiquetaForm : Form
         summaryUsuariosValueLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 12F), FontStyle.Bold);
         tipTextLabel.Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 8.5F, 12F));
         salvarButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
-        novoButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
-        excluirButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
+        editarButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
+        situacaoButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
 
-        SetBounds(summaryTitleIconLabel, Scale(20, scaleX), Scale(18, scaleY), iconSize, iconSize);
-        SetBounds(summaryTitleLabel, Scale(52, scaleX), Scale(20, scaleY), Scale(200, scaleX), titleHeight);
-
-        SetBounds(summaryDividerLabel, Scale(26, scaleX), Scale(56, scaleY), dividerWidth, 1);
-        SetBounds(summaryDividerLabel2, Scale(26, scaleX), Scale(124, scaleY), dividerWidth, 1);
-        SetBounds(summaryDividerLabel3, Scale(26, scaleX), Scale(178, scaleY), dividerWidth, 1);
-        SetBounds(summaryDividerLabel4, Scale(26, scaleX), Scale(232, scaleY), dividerWidth, 1);
-        SetBounds(summaryDividerLabel5, Scale(26, scaleX), Scale(286, scaleY), dividerWidth, 1);
-
-        SetBounds(summaryPerfilIconLabel, innerLeft, Scale(78, scaleY), iconSize, iconSize);
-        SetBounds(summaryPerfilCaptionLabel, textLeft, Scale(78, scaleY), labelWidth, Scale(18, scaleY));
-        SetBounds(summaryPerfilValueLabel, textLeft, Scale(98, scaleY), labelWidth, titleHeight);
-
-        SetBounds(summarySituacaoIconLabel, innerLeft, Scale(132, scaleY), iconSize, iconSize);
-        SetBounds(summarySituacaoCaptionLabel, textLeft, Scale(132, scaleY), labelWidth, Scale(18, scaleY));
-        SetBounds(summarySituacaoValueLabel, textLeft, Scale(152, scaleY), labelWidth, titleHeight);
-
-        SetBounds(summaryUsuariosIconLabel, innerLeft, Scale(186, scaleY), iconSize, iconSize);
-        SetBounds(summaryUsuariosCaptionLabel, textLeft, Scale(186, scaleY), labelWidth, Scale(18, scaleY));
-        SetBounds(summaryUsuariosValueLabel, textLeft, Scale(206, scaleY), labelWidth, titleHeight);
-
-        SetBounds(tipTextLabel, textLeft, Scale(314, scaleY), Math.Max(180, summaryCard.Width - Scale(98, scaleX)), Math.Max(56, Scale(66, scaleY)));
-
-        SetBounds(salvarButton, buttonX, Scale(402, scaleY), buttonWidth, buttonHeight);
-        SetBounds(novoButton, buttonX, Scale(434, scaleY), buttonWidth, buttonHeight);
-        SetBounds(excluirButton, buttonX, Scale(466, scaleY), buttonWidth, buttonHeight);
-    }
-
-    private void LayoutDetailsCard()
-    {
-        const int baseCardWidth = 557;
-        const int baseCardHeight = 596;
-
-        if (detailsCard.Width <= 0 || detailsCard.Height <= 0)
-        {
-            return;
-        }
-
-        float scaleX = detailsCard.Width / (float)baseCardWidth;
-        float scaleY = detailsCard.Height / (float)baseCardHeight;
-        float contentScale = Math.Min(scaleX, scaleY);
-
-        static int Scale(int value, float scale) => Math.Max(0, (int)Math.Round(value * scale));
-        static void SetBounds(Control control, int x, int y, int width, int height) =>
-            control.Bounds = new Rectangle(x, y, width, height);
-
-        int leftPadding = Scale(24, scaleX);
-        int rightPadding = Scale(24, scaleX);
-        int cardInnerWidth = Math.Max(260, detailsCard.Width - leftPadding - rightPadding);
-
-        int gap = Scale(30, scaleX);
-        int fieldWidth = Math.Max(170, Math.Min(Scale(300, scaleX), (cardInnerWidth - gap) / 2));
-
-        int layoutWidth = fieldWidth * 2 + gap;
-        int col1 = leftPadding + Math.Max(0, (cardInnerWidth - layoutWidth) / 2);
-        int col2 = col1 + fieldWidth + gap;
-
-        ApplyScaledFont(detailsTitleLabel, 8.5F, contentScale, 9F, 12.5F);
-        ApplyScaledFont(detailsTitleIconLabel, 14F, contentScale, 14F, 18F);
-        ApplyScaledFont(nomePerfilLabel, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(situacaoLabel, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(descricaoLabel, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(LblPeso, 7.75F, contentScale, 8.5F, 11F);
-        //ApplyScaledFont(LblTipoTara, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(LblSetorTara, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(nomePerfilTextBox, 9F, contentScale, 9F, 12F);
-        ApplyScaledFont(situacaoComboBox, 9F, contentScale, 9F, 12F);
-        ApplyScaledFont(descricaoTextBox, 9F, contentScale, 9F, 12F);
-        ApplyScaledFont(TxtPeso, 9F, contentScale, 9F, 12F);
-        //ApplyScaledFont(CmbTipoTara, 9F, contentScale, 9F, 12F);
-        ApplyScaledFont(CmbSetor, 9F, contentScale, 9F, 12F);
-        ApplyScaledFont(label1, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(label2, 7.75F, contentScale, 8.5F, 11F);
-        ApplyScaledFont(textBox1, 9F, contentScale, 9F, 12F);
-        ApplyScaledFont(textBox2, 9F, contentScale, 9F, 12F);
-        situacaoComboBox.IntegralHeight = false;
-        situacaoComboBox.DropDownHeight = Math.Max(96, Scale(120, scaleY));
-        //CmbTipoTara.IntegralHeight = false;
-        //CmbTipoTara.DropDownHeight = Math.Max(96, Scale(120, scaleY));
-        CmbSetor.IntegralHeight = false;
-        CmbSetor.DropDownHeight = Math.Max(96, Scale(120, scaleY));
-
-        SetBounds(detailsTitleIconLabel, Scale(20, scaleX), Scale(18, scaleY), Scale(26, scaleX), Scale(26, scaleY));
-        SetBounds(detailsTitleLabel, Scale(52, scaleX), Scale(22, scaleY), Math.Max(190, Scale(220, scaleX)), Scale(24, scaleY));
-
-        SetBounds(nomePerfilLabel, col1, Scale(56, scaleY), fieldWidth, Scale(16, scaleY));
-        SetBounds(nomePerfilInputPanel, col1, Scale(73, scaleY), fieldWidth, Scale(33, scaleY));
-        SetBounds(nomePerfilTextBox, Scale(12, scaleX), Scale(10, scaleY), Math.Max(80, fieldWidth - Scale(24, scaleX)), Scale(16, scaleY));
-
-        SetBounds(situacaoLabel, col2, Scale(56, scaleY), fieldWidth, Scale(16, scaleY));
-        SetBounds(situacaoInputPanel, col2, Scale(73, scaleY), fieldWidth, Scale(33, scaleY));
-        int situacaoComboWidth = Math.Max(80, fieldWidth - Scale(24, scaleX));
-        int situacaoComboHeight = Math.Max(22, situacaoComboBox.PreferredHeight);
-        int situacaoComboY = Math.Max(2, (situacaoInputPanel.Height - situacaoComboHeight) / 2);
-        SetBounds(situacaoComboBox, Scale(12, scaleX), situacaoComboY, situacaoComboWidth, situacaoComboHeight);
-
-        // Linha 2: Altura | Impressora
-        SetBounds(label1, col1, Scale(117, scaleY), fieldWidth, Scale(19, scaleY));
-        SetBounds(roundedPanel2, col1, Scale(140, scaleY), fieldWidth, Scale(33, scaleY));
-        SetBounds(textBox1, Scale(12, scaleX), Scale(8, scaleY), Math.Max(80, fieldWidth - Scale(24, scaleX)), Scale(16, scaleY));
-
-        SetBounds(LblPeso, col2, Scale(117, scaleY), fieldWidth, Scale(19, scaleY));
-        SetBounds(roundedPanel1, col2, Scale(140, scaleY), fieldWidth, Scale(33, scaleY));
-        SetBounds(TxtPeso, Scale(12, scaleX), Scale(8, scaleY), Math.Max(80, fieldWidth - Scale(24, scaleX)), Scale(16, scaleY));
-
-        // Linha 3: Largura | Setor
-        SetBounds(label2, col1, Scale(182, scaleY), fieldWidth, Scale(19, scaleY));
-        SetBounds(roundedPanel3, col1, Scale(204, scaleY), fieldWidth, Scale(33, scaleY));
-        SetBounds(textBox2, Scale(12, scaleX), Scale(8, scaleY), Math.Max(80, fieldWidth - Scale(24, scaleX)), Scale(16, scaleY));
-
-        SetBounds(LblSetorTara, col2, Scale(182, scaleY), fieldWidth, Scale(19, scaleY));
-        SetBounds(RdpSetor, col2, Scale(204, scaleY), fieldWidth, Scale(33, scaleY));
-        int setorComboWidth = Math.Max(80, fieldWidth - Scale(24, scaleX));
-        int setorComboHeight = Math.Max(22, CmbSetor.PreferredHeight);
-        int setorComboY = Math.Max(2, (RdpSetor.Height - setorComboHeight) / 2);
-        SetBounds(CmbSetor, Scale(12, scaleX), setorComboY, setorComboWidth, setorComboHeight);
-
-        // Linha 4: Descrição ocupando as duas colunas
-        SetBounds(descricaoLabel, col1, Scale(246, scaleY), layoutWidth, Scale(19, scaleY));
-        SetBounds(descricaoInputPanel, col1, Scale(269, scaleY), layoutWidth, Math.Max(95, Scale(108, scaleY)));
-        SetBounds(descricaoTextBox, Scale(12, scaleX), Scale(10, scaleY), Math.Max(140, layoutWidth - Scale(24, scaleX)), Math.Max(60, descricaoInputPanel.Height - Scale(16, scaleY)));
-
-        int dividerBottom = descricaoInputPanel.Bottom;
-        SetBounds(detailsTopDividerLabel, col1, dividerBottom + Scale(12, scaleY), layoutWidth, 1);
-    }
-
-    private void LayoutProfilesCard()
-    {
-        const int baseCardWidth = 411;
-        const int baseCardHeight = 596;
-
-        if (profilesCard.Width <= 0 || profilesCard.Height <= 0)
-        {
-            return;
-        }
-
-        float scaleX = profilesCard.Width / (float)baseCardWidth;
-        float scaleY = profilesCard.Height / (float)baseCardHeight;
-        float contentScale = Math.Min(scaleX, scaleY);
-
-        static int Scale(int value, float scale) => Math.Max(0, (int)Math.Round(value * scale));
-        static void SetBounds(Control control, int x, int y, int width, int height) =>
-            control.Bounds = new Rectangle(x, y, width, height);
-
-        int side = Scale(16, scaleX);
-        int cardWidth = Math.Max(230, profilesCard.Width - side - side);
-        int titleY = Scale(21, scaleY);
-
-        profilesTitleLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 12F), FontStyle.Bold);
-        profilesFooterLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 11F));
-        novoPerfilTextLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
-        searchTextBox.Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 9F, 12F));
-        profilesSearchIconLabel.Font = new Font("Segoe MDL2 Assets", Math.Clamp(11F * contentScale, 11F, 14F));
-        profilesHeaderProfileLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
-        profilesHeaderUsersLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
-        profilesHeaderStatusLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
-        searchTextBox.Multiline = false;
-
-        SetBounds(profilesCheckMarkLabel, Scale(16, scaleX), Scale(19, scaleY), Scale(26, scaleX), Scale(26, scaleY));
-        SetBounds(profilesTitleLabel, Scale(43, scaleX), titleY, Scale(190, scaleX), Scale(24, scaleY));
-
-        int quickH = Math.Max(31, Scale(31, scaleY));
-        int iconW = Math.Max(20, Scale(20, scaleX));
-        int iconLeft = Math.Max(10, Scale(10, scaleX));
-        int textLeft = iconLeft + iconW + Math.Max(4, Scale(4, scaleX));
-        int horizontalPadding = Math.Max(8, Scale(8, scaleX));
-        int minQuickW = Math.Max(142, Scale(142, scaleX));
-        int textWidth = TextRenderer.MeasureText(novoPerfilTextLabel.Text, novoPerfilTextLabel.Font).Width;
-        int quickW = Math.Max(minQuickW, textLeft + textWidth + horizontalPadding);
-
-        SetBounds(novoPerfilButtonPanel, Math.Max(side, profilesCard.Width - side - quickW), Scale(16, scaleY), quickW, quickH);
-        SetBounds(novoPerfilIconLabel, iconLeft, Math.Max(3, (quickH - Math.Max(18, Scale(21, scaleY))) / 2), iconW, Math.Max(18, Scale(21, scaleY)));
-        SetBounds(novoPerfilTextLabel, textLeft, Math.Max(3, (quickH - Math.Max(18, Scale(21, scaleY))) / 2), Math.Max(72, quickW - textLeft - horizontalPadding), Math.Max(18, Scale(21, scaleY)));
-
-        int searchY = Scale(60, scaleY);
-        int searchH = Math.Max(34, Scale(34, scaleY));
-        SetBounds(profilesSearchPanel, side, searchY, cardWidth, searchH);
-        int searchIconWidth = Math.Max(20, Scale(22, scaleX));
-        int searchIconHeight = Math.Max(20, Scale(24, scaleY));
-        int searchTextHeight = Math.Max(16, searchTextBox.PreferredHeight);
-        int searchTextY = Math.Max(2, (profilesSearchPanel.Height - searchTextHeight) / 2);
-        int searchIconY = Math.Max(2, searchTextY + ((searchTextHeight - searchIconHeight) / 2));
-        SetBounds(profilesSearchIconLabel, Scale(8, scaleX), searchIconY, searchIconWidth, searchIconHeight);
-        SetBounds(searchTextBox, Scale(36, scaleX), searchTextY, Math.Max(120, cardWidth - Scale(44, scaleX)), searchTextHeight);
-
-        int tableY = Scale(108, scaleY);
-        int footerY = Math.Max(tableY + 180, profilesCard.Height - Scale(28, scaleY));
-        int tableH = Math.Max(220, footerY - tableY - Scale(10, scaleY));
-        SetBounds(profilesTablePanel, side, tableY, cardWidth, tableH);
-
-        int nameX = Scale(12, scaleX);
-        int usersX = Math.Max(Scale(150, scaleX), cardWidth - Scale(185, scaleX));
-        int statusPanelW = Math.Max(50, Scale(58, scaleX));
-        int statusPanelX = Math.Max(Scale(250, scaleX), cardWidth - Scale(3, scaleX) - statusPanelW - Scale(10, scaleX));
-
-        SetBounds(profilesHeaderProfileLabel, Scale(16, scaleX), Scale(9, scaleY), Math.Max(120, usersX - Scale(26, scaleX)), Scale(20, scaleY));
-        SetBounds(profilesHeaderUsersLabel, usersX, Scale(9, scaleY), Math.Max(90, statusPanelX - usersX - Scale(8, scaleX)), Scale(20, scaleY));
-        SetBounds(profilesHeaderStatusLabel, statusPanelX, Scale(9, scaleY), statusPanelW, Scale(20, scaleY));
-
-        int rowWidth = Math.Max(200, cardWidth - Scale(6, scaleX));
-        int rowHeight = Math.Max(40, Scale(46, scaleY));
-        int baseRowY = Scale(34, scaleY);
-
-        SetBounds(profileRow1Panel, Scale(3, scaleX), baseRowY + rowHeight * 0, rowWidth, rowHeight);
-        SetBounds(profileRow2Panel, Scale(3, scaleX), baseRowY + rowHeight * 1, rowWidth, rowHeight);
-        SetBounds(profileRow3Panel, Scale(3, scaleX), baseRowY + rowHeight * 2, rowWidth, rowHeight);
-        SetBounds(profileRow4Panel, Scale(3, scaleX), baseRowY + rowHeight * 3, rowWidth, rowHeight);
-        SetBounds(profileRow5Panel, Scale(3, scaleX), baseRowY + rowHeight * 4, rowWidth, rowHeight);
-        UpdateMarkerSizes(Math.Max(3, Scale(3, scaleX)));
-
-        Label[] names = [profileRow1NameLabel, profileRow2NameLabel, profileRow3NameLabel, profileRow4NameLabel, profileRow5NameLabel];
-        Label[] users = [profileRow1UsersLabel, profileRow2UsersLabel, profileRow3UsersLabel, profileRow4UsersLabel, profileRow5UsersLabel];
-        RoundedPanel[] statusPanels = [profileRow1StatusPanel, profileRow2StatusPanel, profileRow3StatusPanel, profileRow4StatusPanel, profileRow5StatusPanel];
-        Label[] statusLabels = [profileRow1StatusLabel, profileRow2StatusLabel, profileRow3StatusLabel, profileRow4StatusLabel, profileRow5StatusLabel];
-
-        for (int i = 0; i < names.Length; i++)
-        {
-            names[i].Font = new Font("Segoe UI", Math.Clamp(8.25F * contentScale, 8.25F, 11.5F), FontStyle.Bold);
-            users[i].Font = new Font("Segoe UI", Math.Clamp(8.25F * contentScale, 8.25F, 11.5F), FontStyle.Bold);
-            statusLabels[i].Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10F), FontStyle.Bold);
-
-            SetBounds(names[i], nameX, Scale(11, scaleY), Math.Max(90, usersX - nameX - Scale(8, scaleX)), Scale(24, scaleY));
-            SetBounds(users[i], usersX, Scale(11, scaleY), Math.Max(60, statusPanelX - usersX - Scale(8, scaleX)), Scale(24, scaleY));
-            SetBounds(statusPanels[i], statusPanelX, Scale(11, scaleY), statusPanelW, Scale(24, scaleY));
-            statusLabels[i].Dock = DockStyle.Fill;
-        }
-
-        SetBounds(profilesFooterLabel, Scale(20, scaleX), footerY, Math.Max(180, Scale(220, scaleX)), Scale(22, scaleY));
-        ApplyProfilesFilter();
+        summaryTitleIconLabel.Bounds = new Rectangle(Scale(20, scaleX), Scale(18, scaleY), iconSize, iconSize);
+        summaryTitleLabel.Bounds = new Rectangle(Scale(52, scaleX), Scale(20, scaleY), Scale(200, scaleX), titleHeight);
+        summaryDividerLabel.Bounds = new Rectangle(Scale(26, scaleX), Scale(56, scaleY), dividerWidth, 1);
+        summaryDividerLabel2.Bounds = new Rectangle(Scale(26, scaleX), Scale(124, scaleY), dividerWidth, 1);
+        summaryDividerLabel3.Bounds = new Rectangle(Scale(26, scaleX), Scale(178, scaleY), dividerWidth, 1);
+        summaryDividerLabel4.Bounds = new Rectangle(Scale(26, scaleX), Scale(232, scaleY), dividerWidth, 1);
+        summaryDividerLabel5.Bounds = new Rectangle(Scale(26, scaleX), Scale(286, scaleY), dividerWidth, 1);
+        summaryPerfilIconLabel.Bounds = new Rectangle(Scale(32, scaleX), Scale(78, scaleY), iconSize, iconSize);
+        summaryPerfilCaptionLabel.Bounds = new Rectangle(textLeft, Scale(78, scaleY), labelWidth, Scale(18, scaleY));
+        summaryPerfilValueLabel.Bounds = new Rectangle(textLeft, Scale(98, scaleY), labelWidth, Scale(24, scaleY));
+        summarySituacaoIconLabel.Bounds = new Rectangle(Scale(32, scaleX), Scale(132, scaleY), iconSize, iconSize);
+        summarySituacaoCaptionLabel.Bounds = new Rectangle(textLeft, Scale(132, scaleY), labelWidth, Scale(18, scaleY));
+        summarySituacaoValueLabel.Bounds = new Rectangle(textLeft, Scale(152, scaleY), labelWidth, Scale(24, scaleY));
+        summaryUsuariosIconLabel.Bounds = new Rectangle(Scale(32, scaleX), Scale(186, scaleY), iconSize, iconSize);
+        summaryUsuariosCaptionLabel.Bounds = new Rectangle(textLeft, Scale(186, scaleY), labelWidth, Scale(18, scaleY));
+        summaryUsuariosValueLabel.Bounds = new Rectangle(textLeft, Scale(206, scaleY), labelWidth, Scale(24, scaleY));
+        tipTextLabel.Bounds = new Rectangle(textLeft, tipY, Math.Max(180, summaryCard.Width - Scale(98, scaleX)), tipHeight);
+        salvarButton.Bounds = new Rectangle(buttonX, salvarY, buttonWidth, buttonHeight);
+        editarButton.Bounds = new Rectangle(buttonX, Scale(434, scaleY), buttonWidth, buttonHeight);
+        situacaoButton.Bounds = new Rectangle(buttonX, Scale(466, scaleY), buttonWidth, buttonHeight);
     }
 
     private static void ApplyScaledFont(Control control, float baseSize, float scale, float minSize, float maxSize)
     {
         float size = Math.Clamp(baseSize * scale, minSize, maxSize);
-        if (Math.Abs(control.Font.Size - size) < 0.01f)
-        {
-            return;
-        }
-
+        if (Math.Abs(control.Font.Size - size) < 0.01F) return;
         control.Font = new Font(control.Font.FontFamily, size, control.Font.Style);
     }
 
-    private void InitializeProfilesTableSelection()
+    private void ArrastarJanela(object? sender, MouseEventArgs e)
     {
-        _rowSelections.Clear();
-        _rowSelections.Add(new RowSelection(profileRow1Panel, Color.White));
-        _rowSelections.Add(new RowSelection(profileRow2Panel, Color.White));
-        _rowSelections.Add(new RowSelection(profileRow3Panel, Color.White));
-        _rowSelections.Add(new RowSelection(profileRow4Panel, Color.White));
-        _rowSelections.Add(new RowSelection(profileRow5Panel, Color.White));
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            row.RowPanel.BackColor = row.NormalBackColor;
-            SetHandCursor(row.RowPanel);
-            AttachRowSelectionHandlers(row.RowPanel, row.RowPanel);
-        }
-
-        EnsureRowSelectionMarkers();
-        HideAllMarkers();
+        if (e.Button != MouseButtons.Left) return;
+        ReleaseCapture();
+        SendMessage(Handle, WmNclButtonDown, HtCaption, 0);
     }
 
-    private void AttachRowSelectionHandlers(Control control, Panel rowPanel)
-    {
-        control.Click += (_, _) => SetSelectedRow(rowPanel);
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
 
-        foreach (Control child in control.Controls)
-        {
-            AttachRowSelectionHandlers(child, rowPanel);
-        }
-    }
-
-    private void SetSelectedRow(Panel selectedRowPanel)
-    {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isSelected = row.RowPanel == selectedRowPanel;
-            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
-            if (isSelected)
-            {
-                ShowMarkerForRow(row.RowPanel);
-            }
-            else
-            {
-                HideMarkerForRow(row.RowPanel);
-            }
-        }
-
-        SyncSummaryPerfilFromRow(selectedRowPanel);
-    }
-
-    private void SyncSummaryPerfilFromRow(Panel rowPanel)
-    {
-        ProfileSearchRow? row = _profileSearchRows.FirstOrDefault(x => x.RowPanel == rowPanel);
-        if (row is null)
-        {
-            ClearSummarySelectionValues();
-            return;
-        }
-
-        summaryPerfilValueLabel.Text = row.NameLabel.Text;
-        summarySituacaoValueLabel.Text = row.StatusLabel.Text;
-        summaryUsuariosValueLabel.Text = row.UsersLabel.Text;
-    }
-
-    private void ClearSummarySelectionValues()
-    {
-        summaryPerfilValueLabel.Text = "-";
-        summarySituacaoValueLabel.Text = "-";
-        summaryUsuariosValueLabel.Text = "-";
-    }
-
-    private void EnsureRowSelectionMarkers()
-    {
-        if (_rowSelectionMarkers.Count > 0)
-        {
-            return;
-        }
-
-        foreach (RowSelection row in _rowSelections)
-        {
-            Panel marker = new()
-            {
-                Name = $"{row.RowPanel.Name}MarkerPanel",
-                BackColor = MarkerColor,
-                Size = new Size(3, row.RowPanel.Height),
-                Visible = false
-            };
-            row.RowPanel.Controls.Add(marker);
-
-            _rowSelectionMarkers[row.RowPanel] = marker;
-        }
-    }
-
-    private void UpdateMarkerSizes(int markerWidth)
-    {
-        foreach (RowSelection row in _rowSelections)
-        {
-            if (_rowSelectionMarkers.TryGetValue(row.RowPanel, out Panel? marker))
-            {
-                marker.Size = new Size(markerWidth, row.RowPanel.Height);
-                if (marker.Visible)
-                {
-                    marker.Bounds = new Rectangle(0, 0, markerWidth, row.RowPanel.Height);
-                    marker.BringToFront();
-                }
-            }
-        }
-    }
-
-    private void ShowMarkerForRow(Panel rowPanel)
-    {
-        if (!_rowSelectionMarkers.TryGetValue(rowPanel, out Panel? marker))
-        {
-            return;
-        }
-
-        marker.Parent = rowPanel;
-        marker.Bounds = new Rectangle(0, 0, marker.Width, rowPanel.Height);
-        marker.Visible = true;
-        marker.BringToFront();
-    }
-
-    private void HideMarkerForRow(Panel rowPanel)
-    {
-        if (_rowSelectionMarkers.TryGetValue(rowPanel, out Panel? marker))
-        {
-            marker.Visible = false;
-        }
-    }
-
-    private void HideAllMarkers()
-    {
-        foreach (Panel marker in _rowSelectionMarkers.Values)
-        {
-            marker.Visible = false;
-        }
-    }
-
-
-    private void ConectarAcoesCadastro()
-    {
-        salvarButton.Click += async (_, _) => await SalvarEtiquetaAsync();
-        novoButton.Click += (_, _) => PrepareNewEtiqueta();
-        excluirButton.Click += async (_, _) => await ExcluirEtiquetaAsync();
-    }
-
-    private async Task SalvarEtiquetaAsync()
-    {
-        if (!_integracaoBancoHabilitada)
-        {
-            MessageBox.Show("Integracao com banco desabilitada no momento.", "Cadastro de Etiqueta", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        EtiquetaCadastro etiqueta = new()
-        {
-            IdModeloEtiqueta = TryParseLong(CmbSetor.SelectedValue),
-            Codigo = textBox1.Text.Trim(),
-            Nome = nomePerfilTextBox.Text.Trim(),
-            TipoEtiqueta = textBox2.Text.Trim(),
-            Descricao = descricaoTextBox.Text.Trim(),
-            Ativo = situacaoComboBox.Text.Equals("Ativo", StringComparison.OrdinalIgnoreCase)
-        };
-
-        ResultadoOperacao resultado = await _etiquetaController.InserirAsync(etiqueta);
-        MessageBox.Show(resultado.Mensagem, "Cadastro de Etiqueta", MessageBoxButtons.OK,
-            resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-
-        if (resultado.Sucesso)
-        {
-            PrepareNewEtiqueta();
-        }
-    }
-
-    private async Task ExcluirEtiquetaAsync()
-    {
-        if (!_integracaoBancoHabilitada)
-        {
-            MessageBox.Show("Integracao com banco desabilitada no momento.", "Cadastro de Etiqueta", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        if (_idEtiquetaAtual <= 0)
-        {
-            MessageBox.Show("Selecione uma etiqueta para excluir.", "Cadastro de Etiqueta", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        ResultadoOperacao resultado = await _etiquetaController.ExcluirAsync(_idEtiquetaAtual);
-        MessageBox.Show(resultado.Mensagem, "Cadastro de Etiqueta", MessageBoxButtons.OK,
-            resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-
-        if (resultado.Sucesso)
-        {
-            PrepareNewEtiqueta();
-        }
-    }
-
-    private static long TryParseLong(object? value)
-    {
-        if (value is long l) return l;
-        if (value is int i) return i;
-        if (value is string s && long.TryParse(s, out long p)) return p;
-        return 0;
-    }    private sealed class RowSelection
-    {
-        public RowSelection(Panel rowPanel, Color normalBackColor)
-        {
-            RowPanel = rowPanel;
-            NormalBackColor = normalBackColor;
-        }
-
-        public Panel RowPanel { get; }
-
-        public Color NormalBackColor { get; }
-    }
-
-    private sealed class ProfileSearchRow
-    {
-        public ProfileSearchRow(Panel rowPanel, Label nameLabel, Label usersLabel, Label statusLabel)
-        {
-            RowPanel = rowPanel;
-            NameLabel = nameLabel;
-            UsersLabel = usersLabel;
-            StatusLabel = statusLabel;
-        }
-
-        public Panel RowPanel { get; }
-        public Label NameLabel { get; }
-        public Label UsersLabel { get; }
-        public Label StatusLabel { get; }
-    }
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

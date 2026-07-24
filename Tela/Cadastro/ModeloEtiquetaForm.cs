@@ -6,7 +6,10 @@ using FugaPET_Dev.Tela.Controls;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Servicos.Auditoria;
+using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.Seguranca;
+using FugaPET_Dev.Tela.Comum;
 
 namespace FugaPET_Dev.Tela.Cadastro;
 
@@ -26,7 +29,14 @@ public partial class ModeloEtiquetaForm : Form
     private readonly List<ModeloEtiquetaCadastro> _modelosCarregados = new();
     private readonly ToolTip _toolTipModelo = new();
     private readonly ModeloEtiquetaController _modeloController;
+    private readonly AuditoriaServico _auditoriaServico;
     private long _idModeloAtual;
+
+    // Alinhamento Setor/Cargo/Tara/TipoTara: operação protegida + modo de card + modo de botões + situação selecionada.
+    private bool _operacaoEmAndamento;
+    private ModoCard _modoCard = ModoCard.Vazio;
+    private ModoAcaoBotoes _modoAcaoBotoesAtual = ModoAcaoBotoes.Nenhum;
+    private bool _situacaoSelecionadaAtiva = true;
 
     // Campos extras criados em runtime (Designer base so tem nome/descricao/situacao).
     private TextBox? _txtVersao;
@@ -36,6 +46,9 @@ public partial class ModeloEtiquetaForm : Form
     private TextBox? _txtObservacao;
     private readonly List<(Label Rotulo, RoundedPanel Painel, TextBox Campo)> _camposExtras = new();
 
+    // Mensagem amigável de estado vazio (card sem seleção), criada em runtime.
+    private Label? _lblEstadoVazio;
+
     private static readonly Color StatusAtivoFundo = Color.FromArgb(220, 252, 231);
     private static readonly Color StatusAtivoTexto = Color.FromArgb(22, 163, 74);
     private static readonly Color StatusInativoFundo = Color.FromArgb(255, 237, 213);
@@ -43,9 +56,12 @@ public partial class ModeloEtiquetaForm : Form
     private static readonly Color StatusNeutroFundo = Color.FromArgb(243, 244, 246);
     private static readonly Color StatusNeutroTexto = Color.FromArgb(100, 116, 139);
 
-    public ModeloEtiquetaForm(ModeloEtiquetaController? modeloController = null)
+    public ModeloEtiquetaForm(
+        ModeloEtiquetaController? modeloController = null,
+        AuditoriaServico? auditoriaServico = null)
     {
         _modeloController = modeloController ?? FabricaControladoresCadastro.CriarModeloEtiquetaController();
+        _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
         global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
@@ -53,12 +69,13 @@ public partial class ModeloEtiquetaForm : Form
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";
 
         // Reaproveita descricaoTextBox como editor de ZPL (multiline).
-        descricaoLabel.Text = "Conteudo ZPL *";
+        descricaoLabel.Text = "Conteúdo ZPL *";
         descricaoTextBox.Multiline = true;
         descricaoTextBox.ScrollBars = ScrollBars.Vertical;
         descricaoTextBox.Font = new Font("Consolas", 9F);
 
         CriarCamposExtrasRuntime();
+        CriarMensagemEstadoVazioRuntime();
 
         ConfigureWindowButtons();
         ConfigureDragOnTitleBar();
@@ -74,34 +91,141 @@ public partial class ModeloEtiquetaForm : Form
         tipTextLabel.AutoEllipsis = true;
         tipTextLabel.AutoSize = false;
         tipTextLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        // Situação como DropDownList + limites de texto (padrão maduro dos demais cadastros).
+        situacaoComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        // Novo Modelo é SEMPRE Ativo: a caixa exibe apenas "Ativo" (sem opção de Inativo). Fica habilitada só para
+        // manter a aparência limpa/branca (igual às telas maduras) — não há o que o usuário selecionar de errado.
+        situacaoComboBox.Items.Clear();
+        situacaoComboBox.Items.Add(SituacaoCadastroHelper.Ativo);
+        situacaoComboBox.SelectedItem = SituacaoCadastroHelper.Ativo;
+        nomePerfilTextBox.MaxLength = ModeloEtiquetaCadastro.TamanhoMaximoNome;
+        if (_txtObservacao is not null) _txtObservacao.MaxLength = ModeloEtiquetaCadastro.TamanhoMaximoObservacao;
+        if (_txtVersao is not null) _txtVersao.MaxLength = 6;
+        if (_txtDpi is not null) _txtDpi.MaxLength = 6;
+        if (_txtLargura is not null) _txtLargura.MaxLength = 9;
+        if (_txtAltura is not null) _txtAltura.MaxLength = 9;
+
         AtualizarRodapeModelos();
         AtualizarTipCadastro(null);
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
+        ConfigurarCard(ModoCard.Vazio);
         ConectarAcoesCadastro();
+        Shown += async (_, _) => await InicializarTelaAsync();
+    }
+
+    // Alinhamento Setor/Cargo/Tara/TipoTara: valida permissão de visualização antes de carregar; em acesso direto
+    // sem permissão, audita, avisa e fecha a tela.
+    private async Task InicializarTelaAsync()
+    {
+        if (!AutorizacaoServico.PodeVisualizarRotina(
+                PermissoesSistema.Modulos.Etiqueta,
+                PermissoesSistema.Rotinas.ModeloEtiqueta))
+        {
+            long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+            if (codigoUsuario.HasValue)
+            {
+                await RegistrarAcessoDiretoNegadoSeguroAsync(codigoUsuario.Value);
+            }
+
+            MessageBox.Show(
+                "Você não possui permissão para acessar esta rotina.",
+                "Acesso negado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            Close();
+            return;
+        }
+
         if (_integracaoBancoHabilitada)
         {
-            Shown += async (_, _) => await CarregarModelosAsync();
+            await CarregarModelosAsync();
         }
+    }
+
+    private async Task RegistrarAcessoDiretoNegadoSeguroAsync(long codigoUsuario)
+    {
+        try
+        {
+            await _auditoriaServico.RegistrarAcessoNegadoAsync(
+                codigoUsuario,
+                $"Acesso direto negado a Cadastro de Modelo de Etiqueta ({PermissoesSistema.Modulos.Etiqueta}/{PermissoesSistema.Rotinas.ModeloEtiqueta}/CONSULTAR ou VISUALIZAR).",
+                nameof(ModeloEtiquetaForm));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError($"Falha ao registrar acesso direto negado ao ModeloEtiquetaForm: {ex}");
+        }
+    }
+
+    // Bloqueia reentrância; desabilita botões durante a operação e reabilita no finally.
+    private async Task ExecutarOperacaoProtegidaAsync(Func<Task> operacao, string codigoErro)
+    {
+        if (_operacaoEmAndamento) return;
+
+        _operacaoEmAndamento = true;
+        AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+
+        try
+        {
+            await operacao();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                await ErroUsuarioHelper.TratarAsync(codigoErro, ex, nameof(ModeloEtiquetaForm), "Não foi possível concluir a operação do modelo. Acione o suporte."),
+                "Cadastro de Modelo",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _operacaoEmAndamento = false;
+            AtualizarBotoesAcao(_modoAcaoBotoesAtual);
+        }
+    }
+
+    // Atalhos F5 Salvar, F6 Editar, F8 Inativar/Reativar — só se Visible && Enabled (não burla permissão).
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.F5 when salvarButton.Visible && salvarButton.Enabled:
+                salvarButton.PerformClick();
+                return true;
+            case Keys.F6 when BtnEditar.Visible && BtnEditar.Enabled:
+                BtnEditar.PerformClick();
+                return true;
+            case Keys.F8 when excluirButton.Visible && excluirButton.Enabled:
+                excluirButton.PerformClick();
+                return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void ConectarAcoesCadastro()
     {
-        salvarButton.Click += async (_, _) => await SalvarModeloAsync();
-        BtnEditar.Click += async (_, _) => await EditarModeloAsync();
-        excluirButton.Click += async (_, _) => await ExcluirModeloAsync();
+        salvarButton.Click += async (_, _) => await ExecutarOperacaoProtegidaAsync(SalvarModeloAsync, "MODELO_ETIQUETA_SALVAR_ERRO");
+        BtnEditar.Click += async (_, _) => await ExecutarOperacaoProtegidaAsync(EditarModeloAsync, "MODELO_ETIQUETA_EDITAR_ERRO");
+        excluirButton.Click += async (_, _) => await ExecutarOperacaoProtegidaAsync(AlternarSituacaoModeloAsync, "MODELO_ETIQUETA_ALTERAR_SITUACAO_ERRO");
     }
 
-    private ModeloEtiquetaCadastro MontarModeloDoForm()
+    // Modelo ativo → Inativar; modelo inativo → Reativar.
+    private Task AlternarSituacaoModeloAsync()
+        => _situacaoSelecionadaAtiva ? ExcluirModeloAsync() : ReativarModeloAsync();
+
+    // Monta os campos CADASTRAIS do modelo a partir da UI (a situação é definida pelo chamador). ZPL preservado (sem Trim).
+    private ModeloEtiquetaCadastro MontarModeloCadastralDoForm(int versao, int dpi, decimal? largura, decimal? altura)
         => new()
         {
             NomeModeloEtiqueta = nomePerfilTextBox.Text.Trim(),
             ConteudoZpl = descricaoTextBox.Text,
-            Versao = ParseIntOuPadrao(_txtVersao?.Text, 1),
-            Dpi = ParseIntNullable(_txtDpi?.Text),
-            LarguraMm = ParseDecimalNullable(_txtLargura?.Text),
-            AlturaMm = ParseDecimalNullable(_txtAltura?.Text),
-            Observacao = _txtObservacao?.Text.Trim() ?? string.Empty,
-            SituacaoModeloEtiqueta = string.Equals(situacaoComboBox.Text, "Ativo", StringComparison.OrdinalIgnoreCase)
+            Versao = versao,
+            Dpi = dpi,
+            LarguraMm = largura,
+            AlturaMm = altura,
+            Observacao = _txtObservacao?.Text.Trim() ?? string.Empty
         };
 
     private async Task SalvarModeloAsync()
@@ -112,17 +236,20 @@ public partial class ModeloEtiquetaForm : Form
             return;
         }
 
-        ModeloEtiquetaCadastro modelo = MontarModeloDoForm();
+        // Parse explícito da UI: textos inválidos NÃO viram valores silenciosos e o controller não é chamado.
+        if (!CamposNumericosValidos(out int versao, out int dpi, out decimal? largura, out decimal? altura)) return;
+
+        ModeloEtiquetaCadastro modelo = MontarModeloCadastralDoForm(versao, dpi, largura, altura);
+        // Regra definitiva: todo novo modelo nasce ATIVO — a situação da UI é apenas informativa na criação.
+        modelo.SituacaoModeloEtiqueta = true;
         modelo.ModeloEtiquetaCriadoPor = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
 
-        var resultado = await _modeloController.InserirAsync(modelo);
+        ResultadoOperacao resultado = await _modeloController.InserirAsync(modelo);
         MessageBox.Show(resultado.Mensagem, "Cadastro de Modelo", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
 
         if (resultado.Sucesso)
         {
-            _idModeloAtual = resultado.IdGerado ?? 0;
-            PrepareNewModelo();
-            await CarregarModelosAsync();
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
     }
 
@@ -140,16 +267,27 @@ public partial class ModeloEtiquetaForm : Form
             return;
         }
 
-        ModeloEtiquetaCadastro modelo = MontarModeloDoForm();
+        ModeloEtiquetaCadastro? selecionado = _modeloPorLinha.Values.FirstOrDefault(x => x.CodigoModeloEtiqueta == _idModeloAtual);
+        if (selecionado is null)
+        {
+            MessageBox.Show("Selecione um modelo válido para editar.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!CamposNumericosValidos(out int versao, out int dpi, out decimal? largura, out decimal? altura)) return;
+
+        ModeloEtiquetaCadastro modelo = MontarModeloCadastralDoForm(versao, dpi, largura, altura);
         modelo.CodigoModeloEtiqueta = _idModeloAtual;
+        // Situação NÃO muda pela edição — envia a situação atual (o serviço bloqueia mudanças).
+        modelo.SituacaoModeloEtiqueta = selecionado.SituacaoModeloEtiqueta;
         modelo.ModeloEtiquetaAtualizadoPor = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
 
-        var resultado = await _modeloController.AtualizarAsync(modelo);
+        ResultadoOperacao resultado = await _modeloController.AtualizarAsync(modelo);
         MessageBox.Show(resultado.Mensagem, "Cadastro de Modelo", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
 
         if (resultado.Sucesso)
         {
-            await CarregarModelosAsync();
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
     }
 
@@ -168,32 +306,90 @@ public partial class ModeloEtiquetaForm : Form
         }
 
         DialogResult confirmacao = MessageBox.Show(
-            "Confirma a inativacao do modelo atual?\n\nO modelo ficara inativo, mas pode ser reativado depois. Modelos com etiquetas vinculadas nao podem ser inativados.",
+            "Confirma a inativação do modelo atual?\n\nO modelo ficará inativo, mas pode ser reativado depois. Modelos com etiquetas ativas vinculadas não podem ser inativados.",
             "Cadastro de Modelo",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
 
         if (confirmacao != DialogResult.Yes) return;
 
-        var resultado = await _modeloController.ExcluirAsync(_idModeloAtual);
+        ResultadoOperacao resultado = await _modeloController.ExcluirAsync(_idModeloAtual);
         MessageBox.Show(resultado.Mensagem, "Cadastro de Modelo", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
 
         if (resultado.Sucesso)
         {
-            _idModeloAtual = 0;
-            PrepareNewModelo();
-            await CarregarModelosAsync();
+            await FinalizarOperacaoComTelaLimpaAsync();
         }
+    }
+
+    private async Task ReativarModeloAsync()
+    {
+        if (!_integracaoBancoHabilitada)
+        {
+            MessageBox.Show("Integração com banco está desabilitada temporariamente.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_idModeloAtual <= 0)
+        {
+            MessageBox.Show("Selecione um modelo inativo para reativar.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        DialogResult confirmacao = MessageBox.Show(
+            "Confirma a reativação do modelo atual?",
+            "Cadastro de Modelo",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (confirmacao != DialogResult.Yes) return;
+
+        ResultadoOperacao resultado = await _modeloController.ReativarAsync(_idModeloAtual);
+        MessageBox.Show(resultado.Mensagem, "Cadastro de Modelo", MessageBoxButtons.OK, resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+        if (resultado.Sucesso)
+        {
+            await FinalizarOperacaoComTelaLimpaAsync();
+        }
+    }
+
+    // Estado padrão pós-operação concluída com sucesso: tela LIMPA (sem card em Novo, sem resumo/seleção antigos).
+    private async Task FinalizarOperacaoComTelaLimpaAsync()
+    {
+        _idModeloAtual = 0;
+        ClearRowSelection();
+        ClearSummarySelectionValues();
+        ConfigurarCard(ModoCard.Vazio);
+        AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
+        await CarregarModelosAsync();
     }
 
     private async Task CarregarModelosAsync()
     {
-        IReadOnlyList<ModeloEtiquetaCadastro> modelos = await _modeloController.ListarAsync();
-        _modelosCarregados.Clear();
-        _modelosCarregados.AddRange(modelos);
-        RecriarLinhasPerfis();
-        PopularLinhasComModelos(_modelosCarregados);
-        ApplyProfilesFilter();
+        try
+        {
+            IReadOnlyList<ModeloEtiquetaCadastro> modelos = await _modeloController.ListarAsync();
+            _modelosCarregados.Clear();
+            _modelosCarregados.AddRange(modelos);
+            RecriarLinhasPerfis();
+            PopularLinhasComModelos(_modelosCarregados);
+            ApplyProfilesFilter();
+        }
+        catch (Exception ex)
+        {
+            // Em erro de banco, NÃO deixar a lista antiga como válida — limpa o estado visual.
+            _modelosCarregados.Clear();
+            _idModeloAtual = 0;
+            RemoverLinhasPerfisExistentes();
+            ClearRowSelection();
+            ConfigurarCard(ModoCard.Vazio);
+            AtualizarRodapeModelos(0);
+
+            MessageBox.Show(
+                await ErroUsuarioHelper.TratarAsync("MODELO_ETIQUETA_CARREGAR_ERRO", ex, nameof(ModeloEtiquetaForm),
+                    "Não foi possível carregar os modelos de etiqueta. Acione o suporte."),
+                "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void ConfigureProfilesSearchFilter()
@@ -324,8 +520,12 @@ public partial class ModeloEtiquetaForm : Form
 
         foreach (ProfileSearchRow row in _profileSearchRows)
         {
+            // Filtro pesquisa por Nome E Versão (ex.: "caixa" ou "v2"/"2").
             string rowName = NormalizeForSearch(row.NameLabel.Text);
-            bool match = string.IsNullOrWhiteSpace(query) || rowName.Contains(query, StringComparison.Ordinal);
+            string rowVersao = NormalizeForSearch(row.UsersLabel.Text);
+            bool match = string.IsNullOrWhiteSpace(query)
+                || rowName.Contains(query, StringComparison.Ordinal)
+                || rowVersao.Contains(query, StringComparison.Ordinal);
             row.RowPanel.Visible = match;
             if (!match) continue;
 
@@ -336,13 +536,46 @@ public partial class ModeloEtiquetaForm : Form
 
         AtualizarRodapeModelos(visibleIndex);
 
-        if (string.IsNullOrWhiteSpace(query))
+        // O filtro apenas oculta/exibe: mantém a seleção real se a linha continuar visível; senão limpa (card Vazio).
+        RestaurarSelecaoAposFiltro();
+    }
+
+    private void RestaurarSelecaoAposFiltro()
+    {
+        Panel? selecionada = null;
+        if (_idModeloAtual > 0)
         {
-            ClearRowSelection();
+            foreach (KeyValuePair<Panel, long> par in _idModeloPorLinha)
+            {
+                if (par.Value == _idModeloAtual)
+                {
+                    selecionada = par.Key;
+                    break;
+                }
+            }
+        }
+
+        if (selecionada is not null && selecionada.Visible)
+        {
+            DestacarLinhaSelecionada(selecionada);
             return;
         }
 
-        if (visibleIndex == 0) HideAllMarkers();
+        _idModeloAtual = 0;
+        ClearRowSelection();
+        ConfigurarCard(ModoCard.Vazio);
+    }
+
+    private void DestacarLinhaSelecionada(Panel selectedRowPanel)
+    {
+        Color selectedBackColor = Color.FromArgb(254, 242, 242);
+        foreach (RowSelection row in _rowSelections)
+        {
+            bool isSelected = row.RowPanel == selectedRowPanel;
+            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
+            if (isSelected) ShowMarkerForRow(row.RowPanel);
+            else HideMarkerForRow(row.RowPanel);
+        }
     }
 
     private void ClearRowSelection()
@@ -378,14 +611,7 @@ public partial class ModeloEtiquetaForm : Form
 
     private void SetSelectedRow(Panel selectedRowPanel)
     {
-        Color selectedBackColor = Color.FromArgb(254, 242, 242);
-        foreach (RowSelection row in _rowSelections)
-        {
-            bool isSelected = row.RowPanel == selectedRowPanel;
-            row.RowPanel.BackColor = isSelected ? selectedBackColor : row.NormalBackColor;
-            if (isSelected) ShowMarkerForRow(row.RowPanel);
-            else HideMarkerForRow(row.RowPanel);
-        }
+        DestacarLinhaSelecionada(selectedRowPanel);
 
         _idModeloAtual = _idModeloPorLinha.TryGetValue(selectedRowPanel, out long id) ? id : 0;
         PreencherCamposModeloPorLinha(selectedRowPanel);
@@ -397,9 +623,12 @@ public partial class ModeloEtiquetaForm : Form
     {
         if (!_modeloPorLinha.TryGetValue(rowPanel, out ModeloEtiquetaCadastro? modelo)) return;
 
+        // Modo Edição — campos cadastrais habilitados; a Situação fica OCULTA (muda só por Inativar/Reativar),
+        // então basta guardar o estado real; a caixa de Situação só aparece no Novo, sempre "Ativo".
+        ConfigurarCard(ModoCard.Edicao);
         nomePerfilTextBox.Text = modelo.NomeModeloEtiqueta;
         descricaoTextBox.Text = modelo.ConteudoZpl;
-        situacaoComboBox.Text = modelo.SituacaoModeloEtiqueta ? "Ativo" : "Inativo";
+        _situacaoSelecionadaAtiva = modelo.SituacaoModeloEtiqueta;
         if (_txtVersao is not null) _txtVersao.Text = modelo.Versao.ToString(CultureInfo.InvariantCulture);
         if (_txtDpi is not null) _txtDpi.Text = modelo.Dpi?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         if (_txtLargura is not null) _txtLargura.Text = modelo.LarguraMm?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty;
@@ -413,10 +642,12 @@ public partial class ModeloEtiquetaForm : Form
     private void PrepareNewModelo()
     {
         _idModeloAtual = 0;
+        _situacaoSelecionadaAtiva = true;
+        // Modo Novo — campos habilitados; situação editável só na CRIAÇÃO, iniciando "Ativo".
+        ConfigurarCard(ModoCard.Novo);
         nomePerfilTextBox.Text = string.Empty;
         descricaoTextBox.Text = string.Empty;
-        situacaoComboBox.SelectedIndex = -1;
-        situacaoComboBox.Text = string.Empty;
+        situacaoComboBox.SelectedItem = SituacaoCadastroHelper.Ativo;
         if (_txtVersao is not null) _txtVersao.Text = "1";
         if (_txtDpi is not null) _txtDpi.Text = "203";
         if (_txtLargura is not null) _txtLargura.Text = string.Empty;
@@ -444,6 +675,17 @@ public partial class ModeloEtiquetaForm : Form
         summaryPerfilValueLabel.Text = row.NameLabel.Text;
         summarySituacaoValueLabel.Text = row.StatusLabel.Text;
         summaryUsuariosValueLabel.Text = row.UsersLabel.Text;
+        AtualizarCorSituacaoResumo(row.StatusLabel.Text);
+    }
+
+    // Resumo lateral: Ativo em verde, Inativo em laranja (mesmo padrão de cor dos demais cadastros).
+    private void AtualizarCorSituacaoResumo(string situacao)
+    {
+        summarySituacaoValueLabel.ForeColor = situacao.Equals("Inativo", StringComparison.OrdinalIgnoreCase)
+            ? StatusInativoTexto
+            : situacao.Equals("Ativo", StringComparison.OrdinalIgnoreCase)
+                ? StatusAtivoTexto
+                : StatusNeutroTexto;
     }
 
     private void ClearSummarySelectionValues()
@@ -451,21 +693,187 @@ public partial class ModeloEtiquetaForm : Form
         summaryPerfilValueLabel.Text = "-";
         summarySituacaoValueLabel.Text = "-";
         summaryUsuariosValueLabel.Text = "-";
+        summarySituacaoValueLabel.ForeColor = StatusNeutroTexto;
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
     }
 
     private void AtualizarBotoesAcao(ModoAcaoBotoes modo)
     {
+        _modoAcaoBotoesAtual = modo;
+
         bool podeCriar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.ModeloEtiqueta, PermissoesSistema.Acoes.Criar);
         bool podeEditar = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.ModeloEtiqueta, PermissoesSistema.Acoes.Editar);
         bool podeExcluir = AutorizacaoServico.PossuiPermissao(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.ModeloEtiqueta, PermissoesSistema.Acoes.Excluir);
 
         salvarButton.Visible = modo == ModoAcaoBotoes.SomenteSalvar && podeCriar;
         BtnEditar.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeEditar;
-        excluirButton.Visible = modo == ModoAcaoBotoes.EditarExcluir && podeExcluir;
+
+        // Botão de status (texto/cor/visibilidade/permissão) centralizado a partir do registro selecionado.
+        if (modo == ModoAcaoBotoes.EditarExcluir)
+        {
+            ModeloEtiquetaCadastro? selecionado = _modeloPorLinha.Values.FirstOrDefault(x => x.CodigoModeloEtiqueta == _idModeloAtual);
+            bool ativo = selecionado?.SituacaoModeloEtiqueta ?? true;
+            _situacaoSelecionadaAtiva = ativo;
+            if (ativo)
+            {
+                excluirButton.Text = "Inativar Modelo             F8";
+                excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+                excluirButton.Visible = podeExcluir;
+            }
+            else
+            {
+                excluirButton.Text = "Reativar Modelo             F8";
+                excluirButton.ForeColor = Color.FromArgb(22, 163, 74);
+                excluirButton.Visible = podeEditar;
+            }
+        }
+        else
+        {
+            excluirButton.Visible = false;
+        }
+
+        // Bloqueio de duplo-clique / reentrância enquanto uma operação está em andamento.
+        bool habilitar = !_operacaoEmAndamento;
+        salvarButton.Enabled = habilitar;
+        BtnEditar.Enabled = habilitar;
+        excluirButton.Enabled = habilitar;
     }
 
     private enum ModoAcaoBotoes { Nenhum = 0, SomenteSalvar = 1, EditarExcluir = 2 }
+
+    // ============================================================
+    // Modo do card (estado visual) + validação explícita da UI
+    // ============================================================
+
+    private enum ModoCard { Vazio, Novo, Edicao }
+
+    // Controla a VISIBILIDADE dos campos (mesmo padrão da Tara). No Vazio o bloco central mostra uma mensagem amigável.
+    private void ConfigurarCard(ModoCard modo)
+    {
+        _modoCard = modo;
+        bool novo = modo == ModoCard.Novo;
+        bool edicao = modo == ModoCard.Edicao;
+        bool operacional = novo || edicao;
+
+        nomePerfilLabel.Visible = operacional;
+        nomePerfilInputPanel.Visible = operacional;
+        nomePerfilTextBox.Enabled = operacional;
+
+        descricaoLabel.Visible = operacional;
+        descricaoInputPanel.Visible = operacional;
+        descricaoTextBox.Enabled = operacional;
+
+        detailsTopDividerLabel.Visible = operacional;
+
+        foreach (var (rotulo, painel, campo) in _camposExtras)
+        {
+            rotulo.Visible = operacional;
+            painel.Visible = operacional;
+            campo.Enabled = operacional;
+        }
+
+        // Situação é apenas INFORMATIVA na criação (novo sempre nasce Ativo) e oculta na edição. Fica habilitada
+        // no Novo apenas para manter a APARÊNCIA limpa (igual às telas maduras), mas o valor é travado em "Ativo"
+        // pelo guard de seleção — o operador não consegue cadastrar Inativo. O status muda só por Inativar/Reativar.
+        situacaoLabel.Visible = novo;
+        situacaoInputPanel.Visible = novo;
+        situacaoComboBox.Enabled = novo;
+
+        if (_lblEstadoVazio is not null)
+        {
+            _lblEstadoVazio.Visible = modo == ModoCard.Vazio;
+        }
+
+        if (modo == ModoCard.Vazio)
+        {
+            LimparCamposCard();
+        }
+    }
+
+    private void LimparCamposCard()
+    {
+        nomePerfilTextBox.Text = string.Empty;
+        descricaoTextBox.Text = string.Empty;
+        situacaoComboBox.SelectedIndex = -1;
+        if (_txtVersao is not null) _txtVersao.Text = string.Empty;
+        if (_txtDpi is not null) _txtDpi.Text = string.Empty;
+        if (_txtLargura is not null) _txtLargura.Text = string.Empty;
+        if (_txtAltura is not null) _txtAltura.Text = string.Empty;
+        if (_txtObservacao is not null) _txtObservacao.Text = string.Empty;
+        nomePerfilTextBox.ReadOnly = false;
+        nomePerfilTextBox.BackColor = Color.White;
+        AtualizarTipCadastro(null);
+    }
+
+    // Parse EXPLÍCITO da UI: textos inválidos exibem mensagem amigável e NÃO viram valores silenciosos (1/null).
+    private bool CamposNumericosValidos(out int versao, out int dpi, out decimal? largura, out decimal? altura)
+    {
+        versao = 0; dpi = 0; largura = null; altura = null;
+
+        if (!TryParseInteiroPositivo(_txtVersao?.Text, out versao))
+        {
+            MessageBox.Show("Informe uma versão válida, maior que zero.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if (!TryParseInteiroPositivo(_txtDpi?.Text, out dpi))
+        {
+            MessageBox.Show("Informe um DPI válido, maior que zero.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if (!TryParseDimensaoOpcional(_txtLargura?.Text, out largura))
+        {
+            MessageBox.Show("Informe uma largura válida em milímetros.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if (!TryParseDimensaoOpcional(_txtAltura?.Text, out altura))
+        {
+            MessageBox.Show("Informe uma altura válida em milímetros.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        if ((largura.HasValue && largura.Value != Math.Round(largura.Value, 2)) ||
+            (altura.HasValue && altura.Value != Math.Round(altura.Value, 2)))
+        {
+            MessageBox.Show("Largura e altura devem possuir no máximo duas casas decimais.", "Cadastro de Modelo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    // internal static para teste direto (InternalsVisibleTo). Inteiro estritamente positivo; vazio/inválido → false.
+    internal static bool TryParseInteiroPositivo(string? texto, out int valor)
+    {
+        valor = 0;
+        if (string.IsNullOrWhiteSpace(texto)) return false;
+        if (!int.TryParse(texto.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v <= 0)
+        {
+            valor = 0;
+            return false;
+        }
+
+        valor = v;
+        return true;
+    }
+
+    // Dimensão OPCIONAL: vazio → true com null; preenchida precisa ser decimal > 0 (vírgula ou ponto); inválido → false.
+    internal static bool TryParseDimensaoOpcional(string? texto, out decimal? valor)
+    {
+        valor = null;
+        if (string.IsNullOrWhiteSpace(texto)) return true;
+
+        string limpo = texto.Trim().Replace(" ", string.Empty).Replace(',', '.');
+        if (!decimal.TryParse(limpo, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal v) || v <= 0m)
+        {
+            return false;
+        }
+
+        valor = v;
+        return true;
+    }
 
     private static string NormalizeForSearch(string text)
     {
@@ -587,8 +995,8 @@ public partial class ModeloEtiquetaForm : Form
         SetBounds(excluirButton, buttonX, Scale(466, scaleY), buttonWidth, buttonHeight);
 
         summaryPerfilCaptionLabel.Text = "Modelo selecionado";
-        summarySituacaoCaptionLabel.Text = "Situacao";
-        summaryUsuariosCaptionLabel.Text = "Versao";
+        summarySituacaoCaptionLabel.Text = "Situação";
+        summaryUsuariosCaptionLabel.Text = "Versão";
     }
 
     private void LayoutDetailsCard()
@@ -653,7 +1061,21 @@ public partial class ModeloEtiquetaForm : Form
         int obsY = descricaoInputPanel.Bottom + Scale(10, scaleY);
         PosicionarCampoExtra(4, col1, obsY, fieldWidth, lblH, rowH, scaleX, scaleY);
 
-        SetBounds(detailsTopDividerLabel, col1, Math.Max(descricaoInputPanel.Bottom, linhaY + passo * 4) + Scale(40, scaleY), cardInnerWidth, 1);
+        // Linha separadora: SEMPRE abaixo de todos os campos (Observação na col1, Altura na col2), com margem
+        // superior — nunca encostando na borda do campo Observação (padrão Setor/Cargo/Tara/TipoTara).
+        int fundoColuna1 = _camposExtras.Count > 4 ? _camposExtras[4].Painel.Bottom : descricaoInputPanel.Bottom;
+        int fundoColuna2 = _camposExtras.Count > 3 ? _camposExtras[3].Painel.Bottom : (linhaY + passo * 4);
+        int dividerY = Math.Max(fundoColuna1, fundoColuna2) + Scale(18, scaleY);
+        SetBounds(detailsTopDividerLabel, col1, dividerY, cardInnerWidth, 1);
+
+        // Mensagem de estado vazio ocupa a área central do card (abaixo do título).
+        if (_lblEstadoVazio is not null)
+        {
+            ApplyScaledFont(_lblEstadoVazio, 10F, contentScale, 9.5F, 13F);
+            int estadoVazioTop = Scale(60, scaleY);
+            int estadoVazioHeight = Math.Max(60, detailsCard.Height - estadoVazioTop - Scale(60, scaleY));
+            SetBounds(_lblEstadoVazio, left, estadoVazioTop, cardInnerWidth, estadoVazioHeight);
+        }
     }
 
     private void PosicionarCampoExtra(int indice, int x, int y, int fieldWidth, int lblH, int rowH, float scaleX, float scaleY)
@@ -706,9 +1128,12 @@ public partial class ModeloEtiquetaForm : Form
         int searchY = Scale(60, scaleY);
         int searchH = Math.Max(34, Scale(34, scaleY));
         SetBounds(profilesSearchPanel, side, searchY, cardWidth, searchH);
+        int searchIconWidth = Math.Max(20, Scale(22, scaleX));
+        int searchIconHeight = Math.Max(20, Scale(24, scaleY));
         int searchTextHeight = Math.Max(16, searchTextBox.PreferredHeight);
         int searchTextY = Math.Max(2, (profilesSearchPanel.Height - searchTextHeight) / 2);
-        SetBounds(profilesSearchIconLabel, Scale(8, scaleX), searchTextY, Math.Max(20, Scale(22, scaleX)), Math.Max(20, Scale(24, scaleY)));
+        int searchIconY = Math.Max(2, searchTextY + ((searchTextHeight - searchIconHeight) / 2));
+        SetBounds(profilesSearchIconLabel, Scale(8, scaleX), searchIconY, searchIconWidth, searchIconHeight);
         SetBounds(searchTextBox, Scale(36, scaleX), searchTextY, Math.Max(120, cardWidth - Scale(44, scaleX)), searchTextHeight);
 
         int tableY = Scale(108, scaleY);
@@ -722,7 +1147,7 @@ public partial class ModeloEtiquetaForm : Form
         SetBounds(profilesHeaderProfileLabel, Scale(16, scaleX), Scale(9, scaleY), Math.Max(120, usersX - Scale(26, scaleX)), Scale(20, scaleY));
         SetBounds(profilesHeaderUsersLabel, usersX, Scale(9, scaleY), Math.Max(60, statusPanelX - usersX - Scale(8, scaleX)), Scale(20, scaleY));
         SetBounds(profilesHeaderStatusLabel, statusPanelX, Scale(9, scaleY), statusPanelW, Scale(20, scaleY));
-        profilesHeaderUsersLabel.Text = "Versao";
+        profilesHeaderUsersLabel.Text = "Versão";
 
         SetBounds(profilesFooterLabel, Scale(20, scaleX), footerY, Math.Max(180, Scale(220, scaleX)), Scale(22, scaleY));
         AtualizarLayoutLinhas();
@@ -852,11 +1277,11 @@ public partial class ModeloEtiquetaForm : Form
 
     private void CriarCamposExtrasRuntime()
     {
-        _txtVersao = CriarCampoExtra("Versao *");
-        _txtDpi = CriarCampoExtra("DPI");
+        _txtVersao = CriarCampoExtra("Versão *");
+        _txtDpi = CriarCampoExtra("DPI *");
         _txtLargura = CriarCampoExtra("Largura (mm)");
         _txtAltura = CriarCampoExtra("Altura (mm)");
-        _txtObservacao = CriarCampoExtra("Observacao");
+        _txtObservacao = CriarCampoExtra("Observação");
         _txtVersao.Text = "1";
         _txtDpi.Text = "203";
     }
@@ -903,20 +1328,23 @@ public partial class ModeloEtiquetaForm : Form
         return campo;
     }
 
-    private static int ParseIntOuPadrao(string? texto, int padrao)
-        => int.TryParse((texto ?? string.Empty).Trim(), out int v) ? v : padrao;
-
-    private static int? ParseIntNullable(string? texto)
+    // Mensagem amigável exibida no centro do card quando não há modelo selecionado nem em criação.
+    private void CriarMensagemEstadoVazioRuntime()
     {
-        if (string.IsNullOrWhiteSpace(texto)) return null;
-        return int.TryParse(texto.Trim(), out int v) ? v : null;
-    }
+        _lblEstadoVazio = new Label
+        {
+            Name = "lblEstadoVazioRuntime",
+            Text = "Selecione um modelo cadastrado ou clique em Novo Modelo para iniciar.",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = Color.FromArgb(100, 116, 139),
+            Font = new Font("Segoe UI", 10F),
+            BackColor = Color.Transparent,
+            Visible = false
+        };
 
-    private static decimal? ParseDecimalNullable(string? texto)
-    {
-        if (string.IsNullOrWhiteSpace(texto)) return null;
-        string limpo = texto.Trim().Replace(',', '.');
-        return decimal.TryParse(limpo, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal v) ? v : null;
+        detailsCard.Controls.Add(_lblEstadoVazio);
+        _lblEstadoVazio.BringToFront();
     }
 
     private sealed class RowSelection

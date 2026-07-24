@@ -179,14 +179,24 @@ public class TaraRepositorio : RepositorioBase
         }, cancellationToken);
     }
 
+    // Tarefa Tara (Ajuste 5): reativação com proteção ATÔMICA — não reativa se já existir OUTRA tara com o
+    // mesmo nome no mesmo setor+tipo (evita corrida entre a verificação prévia do serviço e o UPDATE).
     public virtual async Task<int> ReativarAsync(long codigoTara, CancellationToken cancellationToken = default)
     {
         const string sql = """
-            UPDATE tara
+            UPDATE tara t
                SET situacao_tara = true,
                    tara_atualizado_por = @tara_atualizado_por
-             WHERE codigo_tara = @codigo_tara
-               AND situacao_tara = false;
+             WHERE t.codigo_tara = @codigo_tara
+               AND t.situacao_tara = false
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM tara outra
+                    WHERE outra.codigo_setor = t.codigo_setor
+                      AND outra.codigo_tipo_tara = t.codigo_tipo_tara
+                      AND upper(trim(outra.nome_tara)) = upper(trim(t.nome_tara))
+                      AND outra.codigo_tara <> t.codigo_tara
+               );
             """;
 
         return await ExecutarEmTransacaoAuditavelAsync(async (conexao, transacao) =>
@@ -196,6 +206,36 @@ public class TaraRepositorio : RepositorioBase
             comando.Parameters.Add(ParametroLongoNulo("@tara_atualizado_por", ObterCodigoUsuarioSessao()));
             return await comando.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
+    }
+
+    // Tarefa Tara (Ajuste 3): situação dos vínculos (setor / tipo de tara) da tara, para validar reativação.
+    // Somente leitura; NÃO altera comportamento de Setor/Tipo de Tara. Encontrado=false se a tara não existe.
+    public virtual async Task<ResumoValidacaoReativacaoTara> ObterResumoValidacaoReativacaoAsync(long codigoTara, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT s.situacao_setor, tt.situacao_tipo_tara
+              FROM tara t
+              JOIN setor s ON s.codigo_setor = t.codigo_setor
+              JOIN tipo_tara tt ON tt.codigo_tipo_tara = t.codigo_tipo_tara
+             WHERE t.codigo_tara = @codigo_tara;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_tara", codigoTara));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+
+        if (!await leitor.ReadAsync(cancellationToken))
+        {
+            return new ResumoValidacaoReativacaoTara { Encontrado = false };
+        }
+
+        return new ResumoValidacaoReativacaoTara
+        {
+            Encontrado = true,
+            SetorAtivo = leitor.GetBoolean(0),
+            TipoAtivo = leitor.GetBoolean(1)
+        };
     }
 
     private static TaraCadastro MapearTara(NpgsqlDataReader leitor)
