@@ -1,4 +1,5 @@
-﻿using FugaPET_Dev.Controle.Processo;
+﻿using System.Runtime.InteropServices;
+using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.Processo;
@@ -107,10 +108,11 @@ public partial class ProcessoControleApontamentosForm : Form
         ConfigurarParCampo(usuarioCaptionLabel, usuarioValueLabel, "USUÁRIO", 588, 12, 160);
         ConfigurarParCampo(estacaoCaptionLabel, estacaoValueLabel, "ESTAÇÃO", 768, 12, 180);
 
-        ConfigurarParCampo(operacaoAtualCaptionLabel, operacaoAtualValueLabel, "OPERAÇÃO ATUAL", 18, 44, 260);
-        ConfigurarParCampo(proximaOperacaoCaptionLabel, proximaOperacaoValueLabel, "PRÓXIMA OPERAÇÃO", 18, 108, 260);
-        ConfigurarParCampo(eventoCaptionLabel, eventoValueLabel, "EVENTO INTERPRETADO", 18, 172, 260);
-        ConfigurarParCampo(statusApontamentoCaptionLabel, statusApontamentoValueLabel, "STATUS DO APONTAMENTO", 18, 236, 260);
+        // Status compacto em UMA linha horizontal (antes era uma pilha vertical no painel lateral).
+        ConfigurarParCampo(operacaoAtualCaptionLabel, operacaoAtualValueLabel, "OPERAÇÃO ATUAL", 18, 34, 280);
+        ConfigurarParCampo(proximaOperacaoCaptionLabel, proximaOperacaoValueLabel, "PRÓXIMA OPERAÇÃO", 320, 34, 280);
+        ConfigurarParCampo(eventoCaptionLabel, eventoValueLabel, "EVENTO INTERPRETADO", 620, 34, 300);
+        ConfigurarParCampo(statusApontamentoCaptionLabel, statusApontamentoValueLabel, "STATUS DO APONTAMENTO", 940, 34, 260);
     }
 
     private void ConfigurarGridOperacoes()
@@ -133,11 +135,62 @@ public partial class ProcessoControleApontamentosForm : Form
     private void ConfigurarEventos()
     {
         Load += (_, _) => DevolverFocoParaLeitor();
-        closeWindowLabel.Click += CloseWindowLabel_Click;
+        ConfigurarCabecalhoJanela();
         codigoLeituraTextBox.KeyDown += CodigoLeituraTextBox_KeyDown;
         KeyDown += ProcessoControleApontamentosForm_KeyDown;
         // Cobre Alt+F4 e o fechamento pelo Windows, não só o X da tela.
         FormClosing += ProcessoControleApontamentosForm_FormClosing;
+    }
+
+    // ---------- Barra de título padrão (idêntica às demais telas de Processo) ----------
+
+    private const int WmNclButtonDown = 0xA1;
+    private const int HtCaption = 0x2;
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+    private void ConfigurarCabecalhoJanela()
+    {
+        customTitleBarPanel.MouseDown += CustomTitleBar_MouseDown;
+        companyLogoPictureBox.MouseDown += CustomTitleBar_MouseDown;
+        headerTitleLabel.MouseDown += CustomTitleBar_MouseDown;
+        headerSubtitleLabel.MouseDown += CustomTitleBar_MouseDown;
+
+        minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        maximizeWindowLabel.Click += (_, _) => AlternarEstadoJanela();
+        closeWindowLabel.Click += CloseWindowLabel_Click;
+
+        ConfigurarHoverBotaoTitulo(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
+        ConfigurarHoverBotaoTitulo(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
+        ConfigurarHoverBotaoTitulo(closeWindowLabel, Color.FromArgb(184, 18, 32));
+    }
+
+    private void CustomTitleBar_MouseDown(object? sender, MouseEventArgs e)
+    {
+        // Durante o processamento da leitura a tela não se move (mesma proteção do fechamento).
+        if (_processandoLeitura || e.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        ReleaseCapture();
+        SendMessage(Handle, WmNclButtonDown, HtCaption, 0);
+    }
+
+    private void AlternarEstadoJanela()
+        => WindowState = WindowState == FormWindowState.Maximized
+            ? FormWindowState.Normal
+            : FormWindowState.Maximized;
+
+    private static void ConfigurarHoverBotaoTitulo(Label botao, Color corHover)
+    {
+        Color corNormal = botao.BackColor;
+        botao.MouseEnter += (_, _) => botao.BackColor = corHover;
+        botao.MouseLeave += (_, _) => botao.BackColor = corNormal;
     }
 
     private void CloseWindowLabel_Click(object? sender, EventArgs e)
@@ -490,25 +543,17 @@ public partial class ProcessoControleApontamentosForm : Form
                  ProcessoControleApontamentosServico.OrdenarTecnicamente(_ordemAtual))
         {
             OperacaoProducaoApontamento? apontamento = LocalizarApontamento(resultado.ApontamentosDaOrdem, operacao);
-            ConfiguracaoOperacaoProcesso? configuracao = LocalizarConfiguracao(resultado.ConfiguracoesDaOrdem, operacao);
 
             bool ehOperacaoLida = resultado.Operacao is not null
                 && string.Equals(resultado.Operacao.Operacao, operacao.Operacao, StringComparison.Ordinal)
                 && string.Equals(resultado.Operacao.Sequencia, operacao.Sequencia, StringComparison.Ordinal);
 
+            // Grade enxuta: Seleção (marca a operação atual/lida), Apontamento/Batida, Data início e Hora início.
             int indice = operacoesGridView.Rows.Add(
-                operacao.Sequencia,
-                operacao.Operacao,
-                operacao.Suboperacao,
-                operacao.Descricao,
-                operacao.CentroTrabalho,
-                DescricaoOuTraco(configuracao?.TipoProcesso),
-                apontamento?.Status ?? StatusCalculadoOperacao.Pendente,
-                DescricaoOuTraco(apontamento?.UsuarioInicio),
-                FormatarDataHoraCurta(apontamento?.IniciadoEm),
-                FormatarDataHoraCurta(apontamento?.TerminadoEm),
-                FormatarDuracao(apontamento?.Duracao),
-                DescricaoOuTraco(configuracao?.TelaDestino));
+                ehOperacaoLida,
+                $"{operacao.Operacao} · {DescricaoOuTraco(operacao.Descricao)}",
+                FormatarData(apontamento?.IniciadoEm),
+                FormatarHora(apontamento?.IniciadoEm));
 
             operacoesGridView.Rows[indice].Tag = operacao;
             if (ehOperacaoLida)
@@ -569,10 +614,18 @@ public partial class ProcessoControleApontamentosForm : Form
         {
             operacaoAtualValueLabel.Text = "-";
             proximaOperacaoValueLabel.Text = "-";
+            destaqueValueLabel.Text = "-";
             return;
         }
 
         operacaoAtualValueLabel.Text = $"{atual.Operacao} · {DescricaoOuTraco(atual.Descricao)}";
+
+        // Faixa de destaque: operação/processo atual em evidência (descrição + centro de trabalho),
+        // no espírito do legado ("MISTURA DE RECEITA - MISTURADOR"), com o visual atual do FugaPET.
+        string descricaoDestaque = DescricaoOuTraco(atual.Descricao);
+        destaqueValueLabel.Text = string.IsNullOrWhiteSpace(atual.CentroTrabalho)
+            ? descricaoDestaque
+            : $"{descricaoDestaque} — {atual.CentroTrabalho.Trim()}";
 
         // A próxima operação sai da sequência TÉCNICA (mesma regra usada na validação da anterior).
         OperacaoOrdemProducaoSap? proxima = ProcessoControleApontamentosServico.ObterProximaOperacao(ordem, atual);
@@ -644,6 +697,12 @@ public partial class ProcessoControleApontamentosForm : Form
 
     private static string FormatarDataHoraCurta(DateTimeOffset? data)
         => data?.LocalDateTime.ToString("dd/MM HH:mm") ?? "-";
+
+    private static string FormatarData(DateTimeOffset? data)
+        => data?.LocalDateTime.ToString("dd/MM/yyyy") ?? "-";
+
+    private static string FormatarHora(DateTimeOffset? data)
+        => data?.LocalDateTime.ToString("HH:mm") ?? "-";
 
     private static string FormatarDuracao(TimeSpan? duracao)
         => duracao is { } d ? $"{(int)d.TotalHours:00}:{d.Minutes:00}" : "-";

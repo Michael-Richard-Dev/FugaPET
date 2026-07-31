@@ -85,7 +85,17 @@ public sealed class ControleApontamentosTelaTests
         Assert.Contains("new RoundedPanel()", designer, StringComparison.Ordinal);
         Assert.Contains("\"Segoe UI\"", designer, StringComparison.Ordinal);
         Assert.Contains("sapStatusPanel", designer, StringComparison.Ordinal);
-        Assert.Contains("lateralCard", designer, StringComparison.Ordinal);
+        // Cabeçalho padrão das telas de Processo: barra de título custom (logo, ícone, min/max/fechar).
+        Assert.Contains("customTitleBarPanel", designer, StringComparison.Ordinal);
+        Assert.Contains("minimizeWindowLabel", designer, StringComparison.Ordinal);
+        Assert.Contains("maximizeWindowLabel", designer, StringComparison.Ordinal);
+        // Abre maximizada (tela cheia).
+        Assert.Contains("WindowState = FormWindowState.Maximized;", designer, StringComparison.Ordinal);
+        // Layout enxuto: sem o painel lateral pesado e sem a caixa "Situação da leitura"; faixa de destaque
+        // da operação/processo atual mantida; a grade é o centro da tela.
+        Assert.Contains("destaqueCard", designer, StringComparison.Ordinal);
+        Assert.DoesNotContain("lateralCard", designer, StringComparison.Ordinal);
+        Assert.DoesNotContain("statusCard = new RoundedPanel", designer, StringComparison.Ordinal);
         Assert.Contains("operacoesGridView", designer, StringComparison.Ordinal);
 
         // Não reproduzir o laranja do SISCOMP: nenhuma cor laranja nomeada é usada.
@@ -100,15 +110,18 @@ public sealed class ControleApontamentosTelaTests
     {
         string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoControleApontamentosForm.Designer.cs");
 
+        // Grade enxuta: apenas Seleção, Apontamento/Batida, Data início e Hora início.
         foreach (string cabecalho in new[]
                  {
-                     "\"Seq.\"", "\"Operação\"", "\"Subop.\"", "\"Descrição\"", "\"Centro de trabalho\"",
-                     "\"Tipo de processo\"", "\"Status\"", "\"Iniciado por\"", "\"Início\"", "\"Término\"",
-                     "\"Duração\"", "\"Tela de destino\""
+                     "\"Seleção\"", "\"Apontamento / Batida\"", "\"Data início\"", "\"Hora início\""
                  })
         {
             Assert.Contains($"HeaderText = {cabecalho};", designer, StringComparison.Ordinal);
         }
+
+        // Colunas antigas removidas.
+        Assert.DoesNotContain("HeaderText = \"Tipo de processo\";", designer, StringComparison.Ordinal);
+        Assert.DoesNotContain("HeaderText = \"Tela de destino\";", designer, StringComparison.Ordinal);
     }
 
     [Fact]
