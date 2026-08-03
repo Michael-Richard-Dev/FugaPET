@@ -270,11 +270,11 @@ partial class ProcessoControleApontamentosForm
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
         sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
-        sapStatusPanel.Location = new Point(920, 12);
+        sapStatusPanel.Location = new Point(786, 12);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
         sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(210, 27);
+        sapStatusPanel.Size = new Size(350, 27);
         //
         // sapStatusDotLabel
         //
@@ -290,6 +290,7 @@ partial class ProcessoControleApontamentosForm
         // sapStatusLabel
         //
         sapStatusLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        sapStatusLabel.AutoEllipsis = true;
         sapStatusLabel.AutoSize = false;
         sapStatusLabel.BackColor = Color.Transparent;
         sapStatusLabel.Font = new Font("Cascadia Code", 7.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
@@ -297,7 +298,7 @@ partial class ProcessoControleApontamentosForm
         sapStatusLabel.Location = new Point(27, 4);
         sapStatusLabel.Name = "sapStatusLabel";
         sapStatusLabel.Padding = new Padding(2, 0, 4, 0);
-        sapStatusLabel.Size = new Size(174, 19);
+        sapStatusLabel.Size = new Size(316, 19);
         sapStatusLabel.Text = "SAP: verificando...";
         sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         //

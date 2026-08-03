@@ -213,6 +213,9 @@ public partial class ProcessoSemiAcabadoForm : Form
         productionDataGridView.CellDoubleClick += ProductionDataGridView_CellDoubleClick;
         materialDataGridView.CellDoubleClick += MaterialDataGridView_CellDoubleClick;
         productionSearchTextBox.TextChanged += (_, _) => AplicarFiltroItens();
+        // "Os três pontinhos" (menu) retorna à tela de Processos: fecha o diálogo, que devolve o controle
+        // ao painel (mesma proteção de leitura em andamento do fechamento pelo X).
+        menuHeaderLabel.Click += (_, _) => Close();
         minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
         maximizeWindowLabel.Click += (_, _) => ToggleWindowState();
         closeWindowLabel.Click += (_, _) => Close();

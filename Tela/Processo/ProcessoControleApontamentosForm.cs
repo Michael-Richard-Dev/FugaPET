@@ -32,6 +32,11 @@ public partial class ProcessoControleApontamentosForm : Form
     private bool _processandoLeitura;
     private OrdemProducaoSap? _ordemAtual;
 
+    // Rodapé padrão (relógio + células de identificação), igual às demais telas de Processo.
+    private Label? _footerHoraLabel;
+    private Label? _footerDataLabel;
+    private System.Windows.Forms.Timer? _footerClockTimer;
+
     public ProcessoControleApontamentosForm()
         : this(new ProcessoControleApontamentosController())
     {
@@ -47,6 +52,7 @@ public partial class ProcessoControleApontamentosForm : Form
         ConfigurarGridOperacoes();
         ConfigurarEventos();
         ResolverUsuarioEEstacao();
+        ConfigurarRodape();
         AtualizarStatusSap();
     }
 
@@ -160,6 +166,10 @@ public partial class ProcessoControleApontamentosForm : Form
         headerTitleLabel.MouseDown += CustomTitleBar_MouseDown;
         headerSubtitleLabel.MouseDown += CustomTitleBar_MouseDown;
 
+        // "Os três riscos" (menu) retorna à tela de Processos: fecha o diálogo, que devolve o controle
+        // ao painel (que reexibe Processo de Produção). Mesma proteção de leitura em andamento.
+        menuHeaderLabel.Click += CloseWindowLabel_Click;
+
         minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
         maximizeWindowLabel.Click += (_, _) => AlternarEstadoJanela();
         closeWindowLabel.Click += CloseWindowLabel_Click;
@@ -216,7 +226,11 @@ public partial class ProcessoControleApontamentosForm : Form
             statusLabel.Text = MensagemAguardeLeitura;
             MessageBox.Show(
                 MensagemAguardeLeitura, "Controle de Apontamentos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
         }
+
+        _footerClockTimer?.Stop();
+        _footerClockTimer?.Dispose();
     }
 
     private void ProcessoControleApontamentosForm_KeyDown(object? sender, KeyEventArgs e)
@@ -675,7 +689,99 @@ public partial class ProcessoControleApontamentosForm : Form
     private void AtualizarStatusSap()
     {
         // Rótulo informativo do cabeçalho; o estado real é sempre o do resultado da leitura.
-        sapStatusLabel.Text = "SAP: integração de Ordem de Produção (somente leitura)";
+        sapStatusLabel.Text = "SAP: Ordem de Produção (somente leitura)";
+    }
+
+    // ---------- Rodapé padrão (Usuário · Terminal · Empresa · Banco · Hora · Data · Status) ----------
+
+    private void ConfigurarRodape()
+    {
+        footerPanel.BackColor = Color.FromArgb(248, 250, 253);
+        footerPanel.Height = 38;
+        footerPanel.Controls.Clear(); // o statusLabel será recolocado na célula de status
+
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ColumnCount = 7,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        foreach (float peso in new[] { 15F, 14F, 22F, 19F, 7F, 9F, 14F })
+        {
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, peso));
+        }
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        string terminal = string.IsNullOrWhiteSpace(_estacao) ? Environment.MachineName : _estacao;
+        layout.Controls.Add(CriarCelulaRodape("", UsuarioLogadoUiHelper.ObterTextoUsuarioRodape(), out _), 0, 0);
+        layout.Controls.Add(CriarCelulaRodape("", $"Terminal:  {terminal}", out _), 1, 0);
+        layout.Controls.Add(CriarCelulaRodape("", "Empresa:  FUGA COUROS S.A.", out _), 2, 0);
+        layout.Controls.Add(CriarCelulaRodape("", RodapeBancoHelper.ObterTextoBancoDados(), out _), 3, 0);
+        layout.Controls.Add(CriarCelulaRodape("", "--:--", out _footerHoraLabel), 4, 0);
+        layout.Controls.Add(CriarCelulaRodape("", "--/--/----", out _footerDataLabel), 5, 0);
+
+        // Célula de status: mantém o statusLabel operacional (feedback de leitura) visível no rodapé.
+        Panel celulaStatus = new() { Dock = DockStyle.Fill, BackColor = Color.Transparent, Margin = new Padding(0) };
+        statusLabel.Dock = DockStyle.Fill;
+        statusLabel.Padding = new Padding(8, 0, 6, 0);
+        statusLabel.AutoEllipsis = true;
+        celulaStatus.Controls.Add(statusLabel);
+        layout.Controls.Add(celulaStatus, 6, 0);
+
+        footerPanel.Controls.Add(layout);
+
+        UpdateFooterDateTime();
+        _footerClockTimer = new System.Windows.Forms.Timer { Interval = 30000 };
+        _footerClockTimer.Tick += (_, _) => UpdateFooterDateTime();
+        _footerClockTimer.Start();
+    }
+
+    private static Panel CriarCelulaRodape(string glyph, string texto, out Label textoLabel)
+    {
+        Panel celula = new() { Dock = DockStyle.Fill, BackColor = Color.Transparent, Margin = new Padding(0) };
+
+        Panel divisor = new() { Dock = DockStyle.Right, Width = 1, BackColor = Color.FromArgb(214, 219, 226) };
+        Label icone = new()
+        {
+            Dock = DockStyle.Left,
+            Width = 28,
+            Font = new Font("Segoe MDL2 Assets", 10F),
+            ForeColor = Color.FromArgb(212, 37, 49),
+            Text = glyph,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        textoLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(98, 108, 124),
+            Padding = new Padding(2, 0, 0, 0),
+            Text = texto,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true
+        };
+
+        celula.Controls.Add(textoLabel);
+        celula.Controls.Add(icone);
+        celula.Controls.Add(divisor);
+        return celula;
+    }
+
+    private void UpdateFooterDateTime()
+    {
+        System.Globalization.CultureInfo ptBr = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+        DateTime agora = DateTime.Now;
+        if (_footerDataLabel is not null)
+        {
+            _footerDataLabel.Text = agora.ToString("dd/MM/yyyy", ptBr);
+        }
+
+        if (_footerHoraLabel is not null)
+        {
+            _footerHoraLabel.Text = agora.ToString("HH:mm", ptBr);
+        }
     }
 
     private void DefinirInstrucao(string texto) => instrucaoLabel.Text = texto;
