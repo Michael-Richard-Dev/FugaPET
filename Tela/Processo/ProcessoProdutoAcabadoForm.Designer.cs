@@ -913,7 +913,7 @@ partial class ProcessoProdutoAcabadoForm
         Gpb_PrevisaoLeitura.Location = new Point(449, 3);
         Gpb_PrevisaoLeitura.Margin = new Padding(3, 3, 0, 3);
         Gpb_PrevisaoLeitura.Name = "Gpb_PrevisaoLeitura";
-        Gpb_PrevisaoLeitura.Padding = new Padding(17, 35, 16, 5);
+        Gpb_PrevisaoLeitura.Padding = new Padding(17, 30, 16, 5);
         Gpb_PrevisaoLeitura.ShadowBlur = 0;
         Gpb_PrevisaoLeitura.ShadowOffsetY = 0;
         Gpb_PrevisaoLeitura.Size = new Size(666, 81);
@@ -977,7 +977,7 @@ partial class ProcessoProdutoAcabadoForm
         tableLayoutPanel8.Margin = new Padding(0);
         tableLayoutPanel8.Name = "tableLayoutPanel8";
         tableLayoutPanel8.RowCount = 2;
-        tableLayoutPanel8.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+        tableLayoutPanel8.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
         tableLayoutPanel8.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tableLayoutPanel8.Size = new Size(633, 41);
         tableLayoutPanel8.TabIndex = 0;

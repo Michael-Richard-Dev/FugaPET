@@ -59,6 +59,14 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private Label? _statusNormaValorLabel;        // Tarefa 21.6 (Ajuste 2): STATUS NORMA / MATERIAL CAIXA
     private Label? _avisoNormaFallbackLabel;
 
+    // Correção HU (1ª entrega): Produto Acabado por CAIXA INDIVIDUAL via Handling Unit.
+    // Enquanto true: uma caixa por vez, área de palete fora do fluxo ativo e botão de envio manual apenas
+    // preparado (desabilitado — schema e contrato OP_HANDLINGUNIT_0001 pendentes; nenhum POST).
+    private const bool PrimeiraEntregaHu = true;
+    // §6: NÃO existe fallback de material de embalagem inventado. A única origem confirmada é a norma SAP
+    // (MaterialCaixa). Sem origem real ⇒ vazio e o preview bloqueia a finalização (mensagem clara).
+    private Button? _enviarCaixaSapButton; // §10: "ENVIAR CAIXA SAP HML" (preparado/desabilitado)
+
     public ProcessoProdutoAcabadoForm()
         : this(new ProdutoAcabadoController())
     {
@@ -208,6 +216,15 @@ public partial class ProcessoProdutoAcabadoForm : Form
         manualLotLegendTextLabel.Click += LeituraManual_Click;
         deleteLastLegendPanel.Click += (_, _) => CancelarUltimaCaixa();
         productionActionsButton.Click += (_, _) => CriarPaleteLocal();
+        // "Os três pontinhos" (menu) retorna à tela de Processos: fecha o diálogo (com a mesma proteção
+        // de fechamento), devolvendo o controle ao painel.
+        menuHeaderLabel.Click += (_, _) =>
+        {
+            if (PodeFecharTela())
+            {
+                Close();
+            }
+        };
         minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
         maximizeWindowLabel.Click += (_, _) => WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
         closeWindowLabel.Click += (_, _) =>
@@ -217,6 +234,19 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 Close();
             }
         };
+
+        // Mesmo efeito hover do cabeçalho das demais telas de Processo.
+        ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
+        ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+    }
+
+    private static void ConfigureTitleButtonHover(Label button, Color hoverColor)
+    {
+        Color normalColor = button.BackColor;
+
+        button.MouseEnter += (_, _) => button.BackColor = hoverColor;
+        button.MouseLeave += (_, _) => button.BackColor = normalColor;
     }
 
     private void ConfigurarRodape()
@@ -511,7 +541,107 @@ public partial class ProcessoProdutoAcabadoForm : Form
         _areaInferior.Controls.Add(paletesDataGridView, 0, 3);
         productionReadingsPanel.Controls.Add(_areaInferior);
         _areaInferior.BringToFront();
+
+        // §8: 1ª entrega por caixa individual (HU) — palete FORA do fluxo ativo. Oculta integralmente o card
+        // CRIAR PALETE, o título e o grid de paletes, e colapsa as linhas correspondentes da área inferior.
+        if (PrimeiraEntregaHu)
+        {
+            _criarPaleteCard.Visible = false;
+            paletesCriadosTituloLabel.Visible = false;
+            paletesDataGridView.Visible = false;
+            productionActionsButton.Visible = false;
+            _areaInferior.RowStyles[0] = new RowStyle(SizeType.Percent, 100F); // caixas ocupam a área
+            _areaInferior.RowStyles[1] = new RowStyle(SizeType.Absolute, 0F);
+            _areaInferior.RowStyles[2] = new RowStyle(SizeType.Absolute, 0F);
+            _areaInferior.RowStyles[3] = new RowStyle(SizeType.Absolute, 0F);
+            ConfigurarBotaoEnvioCaixaSap();
+        }
     }
+
+    /// <summary>
+    /// §10: prepara o botão "ENVIAR CAIXA SAP HML". Estrutura visual apenas — enquanto o schema do banco e o
+    /// contrato OP_HANDLINGUNIT_0001 estiverem pendentes o botão permanece DESABILITADO e nenhum POST ocorre.
+    /// Fica visível somente após uma caixa finalizada.
+    /// </summary>
+    private void ConfigurarBotaoEnvioCaixaSap()
+    {
+        _enviarCaixaSapButton = new Button
+        {
+            Name = "enviarCaixaSapButton",
+            Text = "ENVIAR CAIXA SAP HML",
+            Font = FonteBotao,
+            Location = leituraManualButton.Location,
+            Size = leituraManualButton.Size,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            TabIndex = leituraManualButton.TabIndex,
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = Color.White,
+            BackColor = Color.FromArgb(156, 163, 175), // cinza = desabilitado
+            Enabled = false,
+            Visible = false,
+            Cursor = Cursors.Default
+        };
+        _enviarCaixaSapButton.FlatAppearance.BorderSize = 0;
+
+        ToolTip tooltip = new();
+        tooltip.SetToolTip(_enviarCaixaSapButton,
+            "Envio manual indisponível: schema do banco pendente e contrato OP_HANDLINGUNIT_0001 pendente. "
+            + "POST ao SAP não autorizado nesta fase.");
+
+        // Nenhum handler de POST: o clique não executa HTTP. Enquanto desabilitado nem dispara.
+        _enviarCaixaSapButton.Click += (_, _) =>
+            statusLabel.Text = "Envio ao SAP não autorizado nesta fase (schema/contrato pendentes). Nenhum POST executado.";
+
+        sidePanel.Controls.Add(_enviarCaixaSapButton);
+        _enviarCaixaSapButton.BringToFront();
+        AtualizarEstadoEnvioCaixaSap();
+    }
+
+    /// <summary>
+    /// §10: reflete o estado da caixa no botão de envio e no status. O botão só aparece após uma caixa
+    /// finalizada e permanece DESABILITADO enquanto schema/gateway estiverem pendentes (nenhum POST).
+    /// </summary>
+    private void AtualizarEstadoEnvioCaixaSap()
+    {
+        if (_enviarCaixaSapButton is null)
+        {
+            return;
+        }
+
+        ProdutoAcabadoCaixa? caixa = _caixasPesadas.LastOrDefault();
+        bool temCaixaFinalizada = caixa is not null
+            && caixa.StatusIntegracao is StatusIntegracaoCaixa.FinalizadaLocal
+                or StatusIntegracaoCaixa.PreviewHuGerado
+                or StatusIntegracaoCaixa.AguardandoAutorizacaoSap
+                or StatusIntegracaoCaixa.ProntaParaEnvio
+                or StatusIntegracaoCaixa.ErroSap;
+
+        _enviarCaixaSapButton.Visible = temCaixaFinalizada;
+        // Sempre desabilitado nesta fase: schema pendente + contrato pendente + POST não autorizado.
+        _enviarCaixaSapButton.Enabled = false;
+        leituraManualButton.Visible = _leituraIniciada && !temCaixaFinalizada;
+
+        if (caixa is not null)
+        {
+            _enviarCaixaSapButton.Text = "ENVIAR CAIXA SAP HML";
+        }
+    }
+
+    /// <summary>§10: rótulo amigável dos estados de integração da caixa.</summary>
+    private static string DescreverStatusIntegracao(StatusIntegracaoCaixa status)
+        => status switch
+        {
+            StatusIntegracaoCaixa.FinalizadaLocal => "FINALIZADA LOCAL",
+            StatusIntegracaoCaixa.PreviewHuGerado => "PREVIEW GERADO",
+            StatusIntegracaoCaixa.AguardandoAutorizacaoSap => "AGUARDANDO AUTORIZAÇÃO SAP",
+            StatusIntegracaoCaixa.ProntaParaEnvio => "PRONTA PARA ENVIO",
+            StatusIntegracaoCaixa.EnviandoSap => "ENVIANDO SAP",
+            StatusIntegracaoCaixa.ConfirmadaSap => "CONFIRMADA SAP",
+            StatusIntegracaoCaixa.ErroSap => "ERRO SAP",
+            StatusIntegracaoCaixa.Cancelada => "CANCELADA",
+            StatusIntegracaoCaixa.Bloqueada => "BLOQUEADA",
+            _ => "EM PESAGEM"
+        };
 
     private static Label CriarLabelPaletizacao(string texto)
         => new()
@@ -581,6 +711,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
     {
         if (_operacaoEmAndamento)
         {
+            return;
+        }
+
+        // §5: protege a caixa ativa (só em memória nesta fase) de descarte silencioso ao trocar/limpar OP.
+        if (!PodeTrocarOuLimparOp())
+        {
+            productionOrderTextBox.Text = _ultimaOpConsultada; // restaura a OP corrente; nada é descartado
             return;
         }
 
@@ -768,8 +905,8 @@ public partial class ProcessoProdutoAcabadoForm : Form
             BorderColor = Color.FromArgb(209, 213, 219),
             FillColor = Color.White,
             Dock = DockStyle.Fill,
-            Margin = new Padding(0, 2, 8, 4),
-            Padding = new Padding(8, 3, 8, 3)
+            Margin = new Padding(0, 1, 8, 1),
+            Padding = new Padding(8, 2, 8, 2)
         };
         caixa.Controls.Add(readForecastBoxesTextBox);
         tabela.Controls.Add(caixa, celula.Column, celula.Row);
@@ -910,6 +1047,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
+        // §4: com caixa ATIVA, não reiniciar a leitura — exige confirmar/cancelar a caixa atual antes.
+        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        {
+            AvisarCaixaAtivaPendente();
+            return;
+        }
+
         if (_ordemAtual is null)
         {
             MessageBox.Show("Selecione uma OP antes de iniciar a leitura.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1012,6 +1156,16 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return false;
         }
 
+        // §7: UMA CAIXA POR VEZ. Enquanto houver uma caixa ativa, não registra outra — sem usar apenas
+        // Count+1 como autorização. Exige confirmar/cancelar a caixa atual antes da próxima.
+        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        {
+            MessageBox.Show(
+                "Já existe uma caixa em andamento. Confirme o envio ou cancele a caixa atual antes de pesar outra.",
+                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         decimal pesoLiquidoKg = pesoBrutoKg - taraKg;
         if (pesoLiquidoKg <= 0m)
         {
@@ -1026,16 +1180,20 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return false;
         }
 
+        // §9: material de embalagem da CAIXA obtido explicitamente (origem controlada, nunca PALLET01).
+        (string materialEmbalagem, OrigemMaterialEmbalagemCaixa origemEmbalagem) = ObterMaterialEmbalagemCaixaControlada();
+
         ProdutoAcabadoCaixa caixa;
         try
         {
-            caixa = _controller.MontarCaixa(
+            caixa = _controller.MontarCaixaSemIdentidadeSequencial(
                 _ordemAtual,
                 _normaEmbalagem,
-                _caixasPesadas.Count + 1,
                 pesoBrutoKg,
                 taraKg,
-                origem);
+                origem,
+                materialEmbalagem: string.IsNullOrWhiteSpace(materialEmbalagem) ? null : materialEmbalagem,
+                origemMaterialEmbalagem: origemEmbalagem);
         }
         catch (Exception ex)
         {
@@ -1043,19 +1201,80 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return false;
         }
 
+        // §9: valida o preview da HU ANTES de adicionar a caixa. Preview inválido (ex.: material de embalagem
+        // ausente) BLOQUEIA a finalização — a pesagem não é perdida em silêncio nem a caixa é adicionada.
+        FugaPET_Dev.Servicos.IntegracaoSap.ResultadoPreviewHandlingUnitCaixa preview =
+            _controller.GerarPreviewHandlingUnitCaixa(_ordemAtual, caixa);
+        if (!preview.Sucesso)
+        {
+            MessageBox.Show(
+                $"Não foi possível preparar a caixa para o SAP: {preview.Mensagem}",
+                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         _caixasPesadas.Add(caixa);
-        ResultadoPreviewProdutoAcabado101 preview =
-            _controller.GerarPreviewMaterialDocument101(_ordemAtual, caixa, DateTime.UtcNow);
-        System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Preview Material Document 101 caixa {0}: {1}", caixa.NumeroCaixa, preview.PayloadJson);
+        // Produto Acabado deixou o movimento 101: preview é da Handling Unit da caixa (contrato SAP ainda não
+        // confirmado; nenhum POST). Nome interno de propriedades, não o JSON externo definitivo.
+        System.Diagnostics.Trace.TraceInformation(
+            "[ProdutoAcabado] Preview Handling Unit caixa {0} (contrato SAP não confirmado): {1}",
+            caixa.NumeroCaixa, preview.PayloadJsonSanitizado);
+        caixa.TransicionarPara(StatusIntegracaoCaixa.PreviewHuGerado);
+        caixa.TransicionarPara(StatusIntegracaoCaixa.AguardandoAutorizacaoSap);
         AtualizarGridCaixas();
         AtualizarCamposPaletizacaoPadrao();
         AtualizarResumoOperacional();
-        statusLabel.Text = $"Caixa {caixa.NumeroCaixa:0000} registrada. Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
+        AtualizarEstadoEnvioCaixaSap();
+        statusLabel.Text = $"Caixa registrada em memória, aguardando numeração persistente (FINALIZADA LOCAL). Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
         return true;
     }
 
+    /// <summary>§7: existe caixa ativa (não confirmada/cancelada) em andamento na tela.</summary>
+    private bool ExisteCaixaAtiva()
+        => _caixasPesadas.Any(c =>
+            c.StatusIntegracao != StatusIntegracaoCaixa.ConfirmadaSap
+            && c.StatusIntegracao != StatusIntegracaoCaixa.Cancelada);
+
+    /// <summary>§3: oculta um controle de palete localizado por Name (o título é criado localmente).</summary>
+    private void OcultarControlePaletePorNome(string nome)
+    {
+        foreach (Control controle in Controls.Find(nome, true))
+        {
+            controle.Visible = false;
+        }
+    }
+
+    /// <summary>
+    /// §6/§9: material de embalagem da caixa por origem REAL e explícita (nunca PALLET01, nunca código
+    /// fictício). Única origem confirmada nesta fase: <c>_normaEmbalagem.MaterialCaixa</c> (quando preenchido
+    /// e diferente de PALLET01). Não existindo origem real ⇒ retorna vazio; o preview então BLOQUEIA a
+    /// finalização com "Material de embalagem da caixa não informado." Nenhum fallback inventado.
+    /// </summary>
+    private (string material, OrigemMaterialEmbalagemCaixa origem) ObterMaterialEmbalagemCaixaControlada()
+    {
+        string? daNorma = _normaEmbalagem?.MaterialCaixa;
+        if (!string.IsNullOrWhiteSpace(daNorma) && !EhMaterialPalete(daNorma))
+        {
+            return (daNorma.Trim(), OrigemMaterialEmbalagemCaixa.Sap);
+        }
+
+        // Sem origem real (norma SAP não trouxe MaterialCaixa e não há campo de operador aprovado): vazio.
+        return (string.Empty, OrigemMaterialEmbalagemCaixa.NaoInformada);
+    }
+
+    private static bool EhMaterialPalete(string? material)
+        => !string.IsNullOrWhiteSpace(material)
+            && material.Trim().Equals("PALLET01", StringComparison.OrdinalIgnoreCase);
+
     private bool ValidarPodePesar()
     {
+        // §4: bloqueio preventivo — com caixa ativa pendente não abre pesagem (F9/F12/manual/balança).
+        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        {
+            AvisarCaixaAtivaPendente();
+            return false;
+        }
+
         if (!_leituraIniciada)
         {
             MessageBox.Show("Inicie a leitura antes de registrar caixa.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1173,15 +1392,17 @@ public partial class ProcessoProdutoAcabadoForm : Form
         {
             // Tarefa 21.6 (Ajuste 6): uma coluna por conceito (bruto, tara, liquido, origem, status, palete, HU).
             productionDataGridView.Rows.Add(
-                caixa.NumeroCaixa.ToString("0000", CultureInfo.InvariantCulture),
+                caixa.NumeroCaixa > 0
+                    ? caixa.NumeroCaixa.ToString("0000", CultureInfo.InvariantCulture)
+                    : "PEND.",
                 FormatarKg(caixa.PesoBrutoKg),
                 FormatarKg(caixa.TaraKg),
                 FormatarKg(caixa.PesoLiquidoKg),
                 caixa.QuantidadeProdutos.ToString(CultureInfo.InvariantCulture),
                 caixa.OrigemPesagem,
-                caixa.StatusSap,
+                caixa.StatusIntegracao.ToString(),
                 string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal) ? "-" : caixa.CodigoPaleteLocal,
-                string.IsNullOrWhiteSpace(caixa.HandlingUnitCaixa) ? "-" : caixa.HandlingUnitCaixa);
+                string.IsNullOrWhiteSpace(caixa.HandlingUnitExternalId) ? "-" : caixa.HandlingUnitExternalId);
         }
     }
 
@@ -1192,15 +1413,37 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
+        ProdutoAcabadoCaixa caixa = _caixasPesadas[^1];
+        if (!TransicaoStatusIntegracaoCaixa.PodeTransitar(caixa.StatusIntegracao, StatusIntegracaoCaixa.Cancelada))
+        {
+            MessageBox.Show(
+                "A caixa atual não pode ser cancelada no estado de integração em que se encontra.",
+                "Produto Acabado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        caixa.TransicionarPara(StatusIntegracaoCaixa.Cancelada);
         _caixasPesadas.RemoveAt(_caixasPesadas.Count - 1);
         AtualizarGridCaixas();
         AtualizarCamposPaletizacaoPadrao();
         AtualizarResumoOperacional();
+        AtualizarEstadoEnvioCaixaSap();
+        AtualizarBotoesOperacao();
         statusLabel.Text = "Última caixa de produto acabado cancelada.";
     }
 
     private void CriarPaleteLocal()
     {
+        // §8: na 1ª entrega (caixa individual via HU) a formação de palete está FORA do fluxo ativo.
+        // O acionamento é neutralizado aqui — a Form não monta palete nem gera preview de palete.
+        // O código permanece para fase futura, mas não é acionável enquanto PrimeiraEntregaHu.
+        if (PrimeiraEntregaHu)
+        {
+            return;
+        }
+
         if (_ordemAtual is null || _caixasPesadas.Count == 0)
         {
             MessageBox.Show("Registre caixas antes de criar o palete.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1470,7 +1713,10 @@ public partial class ProcessoProdutoAcabadoForm : Form
     {
         // Tarefa 21.6.2 (Ajuste 1): iniciar verde com OP + QTD. por caixa válida (falta de balança não impede).
         bool livre = !_operacaoEmAndamento;
-        bool podeAlternarLeitura = livre && _ordemAtual is not null && QuantidadePorCaixaValida();
+        // §4: com caixa ATIVA (finalizada aguardando integração) a leitura NÃO pode reiniciar — apenas parar
+        // uma leitura já em andamento. Bloqueio preventivo, não só dentro de RegistrarCaixaProdutoAcabado.
+        bool caixaAtiva = ExisteCaixaAtiva();
+        bool podeAlternarLeitura = livre && _ordemAtual is not null && QuantidadePorCaixaValida() && !caixaAtiva;
         iniciarLeituraButton.PrimaryText = _leituraIniciada ? "PARAR LEITURA" : "INICIAR LEITURA";
         iniciarLeituraButton.IconGlyph = _leituraIniciada ? "\uE71A" : "\uE768";
         iniciarLeituraButton.BaseBackColor = _leituraIniciada
@@ -1483,19 +1729,48 @@ public partial class ProcessoProdutoAcabadoForm : Form
         iniciarLeituraButton.Invalidate(); // ActionPillButton é custom-painted: precisa repintar a cor
         lerEtiquetaButton.Visible = _leituraIniciada;
         leituraManualButton.Visible = _leituraIniciada;
-        lerEtiquetaButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null;
-        leituraManualButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null;
-        // Tarefa 21.6.3 (Ajuste 8): botão CRIAR PALETE sempre visível no card; habilita só com caixa livre.
-        productionActionsButton.Visible = !_leituraIniciada;
-        productionActionsButton.Enabled = !_leituraIniciada && livre && ExisteCaixaLivreParaPalete();
-        if (_paleteMensagemLabel is not null)
+        // §4: F9 (etiqueta) e leitura manual só com leitura ativa E sem caixa ativa pendente.
+        lerEtiquetaButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null && !caixaAtiva;
+        leituraManualButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null && !caixaAtiva;
+
+        // §3: na 1ª entrega (caixa individual via HU) o fluxo de palete NÃO pode reaparecer em NENHUMA
+        // atualização de estado. Ramo explícito mantém botão/card/título/grid ocultos e desabilitados.
+        if (PrimeiraEntregaHu)
         {
-            _paleteMensagemLabel.Text = _caixasPesadas.Count == 0
-                ? "Registre caixas para criar um palete."
-                : ExisteCaixaLivreParaPalete() ? string.Empty
-                : "Todas as caixas já foram vinculadas a paletes.";
-            _paleteMensagemLabel.Visible = _paleteMensagemLabel.Text.Length > 0;
+            productionActionsButton.Visible = false;
+            productionActionsButton.Enabled = false;
+            if (_criarPaleteCard is not null)
+            {
+                _criarPaleteCard.Visible = false;
+            }
+
+            OcultarControlePaletePorNome("paletesCriadosTituloLabel");
+            if (paletesDataGridView is not null)
+            {
+                paletesDataGridView.Visible = false;
+            }
+
+            if (_paleteMensagemLabel is not null)
+            {
+                _paleteMensagemLabel.Visible = false;
+            }
         }
+        else
+        {
+            // Comportamento futuro do palete existente (fora do escopo desta 1ª entrega).
+            productionActionsButton.Visible = !_leituraIniciada;
+            productionActionsButton.Enabled = !_leituraIniciada && livre && ExisteCaixaLivreParaPalete();
+            if (_paleteMensagemLabel is not null)
+            {
+                _paleteMensagemLabel.Text = _caixasPesadas.Count == 0
+                    ? "Registre caixas para criar um palete."
+                    : ExisteCaixaLivreParaPalete() ? string.Empty
+                    : "Todas as caixas já foram vinculadas a paletes.";
+                _paleteMensagemLabel.Visible = _paleteMensagemLabel.Text.Length > 0;
+            }
+        }
+
+        AtualizarEstadoEnvioCaixaSap();
 
         // Tarefa 21.6.2 (Ajuste 10): "Excluir última caixa" fica VISÍVEL porém cinza/desabilitado sem caixa.
         // (deleteByCodeLegendPanel aqui é "Esc - Fechar" — NÃO desabilitar, senão trava o fechamento.)
@@ -1558,8 +1833,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
         productionFooterLabel.Text = $"{qtdCaixas} caixa(s) registrada(s). POST SAP desativado.";
     }
 
-    private void LimparOp()
+    private bool LimparOp()
     {
+        if (!PodeTrocarOuLimparOp())
+        {
+            return false;
+        }
+
         _ordemAtual = null;
         _ultimaOpConsultada = string.Empty; // Tarefa 21.6.3 (Ajuste 1): limpar libera nova consulta no Leave
         _normaEmbalagem = null;
@@ -1583,6 +1863,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         AtualizarCamposPaletizacaoPadrao();
         AtualizarEstadoLeitura(false);
         AtualizarResumoOperacional();
+        return true;
     }
 
     private async Task<bool> BloquearAcaoSemPermissaoAsync(string acao, string descricaoAcao)
@@ -1618,6 +1899,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
     private bool PodeFecharTela()
     {
+        // §5: caixa ativa (só em memória nesta fase) NÃO pode ser descartada ao fechar/Escape.
+        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        {
+            AvisarCaixaAtivaPendente();
+            return false;
+        }
+
         if (!_leituraIniciada)
         {
             return true;
@@ -1630,6 +1918,30 @@ public partial class ProcessoProdutoAcabadoForm : Form
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
         return false;
+    }
+
+    /// <summary>
+    /// §5: pode trocar ou limpar a OP? Enquanto houver caixa ativa (não persistida, só em memória) a troca
+    /// é bloqueada para não descartar a caixa silenciosamente. Somente confirmar/cancelar libera.
+    /// </summary>
+    private bool PodeTrocarOuLimparOp()
+    {
+        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        {
+            AvisarCaixaAtivaPendente();
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>§5: aviso central de caixa ativa pendente (usado em pesagem, troca de OP e fechamento).</summary>
+    private void AvisarCaixaAtivaPendente()
+    {
+        const string mensagem =
+            "Existe uma caixa finalizada aguardando integração. Confirme ou cancele a caixa antes de trocar a OP ou fechar a tela.";
+        statusLabel.Text = mensagem;
+        MessageBox.Show(mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private bool SolicitarPesoManual(decimal taraKg, out decimal pesoKg)
@@ -1747,6 +2059,15 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
     private async void ProcessoProdutoAcabadoForm_KeyDown(object? sender, KeyEventArgs e)
     {
+        // §4: bloqueio preventivo de F5/F9/F12 com caixa ativa pendente (Delete=cancelar e Escape seguem).
+        if (PrimeiraEntregaHu && ExisteCaixaAtiva()
+            && e.KeyCode is Keys.F5 or Keys.F9 or Keys.F12 && !_leituraIniciada)
+        {
+            e.SuppressKeyPress = true;
+            AvisarCaixaAtivaPendente();
+            return;
+        }
+
         if (e.KeyCode == Keys.F5)
         {
             e.SuppressKeyPress = true;

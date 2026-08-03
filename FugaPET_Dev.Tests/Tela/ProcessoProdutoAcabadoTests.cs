@@ -123,7 +123,10 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Equal(2.3m, caixa.PesoLiquidoKg);
         Assert.Equal(12, caixa.QuantidadeProdutos);
         Assert.Equal("MANUAL", caixa.OrigemPesagem);
-        Assert.Equal("PENDENTE_SAP", caixa.StatusSap);
+        // Produto Acabado deixou o movimento 101: a caixa nasce FINALIZADA_LOCAL (status de integração HU),
+        // com correlation_id gerado uma única vez.
+        Assert.Equal(StatusIntegracaoCaixa.FinalizadaLocal, caixa.StatusIntegracao);
+        Assert.NotEqual(Guid.Empty, caixa.CorrelationId);
     }
 
     [Fact]
@@ -160,7 +163,7 @@ public sealed class ProcessoProdutoAcabadoTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
 
         // Tarefa 21.6.2: iniciar exige OP + QTD. por caixa válida (verde só quando pode pesar).
-        Assert.Contains("bool podeAlternarLeitura = livre && _ordemAtual is not null && QuantidadePorCaixaValida();", form, StringComparison.Ordinal);
+        Assert.Contains("bool podeAlternarLeitura = livre && _ordemAtual is not null && QuantidadePorCaixaValida() && !caixaAtiva;", form, StringComparison.Ordinal);
         Assert.Contains("iniciarLeituraButton.PrimaryText = _leituraIniciada ? \"PARAR LEITURA\" : \"INICIAR LEITURA\";", form, StringComparison.Ordinal);
         Assert.Contains("iniciarLeituraButton.IconGlyph = _leituraIniciada ? \"\\uE71A\" : \"\\uE768\";", form, StringComparison.Ordinal);
         Assert.Contains("ActionDisabledColor", form, StringComparison.Ordinal);
@@ -233,85 +236,9 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("e.Handled = true;", metodo, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Builder101_DeveUsarOrdemProducaoENaoPedidoCompra()
-    {
-        ProdutoAcabadoCaixa caixa = new()
-        {
-            NumeroCaixa = 1,
-            CodigoCaixaLocal = "CX-1000909-0001",
-            PesoBrutoKg = 2m,
-            TaraKg = 0.2m,
-            PesoLiquidoKg = 1.8m,
-            QuantidadeProdutos = 12,
-            OrigemPesagem = "MANUAL"
-        };
-
-        ResultadoPreviewProdutoAcabado101 preview = new ProdutoAcabadoMaterialDocument101PayloadBuilder()
-            .MontarPreview101(OrdemProdutoAcabadoValida(), caixa, new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc));
-
-        Assert.True(preview.Sucesso);
-        Assert.NotNull(preview.Payload);
-        Assert.Equal("02", preview.Payload!.GoodsMovementCode);
-        ProdutoAcabadoMaterialDocument101ItemRequest item = Assert.Single(preview.Payload.ToMaterialDocumentItem.Results);
-        Assert.Equal("101", item.GoodsMovementType);
-        Assert.Equal("1000909", item.ManufacturingOrder);
-        Assert.Equal("0001", item.ManufacturingOrderItem);
-        Assert.Equal("1.8", item.QuantityInEntryUnit);
-        Assert.Contains("\"ManufacturingOrder\": \"1000909\"", preview.PayloadJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("PurchaseOrder", preview.PayloadJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("PurchaseOrderItem", preview.PayloadJson, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("KG", "1.8")]
-    [InlineData("KGM", "1.8")]
-    [InlineData("UN", "12")]
-    [InlineData("PC", "12")]
-    [InlineData("ST", "12")]
-    public void Builder101_DeveDefinirQuantidadeConformeUnidadeDaOp(string unidade, string quantidadeEsperada)
-    {
-        ProdutoAcabadoOrdem ordem = OrdemProdutoAcabadoValida(unidade);
-        ProdutoAcabadoCaixa caixa = new()
-        {
-            NumeroCaixa = 1,
-            CodigoCaixaLocal = "CX-1000909-0001",
-            PesoBrutoKg = 2m,
-            TaraKg = 0.2m,
-            PesoLiquidoKg = 1.8m,
-            QuantidadeProdutos = 12,
-            OrigemPesagem = "MANUAL"
-        };
-
-        ResultadoPreviewProdutoAcabado101 preview = new ProdutoAcabadoMaterialDocument101PayloadBuilder()
-            .MontarPreview101(ordem, caixa, DateTime.UtcNow);
-
-        ProdutoAcabadoMaterialDocument101ItemRequest item = Assert.Single(preview.Payload!.ToMaterialDocumentItem.Results);
-        Assert.Equal(quantidadeEsperada, item.QuantityInEntryUnit);
-        Assert.Equal(unidade, item.EntryUnit);
-    }
-
-    [Fact]
-    public void Builder101_DeveBloquearQuantidadeNaoKgSemQuantidadeProdutos()
-    {
-        ProdutoAcabadoOrdem ordem = OrdemProdutoAcabadoValida("UN");
-        ProdutoAcabadoCaixa caixa = new()
-        {
-            NumeroCaixa = 1,
-            CodigoCaixaLocal = "CX-1000909-0001",
-            PesoBrutoKg = 2m,
-            TaraKg = 0.2m,
-            PesoLiquidoKg = 1.8m,
-            QuantidadeProdutos = 0,
-            OrigemPesagem = "MANUAL"
-        };
-
-        ResultadoPreviewProdutoAcabado101 preview = new ProdutoAcabadoMaterialDocument101PayloadBuilder()
-            .MontarPreview101(ordem, caixa, DateTime.UtcNow);
-
-        Assert.False(preview.Sucesso);
-        Assert.Contains("Quantidade de produtos da caixa", preview.Mensagem, StringComparison.Ordinal);
-    }
+    // Os antigos testes Builder101_* foram removidos: Produto Acabado deixou o movimento 101 /
+    // Material Document. A cobertura da caixa individual (Handling Unit) está em
+    // ProdutoAcabadoHandlingUnitCaixaTests (preview, idempotência, envio manual, escopo).
 
     [Fact]
     public void Palete_DeveGerarPreviewComHandlingUnitsESemPost()
@@ -449,6 +376,150 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.DoesNotContain(".PostAsync(", produto + controller, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CREATE TABLE", produto + controller, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ALTER TABLE", produto + controller, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ===================== Correção HU 1ª entrega (Form §6-§10) =====================
+
+    [Fact]
+    public void FormHu_UmaCaixaPorVez_BloqueiaSegundaPesagem()
+    {
+        // §7/§11.C: guard explícito "uma caixa por vez" (não usa apenas Count+1 como autorização).
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+
+        Assert.Contains("private const bool PrimeiraEntregaHu = true;", form, StringComparison.Ordinal);
+        Assert.Contains("if (PrimeiraEntregaHu && ExisteCaixaAtiva())", form, StringComparison.Ordinal);
+        Assert.Contains("private bool ExisteCaixaAtiva()", form, StringComparison.Ordinal);
+        Assert.Contains("Confirme o envio ou cancele a caixa atual antes de pesar outra.", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_PaleteForaDoFluxoAtivo()
+    {
+        // §8/§11.D: CriarPaleteLocal não acionável; card/grid de palete ocultos na 1ª entrega.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string criarPalete = ExtrairMetodo(form, "private void CriarPaleteLocal()");
+
+        // O acionamento retorna cedo enquanto PrimeiraEntregaHu (Form não monta palete / não gera preview).
+        Assert.Contains("if (PrimeiraEntregaHu)", criarPalete, StringComparison.Ordinal);
+        Assert.Contains("return;", criarPalete, StringComparison.Ordinal);
+        Assert.DoesNotContain("MontarPaletePorIntervalo", criarPalete.Split("if (PrimeiraEntregaHu)")[0], StringComparison.Ordinal);
+        // Card, título e grid de palete ocultados.
+        Assert.Contains("_criarPaleteCard.Visible = false;", form, StringComparison.Ordinal);
+        Assert.Contains("paletesDataGridView.Visible = false;", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_MaterialEmbalagemExplicitoBloqueiaPreviewInvalido()
+    {
+        // §9/§11.E: material de embalagem por origem controlada (nunca PALLET01); preview inválido bloqueia add.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string registrar = ExtrairMetodo(form, "private bool RegistrarCaixaProdutoAcabado(decimal pesoBrutoKg, decimal taraKg, string origem)");
+
+        Assert.Contains("ObterMaterialEmbalagemCaixaControlada()", registrar, StringComparison.Ordinal);
+        Assert.Contains("if (!preview.Sucesso)", registrar, StringComparison.Ordinal);
+        // A caixa só é adicionada DEPOIS da checagem do preview.
+        int idxCheck = registrar.IndexOf("if (!preview.Sucesso)", StringComparison.Ordinal);
+        int idxAdd = registrar.IndexOf("_caixasPesadas.Add(caixa);", StringComparison.Ordinal);
+        Assert.True(idxCheck >= 0 && idxAdd > idxCheck, "O Add da caixa deve ocorrer após a validação do preview.");
+        // Origem controlada nunca PALLET01.
+        Assert.Contains("private static bool EhMaterialPalete(string? material)", form, StringComparison.Ordinal);
+        Assert.Contains("OrigemMaterialEmbalagemCaixa.NaoInformada", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_BotaoEnvioManualPreparadoEDesabilitado()
+    {
+        // §10/§11.F: botão "ENVIAR CAIXA SAP HML" existe, desabilitado, tooltip de pendências; sem POST.
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+
+        Assert.Contains("Text = \"ENVIAR CAIXA SAP HML\",", form, StringComparison.Ordinal);
+        Assert.Contains("private void ConfigurarBotaoEnvioCaixaSap()", form, StringComparison.Ordinal);
+        string cfg = ExtrairMetodo(form, "private void ConfigurarBotaoEnvioCaixaSap()");
+        Assert.Contains("Enabled = false,", cfg, StringComparison.Ordinal);
+        Assert.Contains("contrato OP_HANDLINGUNIT_0001 pendente", cfg, StringComparison.Ordinal);
+        Assert.Contains("POST ao SAP não autorizado", cfg, StringComparison.Ordinal);
+        // Sempre desabilitado nesta fase e nenhum POST/PatchAsync na Form.
+        Assert.Contains("_enviarCaixaSapButton.Enabled = false;", form, StringComparison.Ordinal);
+        Assert.DoesNotContain(".PostAsync(", form, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".PatchAsync(", form, StringComparison.OrdinalIgnoreCase);
+        // Estados visuais preparados.
+        Assert.Contains("\"AGUARDANDO AUTORIZAÇÃO SAP\"", form, StringComparison.Ordinal);
+        Assert.Contains("\"CONFIRMADA SAP\"", form, StringComparison.Ordinal);
+        Assert.Contains("\"ERRO SAP\"", form, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_DevePreservarCaixaAtivaEOcultarPaleteEmTodaAtualizacao()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotoesOperacao()");
+        string limpar = ExtrairMetodo(form, "private bool LimparOp()");
+        string cancelar = ExtrairMetodo(form, "private void CancelarUltimaCaixa()");
+        string teclas = ExtrairMetodo(form, "private async void ProcessoProdutoAcabadoForm_KeyDown(object? sender, KeyEventArgs e)");
+
+        Assert.Contains("if (PrimeiraEntregaHu)", atualizar, StringComparison.Ordinal);
+        Assert.Contains("productionActionsButton.Visible = false;", atualizar, StringComparison.Ordinal);
+        Assert.Contains("productionActionsButton.Enabled = false;", atualizar, StringComparison.Ordinal);
+        Assert.Contains("_criarPaleteCard.Visible = false;", atualizar, StringComparison.Ordinal);
+        Assert.Contains("paletesDataGridView.Visible = false;", atualizar, StringComparison.Ordinal);
+
+        Assert.Contains("bool caixaAtiva = ExisteCaixaAtiva();", atualizar, StringComparison.Ordinal);
+        Assert.Contains("!caixaAtiva", atualizar, StringComparison.Ordinal);
+        Assert.Contains("Keys.F5 or Keys.F9 or Keys.F12", teclas, StringComparison.Ordinal);
+
+        int guardaLimpeza = limpar.IndexOf("if (!PodeTrocarOuLimparOp())", StringComparison.Ordinal);
+        int descarte = limpar.IndexOf("_caixasPesadas.Clear();", StringComparison.Ordinal);
+        Assert.True(guardaLimpeza >= 0 && descarte > guardaLimpeza);
+        int transicaoCancelamento = cancelar.IndexOf("caixa.TransicionarPara(StatusIntegracaoCaixa.Cancelada);", StringComparison.Ordinal);
+        int remocao = cancelar.IndexOf("_caixasPesadas.RemoveAt", StringComparison.Ordinal);
+        Assert.True(transicaoCancelamento >= 0 && remocao > transicaoCancelamento);
+        Assert.Contains("PodeFecharTela()", teclas, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_NaoDeveInventarMaterialNemNumeroDefinitivo()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string controller = LerArquivoProjeto("Controle", "Processo", "ProdutoAcabadoController.cs");
+        string contrato = LerArquivoProjeto("AcessoDados", "Repositorio", "IProdutoAcabadoRepositorio.cs");
+
+        Assert.DoesNotContain("EMB_CX_PADRAO", form + controller, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("_caixasPesadas.Count + 1", form, StringComparison.Ordinal);
+        Assert.Contains("MontarCaixaSemIdentidadeSequencial", form, StringComparison.Ordinal);
+        Assert.Contains("OrigemMaterialEmbalagemCaixa.NaoInformada", form, StringComparison.Ordinal);
+        Assert.Contains("Material de embalagem da caixa não informado.",
+            LerArquivoProjeto("Servicos", "IntegracaoSap", "ProdutoAcabadoHandlingUnitCaixaPayloadBuilder.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains("alocar", contrato, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNIQUE(numero_ordem_producao, numero_caixa)", contrato, StringComparison.Ordinal);
+        Assert.Contains("UNIQUE(codigo_caixa_local)", contrato, StringComparison.Ordinal);
+        Assert.Contains("UNIQUE(correlation_id)", contrato, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_BotaoEnvioManualDevePermanecerDentroDoPainelSemSobreposicao()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.Designer.cs");
+        string configurar = ExtrairMetodo(form, "private void ConfigurarBotaoEnvioCaixaSap()");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarEstadoEnvioCaixaSap()");
+
+        Assert.Contains("Location = leituraManualButton.Location,", configurar, StringComparison.Ordinal);
+        Assert.Contains("Size = leituraManualButton.Size,", configurar, StringComparison.Ordinal);
+        Assert.Contains("Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,", configurar, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.Visible = _leituraIniciada && !temCaixaFinalizada;", atualizar, StringComparison.Ordinal);
+
+        const int parentWidth = 215;
+        const int parentHeight = 604;
+        const int left = 12;
+        const int top = 442;
+        const int width = 190;
+        const int height = 38;
+        Assert.True(left + width <= parentWidth);
+        Assert.True(top + height <= parentHeight);
+        Assert.Contains("sidePanel.Size = new Size(215, 604);", designer, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.Location = new Point(12, 442);", designer, StringComparison.Ordinal);
+        Assert.Contains("leituraManualButton.Size = new Size(190, 38);", designer, StringComparison.Ordinal);
     }
 
     private static OrdemProducaoSap OrdemSapValida()
