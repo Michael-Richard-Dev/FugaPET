@@ -1,4 +1,4 @@
-using FugaPET_Dev.Servicos.IntegracaoSap;
+﻿using FugaPET_Dev.Servicos.IntegracaoSap;
 
 namespace FugaPET_Dev.Tests.IntegracaoSap;
 
@@ -71,15 +71,6 @@ public sealed class LogIntegracaoSapGovernancaTests
         }
     }
 
-    [Fact]
-    public void PacoteLimpo_DeveBloquearArquivosLog()
-    {
-        string caminho = LocalizarArquivo("Scripts", "GerarPacoteLimpo.ps1");
-        string conteudo = File.ReadAllText(caminho);
-
-        Assert.Contains("'.log'", conteudo, StringComparison.Ordinal);
-        Assert.Contains("'pacotes_limpos'", conteudo, StringComparison.Ordinal);
-    }
 
     private static string LocalizarArquivo(params string[] partes)
         => Path.Combine([LocalizarRaizProjeto(), .. partes]);

@@ -1,0 +1,1139 @@
+DIFF INTEGRAL REV8 x REV9 - INCREMENTAL 044 DEV
+
+Gerado estaticamente; nenhum SQL foi executado.
+
+====================================================================
+ARQUIVO: 044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql
+====================================================================
+warning: in the working copy of 'C:\tmp\fugapet_044_rev8_audit_20260806\044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'C:\tmp\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+diff --git "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql" "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql"
+index ce9c800..0cc8d68 100644
+--- "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql"
++++ "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql"
+@@ -4,9 +4,9 @@
+ \pset format aligned
+ \pset null '<NULL>'
+ 
+--- FugaPET - Incremental 044 DEV - REV8
++-- FugaPET - Incremental 044 DEV - REV9
+ -- PREFLIGHT exclusivamente READ ONLY.
+--- Compatibilidade operacional REV8: PostgreSQL major 15, versao minima 15.5.
++-- Compatibilidade operacional REV9: PostgreSQL major 15, versao minima 15.5.
+ -- Nenhum objeto ou dado e alterado.
+ 
+ BEGIN;
+@@ -605,9 +605,9 @@ SELECT
+     to_regclass('desenvolvimento.hu_palete_item') IS NOT NULL AS hu_palete_item_presente,
+     to_regclass('desenvolvimento.vw_hu_caixas_sem_palete') IS NOT NULL AS view_caixas_sem_palete_presente;
+ 
+--- Estado do próprio incremental 044 REV8.
++-- Estado do próprio incremental 044 REV9.
+ SELECT
+-    'ESTADO_044_REV8' AS grupo,
++    'ESTADO_044_REV9' AS grupo,
+     (SELECT count(*) FROM (VALUES
+         ('hu_caixa', 'numero_ordem_producao'),
+         ('hu_caixa', 'item_ordem_producao'),
+@@ -871,7 +871,7 @@ BEGIN
+ 
+     IF v_columns_044 = 59 AND v_objects_044 = 34 AND v_columns_rev5=2 AND v_objects_rev5=3 THEN
+         RAISE NOTICE 'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_APROVADO';
+-        RAISE NOTICE 'ESTADO_PACOTE=PACOTE_REV8_NOMES_PRESENTES_ASSINATURAS_DEVEM_SER_VALIDADAS_PELA_PROPOSTA';
++        RAISE NOTICE 'ESTADO_PACOTE=PACOTE_REV9_NOMES_PRESENTES_ASSINATURAS_DEVEM_SER_VALIDADAS_PELA_PROPOSTA';
+         RETURN;
+     END IF;
+ 
+@@ -965,12 +965,151 @@ BEGIN
+     END IF;
+ 
+     RAISE NOTICE 'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_APROVADO';
+-    RAISE NOTICE 'ESTADO_PACOTE=PACOTE_REV8_NAO_APLICADO';
++    RAISE NOTICE 'ESTADO_PACOTE=PACOTE_REV9_NAO_APLICADO';
+     RAISE NOTICE 'CONTAGEM_HU_CAIXA=%',v_hu;
+     RAISE NOTICE 'CONTAGEM_HISTORICO_INTEGRACAO=%',v_hist;
+ END
+ $gaia$;
+ 
++DO $gaia_view_semantic$
++DECLARE
++    v_view_oid oid;
++    v_schema name;
++    v_view_name name;
++    v_owner name;
++    v_comment text;
++    v_definition text;
++    v_compact text;
++    v_columns text[];
++    v_references text[];
++    v_literals text[];
++    v_outer_segment text;
++    v_inner_segment text;
++    v_pos_outer integer;
++    v_pos_not_exists integer;
++    v_pos_inner integer;
++    v_forbidden integer;
++    v_grants integer;
++BEGIN
++    SELECT c.oid,n.nspname,c.relname,pg_get_userbyid(c.relowner),obj_description(c.oid,'pg_class')
++      INTO v_view_oid,v_schema,v_view_name,v_owner,v_comment
++      FROM pg_class c
++      JOIN pg_namespace n ON n.oid=c.relnamespace
++     WHERE n.nspname='desenvolvimento'
++       AND c.relname='vw_hu_caixas_sem_palete'
++       AND c.relkind='v';
++
++    IF v_view_oid IS NULL OR v_schema<>'desenvolvimento' OR v_view_name<>'vw_hu_caixas_sem_palete' THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_IDENTIDADE';
++    END IF;
++
++    SELECT COALESCE(array_agg(a.attname::text ORDER BY a.attnum),ARRAY[]::text[])
++      INTO v_columns
++      FROM pg_attribute a
++     WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped;
++
++    IF v_columns IS DISTINCT FROM ARRAY[
++        'codigo_hu_caixa','hu_caixa','material','numero_caixa','peso_bruto',
++        'peso_liquido','peso_tara','unidade_peso','status_hu_caixa',
++        'criada_sap_em','hu_caixa_criado_em'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_COLUNAS esperado=11 atual=% nomes=%',
++          cardinality(v_columns),v_columns;
++    END IF;
++
++    SELECT COALESCE(
++        array_agg(DISTINCT format('%s.%s',rn.nspname,rc.relname)
++                  ORDER BY format('%s.%s',rn.nspname,rc.relname)),
++        ARRAY[]::text[])
++      INTO v_references
++      FROM pg_rewrite r
++      JOIN pg_depend d
++        ON d.classid='pg_rewrite'::regclass
++       AND d.objid=r.oid
++       AND d.refclassid='pg_class'::regclass
++      JOIN pg_class rc ON rc.oid=d.refobjid
++      JOIN pg_namespace rn ON rn.oid=rc.relnamespace
++     WHERE r.ev_class=v_view_oid
++       AND r.rulename='_RETURN'
++       AND rc.oid<>v_view_oid
++       AND rc.relkind IN ('r','p','v','m','f');
++
++    IF v_references IS DISTINCT FROM ARRAY[
++        'desenvolvimento.hu_caixa',
++        'desenvolvimento.hu_palete_item'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_DEPENDENCIAS referencias=%',
++          v_references;
++    END IF;
++
++    v_definition:=lower(pg_get_viewdef(v_view_oid,false));
++    v_compact:=regexp_replace(
++        replace(replace(replace(v_definition,'"',''),'(',''),')',''),
++        '\s+','','g');
++
++    v_pos_outer:=strpos(v_compact,'status_hu_caixa');
++    v_pos_not_exists:=strpos(v_compact,'notexists');
++    v_pos_inner:=strpos(v_compact,'status_vinculo');
++
++    IF v_pos_outer=0 OR v_pos_not_exists=0 OR v_pos_inner=0
++       OR NOT (v_pos_outer<v_pos_not_exists AND v_pos_not_exists<v_pos_inner) THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_ESTRUTURA_FILTROS';
++    END IF;
++
++    v_outer_segment:=substring(v_compact FROM v_pos_outer FOR v_pos_not_exists-v_pos_outer);
++    v_inner_segment:=substring(v_compact FROM v_pos_inner);
++
++    IF strpos(v_compact,'situacao_hu_caixa=true')=0
++       OR strpos(v_compact,'situacao_hu_palete_item=true')=0
++       OR strpos(v_compact,'hpi.codigo_hu_caixa=hc.codigo_hu_caixa')=0
++       OR strpos(v_compact,'notexists')=0
++       OR strpos(v_outer_segment,'''confirmada_sap''')=0
++       OR strpos(v_outer_segment,'''etiquetada''')=0
++       OR strpos(v_outer_segment,'''enviada_sap''')=0
++       OR strpos(v_inner_segment,'''vinculado''')=0
++       OR strpos(v_inner_segment,'''enviado_sap''')=0
++       OR strpos(v_inner_segment,'''confirmado_sap''')=0 THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_PREDICADOS';
++    END IF;
++
++    SELECT COALESCE(array_agg(DISTINCT matches[1] ORDER BY matches[1]),ARRAY[]::text[])
++      INTO v_literals
++      FROM regexp_matches(v_definition,'''([^'']+)''','g') AS rm(matches);
++
++    IF v_literals IS DISTINCT FROM ARRAY[
++        'confirmada_sap','confirmado_sap','enviada_sap',
++        'enviado_sap','etiquetada','vinculado'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_STATUS_EXTRAS_OU_AUSENTES status=%',
++          v_literals;
++    END IF;
++
++    SELECT
++      (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL)
++      + (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND col_description(a.attrelid,a.attnum) IS NOT NULL)
++      + (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class=v_view_oid AND r.rulename<>'_RETURN')
++      + (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid=v_view_oid AND NOT t.tgisinternal)
++      INTO v_forbidden;
++
++    IF v_forbidden<>0 THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_METADATA_EXTRA quantidade=%',
++          v_forbidden;
++    END IF;
++
++    SELECT COALESCE(cardinality(c.relacl),0) INTO v_grants
++      FROM pg_class c
++     WHERE c.oid=v_view_oid;
++
++    PERFORM * FROM desenvolvimento.vw_hu_caixas_sem_palete LIMIT 1;
++    RAISE NOTICE
++      'CLASSIFICACAO_OFICIAL=PREFLIGHT_044_DEV_REV9_VIEW_SEMANTICA_APROVADA owner=% comentario_presente=% grants_explicitos=% colunas=% dependencias=%',
++      v_owner,v_comment IS NOT NULL,v_grants,cardinality(v_columns),v_references;
++END
++$gaia_view_semantic$;
+ ROLLBACK;
+ 
+ \echo 'PREFLIGHT 044 FINALIZADO - NENHUMA ALTERACAO PERSISTIDA'
+
+====================================================================
+ARQUIVO: 044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql
+====================================================================
+warning: in the working copy of 'C:\tmp\fugapet_044_rev8_audit_20260806\044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'C:\tmp\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+diff --git "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql" "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql"
+index b32b47f..8dcaa63 100644
+--- "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql"
++++ "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql"
+@@ -4,9 +4,9 @@
+ \pset format aligned
+ \pset null '<NULL>'
+ 
+--- FugaPET - Incremental 044 DEV - REV8
++-- FugaPET - Incremental 044 DEV - REV9
+ -- Persistencia controlada de uma HU SAP para uma caixa individual de Produto Acabado.
+--- Compatibilidade operacional REV8: PostgreSQL major 15, versao minima 15.5.
++-- Compatibilidade operacional REV9: PostgreSQL major 15, versao minima 15.5.
+ -- A PROPOSTA nao insere dados produtivos, nao chama SAP e nao altera objetos de palete.
+ 
+ -- A deteccao e calculada integralmente antes de qualquer \if.
+@@ -501,8 +501,8 @@ BEGIN
+     END IF;
+ END
+ $gaia$;
+-    \echo 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_JA_APLICADA'
+-    \echo 'ESTADO_PACOTE=PACOTE_REV8_INTEGRALMENTE_APLICADO_NENHUMA_ALTERACAO_EXECUTADA'
++    \echo 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_JA_APLICADA'
++    \echo 'ESTADO_PACOTE=PACOTE_REV9_INTEGRALMENTE_APLICADO_NENHUMA_ALTERACAO_EXECUTADA'
+ \else
+ 
+ BEGIN;
+@@ -1230,7 +1230,7 @@ ALTER TABLE desenvolvimento.hu_caixa_pesagem
+         ON DELETE RESTRICT;
+ 
+ COMMENT ON TABLE desenvolvimento.hu_caixa_pesagem IS
+-'FugaPET incremental 044 REV8: historico auditavel da leitura de peso. peso_lido preserva o valor bruto capturado pela balanca ou informado manualmente; peso_bruto, peso_liquido, peso_tara e codigo_usuario sao obrigatorios.';
++'FugaPET incremental 044 REV9: historico auditavel da leitura de peso. peso_lido preserva o valor bruto capturado pela balanca ou informado manualmente; peso_bruto, peso_liquido, peso_tara e codigo_usuario sao obrigatorios.';
+ COMMENT ON COLUMN desenvolvimento.hu_caixa_pesagem.origem_pesagem IS
+ 'BALANCA exige codigo_balanca; MANUAL exige codigo_balanca nulo.';
+ 
+@@ -2413,31 +2413,166 @@ BEGIN
+ 
+     IF v_owner_after IS DISTINCT FROM v_owner_before
+        OR v_comment_after IS DISTINCT FROM v_comment_before
+-       OR v_definition_after IS DISTINCT FROM v_definition_before
+        OR COALESCE(v_grants_after,ARRAY[]::text[]) IS DISTINCT FROM
+           COALESCE(v_grants_before,ARRAY[]::text[]) THEN
+         RAISE EXCEPTION
+-          'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_VIEW_NAO_PRESERVADA owner=%/% comentario_igual=% definicao_igual=% grants_iguais=%',
++          'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_VIEW_METADATA_NAO_PRESERVADA owner=%/% comentario_igual=% grants_iguais=%',
+           v_owner_before,v_owner_after,
+           v_comment_after IS NOT DISTINCT FROM v_comment_before,
+-          v_definition_after IS NOT DISTINCT FROM v_definition_before,
+           COALESCE(v_grants_after,ARRAY[]::text[]) IS NOT DISTINCT FROM
+           COALESCE(v_grants_before,ARRAY[]::text[]);
+     END IF;
+ 
+-    PERFORM * FROM desenvolvimento.vw_hu_caixas_sem_palete LIMIT 1;
+-    RAISE NOTICE 'VIEW_VW_HU_CAIXAS_SEM_PALETE=PRESERVADA_E_ABERTA';
+-    RAISE NOTICE 'OBJETOS_PALETE_ALTERADOS=0';
++    RAISE NOTICE 'VIEW_DEFINICAO_TEXTUAL_IGUAL=%',
++      v_definition_after IS NOT DISTINCT FROM v_definition_before;
+ END
+ $gaia$;
++DO $gaia_view_semantic$
++DECLARE
++    v_view_oid oid;
++    v_schema name;
++    v_view_name name;
++    v_owner name;
++    v_comment text;
++    v_definition text;
++    v_compact text;
++    v_columns text[];
++    v_references text[];
++    v_literals text[];
++    v_outer_segment text;
++    v_inner_segment text;
++    v_pos_outer integer;
++    v_pos_not_exists integer;
++    v_pos_inner integer;
++    v_forbidden integer;
++    v_grants integer;
++BEGIN
++    SELECT c.oid,n.nspname,c.relname,pg_get_userbyid(c.relowner),obj_description(c.oid,'pg_class')
++      INTO v_view_oid,v_schema,v_view_name,v_owner,v_comment
++      FROM pg_class c
++      JOIN pg_namespace n ON n.oid=c.relnamespace
++     WHERE n.nspname='desenvolvimento'
++       AND c.relname='vw_hu_caixas_sem_palete'
++       AND c.relkind='v';
++
++    IF v_view_oid IS NULL OR v_schema<>'desenvolvimento' OR v_view_name<>'vw_hu_caixas_sem_palete' THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_IDENTIDADE';
++    END IF;
++
++    SELECT COALESCE(array_agg(a.attname::text ORDER BY a.attnum),ARRAY[]::text[])
++      INTO v_columns
++      FROM pg_attribute a
++     WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped;
++
++    IF v_columns IS DISTINCT FROM ARRAY[
++        'codigo_hu_caixa','hu_caixa','material','numero_caixa','peso_bruto',
++        'peso_liquido','peso_tara','unidade_peso','status_hu_caixa',
++        'criada_sap_em','hu_caixa_criado_em'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_COLUNAS esperado=11 atual=% nomes=%',
++          cardinality(v_columns),v_columns;
++    END IF;
++
++    SELECT COALESCE(
++        array_agg(DISTINCT format('%s.%s',rn.nspname,rc.relname)
++                  ORDER BY format('%s.%s',rn.nspname,rc.relname)),
++        ARRAY[]::text[])
++      INTO v_references
++      FROM pg_rewrite r
++      JOIN pg_depend d
++        ON d.classid='pg_rewrite'::regclass
++       AND d.objid=r.oid
++       AND d.refclassid='pg_class'::regclass
++      JOIN pg_class rc ON rc.oid=d.refobjid
++      JOIN pg_namespace rn ON rn.oid=rc.relnamespace
++     WHERE r.ev_class=v_view_oid
++       AND r.rulename='_RETURN'
++       AND rc.oid<>v_view_oid
++       AND rc.relkind IN ('r','p','v','m','f');
++
++    IF v_references IS DISTINCT FROM ARRAY[
++        'desenvolvimento.hu_caixa',
++        'desenvolvimento.hu_palete_item'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_DEPENDENCIAS referencias=%',
++          v_references;
++    END IF;
++
++    v_definition:=lower(pg_get_viewdef(v_view_oid,false));
++    v_compact:=regexp_replace(
++        replace(replace(replace(v_definition,'"',''),'(',''),')',''),
++        '\s+','','g');
++
++    v_pos_outer:=strpos(v_compact,'status_hu_caixa');
++    v_pos_not_exists:=strpos(v_compact,'notexists');
++    v_pos_inner:=strpos(v_compact,'status_vinculo');
++
++    IF v_pos_outer=0 OR v_pos_not_exists=0 OR v_pos_inner=0
++       OR NOT (v_pos_outer<v_pos_not_exists AND v_pos_not_exists<v_pos_inner) THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_ESTRUTURA_FILTROS';
++    END IF;
++
++    v_outer_segment:=substring(v_compact FROM v_pos_outer FOR v_pos_not_exists-v_pos_outer);
++    v_inner_segment:=substring(v_compact FROM v_pos_inner);
+ 
++    IF strpos(v_compact,'situacao_hu_caixa=true')=0
++       OR strpos(v_compact,'situacao_hu_palete_item=true')=0
++       OR strpos(v_compact,'hpi.codigo_hu_caixa=hc.codigo_hu_caixa')=0
++       OR strpos(v_compact,'notexists')=0
++       OR strpos(v_outer_segment,'''confirmada_sap''')=0
++       OR strpos(v_outer_segment,'''etiquetada''')=0
++       OR strpos(v_outer_segment,'''enviada_sap''')=0
++       OR strpos(v_inner_segment,'''vinculado''')=0
++       OR strpos(v_inner_segment,'''enviado_sap''')=0
++       OR strpos(v_inner_segment,'''confirmado_sap''')=0 THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_PREDICADOS';
++    END IF;
++
++    SELECT COALESCE(array_agg(DISTINCT matches[1] ORDER BY matches[1]),ARRAY[]::text[])
++      INTO v_literals
++      FROM regexp_matches(v_definition,'''([^'']+)''','g') AS rm(matches);
++
++    IF v_literals IS DISTINCT FROM ARRAY[
++        'confirmada_sap','confirmado_sap','enviada_sap',
++        'enviado_sap','etiquetada','vinculado'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_STATUS_EXTRAS_OU_AUSENTES status=%',
++          v_literals;
++    END IF;
++
++    SELECT
++      (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL)
++      + (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND col_description(a.attrelid,a.attnum) IS NOT NULL)
++      + (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class=v_view_oid AND r.rulename<>'_RETURN')
++      + (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid=v_view_oid AND NOT t.tgisinternal)
++      INTO v_forbidden;
++
++    IF v_forbidden<>0 THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_METADATA_EXTRA quantidade=%',
++          v_forbidden;
++    END IF;
++
++    SELECT COALESCE(cardinality(c.relacl),0) INTO v_grants
++      FROM pg_class c
++     WHERE c.oid=v_view_oid;
++
++    PERFORM * FROM desenvolvimento.vw_hu_caixas_sem_palete LIMIT 1;
++    RAISE NOTICE
++      'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_VIEW_SEMANTICA_APROVADA owner=% comentario_presente=% grants_explicitos=% colunas=% dependencias=%',
++      v_owner,v_comment IS NOT NULL,v_grants,cardinality(v_columns),v_references;
++END
++$gaia_view_semantic$;
+ DO $gaia$
+ DECLARE v_role record; v_functions integer; v_triggers integer; v_indexes integer; v_history_open bigint; v_public_execute integer; v_app_execute integer;
+ BEGIN
+     SELECT * INTO v_role FROM pg_roles WHERE rolname='fugapet_dev_app';
+     IF v_role.rolsuper OR v_role.rolcreatedb OR v_role.rolcreaterole OR v_role.rolreplication OR v_role.rolbypassrls
+        OR has_schema_privilege('fugapet_dev_app','desenvolvimento','CREATE') THEN
+-        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_ROLE_INSEGURA';
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_ROLE_INSEGURA';
+     END IF;
+     IF has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','INSERT')
+        OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_pesagem','INSERT')
+@@ -2445,7 +2580,7 @@ BEGIN
+        OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_integracao_sap','INSERT')
+        OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_integracao_sap','UPDATE')
+        OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_integracao_sap','DELETE') THEN
+-        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_PRIVILEGIOS_DIRETOS_INDEVIDOS';
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_PRIVILEGIOS_DIRETOS_INDEVIDOS';
+     END IF;
+ 
+     IF EXISTS (
+@@ -2464,7 +2599,7 @@ BEGIN
+       ) e(tabela,coluna)
+       WHERE NOT has_column_privilege('fugapet_dev_app',format('desenvolvimento.%I',e.tabela),e.coluna,'INSERT')
+     ) THEN
+-        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_GRANTS_COLUNA_AUSENTES';
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_GRANTS_COLUNA_AUSENTES';
+     END IF;
+     IF has_column_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','codigo_hu_caixa','INSERT')
+        OR has_column_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','status_hu_caixa','INSERT')
+@@ -2472,7 +2607,7 @@ BEGIN
+        OR has_column_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','situacao_hu_caixa','INSERT')
+        OR has_column_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_pesagem','codigo_hu_caixa_pesagem','INSERT')
+        OR has_column_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_pesagem','situacao_hu_caixa_pesagem','INSERT') THEN
+-        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_GRANTS_COLUNA_SISTEMICA';
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_GRANTS_COLUNA_SISTEMICA';
+     END IF;
+ 
+     IF EXISTS (
+@@ -2504,7 +2639,7 @@ BEGIN
+            WHERE e.tabela=c.table_name AND e.coluna=c.column_name
+          )
+     ) THEN
+-        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_GRANTS_COLUNA_FORA_DA_LISTA';
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_GRANTS_COLUNA_FORA_DA_LISTA';
+     END IF;
+ 
+     SELECT count(*) INTO v_functions FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='desenvolvimento' AND p.proname LIKE 'fn_hu_caixa%';
+@@ -2524,15 +2659,15 @@ BEGIN
+        AND p.proname IN ('fn_hu_caixa_finalizar_local','fn_hu_caixa_salvar_preview','fn_hu_caixa_aguardar_autorizacao','fn_hu_caixa_autorizar_envio','fn_hu_caixa_claim_envio','fn_hu_caixa_registrar_sucesso','fn_hu_caixa_registrar_erro','fn_hu_caixa_registrar_timeout','fn_hu_caixa_confirmar_reconciliacao','fn_hu_caixa_registrar_reconciliacao_nao_encontrada','fn_hu_caixa_bloquear_configuracao','fn_hu_caixa_cancelar','fn_hu_caixa_liberar_reprocessamento')
+        AND has_function_privilege('fugapet_dev_app',p.oid,'EXECUTE');
+     IF v_functions < 19 OR v_triggers<>5 OR v_indexes<>12 OR v_history_open<>0 OR v_public_execute<>0 OR v_app_execute<>13 THEN
+-        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_REPROVADA_POSTCHECK funcoes=% triggers=% indices=% historico_aberto=% public_execute=% app_execute=%/13',v_functions,v_triggers,v_indexes,v_history_open,v_public_execute,v_app_execute;
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_REPROVADA_POSTCHECK funcoes=% triggers=% indices=% historico_aberto=% public_execute=% app_execute=%/13',v_functions,v_triggers,v_indexes,v_history_open,v_public_execute,v_app_execute;
+     END IF;
+-    RAISE NOTICE 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_APLICADA_COM_SUCESSO';
++    RAISE NOTICE 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_APLICADA_COM_SUCESSO';
+     RAISE NOTICE 'CLAIM_TOKEN=IMPLEMENTADO';
+     RAISE NOTICE 'UPDATE_DIRETO_ROLE_APLICACAO=AUSENTE';
+     RAISE NOTICE 'CREATE_SCHEMA_ROLE_APLICACAO=AUSENTE';
+ END $gaia$;
+ 
+ COMMIT;
+-\echo 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV8_APLICADA_COM_SUCESSO'
+-\echo 'OK - incremental 044 DEV REV8 aplicado sem dados produtivos'
++\echo 'CLASSIFICACAO_OFICIAL=PROPOSTA_044_DEV_REV9_APLICADA_COM_SUCESSO'
++\echo 'OK - incremental 044 DEV REV9 aplicado sem dados produtivos'
+ \endif
+
+====================================================================
+ARQUIVO: 044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql
+====================================================================
+warning: in the working copy of 'C:\tmp\fugapet_044_rev8_audit_20260806\044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'C:\tmp\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+diff --git "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql" "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql"
+index 1bffc62..eaabaa1 100644
+--- "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql"
++++ "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql"
+@@ -4,9 +4,9 @@
+ \pset format aligned
+ \pset null '<NULL>'
+ 
+--- FugaPET - Incremental 044 DEV - VALIDACAO REV8
++-- FugaPET - Incremental 044 DEV - VALIDACAO REV9
+ -- Dados e grants temporarios dentro de transacao. ROLLBACK final obrigatorio.
+--- Compatibilidade operacional REV8: PostgreSQL major 15, versao minima 15.5.
++-- Compatibilidade operacional REV9: PostgreSQL major 15, versao minima 15.5.
+ -- Nenhuma sequence deve avancar e nenhum dado ou privilegio temporario deve permanecer.
+ 
+ SELECT count(*) AS hu_antes FROM desenvolvimento.hu_caixa \gset
+@@ -105,7 +105,7 @@ BEGIN
+  v_major := v_version_num / 10000;
+  IF v_major <> 15 OR v_version_num < 150005 THEN
+    RAISE EXCEPTION
+-     'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV8_BLOQUEADA_POSTGRESQL_INCOMPATIVEL major_atual=% versao_num_atual=% major_esperado=15 versao_minima=15.5',
++     'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_BLOQUEADA_POSTGRESQL_INCOMPATIVEL major_atual=% versao_num_atual=% major_esperado=15 versao_minima=15.5',
+      v_major,
+      v_version_num;
+  END IF;
+@@ -113,7 +113,7 @@ BEGIN
+    RAISE EXCEPTION 'VALIDACAO_044_EXIGE_USUARIO_E_BALANCA_ATIVOS';
+  END IF;
+  IF current_database()<>'fuga_jales_local_desenvolvimento' OR current_user<>'postgres' THEN
+-   RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV8_BLOQUEADA_AMBIENTE_OU_EXECUTOR';
++   RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_BLOQUEADA_AMBIENTE_OU_EXECUTOR';
+  END IF;
+  IF has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','INSERT')
+     OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_pesagem','INSERT')
+@@ -385,7 +385,6 @@ DECLARE
+     v_grants jsonb;
+     v_columns jsonb;
+     v_expected tmp_044_view_metadata%ROWTYPE;
+-    v_forbidden integer;
+ BEGIN
+     SELECT pg_get_userbyid(c.relowner),obj_description(c.oid,'pg_class'),pg_get_viewdef(c.oid,true)
+       INTO v_owner,v_comment,v_definition
+@@ -411,28 +410,156 @@ BEGIN
+     SELECT * INTO v_expected FROM tmp_044_view_metadata;
+     IF v_owner IS DISTINCT FROM v_expected.view_owner
+        OR v_comment IS DISTINCT FROM v_expected.view_comment
+-       OR v_definition IS DISTINCT FROM v_expected.view_definition
+        OR v_grants IS DISTINCT FROM v_expected.grants_signature
+        OR v_columns IS DISTINCT FROM v_expected.columns_signature THEN
+-        RAISE EXCEPTION 'VIEW_METADATA_DIVERGENTE owner=%/% comentario_igual=% definicao_igual=% grants_iguais=% colunas_iguais=%',
++        RAISE EXCEPTION 'VIEW_METADATA_DIVERGENTE owner=%/% comentario_igual=% grants_iguais=% colunas_iguais=%',
+           v_expected.view_owner,v_owner,
+           v_comment IS NOT DISTINCT FROM v_expected.view_comment,
+-          v_definition IS NOT DISTINCT FROM v_expected.view_definition,
+           v_grants IS NOT DISTINCT FROM v_expected.grants_signature,
+           v_columns IS NOT DISTINCT FROM v_expected.columns_signature;
+     END IF;
+-    IF position('hu_palete_item' IN lower(v_definition))=0 THEN
+-        RAISE EXCEPTION 'VIEW_REGRA_DE_PALETE_NAO_PRESERVADA';
++    RAISE NOTICE 'VIEW_DEFINICAO_TEXTUAL_IGUAL=%',
++      v_definition IS NOT DISTINCT FROM v_expected.view_definition;
++END $gaia$;
++DO $gaia_view_semantic$
++DECLARE
++    v_view_oid oid;
++    v_schema name;
++    v_view_name name;
++    v_owner name;
++    v_comment text;
++    v_definition text;
++    v_compact text;
++    v_columns text[];
++    v_references text[];
++    v_literals text[];
++    v_outer_segment text;
++    v_inner_segment text;
++    v_pos_outer integer;
++    v_pos_not_exists integer;
++    v_pos_inner integer;
++    v_forbidden integer;
++    v_grants integer;
++BEGIN
++    SELECT c.oid,n.nspname,c.relname,pg_get_userbyid(c.relowner),obj_description(c.oid,'pg_class')
++      INTO v_view_oid,v_schema,v_view_name,v_owner,v_comment
++      FROM pg_class c
++      JOIN pg_namespace n ON n.oid=c.relnamespace
++     WHERE n.nspname='desenvolvimento'
++       AND c.relname='vw_hu_caixas_sem_palete'
++       AND c.relkind='v';
++
++    IF v_view_oid IS NULL OR v_schema<>'desenvolvimento' OR v_view_name<>'vw_hu_caixas_sem_palete' THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_IDENTIDADE';
++    END IF;
++
++    SELECT COALESCE(array_agg(a.attname::text ORDER BY a.attnum),ARRAY[]::text[])
++      INTO v_columns
++      FROM pg_attribute a
++     WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped;
++
++    IF v_columns IS DISTINCT FROM ARRAY[
++        'codigo_hu_caixa','hu_caixa','material','numero_caixa','peso_bruto',
++        'peso_liquido','peso_tara','unidade_peso','status_hu_caixa',
++        'criada_sap_em','hu_caixa_criado_em'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_COLUNAS esperado=11 atual=% nomes=%',
++          cardinality(v_columns),v_columns;
++    END IF;
++
++    SELECT COALESCE(
++        array_agg(DISTINCT format('%s.%s',rn.nspname,rc.relname)
++                  ORDER BY format('%s.%s',rn.nspname,rc.relname)),
++        ARRAY[]::text[])
++      INTO v_references
++      FROM pg_rewrite r
++      JOIN pg_depend d
++        ON d.classid='pg_rewrite'::regclass
++       AND d.objid=r.oid
++       AND d.refclassid='pg_class'::regclass
++      JOIN pg_class rc ON rc.oid=d.refobjid
++      JOIN pg_namespace rn ON rn.oid=rc.relnamespace
++     WHERE r.ev_class=v_view_oid
++       AND r.rulename='_RETURN'
++       AND rc.oid<>v_view_oid
++       AND rc.relkind IN ('r','p','v','m','f');
++
++    IF v_references IS DISTINCT FROM ARRAY[
++        'desenvolvimento.hu_caixa',
++        'desenvolvimento.hu_palete_item'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_DEPENDENCIAS referencias=%',
++          v_references;
++    END IF;
++
++    v_definition:=lower(pg_get_viewdef(v_view_oid,false));
++    v_compact:=regexp_replace(
++        replace(replace(replace(v_definition,'"',''),'(',''),')',''),
++        '\s+','','g');
++
++    v_pos_outer:=strpos(v_compact,'status_hu_caixa');
++    v_pos_not_exists:=strpos(v_compact,'notexists');
++    v_pos_inner:=strpos(v_compact,'status_vinculo');
++
++    IF v_pos_outer=0 OR v_pos_not_exists=0 OR v_pos_inner=0
++       OR NOT (v_pos_outer<v_pos_not_exists AND v_pos_not_exists<v_pos_inner) THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_ESTRUTURA_FILTROS';
+     END IF;
++
++    v_outer_segment:=substring(v_compact FROM v_pos_outer FOR v_pos_not_exists-v_pos_outer);
++    v_inner_segment:=substring(v_compact FROM v_pos_inner);
++
++    IF strpos(v_compact,'situacao_hu_caixa=true')=0
++       OR strpos(v_compact,'situacao_hu_palete_item=true')=0
++       OR strpos(v_compact,'hpi.codigo_hu_caixa=hc.codigo_hu_caixa')=0
++       OR strpos(v_compact,'notexists')=0
++       OR strpos(v_outer_segment,'''confirmada_sap''')=0
++       OR strpos(v_outer_segment,'''etiquetada''')=0
++       OR strpos(v_outer_segment,'''enviada_sap''')=0
++       OR strpos(v_inner_segment,'''vinculado''')=0
++       OR strpos(v_inner_segment,'''enviado_sap''')=0
++       OR strpos(v_inner_segment,'''confirmado_sap''')=0 THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_PREDICADOS';
++    END IF;
++
++    SELECT COALESCE(array_agg(DISTINCT matches[1] ORDER BY matches[1]),ARRAY[]::text[])
++      INTO v_literals
++      FROM regexp_matches(v_definition,'''([^'']+)''','g') AS rm(matches);
++
++    IF v_literals IS DISTINCT FROM ARRAY[
++        'confirmada_sap','confirmado_sap','enviada_sap',
++        'enviado_sap','etiquetada','vinculado'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_STATUS_EXTRAS_OU_AUSENTES status=%',
++          v_literals;
++    END IF;
++
+     SELECT
+-      (SELECT count(*) FROM pg_attribute a WHERE a.attrelid='desenvolvimento.vw_hu_caixas_sem_palete'::regclass AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL)
+-      + (SELECT count(*) FROM pg_attribute a WHERE a.attrelid='desenvolvimento.vw_hu_caixas_sem_palete'::regclass AND a.attnum>0 AND NOT a.attisdropped AND col_description(a.attrelid,a.attnum) IS NOT NULL)
+-      + (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class='desenvolvimento.vw_hu_caixas_sem_palete'::regclass AND r.rulename<>'_RETURN')
+-      + (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid='desenvolvimento.vw_hu_caixas_sem_palete'::regclass AND NOT t.tgisinternal)
++      (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL)
++      + (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND col_description(a.attrelid,a.attnum) IS NOT NULL)
++      + (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class=v_view_oid AND r.rulename<>'_RETURN')
++      + (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid=v_view_oid AND NOT t.tgisinternal)
+       INTO v_forbidden;
+-    IF v_forbidden<>0 THEN RAISE EXCEPTION 'VIEW_METADATA_ADICIONAL_NAO_PRESERVAVEL'; END IF;
+-END $gaia$;
+ 
++    IF v_forbidden<>0 THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_METADATA_EXTRA quantidade=%',
++          v_forbidden;
++    END IF;
++
++    SELECT COALESCE(cardinality(c.relacl),0) INTO v_grants
++      FROM pg_class c
++     WHERE c.oid=v_view_oid;
++
++    PERFORM * FROM desenvolvimento.vw_hu_caixas_sem_palete LIMIT 1;
++    RAISE NOTICE
++      'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_VIEW_SEMANTICA_APROVADA owner=% comentario_presente=% grants_explicitos=% colunas=% dependencias=%',
++      v_owner,v_comment IS NOT NULL,v_grants,cardinality(v_columns),v_references;
++END
++$gaia_view_semantic$;
+ DO $gaia$ BEGIN
+  IF EXISTS(SELECT 1 FROM desenvolvimento.hu_caixa_integracao_sap WHERE codigo_hu_caixa BETWEEN -440307 AND -440301 AND finalizado_em IS NULL) THEN RAISE EXCEPTION 'HISTORICO_EVENTO_ABERTO'; END IF;
+  IF has_column_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','codigo_hu_caixa','INSERT')
+@@ -440,7 +567,7 @@ DO $gaia$ BEGIN
+     OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','INSERT')
+     OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa_pesagem','INSERT')
+     OR has_table_privilege('fugapet_dev_app','desenvolvimento.hu_caixa','UPDATE') THEN RAISE EXCEPTION 'PRIVILEGIO_TEMPORARIO_PERMANECEU'; END IF;
+- RAISE NOTICE 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV8_CONCLUIDA_COM_SUCESSO';
++ RAISE NOTICE 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_CONCLUIDA_COM_SUCESSO';
+  RAISE NOTICE 'CLAIM_ATOR_TERMINAL=VALIDADO';
+  RAISE NOTICE 'GRANTS_POR_COLUNA=VALIDADOS';
+  RAISE NOTICE 'PESAGEM_COMPLETA=VALIDADA';
+@@ -468,9 +595,9 @@ SELECT (
+   \echo 'RESIDUOS_VALIDACAO=0'
+   \echo 'SEQUENCES_AVANCADAS=0'
+ \else
+-  \echo 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV8_REPROVADA_RESIDUOS_GRANT_OU_SEQUENCE'
++  \echo 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_REPROVADA_RESIDUOS_GRANT_OU_SEQUENCE'
+   \quit 3
+ \endif
+ 
+-\echo 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV8_CONCLUIDA_COM_SUCESSO'
+-\echo 'OK - validacao 044 DEV REV8 concluida com ROLLBACK e zero residuos'
++\echo 'CLASSIFICACAO_OFICIAL=VALIDACAO_044_DEV_REV9_CONCLUIDA_COM_SUCESSO'
++\echo 'OK - validacao 044 DEV REV9 concluida com ROLLBACK e zero residuos'
+
+====================================================================
+ARQUIVO: 044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql
+====================================================================
+warning: in the working copy of 'C:\tmp\fugapet_044_rev8_audit_20260806\044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'C:\tmp\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql', LF will be replaced by CRLF the next time Git touches it
+diff --git "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql" "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql"
+index d6f87ae..4d03e4a 100644
+--- "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql"
++++ "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql"
+@@ -4,8 +4,8 @@
+ \pset format aligned
+ \pset null '<NULL>'
+ 
+--- FugaPET - Incremental 044 DEV - REV8
+--- Compatibilidade operacional REV8: PostgreSQL major 15, versao minima 15.5.
++-- FugaPET - Incremental 044 DEV - REV9
++-- Compatibilidade operacional REV9: PostgreSQL major 15, versao minima 15.5.
+ -- ROLLBACK oficial de contingencia.
+ -- NAO faz parte do fluxo normal e recusa perda silenciosa de caixas ou historicos.
+ 
+@@ -61,7 +61,7 @@ BEGIN
+             v_version_num;
+     END IF;
+ 
+-    -- REV8: o rollback so aceita o pacote integral e com assinaturas exatas.
++    -- REV9: o rollback so aceita o pacote integral e com assinaturas exatas.
+     v_aplicado :=
+         (SELECT count(*)=61 FROM (VALUES
+           ('hu_caixa','numero_ordem_producao'),('hu_caixa','item_ordem_producao'),('hu_caixa','codigo_caixa_local'),('hu_caixa','correlation_id'),
+@@ -353,11 +353,12 @@ CREATE TEMP TABLE gaia_044_rollback_view_snapshot (
+     view_owner name NOT NULL,
+     view_comment text,
+     column_signature jsonb NOT NULL,
+-    grants_sql text[]
++    grants_sql text[],
++    grants_signature text[]
+ ) ON COMMIT DROP;
+ 
+ INSERT INTO gaia_044_rollback_view_snapshot(
+-    view_definition,view_owner,view_comment,column_signature,grants_sql
++    view_definition,view_owner,view_comment,column_signature,grants_sql,grants_signature
+ )
+ SELECT
+     pg_get_viewdef(c.oid,true),
+@@ -380,6 +381,10 @@ SELECT
+       ) ORDER BY a.grantee,a.privilege_type,a.is_grantable)
+       FROM aclexplode(c.relacl) a
+       WHERE a.privilege_type<>'TRUNCATE'
++    ),
++    (
++      SELECT array_agg(u.acl::text ORDER BY u.acl::text)
++      FROM unnest(c.relacl) AS u(acl)
+     )
+ FROM pg_class c
+ JOIN pg_namespace n ON n.oid=c.relnamespace
+@@ -444,7 +449,7 @@ REVOKE SELECT
+ ON TABLE desenvolvimento.hu_caixa_integracao_sap
+ FROM fugapet_dev_app;
+ 
+--- Remove integralmente ACLs por coluna criadas pela REV8.
++-- Remove integralmente ACLs por coluna criadas pela REV9.
+ DO $gaia$
+ DECLARE v_col record;
+ BEGIN
+@@ -768,18 +773,24 @@ COMMENT ON COLUMN desenvolvimento.hu_caixa.peso_tara IS NULL;
+ COMMENT ON COLUMN desenvolvimento.hu_caixa.status_hu_caixa IS NULL;
+ 
+ 
+--- Restaurar exatamente a definicao capturada antes do DROP, sem alterar a regra de palete.
++-- Restaurar a definicao capturada e comprovar equivalencia estrutural e semantica.
+ DO $gaia$
+ DECLARE
+     v_definition text;
++    v_definition_after text;
+     v_owner name;
++    v_owner_after name;
+     v_comment text;
++    v_comment_after text;
+     v_column_signature jsonb;
+     v_sql text;
+     v_recreated_signature jsonb;
++    v_grants_before text[];
++    v_grants_signature_before text[];
++    v_grants_signature_after text[];
+ BEGIN
+-    SELECT view_definition,view_owner,view_comment,column_signature
+-      INTO v_definition,v_owner,v_comment,v_column_signature
++    SELECT view_definition,view_owner,view_comment,column_signature,grants_sql,grants_signature
++      INTO v_definition,v_owner,v_comment,v_column_signature,v_grants_before,v_grants_signature_before
+       FROM gaia_044_rollback_view_snapshot;
+ 
+     EXECUTE format(
+@@ -817,7 +828,7 @@ BEGIN
+ 
+     IF v_recreated_signature IS DISTINCT FROM v_column_signature THEN
+         RAISE EXCEPTION
+-          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_BLOQUEADO_VIEW_COLUNAS_DIVERGENTES esperado=% atual=%',
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_BLOQUEADO_VIEW_COLUNAS_DIVERGENTES esperado=% atual=%',
+           v_column_signature,v_recreated_signature;
+     END IF;
+ 
+@@ -835,18 +846,181 @@ BEGIN
+            )
+     ) THEN
+         RAISE EXCEPTION
+-          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_BLOQUEADO_VIEW_TIPOS_ANTERIORES_NAO_RESTAURADOS';
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_BLOQUEADO_VIEW_TIPOS_ANTERIORES_NAO_RESTAURADOS';
+     END IF;
+ 
+-    IF pg_get_viewdef('desenvolvimento.vw_hu_caixas_sem_palete'::regclass,true)
+-       IS DISTINCT FROM v_definition THEN
++    SELECT pg_get_userbyid(c.relowner),obj_description(c.oid,'pg_class'),pg_get_viewdef(c.oid,true)
++      INTO v_owner_after,v_comment_after,v_definition_after
++      FROM pg_class c
++      JOIN pg_namespace n ON n.oid=c.relnamespace
++     WHERE n.nspname='desenvolvimento'
++       AND c.relname='vw_hu_caixas_sem_palete'
++       AND c.relkind='v';
++
++    SELECT array_agg(u.acl::text ORDER BY u.acl::text)
++      INTO v_grants_signature_after
++      FROM pg_class c
++      JOIN pg_namespace n ON n.oid=c.relnamespace
++      JOIN LATERAL unnest(c.relacl) AS u(acl) ON true
++     WHERE n.nspname='desenvolvimento'
++       AND c.relname='vw_hu_caixas_sem_palete';
++
++    IF v_owner_after IS DISTINCT FROM v_owner
++       OR v_comment_after IS DISTINCT FROM v_comment
++       OR COALESCE(v_grants_signature_after,ARRAY[]::text[]) IS DISTINCT FROM
++          COALESCE(v_grants_signature_before,ARRAY[]::text[]) THEN
+         RAISE EXCEPTION
+-          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_BLOQUEADO_VIEW_DEFINICAO_DIVERGENTE';
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_BLOQUEADO_VIEW_METADATA_DIVERGENTE owner=%/% comentario_igual=% grants_iguais=%',
++          v_owner,v_owner_after,
++          v_comment_after IS NOT DISTINCT FROM v_comment,
++          COALESCE(v_grants_signature_after,ARRAY[]::text[]) IS NOT DISTINCT FROM
++          COALESCE(v_grants_signature_before,ARRAY[]::text[]);
+     END IF;
+ 
++    RAISE NOTICE 'VIEW_DEFINICAO_TEXTUAL_IGUAL=%',
++      v_definition_after IS NOT DISTINCT FROM v_definition;
+     PERFORM * FROM desenvolvimento.vw_hu_caixas_sem_palete LIMIT 1;
+ END
+ $gaia$;
++DO $gaia_view_semantic$
++DECLARE
++    v_view_oid oid;
++    v_schema name;
++    v_view_name name;
++    v_owner name;
++    v_comment text;
++    v_definition text;
++    v_compact text;
++    v_columns text[];
++    v_references text[];
++    v_literals text[];
++    v_outer_segment text;
++    v_inner_segment text;
++    v_pos_outer integer;
++    v_pos_not_exists integer;
++    v_pos_inner integer;
++    v_forbidden integer;
++    v_grants integer;
++BEGIN
++    SELECT c.oid,n.nspname,c.relname,pg_get_userbyid(c.relowner),obj_description(c.oid,'pg_class')
++      INTO v_view_oid,v_schema,v_view_name,v_owner,v_comment
++      FROM pg_class c
++      JOIN pg_namespace n ON n.oid=c.relnamespace
++     WHERE n.nspname='desenvolvimento'
++       AND c.relname='vw_hu_caixas_sem_palete'
++       AND c.relkind='v';
++
++    IF v_view_oid IS NULL OR v_schema<>'desenvolvimento' OR v_view_name<>'vw_hu_caixas_sem_palete' THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_IDENTIDADE';
++    END IF;
++
++    SELECT COALESCE(array_agg(a.attname::text ORDER BY a.attnum),ARRAY[]::text[])
++      INTO v_columns
++      FROM pg_attribute a
++     WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped;
++
++    IF v_columns IS DISTINCT FROM ARRAY[
++        'codigo_hu_caixa','hu_caixa','material','numero_caixa','peso_bruto',
++        'peso_liquido','peso_tara','unidade_peso','status_hu_caixa',
++        'criada_sap_em','hu_caixa_criado_em'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_COLUNAS esperado=11 atual=% nomes=%',
++          cardinality(v_columns),v_columns;
++    END IF;
++
++    SELECT COALESCE(
++        array_agg(DISTINCT format('%s.%s',rn.nspname,rc.relname)
++                  ORDER BY format('%s.%s',rn.nspname,rc.relname)),
++        ARRAY[]::text[])
++      INTO v_references
++      FROM pg_rewrite r
++      JOIN pg_depend d
++        ON d.classid='pg_rewrite'::regclass
++       AND d.objid=r.oid
++       AND d.refclassid='pg_class'::regclass
++      JOIN pg_class rc ON rc.oid=d.refobjid
++      JOIN pg_namespace rn ON rn.oid=rc.relnamespace
++     WHERE r.ev_class=v_view_oid
++       AND r.rulename='_RETURN'
++       AND rc.oid<>v_view_oid
++       AND rc.relkind IN ('r','p','v','m','f');
++
++    IF v_references IS DISTINCT FROM ARRAY[
++        'desenvolvimento.hu_caixa',
++        'desenvolvimento.hu_palete_item'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_DEPENDENCIAS referencias=%',
++          v_references;
++    END IF;
++
++    v_definition:=lower(pg_get_viewdef(v_view_oid,false));
++    v_compact:=regexp_replace(
++        replace(replace(replace(v_definition,'"',''),'(',''),')',''),
++        '\s+','','g');
++
++    v_pos_outer:=strpos(v_compact,'status_hu_caixa');
++    v_pos_not_exists:=strpos(v_compact,'notexists');
++    v_pos_inner:=strpos(v_compact,'status_vinculo');
++
++    IF v_pos_outer=0 OR v_pos_not_exists=0 OR v_pos_inner=0
++       OR NOT (v_pos_outer<v_pos_not_exists AND v_pos_not_exists<v_pos_inner) THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_ESTRUTURA_FILTROS';
++    END IF;
++
++    v_outer_segment:=substring(v_compact FROM v_pos_outer FOR v_pos_not_exists-v_pos_outer);
++    v_inner_segment:=substring(v_compact FROM v_pos_inner);
++
++    IF strpos(v_compact,'situacao_hu_caixa=true')=0
++       OR strpos(v_compact,'situacao_hu_palete_item=true')=0
++       OR strpos(v_compact,'hpi.codigo_hu_caixa=hc.codigo_hu_caixa')=0
++       OR strpos(v_compact,'notexists')=0
++       OR strpos(v_outer_segment,'''confirmada_sap''')=0
++       OR strpos(v_outer_segment,'''etiquetada''')=0
++       OR strpos(v_outer_segment,'''enviada_sap''')=0
++       OR strpos(v_inner_segment,'''vinculado''')=0
++       OR strpos(v_inner_segment,'''enviado_sap''')=0
++       OR strpos(v_inner_segment,'''confirmado_sap''')=0 THEN
++        RAISE EXCEPTION 'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_PREDICADOS';
++    END IF;
++
++    SELECT COALESCE(array_agg(DISTINCT matches[1] ORDER BY matches[1]),ARRAY[]::text[])
++      INTO v_literals
++      FROM regexp_matches(v_definition,'''([^'']+)''','g') AS rm(matches);
++
++    IF v_literals IS DISTINCT FROM ARRAY[
++        'confirmada_sap','confirmado_sap','enviada_sap',
++        'enviado_sap','etiquetada','vinculado'
++    ]::text[] THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_STATUS_EXTRAS_OU_AUSENTES status=%',
++          v_literals;
++    END IF;
++
++    SELECT
++      (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL)
++      + (SELECT count(*) FROM pg_attribute a WHERE a.attrelid=v_view_oid AND a.attnum>0 AND NOT a.attisdropped AND col_description(a.attrelid,a.attnum) IS NOT NULL)
++      + (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class=v_view_oid AND r.rulename<>'_RETURN')
++      + (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid=v_view_oid AND NOT t.tgisinternal)
++      INTO v_forbidden;
++
++    IF v_forbidden<>0 THEN
++        RAISE EXCEPTION
++          'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_REPROVADA_METADATA_EXTRA quantidade=%',
++          v_forbidden;
++    END IF;
++
++    SELECT COALESCE(cardinality(c.relacl),0) INTO v_grants
++      FROM pg_class c
++     WHERE c.oid=v_view_oid;
++
++    PERFORM * FROM desenvolvimento.vw_hu_caixas_sem_palete LIMIT 1;
++    RAISE NOTICE
++      'CLASSIFICACAO_OFICIAL=ROLLBACK_044_DEV_REV9_VIEW_SEMANTICA_APROVADA owner=% comentario_presente=% grants_explicitos=% colunas=% dependencias=%',
++      v_owner,v_comment IS NOT NULL,v_grants,cardinality(v_columns),v_references;
++END
++$gaia_view_semantic$;
+ 
+ DO $gaia$
+ DECLARE
+
+====================================================================
+ARQUIVO: README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt
+====================================================================
+warning: in the working copy of 'C:\tmp\fugapet_044_rev8_audit_20260806\README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'C:\tmp\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt', LF will be replaced by CRLF the next time Git touches it
+diff --git "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt" "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt"
+index 81d757a..f84f621 100644
+--- "a/C:\\tmp\\fugapet_044_rev8_audit_20260806\\README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt"
++++ "b/C:\\tmp\\044_produto_acabado_hu_caixa_GAIA_DEV_REV9\\README_044_PRODUTO_ACABADO_HU_CAIXA_GAIA.txt"
+@@ -1,15 +1,15 @@
+-FUGAPET - INCREMENTAL 044 DEV - REV8
++FUGAPET - INCREMENTAL 044 DEV - REV9
+ HU DE UMA CAIXA INDIVIDUAL DE PRODUTO ACABADO
+ Projeto: FugaPET - Sistema Local de Producao e Rastreabilidade PET
+ Responsavel: Michael Richard
+-Preparacao REV8: 2026-08-06
++Preparacao REV9: 2026-08-06
+ Agente: Gaia Dados V2
+ 
+ ==============================================================================
+ 1. CLASSIFICACAO E LIMITES DA ENTREGA
+ ==============================================================================
+-CLASSIFICACAO_DA_PREPARACAO=PACOTE_044_DEV_REV8_PREPARADO_PARA_AUDITORIA
+-REVISAO=REV8_ALINHAMENTO_DE_CLASSIFICACOES_OPERACIONAIS
++CLASSIFICACAO_DA_PREPARACAO=PACOTE_044_DEV_REV9_PREPARADO_PARA_AUDITORIA
++REVISAO=REV9_VALIDACAO_SEMANTICA_VIEW_HU_CAIXA
+ INCREMENTAL_PRESERVADO=044
+ AMBIENTE_ALVO_DOCUMENTAL=DEV
+ BANCO_ALVO_DOCUMENTAL=fuga_jales_local_desenvolvimento
+@@ -18,11 +18,11 @@ POSTGRESQL_ALVO_MAJOR=15
+ POSTGRESQL_VERSAO_MINIMA=15.5
+ POSTGRESQL_AMBIENTE_DEV_COMPROVADO=15.5
+ 
+-SQL_REV8_EXECUTADO=NAO
+-PREFLIGHT_REV8_EXECUTADO=NAO
+-PROPOSTA_REV8_EXECUTADA=NAO
+-VALIDACAO_REV8_EXECUTADA=NAO
+-ROLLBACK_REV8_EXECUTADO=NAO
++SQL_REV9_EXECUTADO=NAO
++PREFLIGHT_REV9_EXECUTADO=NAO
++PROPOSTA_REV9_EXECUTADA=NAO
++VALIDACAO_REV9_EXECUTADA=NAO
++ROLLBACK_REV9_EXECUTADO=NAO
+ BANCO_DEV_ACESSADO=NAO
+ HML_ACESSADO_OU_ALTERADO=NAO
+ PRD_ACESSADO_OU_ALTERADO=NAO
+@@ -42,7 +42,7 @@ SHA256_LOG_INTEGRAL_REV5=F5637A0F52EA81E11F754909C8D225442E9835EC6C7F8EA6345A7FF
+ HASH_LOG_REV5_VERIFICADO_PELA_GAIA=NAO
+ ORIGEM_HASH_LOG_REV5=VALOR_INFORMADO_NA_AUTORIZACAO_DE_MICHAEL_RICHARD
+ 
+-Nesta missao de emissao da REV8, o catalogo do DEV nao foi consultado, nenhum
++Nesta missao de emissao da REV9, o catalogo do DEV nao foi consultado, nenhum
+ SQL foi executado e nenhuma ferramenta PostgreSQL foi chamada. As tentativas
+ historicas das revisoes anteriores permanecem documentadas nas secoes REV6 e
+ REV7. O hash do log oficial da falha da PROPOSTA REV6 permanece registrado
+@@ -582,3 +582,84 @@ PRD_ACESSADO=NAO
+ COMMIT_GIT_EXECUTADO=NAO
+ PUSH_GIT_EXECUTADO=NAO
+ CLASSIFICACAO_DOCUMENTAL_REV8=PACOTE_044_DEV_REV8_PREPARADO_PARA_AUDITORIA
++====================================================================
++REV9 - VALIDACAO SEMANTICA DA VIEW DE HU DE CAIXA
++====================================================================
++
++PACOTE_BASE=044_produto_acabado_hu_caixa_GAIA_DEV_REV8.zip
++SHA256_PACOTE_BASE=55D4B5A0E6BDBB92A5FF489BD6D7F1B1B23FFBA3C216C5CF8EB3EC9E09732C5D
++SHA256_PROPOSTA_REV8_EXECUTADA=F16262133E7C2AF3D053D1AECF3894AAD1955E58388B35276093198A46C43A83
++LOG_OFICIAL=resultado_proposta_044_dev_rev8_20260806_155850_integral.txt
++SHA256_LOG_OFICIAL_INFORMADO=4961A78DE8CDEBB4FD144F588F41FB78275B10C3620C81FA8178A6C88159BCF9
++LOG_OFICIAL_LOCALIZADO_NESTA_MISSAO=NAO
++
++PROPOSTA_REV8_CODIGO_SAIDA_PSQL=3
++PROPOSTA_REV8_BEGIN_IDENTIFICADO=SIM
++PROPOSTA_REV8_COMMIT_CONFIRMADO=NAO
++PROPOSTA_REV8_ROLLBACK_CONFIRMADO=NAO
++PROPOSTA_REV8_ESTADO_TRANSACIONAL=INDETERMINADO
++PROPOSTA_REV8_REEXECUCAO=PROIBIDA
++ERRO_LITERAL=PROPOSTA_044_DEV_REV8_REPROVADA_VIEW_NAO_PRESERVADA
++OWNER_PRESERVADO=SIM
++COMENTARIO_PRESERVADO=SIM
++GRANTS_PRESERVADOS=SIM
++COMPARACAO_TEXTUAL_DEFINICAO=FALHOU
++
++CAUSA_RAIZ_ESTATICA:
++- a REV8 capturava pg_get_viewdef antes dos ALTER COLUMN TYPE e exigia igualdade
++  textual integral depois da recriacao;
++- a view projeta hc.material, hc.peso_bruto, hc.peso_liquido, hc.peso_tara e
++  hc.unidade_peso;
++- as respectivas colunas da tabela-base mudam de text/numeric(14,3) para
++  varchar(18)/numeric(15,3) e de text para varchar(3);
++- a arvore reanalisada pelo PostgreSQL pode deparsing casts ou coercoes de forma
++  diferente, embora a regra relacional permaneça equivalente;
++- owner, comentario e grants iguais, juntamente com definicao_igual=f, isolam
++  o bloqueio na representacao textual da definicao.
++
++VALIDACAO_SEMANTICA_REV9:
++- schema e nome exatos da view;
++- relkind de view, owner e comentario catalogados;
++- grants explicitos preservados dinamicamente na PROPOSTA, VALIDACAO e ROLLBACK;
++- exatamente 11 colunas com nomes e ordem aprovados;
++- dependencias relacionais exatamente em desenvolvimento.hu_caixa e
++  desenvolvimento.hu_palete_item;
++- situacao_hu_caixa=true;
++- status externos CONFIRMADA_SAP, ETIQUETADA e ENVIADA_SAP;
++- NOT EXISTS correlacionado por codigo_hu_caixa;
++- situacao_hu_palete_item=true;
++- status de vinculo VINCULADO, ENVIADO_SAP e CONFIRMADO_SAP;
++- conjunto total de literais sem status extras;
++- ausencia de ACL por coluna, comentarios por coluna, regras adicionais e
++  triggers nao internos;
++- abertura funcional por SELECT limitado.
++
++A igualdade textual de pg_get_viewdef permanece somente como NOTICE complementar
++e nao e criterio isolado de aprovacao ou bloqueio.
++
++CORRECAO_ACL_PRESERVADA:
++PREFLIGHT_ACLEXPLODE_RELACL=0
++PROPOSTA_ACLEXPLODE_RELACL=2
++VALIDACAO_ACLEXPLODE_RELACL=2
++ROLLBACK_ACLEXPLODE_RELACL=1
++PADRAO_ACL_INSEGURO=0
++
++REV9_EXECUCAO_AUTORIZADA=NAO
++PREFLIGHT_REV9_EXECUCAO_AUTORIZADA=NAO
++PROPOSTA_REV9_EXECUCAO_AUTORIZADA=NAO
++VALIDACAO_REV9_EXECUCAO_AUTORIZADA=NAO
++ROLLBACK_REV9_EXECUCAO_AUTORIZADA=NAO
++
++BANCO_ACESSADO=NAO
++SQL_EXECUTADO=NAO
++PSQL_EXECUTADO=NAO
++PG_DUMP_EXECUTADO=NAO
++PG_RESTORE_EXECUTADO=NAO
++SAP_ACESSADO=NAO
++CPI_ACESSADO=NAO
++CSHARP_ALTERADO=NAO
++HML_ACESSADO=NAO
++PRD_ACESSADO=NAO
++COMMIT_GIT_EXECUTADO=NAO
++PUSH_GIT_EXECUTADO=NAO
++CLASSIFICACAO_DOCUMENTAL_REV9=PACOTE_044_DEV_REV9_PREPARADO_PARA_AUDITORIA
+

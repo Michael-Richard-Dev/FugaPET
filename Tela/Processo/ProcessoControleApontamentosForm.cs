@@ -399,6 +399,20 @@ public partial class ProcessoControleApontamentosForm : Form
                     MessageBoxIcon.Warning);
                 break;
 
+            case CenarioLeituraApontamento.OperacaoAutomatica:
+                DefinirInstrucao(
+                    "Esta operação é automática no SAP. Leia o código de início de uma operação manual.");
+                MessageBox.Show(resultado.Mensagem, "Controle de Apontamentos",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                break;
+
+            case CenarioLeituraApontamento.ContratoRoteiroNaoResolvido:
+                DefinirInstrucao(
+                    "Não foi possível resolver o roteiro da operação no SAP. O apontamento está bloqueado.");
+                MessageBox.Show(resultado.Mensagem, "Controle de Apontamentos",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                break;
+
             default:
                 DefinirInstrucao(resultado.Mensagem);
                 MessageBox.Show(resultado.Mensagem, "Controle de Apontamentos",

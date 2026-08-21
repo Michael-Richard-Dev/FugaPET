@@ -1,4 +1,4 @@
-﻿bin/
+bin/
 obj/
 .vs/
 .claude/
@@ -12,6 +12,12 @@ configuracao.terminal.json
 !configuracao.terminal.exemplo.json
 configuracao.sap.json
 !configuracao.sap.exemplo.json
+configuracao.*.json.bak_*
+configuracao.*.json.backup*
+configuracao.*.json.old*
+*.env
+.env
+.env.*
 
 # Nota local com senha de exemplo para gerar hash do admin (nunca versionar)
 Gerar Hash para primeiro acesso.txt

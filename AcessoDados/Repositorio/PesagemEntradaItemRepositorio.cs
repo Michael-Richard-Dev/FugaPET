@@ -1,6 +1,7 @@
-using FugaPET_Dev.AcessoDados.Banco;
+﻿using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Comum;
 using FugaPET_Dev.Modelo;
+using FugaPET_Dev.Modelo.Entrada;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -25,7 +26,13 @@ public sealed class PesagemEntradaItemRepositorio : RepositorioBase
         const string sql = """
             SELECT (p.situacao_sap_pedido_compra AND p.ativo_sap) AS pedido_ativo,
                    (i.situacao_sap_pedido_compra_item AND i.ativo_sap) AS item_ativo,
-                   (length(trim(coalesce(i.codigo_produto, ''))) > 0) AS material_presente
+                   (length(trim(coalesce(i.codigo_produto, ''))) > 0) AS material_presente,
+                   p.numero_pedido,
+                   i.numero_item,
+                   i.codigo_produto,
+                   i.centro,
+                   i.deposito,
+                   i.unidade_medida
               FROM sap_pedido_compra_item i
               JOIN sap_pedido_compra p
                 ON p.codigo_sap_pedido_compra = i.codigo_sap_pedido_compra
@@ -46,7 +53,13 @@ public sealed class PesagemEntradaItemRepositorio : RepositorioBase
             Existe: true,
             PedidoAtivo: !leitor.IsDBNull(0) && leitor.GetBoolean(0),
             ItemAtivo: !leitor.IsDBNull(1) && leitor.GetBoolean(1),
-            MaterialPresente: !leitor.IsDBNull(2) && leitor.GetBoolean(2));
+            MaterialPresente: !leitor.IsDBNull(2) && leitor.GetBoolean(2),
+            NumeroPedido: leitor.IsDBNull(3) ? string.Empty : leitor.GetString(3),
+            NumeroItem: leitor.IsDBNull(4) ? string.Empty : leitor.GetString(4),
+            Material: leitor.IsDBNull(5) ? string.Empty : leitor.GetString(5),
+            Centro: leitor.IsDBNull(6) ? string.Empty : leitor.GetString(6),
+            Deposito: leitor.IsDBNull(7) ? string.Empty : leitor.GetString(7),
+            Unidade: leitor.IsDBNull(8) ? string.Empty : leitor.GetString(8));
     }
 
     /// <summary>
@@ -98,5 +111,3 @@ public sealed class PesagemEntradaItemRepositorio : RepositorioBase
     }
 }
 
-/// <summary>Resultado da validacao de um item de pedido para pesagem.</summary>
-public sealed record ValidacaoItemPesagem(bool Existe, bool PedidoAtivo, bool ItemAtivo, bool MaterialPresente);

@@ -33,12 +33,17 @@ public sealed class ProcessoControleApontamentosServico
     private readonly CodigoBarrasOperacaoServico _parser;
     private readonly IControleApontamentosAutorizacaoServico _autorizacao;
 
+    // GATE 048-E: resolucao READ-ONLY do roteiro (marcador PP_FORM). Fail-closed por padrao.
+    private readonly IProductionRoutingSapServico _roteiroServico;
+
     public ProcessoControleApontamentosServico()
         : this(
             FabricaProductionOrderSapServico.Criar(),
             () => new ControleApontamentosRepositorio(
                 new FabricaConexaoPostgreSql(LeitorConfiguracaoBancoPostgreSql.Carregar())),
-            new CodigoBarrasOperacaoServico())
+            new CodigoBarrasOperacaoServico(),
+            autorizacao: null,
+            roteiroServico: FabricaProductionRoutingSapServico.Criar())
     {
     }
 
@@ -46,12 +51,14 @@ public sealed class ProcessoControleApontamentosServico
         IProductionOrderSapServico ordemProducaoServico,
         Func<IControleApontamentosRepositorio> criarRepositorio,
         CodigoBarrasOperacaoServico? parser = null,
-        IControleApontamentosAutorizacaoServico? autorizacao = null)
+        IControleApontamentosAutorizacaoServico? autorizacao = null,
+        IProductionRoutingSapServico? roteiroServico = null)
     {
         _ordemProducaoServico = ordemProducaoServico ?? throw new ArgumentNullException(nameof(ordemProducaoServico));
         _criarRepositorio = criarRepositorio ?? throw new ArgumentNullException(nameof(criarRepositorio));
         _parser = parser ?? new CodigoBarrasOperacaoServico();
         _autorizacao = autorizacao ?? new ControleApontamentosAutorizacaoServico();
+        _roteiroServico = roteiroServico ?? new ProductionRoutingSapFailClosedServico();
     }
 
     /// <summary>Interpreta o código sem tocar em SAP/banco (eco imediato na tela e testes).</summary>
@@ -151,6 +158,40 @@ public sealed class ProcessoControleApontamentosServico
         }
 
         OperacaoOrdemProducaoSap operacao = resolucao.Operacao;
+
+        // GATE 048-E: SOMENTE operações com marcador PP_FORM (OperationStandardTextCode, via roteiro
+        // AUTORITATIVO da ProductionVersion) são manuais. O serviço é o DONO ÚNICO da regra; o roteiro
+        // não resolvido/ambíguo é fail-closed; a operação automática não gera apontamento nem abre tela.
+        RoteiroProducaoSap? roteiro = await _roteiroServico.ResolverRoteiroDaOrdemAsync(ordemSap, cancellationToken);
+        IReadOnlyList<OperacaoOrdemProducaoSap> operacoesManuais =
+            MarcadorOperacaoManualSap.FiltrarOperacoesManuais(ordemSap, roteiro);
+        OrdemProducaoSap ordemManual = ordemSap with { Operacoes = operacoesManuais };
+        ClassificacaoOperacaoManual classificacao =
+            MarcadorOperacaoManualSap.ClassificarOperacao(roteiro, operacao.Operacao);
+
+        if (classificacao == ClassificacaoOperacaoManual.ContratoNaoResolvido)
+        {
+            const string mensagem =
+                "Não foi possível resolver o roteiro (marcador PP_FORM) desta operação no SAP. "
+                + "O apontamento manual está bloqueado até a regularização.";
+            await AuditarAsync(codigo, usuario, estacao, "ROTEIRO_NAO_RESOLVIDO", mensagem, cancellationToken);
+            return ResultadoLeituraApontamento.Falha(
+                CenarioLeituraApontamento.ContratoRoteiroNaoResolvido, mensagem, codigo, ordemManual);
+        }
+
+        if (classificacao == ClassificacaoOperacaoManual.Automatica)
+        {
+            string mensagem =
+                $"A operação {operacao.Operacao} é automática no SAP e não exige apontamento manual no FugaPET.";
+            await AuditarAsync(codigo, usuario, estacao, "OPERACAO_AUTOMATICA", mensagem, cancellationToken);
+            return ResultadoLeituraApontamento.Falha(
+                CenarioLeituraApontamento.OperacaoAutomatica, mensagem, codigo, ordemManual);
+        }
+
+        // Manual: a partir daqui a OP usada (grid, sequência anterior/próxima) contém SÓ operações manuais;
+        // a operação lida carrega o marcador PP_FORM. A tela/Controller nunca conhecem essa regra.
+        ordemSap = ordemManual;
+        operacao = operacao with { CodigoTextoPadrao = MarcadorOperacaoManualSap.CodigoTextoPadraoManual };
 
         IControleApontamentosRepositorio repositorio = _criarRepositorio();
         if (!await EstruturaDisponivelSeguraAsync(repositorio, cancellationToken))

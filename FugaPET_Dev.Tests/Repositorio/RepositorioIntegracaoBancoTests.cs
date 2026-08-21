@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Seguranca;
 using Npgsql;
@@ -459,7 +459,7 @@ internal sealed class IntegrationFactAttribute : FactAttribute
         }
         else if (!BancoTesteIntegracao.DestrutivoAutorizado())
         {
-            // Sem autorizacao destrutiva explicita, PULA (nao falha) — a limpeza usa DELETE.
+            // Sem autorizacao destrutiva explicita, PULA (nao falha) - a limpeza usa DELETE.
             Skip =
                 $"Teste destrutivo ignorado: defina {BancoTesteIntegracao.VariavelPermitirDestrutivo}=true para autorizar.";
         }

@@ -1,8 +1,8 @@
 namespace FugaPET_Dev.Modelo.Entrada;
 
 /// <summary>
-/// Uma leitura/pesagem de um item do lancamento (desenvolvimento.entrada_produto_pesagem).
-/// Cada leitura e preservada; pesos em quilogramas.
+/// Uma leitura/pesagem de um item do lançamento (desenvolvimento.entrada_produto_pesagem).
+/// Cada leitura é preservada; pesos em quilogramas.
 /// </summary>
 public sealed record EntradaProdutoPesagem
 {
@@ -15,6 +15,11 @@ public sealed record EntradaProdutoPesagem
     public decimal PesoLiquidoKg { get; init; }
     public long? CodigoTara { get; init; }
     public long? CodigoBalanca { get; init; }
+
+    public long? CodigoEntradaProdutoLote { get; init; }
+    public string? NumeroLoteSnapshot { get; init; }
+    public DateTime? DataFabricacaoSnapshot { get; init; }
+    public DateTime? DataVencimentoSnapshot { get; init; }
 
     /// <summary>BALANCA ou MANUAL.</summary>
     public string Origem { get; init; } = "BALANCA";

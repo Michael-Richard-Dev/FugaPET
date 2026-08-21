@@ -20,6 +20,13 @@ public sealed record OrdemProducaoSap
     public bool Confirmada { get; init; }                             // OrderIsConfirmed == "X"
     public bool Excluida { get; init; }                               // OrderIsDeleted == "X"
 
+    /// <summary>
+    /// Versao de producao da OP (A_ProductionOrder_2.ProductionVersion). Chave AUTORITATIVA para
+    /// resolver o roteiro (via API_PRODUCTION_VERSION), nunca pela primeira ocorrencia de
+    /// ProductionRoutingMatlAssgmt. Vazia = fail-closed na classificacao PP_FORM (GATE 048-E REV2).
+    /// </summary>
+    public string VersaoProducao { get; init; } = string.Empty;       // ProductionVersion
+
     public DateTime? DataOrdem { get; init; }                         // MfgOrderScheduledStartDate / ... (defensivo)
     public string OrigemDataOrdem { get; init; } = string.Empty;      // campo SAP de origem da data (diagnostico)
 
@@ -75,6 +82,14 @@ public sealed record OperacaoOrdemProducaoSap
     public decimal QuantidadePrevista { get; init; }                 // OpPlannedTotalQuantity
     public decimal QuantidadeConfirmada { get; init; }               // OpTotalConfirmedYieldQty (pode nao vir)
     public string Unidade { get; init; } = string.Empty;            // OperationUnit
+
+    /// <summary>
+    /// Marcador SAP Standard Text Code (ProductionRoutingOperation.OperationStandardTextCode) do roteiro
+    /// AUTORITATIVO da OP. NAO vem de A_ProductionOrderOperation_2 (essa API nao expoe isoladamente): e
+    /// preenchido pelo SERVICO do Controle de Apontamentos apos cruzar a operacao com o roteiro. Valor
+    /// "PP_FORM" = operacao MANUAL FugaPET. NAO confundir com OperationControlProfile (YBP1/QM01...).
+    /// </summary>
+    public string CodigoTextoPadrao { get; init; } = string.Empty;   // OperationStandardTextCode (marcador PP_FORM)
 }
 
 /// <summary>Item da OP (to_ProductionOrderItem / A_ProductionOrderItem_2).</summary>

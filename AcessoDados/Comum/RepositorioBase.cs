@@ -55,6 +55,48 @@ public abstract class RepositorioBase
         }
     }
 
+
+    /// <summary>
+    /// Executa uma operacao de gravacao auditavel usando um usuario explicito ja capturado
+    /// pelo fluxo chamador. Nao consulta sessao global para definir app.usuario_id.
+    /// </summary>
+    protected async Task<T> ExecutarEmTransacaoAuditavelAsync<T>(
+        long codigoUsuario,
+        Func<NpgsqlConnection, NpgsqlTransaction, Task<T>> operacao,
+        CancellationToken cancellationToken = default)
+    {
+        if (codigoUsuario <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(codigoUsuario), "Codigo do usuario deve ser maior que zero.");
+        }
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlTransaction transacao = await conexao.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            await DefinirUsuarioAppAsync(conexao, transacao, codigoUsuario, cancellationToken);
+            T resultado = await operacao(conexao, transacao);
+            await transacao.CommitAsync(cancellationToken);
+            return resultado;
+        }
+        catch (Exception ex)
+        {
+            ExceptionDispatchInfo excecaoOriginal = ExceptionDispatchInfo.Capture(ex);
+            try
+            {
+                await transacao.RollbackAsync(cancellationToken);
+            }
+            catch
+            {
+                // Preserva a excecao original da operacao; rollback pode falhar se o provedor
+                // ja descartou a transacao apos erro de escrita.
+            }
+
+            excecaoOriginal.Throw();
+            throw;
+        }
+    }
     // Auditoria SEMPRE via fluxo transacional: use ExecutarEmTransacaoAuditavelAsync, que abre a
     // transacao e chama DefinirUsuarioAppAsync com a transacao. O set_config('app.usuario_id', ..., true)
     // e LOCAL a transacao; definir o usuario fora de uma transacao explicita nao garante o valor

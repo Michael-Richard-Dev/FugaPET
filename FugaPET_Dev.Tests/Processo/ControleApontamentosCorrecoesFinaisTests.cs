@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
@@ -652,7 +652,7 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
 
     private static ProcessoControleApontamentosServico Criar(
         SapFake sap, RepositorioFake repo, IControleApontamentosAutorizacaoServico autorizacao)
-        => new(sap, () => repo, null, autorizacao);
+        => new(sap, () => repo, null, autorizacao, new RoteiroManualFake());
 
     private static bool SempreConfirma(ConfirmacaoApontamento c) => true;
 
@@ -766,6 +766,24 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
         public bool PodeFinalizar() => _finalizar;
     }
 
+    private sealed class RoteiroManualFake : IProductionRoutingSapServico
+    {
+        public Task<RoteiroProducaoSap?> ResolverRoteiroDaOrdemAsync(
+            OrdemProducaoSap ordem, CancellationToken cancellationToken = default)
+            => Task.FromResult<RoteiroProducaoSap?>(new RoteiroProducaoSap
+            {
+                BillOfOperationsGroup = "TESTE",
+                BillOfOperationsVariant = "1",
+                Operacoes = ordem.Operacoes
+                    .Select(o => new OperacaoRoteiroSap
+                    {
+                        Operacao = o.Operacao,
+                        CodigoTextoPadrao = "PP_FORM",
+                        TextoPadraoObtido = true
+                    })
+                    .ToList()
+            });
+    }
     private sealed class SapFake : IProductionOrderSapServico
     {
         private readonly OrdemProducaoSap? _ordem;
@@ -870,3 +888,4 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
         }
     }
 }
+

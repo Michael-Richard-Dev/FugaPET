@@ -38,6 +38,10 @@ public sealed class EntradaProdutoController
 
     private readonly Func<bool> _ehAmbienteHomologacao;
     private readonly Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>> _carregarItensParaEnvio;
+
+    // Seam de leitura A_ProductPlant (IsBatchManagementRequired por material × centro): produção delega à
+    // fábrica; testes injetam um stub. Somente leitura; a Form/o controller nunca falam direto com HTTP.
+    private readonly Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>> _consultarProdutoCentroSap;
     private readonly Func<long, CancellationToken, Task<string?>> _obterStatusLancamento;
     private readonly Func<long, CancellationToken, Task<bool>> _reservarLancamentoParaEnvio;
     private readonly Func<CancellationToken, Task<DiagnosticoProntidaoIntegracaoSap>> _diagnosticarIntegracaoSap;
@@ -48,6 +52,7 @@ public sealed class EntradaProdutoController
         RastreabilidadeDocumentoMaterialSap?,
         CancellationToken,
         Task<ResultadoOperacao>> _atualizarStatusAposEnvioSap;
+    private readonly EntradaProdutoLotesOrquestrador _lotesOrquestrador;
 
     // Ctor padrao: a fabrica decide mock/real (a tela nao decide nem instancia servico SAP concreto).
     public EntradaProdutoController()
@@ -72,6 +77,7 @@ public sealed class EntradaProdutoController
         TaraController taraController,
         Func<bool>? ehAmbienteHomologacao = null,
         Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>>? carregarItensParaEnvio = null,
+        Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>>? consultarProdutoCentroSap = null,
         Func<long, CancellationToken, Task<string?>>? obterStatusLancamento = null,
         Func<long, CancellationToken, Task<bool>>? reservarLancamentoParaEnvio = null,
         Func<CancellationToken, Task<DiagnosticoProntidaoIntegracaoSap>>? diagnosticarIntegracaoSap = null,
@@ -81,7 +87,8 @@ public sealed class EntradaProdutoController
             CenarioEnvioSapEntrada,
             RastreabilidadeDocumentoMaterialSap?,
             CancellationToken,
-            Task<ResultadoOperacao>>? atualizarStatusAposEnvioSap = null)
+            Task<ResultadoOperacao>>? atualizarStatusAposEnvioSap = null,
+        EntradaProdutoLotesOrquestrador? lotesOrquestrador = null)
     {
         Sap = sap ?? throw new ArgumentNullException(nameof(sap));
         EntradaProduto = entradaProdutoServico ?? throw new ArgumentNullException(nameof(entradaProdutoServico));
@@ -94,6 +101,9 @@ public sealed class EntradaProdutoController
         _carregarItensParaEnvio = carregarItensParaEnvio
             ?? ((codigoLancamento, cancellationToken) =>
                 EntradaProduto.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken));
+        _consultarProdutoCentroSap = consultarProdutoCentroSap
+            ?? ((material, centro, cancellationToken) =>
+                FabricaProductPlantSapServico.Criar().ObterProdutoCentroAsync(material, centro, cancellationToken));
         _obterStatusLancamento = obterStatusLancamento
             ?? ((codigoLancamento, cancellationToken) =>
                 EntradaProduto.ObterStatusLancamentoAsync(codigoLancamento, cancellationToken));
@@ -104,7 +114,77 @@ public sealed class EntradaProdutoController
             diagnosticarIntegracaoSap ?? Sap.DiagnosticarProntidaoEscritaAsync;
         _atualizarStatusAposEnvioSap =
             atualizarStatusAposEnvioSap ?? EntradaProduto.AtualizarStatusAposEnvioSapAsync;
+        _lotesOrquestrador = lotesOrquestrador ?? new EntradaProdutoLotesOrquestrador();
     }
+
+    public EstadoOperacaoEntradaProdutoLotes IniciarOperacaoComLotes(
+        ContextoOperacaoEntradaProdutoLotes contexto,
+        IReadOnlyList<PedidoCompraSapItem> itensSap)
+        => _lotesOrquestrador.IniciarOperacao(contexto, itensSap);
+
+    public EstadoOperacaoEntradaProdutoLotes SelecionarItemOperacaoComLotes(long codigoSapPedidoCompraItem)
+        => _lotesOrquestrador.SelecionarItem(codigoSapPedidoCompraItem);
+
+    public EstadoOperacaoEntradaProdutoLotes ConfirmarLoteOperacaoComLotes(
+        long codigoSapPedidoCompraItem,
+        string? numeroLote,
+        DateTime? dataFabricacao,
+        DateTime? dataVencimento)
+        => _lotesOrquestrador.ConfirmarLote(
+            codigoSapPedidoCompraItem,
+            numeroLote,
+            dataFabricacao,
+            dataVencimento);
+
+    public EntradaProdutoPesagemEmMemoria RegistrarPesagemOperacaoComLotes(
+        long codigoSapPedidoCompraItem,
+        decimal pesoBrutoKg,
+        decimal pesoTaraKg,
+        long? codigoTara,
+        string origem,
+        long? codigoBalanca,
+        string? leituraOriginal = null,
+        DateTimeOffset? pesadoEm = null)
+        => _lotesOrquestrador.RegistrarPesagemNoLoteAtivo(
+            codigoSapPedidoCompraItem,
+            pesoBrutoKg,
+            pesoTaraKg,
+            codigoTara,
+            origem,
+            codigoBalanca,
+            leituraOriginal,
+            pesadoEm);
+
+    public int CancelarPesagensOperacaoComLotes(long codigoSapPedidoCompraItem)
+        => _lotesOrquestrador.CancelarPesagensDoLoteAtivo(codigoSapPedidoCompraItem);
+
+    public EntradaProdutoPesagemEmMemoria CancelarPesagemOperacaoComLotes(
+        long codigoSapPedidoCompraItem,
+        Guid codigoLocalPesagem)
+        => _lotesOrquestrador.CancelarPesagemDoLoteAtivo(codigoSapPedidoCompraItem, codigoLocalPesagem);
+
+    public IReadOnlyList<EntradaProdutoPesagemEmMemoria> ObterPesagensItemOperacaoComLotes(long codigoSapPedidoCompraItem)
+        => _lotesOrquestrador.ObterPesagensDoItem(codigoSapPedidoCompraItem);
+
+    public IReadOnlyList<EntradaProdutoPesagemEmMemoria> ObterPesagensLoteAtivoOperacaoComLotes(long codigoSapPedidoCompraItem)
+        => _lotesOrquestrador.ObterPesagensDoLoteAtivo(codigoSapPedidoCompraItem);
+
+    public EstadoOperacaoEntradaProdutoLotes FinalizarLoteOperacaoComLotes(long codigoSapPedidoCompraItem)
+        => _lotesOrquestrador.FinalizarLoteAtivo(codigoSapPedidoCompraItem);
+
+    public EntradaProdutoLancamentoComLotesPersistencia MontarLancamentoComLotesParaPersistencia()
+        => _lotesOrquestrador.MontarLancamentoComLotesParaPersistencia();
+
+    public Task<ResultadoPersistenciaEntradaComLotes> RegistrarOuRecuperarLancamentoComLotesAsync(
+        EntradaProdutoLancamentoComLotesPersistencia entrada,
+        CancellationToken cancellationToken = default)
+        => EntradaProduto.RegistrarOuRecuperarLancamentoComLotesAsync(entrada, cancellationToken);
+
+    public EstadoOperacaoEntradaProdutoLotes ObterEstadoOperacaoComLotes()
+        => _lotesOrquestrador.ObterEstado();
+
+    public void LimparOperacaoComLotes()
+        => _lotesOrquestrador.LimparOperacao();
 
     public async Task<DiagnosticoEnvioSapEntrada> DiagnosticarEnvioSapEntradaAsync(
         long? codigoLancamento,
@@ -276,15 +356,23 @@ public sealed class EntradaProdutoController
             return new ResultadoEnvioSapEntrada { Cenario = CenarioEnvioSapEntrada.LancamentoSemItens };
         }
 
-        // Pre-POST (etapa 5/6): bloqueia itens sem dados obrigatorios ou sem peso liquido positivo,
-        // sem inventar fallback nem conversao. Nenhuma chamada ao SAP acontece neste caminho.
-        ResultadoEnvioSapEntrada? bloqueioItens = ValidarItensParaEnvio(itens);
-        if (bloqueioItens is not null)
+        // Pre-POST: prepara as posicoes 101 de forma CONDICIONAL a administracao de lote SAP
+        // (A_ProductPlant / IsBatchManagementRequired, consultado 1x por material+centro). Bloqueia SEM POST
+        // quando faltam dados/datas obrigatorios OU quando a administracao de lote e indeterminada (nunca
+        // assume true/false). Material administrado por lote -> posicao por lote com Batch/datas; nao
+        // administrado -> consolida sem Batch/datas. Nenhuma chamada Material Document acontece aqui.
+        string numeroPedido = itens[0].NumeroPedido.Trim();
+        ResultadoPreparacaoPayloadEntrada preparacao =
+            await PreparadorPayloadMaterialDocumentEntrada.PrepararAsync(
+                codigoLancamento, numeroPedido, itens, _consultarProdutoCentroSap, cancellationToken);
+        if (preparacao.Bloqueio is not null)
         {
             Sap.RegistrarDiagnostico(
-                $"Envio SAP bloqueado (lancamento {codigoLancamento}): {bloqueioItens.Mensagem}");
-            return bloqueioItens;
+                $"Envio SAP bloqueado (lancamento {codigoLancamento}): {preparacao.Bloqueio.Mensagem}");
+            return preparacao.Bloqueio;
         }
+
+        IReadOnlyList<EntradaProdutoPosicaoMaterialDocument> posicoes = preparacao.Posicoes!;
 
         // Tarefa Entrada 23.2 (Ajuste 5): coerência quantidade SAP × peso líquido ANTES da reserva/POST.
         ResultadoEnvioSapEntrada? bloqueioQuantidade = ValidarCoerenciaQuantidadeSap(codigoLancamento, itens);
@@ -325,12 +413,10 @@ public sealed class EntradaProdutoController
             };
         }
 
-        // Um UNICO documento de material por lancamento, com todos os itens elegiveis (movimento 101).
-        // Material/Plant/StorageLocation/PurchaseOrder/PurchaseOrderItem vem do banco local.
-        // EntryUnit e a quantidade operacional da tela de balanca sao sempre KG/peso liquido.
-        string numeroPedido = itens[0].NumeroPedido.Trim();
+        // Um UNICO documento de material por lancamento (movimento 101), com as posicoes ja preparadas
+        // (uma por lote quando administrado por lote; consolidada quando nao administrado).
         MaterialDocumentSapRequest requisicao =
-            MontarRequisicaoMaterialDocument(numeroPedido, codigoLancamento, itens);
+            MontarRequisicaoMaterialDocument(numeroPedido, codigoLancamento, posicoes);
         string chaveNegocio = $"{numeroPedido}/{codigoLancamento}";
         RegistrarDiagnosticoEnvioKg(codigoLancamento, itens);
 
@@ -380,9 +466,13 @@ public sealed class EntradaProdutoController
             };
         }
 
+        // Status local e por ITEM (numero_item); como agora ha uma posicao por lote, varios itens do
+        // payload compartilham o mesmo numero_item — deduplica para o UPDATE de status nao repetir item.
         List<ResultadoItemEnvioSap> resultados = itens
-            .Select(item => new ResultadoItemEnvioSap(
-                item.NumeroItem, sucesso, resultadoSap.MensagemSanitizada))
+            .Select(item => item.NumeroItem)
+            .Distinct(StringComparer.Ordinal)
+            .Select(numeroItem => new ResultadoItemEnvioSap(
+                numeroItem, sucesso, resultadoSap.MensagemSanitizada))
             .ToList();
         CenarioEnvioSapEntrada cenario =
             sucesso ? CenarioEnvioSapEntrada.Enviado : CenarioEnvioSapEntrada.Falha;
@@ -492,43 +582,9 @@ public sealed class EntradaProdutoController
         };
     }
 
-    private static ResultadoEnvioSapEntrada? ValidarItensParaEnvio(
-        IReadOnlyList<EntradaProdutoItemEnvioSap> itens)
-    {
-        foreach (EntradaProdutoItemEnvioSap item in itens)
-        {
-            if (string.IsNullOrWhiteSpace(item.NumeroItem)
-                || string.IsNullOrWhiteSpace(item.Material)
-                || string.IsNullOrWhiteSpace(item.Centro)
-                || string.IsNullOrWhiteSpace(item.Deposito))
-            {
-                string descricao = string.IsNullOrWhiteSpace(item.NumeroItem)
-                    ? "(sem número)"
-                    : item.NumeroItem.Trim();
-                return new ResultadoEnvioSapEntrada
-                {
-                    Cenario = CenarioEnvioSapEntrada.DadosIncompletos,
-                    Total = itens.Count,
-                    Mensagem =
-                        $"Item {descricao} sem material, centro, depósito ou item do pedido. "
-                        + "Envio bloqueado."
-                };
-            }
-
-            if (item.PesoLiquidoKg <= 0m)
-            {
-                return new ResultadoEnvioSapEntrada
-                {
-                    Cenario = CenarioEnvioSapEntrada.DadosIncompletos,
-                    Total = itens.Count,
-                    Mensagem = $"Item {item.NumeroItem.Trim()} sem peso líquido positivo para envio SAP."
-                };
-            }
-        }
-
-        return null;
-    }
-
+    // A preparacao das posicoes e a validacao condicional (por administracao de lote SAP) ficam em
+    // PreparadorPayloadMaterialDocumentEntrada — nao ha mais uma validacao unica que exige lote/datas
+    // para todos os itens (isso quebrava material NAO administrado por lote: MM_IM_ODATA_API_MDOC/014).
 
     // Tarefa Entrada 23.2 (Ajuste 6): diagnóstico completo antes do POST 101 — peso bruto, tara (derivada
     // de bruto-líquido), tara em KG, peso líquido, QuantityInEntryUnit final e EntryUnit.
@@ -587,26 +643,36 @@ public sealed class EntradaProdutoController
         return null;
     }
 
+    // Monta UMA posicao (item) do documento de material 101 a partir de um lote/representante. comLote
+    // controla Batch/ManufactureDate/ShelfLifeExpirationDate (material ADMINISTRADO por lote no centro).
+    // Os literais do movimento 101 (101/B/EntryUnit KG/QuantityInEntryUnit) vivem AQUI, no controller.
+    internal static MaterialDocumentSapItemRequest MontarItemMaterialDocument(
+        string numeroPedido, EntradaProdutoItemEnvioSap item, bool comLote)
+        => new()
+        {
+            Material = item.Material!.Trim(),
+            Plant = item.Centro!.Trim(),
+            StorageLocation = item.Deposito!.Trim(),
+            GoodsMovementType = "101",
+            GoodsMovementRefDocType = "B", // referencia = Pedido de Compra (exigido pelo SAP no 101)
+            QuantityInEntryUnit = FormatarQuantidade(item.PesoLiquidoKg),
+            EntryUnit = "KG",
+            PurchaseOrder = numeroPedido,
+            PurchaseOrderItem = NormalizarItemSap(item.NumeroItem),
+            // Batch/datas SOMENTE quando o material e administrado por lote no centro (A_ProductPlant).
+            Batch = comLote && !string.IsNullOrWhiteSpace(item.NumeroLote) ? item.NumeroLote.Trim() : null,
+            ManufactureDate = comLote ? item.DataFabricacao : null,
+            ShelfLifeExpirationDate = comLote ? item.DataValidade : null
+        };
+
+    // Monta o documento 101 a partir das POSICOES ja preparadas (uma por lote quando administrado por
+    // lote; consolidada quando nao administrado). Batch/datas e agrupamento ja foram decididos pelo
+    // PreparadorPayloadMaterialDocumentEntrada com base em A_ProductPlant.
     private static MaterialDocumentSapRequest MontarRequisicaoMaterialDocument(
         string numeroPedido,
         long codigoLancamento,
-        IReadOnlyList<EntradaProdutoItemEnvioSap> itens)
+        IReadOnlyList<EntradaProdutoPosicaoMaterialDocument> posicoes)
     {
-        List<MaterialDocumentSapItemRequest> itensRequisicao = itens
-            .Select(item => new MaterialDocumentSapItemRequest
-            {
-                Material = item.Material!.Trim(),
-                Plant = item.Centro!.Trim(),
-                StorageLocation = item.Deposito!.Trim(),
-                GoodsMovementType = "101",
-                GoodsMovementRefDocType = "B", // referencia = Pedido de Compra (exigido pelo SAP no 101)
-                QuantityInEntryUnit = FormatarQuantidade(item.PesoLiquidoKg),
-                EntryUnit = "KG",
-                PurchaseOrder = numeroPedido,
-                PurchaseOrderItem = NormalizarItemSap(item.NumeroItem)
-            })
-            .ToList();
-
         DateTime hoje = DateTime.Today;
         return new MaterialDocumentSapRequest
         {
@@ -614,7 +680,7 @@ public sealed class EntradaProdutoController
             PostingDate = hoje,
             DocumentDate = hoje,
             MaterialDocumentHeaderText = MontarTextoCabecalho(numeroPedido, codigoLancamento),
-            Itens = itensRequisicao
+            Itens = posicoes.Select(posicao => posicao.Item).ToList()
         };
     }
 

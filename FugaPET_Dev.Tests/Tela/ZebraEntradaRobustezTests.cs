@@ -135,31 +135,34 @@ public sealed class ZebraEntradaRobustezTests
     }
 
     [Fact]
-    public void FalhaAposLeitura_DeveManterPesoEExibirDiagnosticoUtil()
+    public void FalhaAposLeitura_DeveManterServicoDeImpressaoLegadoMasFluxoLotesNaoImprime()
     {
         string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
+        string leitura = ExtrairMetodo(conteudo, "private async void ReadWeightLegend_Click", "private static string GetFriendlyErrorMessage");
 
         Assert.Contains("Peso registrado, mas etiqueta", conteudo, StringComparison.Ordinal);
         Assert.Contains("sem permiss", conteudo, StringComparison.Ordinal);
         Assert.Contains("DescreverImpressoraAtualAsync", conteudo, StringComparison.Ordinal);
         Assert.Contains("Use a reimpress", conteudo, StringComparison.Ordinal);
         Assert.Contains("IMPRESSAO_ETIQUETA_AUTOMATICA_ERRO", conteudo, StringComparison.Ordinal);
-        Assert.Contains("TentarImprimirEtiquetaAposLeituraAsync(label)", conteudo, StringComparison.Ordinal);
         Assert.Contains("=> TentarImprimirEtiquetaAutomaticaAsync(label, \"leitura de peso\")", conteudo, StringComparison.Ordinal);
+        Assert.Contains("RegistrarPesoLidoOperacaoComLotesAsync", leitura, StringComparison.Ordinal);
+        Assert.DoesNotContain("TentarImprimirEtiquetaAposLeituraAsync", leitura, StringComparison.Ordinal);
         Assert.Contains("return false;", conteudo, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PesagemMultipla_ImprimePorPesagemIndividual_SemConsolidado()
+    public void PesagemMultipla_Fase4E_RegistraPorPesagemSemImpressaoConsolidada()
     {
         string conteudo = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
+        string multipla = ExtrairMetodo(conteudo, "private async Task AbrirPesagemMultiplaParaLinhaAsync", "private async Task<bool> TentarReimprimirEtiquetaPesagemAsync");
 
-        // Impressão automática genérica ainda existe (usada por pesagem individual).
         Assert.Contains("TentarImprimirEtiquetaAutomaticaAsync(", conteudo, StringComparison.Ordinal);
-        // Regra definitiva: imprime por pesagem (peso líquido dela), não o total consolidado.
         Assert.Contains("ConstruirEtiquetaPorPesagem(", conteudo, StringComparison.Ordinal);
-        Assert.Contains("Pesagens atualizadas. Total do item:", conteudo, StringComparison.Ordinal);
-        // A expectativa antiga de etiqueta consolidada foi REMOVIDA.
+        Assert.Contains("Pesagens atualizadas no lote em", conteudo, StringComparison.Ordinal);
+        Assert.Contains("imprimirPesagemAsync: null", multipla, StringComparison.Ordinal);
+        Assert.Contains("reimprimirPesagemAsync: null", multipla, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstruirEtiquetaPorPesagem(linhaItem, pesagem)", multipla, StringComparison.Ordinal);
         Assert.DoesNotContain("Peso bruto total {form.PesoTotalTexto} registrado no item {itemPedido}. Etiqueta enviada para", conteudo, StringComparison.Ordinal);
         Assert.DoesNotContain("ConstruirDadosEtiquetaMateriaPrima(linhaAlvo)", conteudo, StringComparison.Ordinal);
     }
@@ -175,6 +178,14 @@ public sealed class ZebraEntradaRobustezTests
         Assert.Contains("GoodsMovementRefDocType = \"B\"", controller, StringComparison.Ordinal);
     }
 
+    private static string ExtrairMetodo(string conteudo, string inicio, string fim)
+    {
+        int inicioIndex = conteudo.IndexOf(inicio, StringComparison.Ordinal);
+        Assert.True(inicioIndex >= 0, $"Início não encontrado: {inicio}");
+        int fimIndex = conteudo.IndexOf(fim, inicioIndex + inicio.Length, StringComparison.Ordinal);
+        Assert.True(fimIndex > inicioIndex, $"Fim não encontrado: {fim}");
+        return conteudo[inicioIndex..fimIndex];
+    }
     private static string LerArquivo(params string[] partes)
         => File.ReadAllText(Path.Combine(RaizProjeto(), Path.Combine(partes)));
 

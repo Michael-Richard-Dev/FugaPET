@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 public sealed class ProdutoAcabadoPalete
 {
@@ -12,6 +12,8 @@ public sealed class ProdutoAcabadoPalete
     public string StorageLocation { get; init; } = string.Empty;
     public string PackagingMaterial { get; init; } = string.Empty;
     public IReadOnlyList<ProdutoAcabadoCaixa> Caixas { get; init; } = [];
+    public long? CodigoHuPalete { get; set; }
     public string HandlingUnitPalete { get; set; } = string.Empty;
-    public string StatusSap { get; set; } = "PENDENTE_SAP";
+    public string StatusSap { get; set; } = "RASCUNHO";
 }
+

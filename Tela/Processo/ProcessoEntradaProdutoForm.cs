@@ -1,6 +1,7 @@
-﻿using FugaPET_Dev.Modelo;
+using FugaPET_Dev.Modelo;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Modelo.IntegracaoSap;
+using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos;
 using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.Terminal;
@@ -101,6 +102,21 @@ public partial class ProcessoEntradaProdutoForm : Form
     private readonly Dictionary<long, global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro> _tarasPorItem = [];
     private IReadOnlyList<PedidoCompraSapItem> _itensPedidoCarregados = [];
     private long? _codigoLancamentoPersistido;
+
+    // Fase 4G: lotes finalizados em memória, mas a gravação local ainda não teve sucesso (falha/cancelamento).
+    // Enquanto true, o botão Parar continua habilitado para RETRY e nenhuma nova pesagem/lote é permitida.
+    private bool _lotesFinalizadosAguardandoPersistencia;
+
+    // Seam de persistência local por lotes (§2): produção usa o Controller; testes injetam delegate controlado.
+    // Retorna o resultado para distinguir gravação inédita × recuperação idempotente. A Form NÃO acessa o
+    // Repository diretamente e NÃO duplica Service/Controller.
+    private readonly Func<EntradaProdutoLancamentoComLotesPersistencia, CancellationToken, Task<ResultadoPersistenciaEntradaComLotes>> _registrarOuRecuperarLancamentoComLotes;
+
+    // Seam de diagnóstico de prontidão SAP (§5): produção delega ao Controller; testes injetam delegate
+    // controlado. A Form NUNCA acessa Repository/SAP diretamente — apenas pede o diagnóstico e reflete o
+    // resultado (botão/chip/tooltip) na UI. Nenhum POST ao SAP acontece por aqui.
+    private readonly Func<long?, CancellationToken, Task<DiagnosticoEnvioSapEntrada>> _diagnosticarEnvioSapEntrada;
+
     private readonly CancellationTokenSource _fechamentoTelaCts = new();
     private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController;
     private Task _envioSapTask = Task.CompletedTask;
@@ -110,6 +126,8 @@ public partial class ProcessoEntradaProdutoForm : Form
     private FiltroItensEntrada _filtroItensAtual = FiltroItensEntrada.Todos;
     private EstadoVisualIntegracaoSap _estadoIntegracaoSapAtual = EstadoVisualIntegracaoSap.AguardandoGravacaoLocal;
     private bool _acessoDiretoValidado;
+    private bool _restaurandoPedidoOperacaoLotes;
+    private readonly Func<IWin32Window, ModoEntradaMaterial, DadosLoteEntrada?> _solicitarDadosLote;
 
     // Tarefa Entrada 24.1 (Ajuste 3): modo operacional (Matéria-Prima × Químicos) + configuração da tela.
     private readonly global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial _modoEntrada;
@@ -128,10 +146,20 @@ public partial class ProcessoEntradaProdutoForm : Form
     internal ProcessoEntradaProdutoForm(
         global::FugaPET_Dev.Controle.Processo.EntradaProdutoController controller,
         global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo =
-            global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima)
+            global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima,
+        Func<IWin32Window, ModoEntradaMaterial, DadosLoteEntrada?>? solicitarDadosLote = null,
+        Func<EntradaProdutoLancamentoComLotesPersistencia, CancellationToken, Task<ResultadoPersistenciaEntradaComLotes>>? registrarOuRecuperarLancamentoComLotes = null,
+        Func<long?, CancellationToken, Task<DiagnosticoEnvioSapEntrada>>? diagnosticarEnvioSapEntrada = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _modoEntrada = modo;
+        _solicitarDadosLote = solicitarDadosLote ?? SolicitarDadosLotePadrao;
+        // Produção: delega ao Controller (fronteira de persistência). Testes: delegate controlado sem banco.
+        _registrarOuRecuperarLancamentoComLotes =
+            registrarOuRecuperarLancamentoComLotes ?? _controller.RegistrarOuRecuperarLancamentoComLotesAsync;
+        // Produção: delega ao Controller (diagnóstico de prontidão SAP). Testes: delegate controlado sem SAP.
+        _diagnosticarEnvioSapEntrada =
+            diagnosticarEnvioSapEntrada ?? _controller.DiagnosticarEnvioSapEntradaAsync;
         _configuracaoTela = global::FugaPET_Dev.Modelo.Processo.ConfiguracaoTelaEntradaMaterialFactory.Criar(modo);
         _entradaServico = _controller.EntradaProduto;
         _balancaLeituraServico = _controller.BalancaLeitura;
@@ -186,7 +214,16 @@ public partial class ProcessoEntradaProdutoForm : Form
         {
             _consultaPedidoCts?.Cancel();
             _fechamentoTelaCts.Cancel();
+            _controller.LimparOperacaoComLotes();
         };
+    }
+
+    private static DadosLoteEntrada? SolicitarDadosLotePadrao(IWin32Window owner, ModoEntradaMaterial modoEntrada)
+    {
+        using EntradaProdutoDadosLoteForm form = new(modoEntrada);
+        return form.ShowDialog(owner) == DialogResult.OK
+            ? form.DadosConfirmados
+            : null;
     }
 
     private void AplicarContextoTerminalAutomatico()
@@ -418,13 +455,17 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void ProcessoProdutoAcabadoForm_FormClosing(object? sender, FormClosingEventArgs e)
     {
-        if (!_isProductionStarted)
+        // §13: bloqueia durante leitura ativa, persistência em andamento ou lotes aguardando retry. Depois do
+        // sucesso (_isProductionStarted=false e não aguardando) o fechamento é liberado.
+        if (!_isProductionStarted && !_lotesFinalizadosAguardandoPersistencia && !_finalizandoPesagem)
         {
             return;
         }
 
         e.Cancel = true;
-        statusLabel.Text = "Finalize a leitura antes de sair da tela.";
+        statusLabel.Text = _lotesFinalizadosAguardandoPersistencia
+            ? "Existe uma entrada por lotes finalizada em memória e ainda não gravada. Tente novamente a gravação antes de sair."
+            : "Finalize a leitura antes de sair da tela.";
     }
 
     private bool PodeAtualizarTela()
@@ -817,10 +858,33 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private async Task AtualizarProntidaoEnvioSapAsync()
     {
-        DiagnosticoEnvioSapEntrada diagnostico =
-            await _controller.DiagnosticarEnvioSapEntradaAsync(
+        DiagnosticoEnvioSapEntrada diagnostico;
+        try
+        {
+            diagnostico = await _diagnosticarEnvioSapEntrada(
                 _codigoLancamentoPersistido,
                 _fechamentoTelaCts.Token);
+        }
+        catch (OperationCanceledException) when (_fechamentoTelaCts.IsCancellationRequested)
+        {
+            // Fechamento da tela: não há UI a atualizar e nada foi enviado ao SAP; encerra silenciosamente.
+            return;
+        }
+        catch (Exception ex)
+        {
+            // §4/C: falha inesperada no diagnóstico NÃO envia SAP, NÃO apaga o lançamento local e NÃO congela
+            // a tela. Botão desabilitado, chip FALHA e motivo amigável/sanitizado no tooltip e no status.
+            // Registro de diagnóstico sanitizado (só o TIPO da exceção, nunca mensagem/credencial).
+            System.Diagnostics.Trace.TraceError(
+                $"PRONTIDAO_SAP_HML_ERRO em ProcessoEntradaProdutoForm: {ex.GetType().Name}");
+            string motivoFalha = GetFriendlyErrorMessage(ex);
+            productionActionsButton.Enabled = false;
+            _envioSapToolTip.SetToolTip(productionActionsButton, motivoFalha);
+            AtualizarEstadoVisualIntegracaoSap(EstadoVisualIntegracaoSap.Falha, motivoFalha);
+            statusLabel.Text =
+                $"Lançamento local {_codigoLancamentoPersistido} preservado. {motivoFalha}";
+            return;
+        }
 
         productionActionsButton.Visible = diagnostico.UsuarioTemPermissao;
         productionActionsButton.Enabled =
@@ -1329,7 +1393,15 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         if (keyData == Keys.F5)
         {
-            ToggleProductionFromSideButton_Click(iniciarLeituraButton, EventArgs.Empty);
+            // F5 = botão lateral Iniciar/Parar. Só dispara quando o botão está habilitado; durante
+            // persistência/retry/após persistido ele fica desabilitado, então o F5 é consumido sem efeito
+            // (não chama o seam, não muda _finalizandoPesagem/_lotesFinalizadosAguardandoPersistencia nem
+            // correlation_id). Apenas o painel Parar inicia a nova tentativa no retry.
+            if (iniciarLeituraButton.Enabled)
+            {
+                ToggleProductionFromSideButton_Click(iniciarLeituraButton, EventArgs.Empty);
+            }
+
             return true;
         }
 
@@ -1338,6 +1410,13 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void ToggleProductionFromSideButton_Click(object? sender, EventArgs e)
     {
+        // Guarda defensiva: nunca alternar leitura pelo botão lateral quando ele está desabilitado
+        // (persistência em andamento, retry aguardando ou lançamento já persistido).
+        if (!iniciarLeituraButton.Enabled)
+        {
+            return;
+        }
+
         if (_isProductionStarted)
         {
             StopProduction_Click(sender, e);
@@ -1361,22 +1440,29 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (!PedidoSelecionadoValido())
+        try
         {
-            statusLabel.Text = "Selecione um pedido antes de iniciar a leitura.";
-            MessageBox.Show(
-                "Selecione um pedido antes de iniciar a leitura.",
-                "Entrada de Produto",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-            AtualizarDisponibilidadeInicioLeitura();
-            return;
-        }
+            if (!GarantirOperacaoLotesIniciada())
+            {
+                return;
+            }
 
-        _isProductionStarted = true;
-        UpdateProductionState(true);
-        statusLabel.Text = "Leitura iniciada. Selecione o item e registre uma leitura.";
-        StartProductionDevicesWarmUp();
+            _isProductionStarted = true;
+            _codigoLancamentoPersistido = null;
+            UpdateProductionState(true);
+            AtualizarEstadoVisualIntegracaoSap(
+                EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
+                "operação por lotes em memória; SAP bloqueado nesta fase");
+            statusLabel.Text = "Leitura por lotes iniciada em memória. Selecione o item, confirme o lote e registre a pesagem.";
+        }
+        catch (Exception ex)
+        {
+            _isProductionStarted = false;
+            UpdateProductionState(false);
+            string mensagem = GetFriendlyErrorMessage(ex);
+            statusLabel.Text = mensagem;
+            MessageBox.Show(mensagem, "Entrada por lotes", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void StartProductionDevicesWarmUp()
@@ -1422,10 +1508,27 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
     }
 
+    private const string MensagemRetryPersistenciaLotes =
+        "Lotes finalizados em memória. A gravação local falhou. Clique em Parar para tentar novamente.";
+
+    private const string MensagemAguardarLeituraBalanca =
+        "Aguarde a conclusão da leitura da balança antes de parar a operação.";
+
+    // §6/§12: nenhuma nova pesagem/lote enquanto persistindo ou aguardando o retry da gravação local.
+    private bool PesagemBloqueadaNoFluxoLotes => _finalizandoPesagem || _lotesFinalizadosAguardandoPersistencia;
+
     private async void StopProduction_Click(object? sender, EventArgs e)
     {
-        if (!_isProductionStarted || _finalizandoPesagem)
+        // §4: permite retry mesmo com _isProductionStarted já false, desde que aguardando persistência.
+        if ((!_isProductionStarted && !_lotesFinalizadosAguardandoPersistencia) || _finalizandoPesagem)
         {
+            return;
+        }
+
+        // §5: não parar/persistir enquanto uma leitura serial da balança estiver pendente.
+        if (_isReadingWeight)
+        {
+            statusLabel.Text = MensagemAguardarLeituraBalanca;
             return;
         }
 
@@ -1436,27 +1539,486 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        _finalizandoPesagem = true;
+        // §5: async void = wrapper mínimo. Toda a orquestração (persistência local + reavaliação de prontidão
+        // SAP) vive no método Task testável abaixo. Anteparo final: nenhuma exceção pode escapar do async void —
+        // o lançamento local (se houve) permanece preservado e a tela continua operacional; nada é enviado ao SAP.
         try
         {
-            // Consolida enquanto o grid ainda preserva selecao, tara e metadados do item.
-            await GravarPesagensAsync();
+            await FinalizarPersistenciaEAtualizarProntidaoSapAsync();
         }
-        finally
+        catch (OperationCanceledException) when (_fechamentoTelaCts.IsCancellationRequested)
         {
-            _isProductionStarted = false;
-            _finalizandoPesagem = false;
-            UpdateProductionState(false);
+            // Fechamento da tela em andamento: nada a fazer.
         }
+        catch (Exception ex)
+        {
+            // Anteparo final do async void: registro sanitizado (só o TIPO) + mensagem amigável; nada de SAP.
+            System.Diagnostics.Trace.TraceError(
+                $"STOP_PRODUCTION_PRONTIDAO_ERRO em ProcessoEntradaProdutoForm: {ex.GetType().Name}");
+            statusLabel.Text = GetFriendlyErrorMessage(ex);
+        }
+    }
 
-        // Producao ja parada: revalida a prontidao de envio para liberar o botao
-        // "Enviar SAP HML". A 1a validacao acontece dentro de GravarPesagensAsync, quando
-        // _isProductionStarted ainda era true, o que mantinha o botao desabilitado mesmo
-        // com o estado visual "LIBERADO PARA ENVIO".
-        if (_codigoLancamentoPersistido is not null)
+    // §5: fluxo TESTÁVEL do botão Parar. (1) persiste localmente; (2) confirma sucesso local REAL;
+    // (3) reavalia a prontidão do envio SAP manual; (4) atualiza botão/chip/tooltip. NUNCA envia SAP
+    // automaticamente. Uma falha no diagnóstico NÃO perde o lançamento persistido nem congela a tela.
+    internal async Task FinalizarPersistenciaEAtualizarProntidaoSapAsync()
+    {
+        await ExecutarPersistenciaLotesAsync();
+
+        // Só reavalia prontidão quando a persistência local terminou com SUCESSO REAL:
+        // código atribuído, produção encerrada e sem retry pendente. Em falha/retry, não diagnostica.
+        if (_codigoLancamentoPersistido is not null
+            && !_isProductionStarted
+            && !_lotesFinalizadosAguardandoPersistencia)
         {
             await AtualizarProntidaoEnvioSapAsync();
         }
+    }
+
+    // §4/§5/§7/§11/§12: fluxo local idempotente do botão Parar. Extraído em Task para ser testável (STA) sem
+    // depender de async void. NÃO usa o fluxo legado (GravarPesagensAsync/FinalizarLeituraAsync/SalvarLancamento).
+    internal async Task ExecutarPersistenciaLotesAsync()
+    {
+        // §5: leitura serial pendente ⇒ não finaliza lote, não monta árvore, não chama o seam, não muda
+        // _finalizandoPesagem nem correlation_id. Apenas orienta o operador a aguardar.
+        if (_isReadingWeight)
+        {
+            statusLabel.Text = MensagemAguardarLeituraBalanca;
+            return;
+        }
+
+        if (_finalizandoPesagem)
+        {
+            return; // §12: apenas uma persistência por vez (protege clique duplo).
+        }
+
+        _finalizandoPesagem = true;
+        AtualizarControlesFluxoLotes(); // §3: reflete "persistência em andamento" imediatamente.
+        try
+        {
+            // §5: reentrante — na primeira passada valida e finaliza; no retry reconhece a árvore já finalizada.
+            if (!GarantirLotesProntosParaPersistencia())
+            {
+                return; // mensagem objetiva já publicada; mantém a leitura ativa.
+            }
+
+            // §3: o orquestrador é a única fonte da árvore por lotes (mesmas correlation_id no retry).
+            EntradaProdutoLancamentoComLotesPersistencia arvore =
+                _controller.MontarLancamentoComLotesParaPersistencia();
+
+            ResultadoPersistenciaEntradaComLotes resultado =
+                await _registrarOuRecuperarLancamentoComLotes(arvore, _fechamentoTelaCts.Token);
+
+            AplicarSucessoPersistenciaLotes(resultado);
+        }
+        catch (ErroOperacionalEsperadoException ex)
+        {
+            // §11.A: mensagem amigável; mantém operação; permite retry; não perde correlation_id.
+            MarcarAguardandoPersistencia(ex.Message);
+        }
+        catch (OperationCanceledException)
+        {
+            // §11.B: cancelamento (não durante o fechamento) preserva a árvore e permite retry.
+            if (!_fechamentoTelaCts.IsCancellationRequested)
+            {
+                MarcarAguardandoPersistencia(MensagemRetryPersistenciaLotes);
+            }
+        }
+        catch (Exception ex)
+        {
+            // §11.C: exceção inesperada — mensagem amigável; não marca como gravado; não perde a árvore.
+            MarcarAguardandoPersistencia(GetFriendlyErrorMessage(ex));
+        }
+        finally
+        {
+            _finalizandoPesagem = false;
+            // §3: reconstrói a interface a partir do estado final REAL (sucesso, retry ou leitura ativa).
+            AtualizarControlesFluxoLotes();
+        }
+    }
+
+    // §2/§3: ponto ÚNICO de atualização dos controles do fluxo por lotes. Recalcula tudo a partir dos campos
+    // de estado atuais (persistência, retry, leitura, persistido), sem depender de uma chamada anterior.
+    private void AtualizarControlesFluxoLotes() => UpdateProductionState(_isProductionStarted);
+
+    // §7: sucesso — só aqui atribui o código, encerra a leitura, limpa a operação e atualiza a interface.
+    private void AplicarSucessoPersistenciaLotes(ResultadoPersistenciaEntradaComLotes resultado)
+    {
+        _codigoLancamentoPersistido = resultado.CodigoLancamento;
+        _isProductionStarted = false;
+        _lotesFinalizadosAguardandoPersistencia = false;
+        UpdateProductionState(false);
+
+        string detalhe = resultado.PersistenciaRecuperada
+            ? $"lançamento {resultado.CodigoLancamento} recuperado com segurança"
+            : $"lançamento {resultado.CodigoLancamento} gravado por lotes";
+        AtualizarEstadoVisualLocal(EstadoVisualLocalEntrada.Gravado, detalhe);
+
+        // §9: SAP continua separado — apenas indica AGUARDANDO; nenhuma chamada de integração aqui.
+        AtualizarEstadoVisualIntegracaoSap(
+            EstadoVisualIntegracaoSap.AguardandoGravacaoLocal,
+            "envio ao SAP é uma ação separada e explícita");
+
+        statusLabel.Text = resultado.PersistenciaRecuperada
+            ? $"Lançamento local {resultado.CodigoLancamento} já havia sido gravado e foi recuperado com segurança."
+            : $"Lançamento local {resultado.CodigoLancamento} gravado com sucesso por lotes.";
+
+        // §7/§8: depois de salvar o código e atualizar o estado visual, limpa a operação em memória. A
+        // projeção visual do grid permanece para consulta; _codigoLancamentoPersistido é preservado.
+        _controller.LimparOperacaoComLotes();
+    }
+
+    // §6/§11: falha/cancelamento após finalização em memória. Preserva a árvore, mantém _isProductionStarted
+    // e _codigoLancamentoPersistido=null, habilita RETRY e bloqueia novas pesagens. A mensagem final SEMPRE
+    // orienta o operador a clicar novamente em Parar, sem duplicar quando já for a mensagem padrão.
+    private void MarcarAguardandoPersistencia(string mensagem)
+    {
+        _lotesFinalizadosAguardandoPersistencia = true;
+        AtualizarControlesFluxoLotes(); // §3: reflete "aguardando retry" (Parar habilitado, pesagem bloqueada).
+
+        string motivoSeguro = string.IsNullOrWhiteSpace(mensagem) ? string.Empty : mensagem.Trim();
+        string detalhe = motivoSeguro.Length == 0 || motivoSeguro.Contains(MensagemRetryPersistenciaLotes, StringComparison.Ordinal)
+            ? (motivoSeguro.Length == 0 ? MensagemRetryPersistenciaLotes : motivoSeguro)
+            : $"{motivoSeguro} {MensagemRetryPersistenciaLotes}";
+
+        AtualizarEstadoVisualLocal(EstadoVisualLocalEntrada.Pendente, detalhe);
+    }
+
+    // §5: garante que a árvore esteja pronta para persistir, de forma REENTRANTE.
+    //  A. lote ativo não finalizado: valida todos e só então finaliza (sem estado parcial).
+    //  B. lote já FinalizadoEmMemoria: considerado pronto (retry) — não finaliza de novo.
+    //  C. item sem lote: não impede a persistência quando outro item possui lote (excluído pelo orquestrador).
+    //  D. nenhuma árvore com lote/pesagem válida: não persiste, mantém leitura ativa e mostra mensagem.
+    private bool GarantirLotesProntosParaPersistencia()
+    {
+        EstadoOperacaoEntradaProdutoLotes estado = _controller.ObterEstadoOperacaoComLotes();
+
+        bool existeLoteFinalizadoValido = estado.Itens
+            .SelectMany(item => item.Lotes)
+            .Any(lote => lote.Estado == EstadoOperacionalLoteEntrada.FinalizadoEmMemoria
+                         && lote.QuantidadePesagensValidas > 0);
+
+        bool existeLoteAtivoPendente = estado.Itens.Any(item =>
+            item.CodigoLoteAtivoLocal is Guid ativo
+            && item.Lotes.Any(lote => lote.CodigoLocal == ativo
+                                      && lote.Estado != EstadoOperacionalLoteEntrada.FinalizadoEmMemoria));
+
+        // B: retry — árvore já integralmente finalizada e sem lote ativo pendente.
+        if (existeLoteFinalizadoValido && !existeLoteAtivoPendente)
+        {
+            return true;
+        }
+
+        // A: primeira passada — valida e finaliza os lotes ativos (separando validação de mutação).
+        return FinalizarLotesAtivosEmMemoria();
+    }
+
+    private bool GarantirOperacaoLotesIniciada()
+    {
+        if (!PedidoSelecionadoValido())
+        {
+            statusLabel.Text = "Selecione um pedido antes de iniciar a leitura.";
+            MessageBox.Show("Selecione um pedido antes de iniciar a leitura.", "Entrada de Produto", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            AtualizarDisponibilidadeInicioLeitura();
+            return false;
+        }
+
+        if (_idSetorSelecionado is not long codigoSetor || codigoSetor <= 0)
+        {
+            statusLabel.Text = "Usuário sem setor definido: não é possível iniciar a operação por lotes.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(ObterNomeTerminalAtual()))
+        {
+            statusLabel.Text = "Terminal local não identificado para iniciar a operação por lotes.";
+            return false;
+        }
+
+        if (_itensPedidoCarregados.Count == 0)
+        {
+            statusLabel.Text = "Pedido sem itens autorizados carregados para iniciar a operação por lotes.";
+            return false;
+        }
+
+        string numeroPedido = _numeroPedidoCarregado.Trim();
+        EstadoOperacaoEntradaProdutoLotes estadoAtual = _controller.ObterEstadoOperacaoComLotes();
+        if (estadoAtual.OperacaoIniciada)
+        {
+            if (string.Equals(estadoAtual.NumeroPedido, numeroPedido, StringComparison.OrdinalIgnoreCase)
+                && estadoAtual.ModoEntradaMaterial == _modoEntrada)
+            {
+                statusLabel.Text = "Operação por lotes retomada em memória para o mesmo pedido.";
+                return true;
+            }
+
+            statusLabel.Text = "Existe uma operação em memória de outro pedido ou modo. Finalize ou feche a tela antes de trocar.";
+            return false;
+        }
+
+        ContextoOperacaoEntradaProdutoLotes contexto = new()
+        {
+            NumeroPedido = numeroPedido,
+            Fornecedor = lotTextBox.Text.Trim(),
+            CodigoSetor = codigoSetor,
+            Terminal = ObterNomeTerminalAtual(),
+            ModoEntradaMaterial = _modoEntrada
+        };
+
+        _controller.IniciarOperacaoComLotes(contexto, _itensPedidoCarregados);
+        return true;
+    }
+
+    private async Task<bool> GarantirLoteAtivoParaLinhaAsync(DataGridViewRow linhaItem)
+    {
+        // §6: nenhum novo lote pode ser aberto pela Form durante persistência/retry.
+        if (PesagemBloqueadaNoFluxoLotes)
+        {
+            statusLabel.Text = MensagemRetryPersistenciaLotes;
+            return false;
+        }
+
+        if (!long.TryParse(GetCellValue(linhaItem, "productionItemIdColumn"), out long codigoItem) || codigoItem <= 0)
+        {
+            statusLabel.Text = "Item inválido para confirmar lote.";
+            return false;
+        }
+
+        _controller.SelecionarItemOperacaoComLotes(codigoItem);
+        EstadoItemEntradaProdutoLotes? item = ObterEstadoItemOperacaoLotes(codigoItem);
+        if (item?.PodePesar == true)
+        {
+            AtualizarStatusLoteAtivo(item, "Pesagem liberada.");
+            return true;
+        }
+
+        if (item is null || !item.PodeConfirmarNovoLote)
+        {
+            statusLabel.Text = "O lote atual precisa ser finalizado ou corrigido antes de nova pesagem.";
+            return false;
+        }
+
+        DadosLoteEntrada? dados = _solicitarDadosLote(this, _modoEntrada);
+        if (dados is null)
+        {
+            statusLabel.Text = "Confirmação de lote cancelada. Nenhuma pesagem foi registrada.";
+            return false;
+        }
+
+        _controller.ConfirmarLoteOperacaoComLotes(codigoItem, dados.NumeroLote, dados.DataFabricacao, dados.DataVencimento);
+        item = ObterEstadoItemOperacaoLotes(codigoItem);
+        if (item?.PodePesar != true)
+        {
+            statusLabel.Text = "Lote confirmado, mas a pesagem não foi liberada pelo orquestrador.";
+            return false;
+        }
+
+        AtualizarStatusLoteAtivo(item, "Pesagem liberada.");
+        await Task.CompletedTask;
+        return true;
+    }
+
+    private EstadoItemEntradaProdutoLotes? ObterEstadoItemOperacaoLotes(long codigoItem)
+        => _controller.ObterEstadoOperacaoComLotes().Itens
+            .FirstOrDefault(item => item.CodigoSapPedidoCompraItem == codigoItem);
+
+    private void AtualizarStatusLoteAtivo(EstadoItemEntradaProdutoLotes item, string detalhe)
+    {
+        EstadoLoteEntradaProdutoLotes? lote = item.Lotes.FirstOrDefault(l => l.CodigoLocal == item.CodigoLoteAtivoLocal);
+        if (lote is null)
+        {
+            statusLabel.Text = $"Item {item.NumeroItemSap} selecionado. {detalhe}";
+            return;
+        }
+
+        List<string> partes = [$"Item {item.NumeroItemSap} — lote {lote.Dados.NumeroLote} confirmado."];
+        if (lote.Dados.DataFabricacao != default)
+        {
+            partes.Add($"Fabricação {lote.Dados.DataFabricacao:dd/MM/yyyy}.");
+        }
+
+        if (lote.Dados.DataVencimento != default)
+        {
+            partes.Add($"Vencimento {lote.Dados.DataVencimento:dd/MM/yyyy}.");
+        }
+
+        partes.Add($"Estado {lote.Estado}.");
+        partes.Add(detalhe);
+        statusLabel.Text = string.Join(" ", partes);
+    }
+
+    private async Task<EntradaProdutoPesagemEmMemoria?> RegistrarPesoLidoOperacaoComLotesAsync(
+        DataGridViewRow linhaItem,
+        string pesoTexto,
+        string origem,
+        string leituraOriginal)
+    {
+        if (!TryParsePesoKg(pesoTexto, out decimal pesoBruto))
+        {
+            statusLabel.Text = "Peso lido inválido.";
+            return null;
+        }
+
+        if (!await GarantirLoteAtivoParaLinhaAsync(linhaItem))
+        {
+            return null;
+        }
+
+        if (!long.TryParse(GetCellValue(linhaItem, "productionItemIdColumn"), out long codigoItem) || codigoItem <= 0)
+        {
+            statusLabel.Text = "Item inválido para registrar a leitura.";
+            return null;
+        }
+
+        if (!LinhaPossuiTaraSelecionada(linhaItem, out global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro? tara))
+        {
+            statusLabel.Text = "Selecione a tara antes de registrar a leitura.";
+            return null;
+        }
+
+        decimal taraKg = EntradaProdutoQuantidadeSap.ConverterTaraParaKg(tara.PesoKg, "KG");
+        EntradaProdutoPesagemEmMemoria pesagem = _controller.RegistrarPesagemOperacaoComLotes(
+            codigoItem,
+            pesoBruto,
+            taraKg,
+            tara.CodigoTara,
+            origem,
+            string.Equals(origem, EntradaProdutoPesagemCalculos.OrigemBalanca, StringComparison.OrdinalIgnoreCase)
+                ? _idBalancaSelecionada
+                : null,
+            leituraOriginal,
+            DateTimeOffset.Now);
+
+        if (pesagem.CodigoLocalPesagem == Guid.Empty)
+        {
+            statusLabel.Text = "Registro de pesagem retornou identificador local inválido.";
+            return null;
+        }
+
+        SincronizarLeiturasItemComOperacaoLotes(linhaItem, codigoItem);
+        ApplyProductionRowStyle(linhaItem, linhaItem.Index);
+        ClearGridSelection(productionDataGridView);
+        linhaItem.Selected = true;
+        SetCurrentProductionCell(linhaItem, "productionPesoLidoColumn");
+        UpdateProductionCounters();
+        return pesagem;
+    }
+
+    private bool SincronizarLeiturasItemComOperacaoLotes(
+        DataGridViewRow linhaItem,
+        long codigoSapPedidoCompraItem)
+    {
+        IReadOnlyList<EntradaProdutoPesagemEmMemoria> pesagens =
+            _controller.ObterPesagensItemOperacaoComLotes(codigoSapPedidoCompraItem);
+        _leiturasPorItem[codigoSapPedidoCompraItem] = pesagens
+            .OrderBy(p => p.Pesagem.Sequencia)
+            .Select(p => p.Pesagem)
+            .ToList();
+        bool atualizado = AtualizarTotaisDaLinha(linhaItem, _leiturasPorItem[codigoSapPedidoCompraItem]);
+        UpdateProductionCounters();
+        return atualizado;
+    }
+
+
+    private bool FinalizarLotesAtivosEmMemoria()
+    {
+        EstadoOperacaoEntradaProdutoLotes estado = _controller.ObterEstadoOperacaoComLotes();
+        List<EstadoItemEntradaProdutoLotes> itensValidados = [];
+
+        foreach (EstadoItemEntradaProdutoLotes item in estado.Itens)
+        {
+            if (item.CodigoLoteAtivoLocal is not Guid codigoLote)
+            {
+                continue;
+            }
+
+            EstadoLoteEntradaProdutoLotes? lote = item.Lotes.FirstOrDefault(l => l.CodigoLocal == codigoLote);
+            if (lote is null || lote.Estado == EstadoOperacionalLoteEntrada.FinalizadoEmMemoria)
+            {
+                continue;
+            }
+
+            if (lote.QuantidadePesagensValidas <= 0)
+            {
+                statusLabel.Text = $"Lote {lote.Dados.NumeroLote} do item {item.NumeroItemSap} não possui pesagem válida para finalizar.";
+                return false;
+            }
+
+            if (!item.PodeFinalizarLote)
+            {
+                statusLabel.Text = $"Lote {lote.Dados.NumeroLote} do item {item.NumeroItemSap} ainda não pode ser finalizado.";
+                return false;
+            }
+
+            itensValidados.Add(item);
+        }
+
+        if (itensValidados.Count == 0)
+        {
+            statusLabel.Text = "Não existe lote ativo com leitura válida para finalizar em memória.";
+            return false;
+        }
+
+        foreach (EstadoItemEntradaProdutoLotes itemValidado in itensValidados)
+        {
+            _controller.FinalizarLoteOperacaoComLotes(itemValidado.CodigoSapPedidoCompraItem);
+        }
+
+        return true;
+    }
+
+
+
+    private bool BloquearTrocaPedidoComOperacaoEmMemoria(
+        string numeroPedidoSolicitado,
+        bool restaurarTexto)
+    {
+        EstadoOperacaoEntradaProdutoLotes estado = _controller.ObterEstadoOperacaoComLotes();
+        if (!estado.OperacaoIniciada)
+        {
+            return false;
+        }
+
+        if (string.Equals(estado.NumeroPedido, numeroPedidoSolicitado, StringComparison.OrdinalIgnoreCase)
+            && estado.ModoEntradaMaterial == _modoEntrada)
+        {
+            return false;
+        }
+
+        if (!OperacaoComLotesPossuiLotes())
+        {
+            _controller.LimparOperacaoComLotes();
+            return false;
+        }
+
+        if (restaurarTexto)
+        {
+            string pedidoOriginal = estado.NumeroPedido ?? _numeroPedidoCarregado;
+            if (!string.IsNullOrWhiteSpace(pedidoOriginal)
+                && !string.Equals(pedidoComboBox.Text.Trim(), pedidoOriginal, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    _restaurandoPedidoOperacaoLotes = true;
+                    pedidoComboBox.Text = pedidoOriginal;
+                }
+                finally
+                {
+                    _restaurandoPedidoOperacaoLotes = false;
+                }
+            }
+        }
+
+        statusLabel.Text = "Existe uma operação em memória ainda não persistida. Feche a tela para descartar ou continue o mesmo pedido.";
+        AtualizarDisponibilidadeInicioLeitura();
+        return true;
+    }
+
+    private bool OperacaoComLotesPossuiLotes()
+    {
+        EstadoOperacaoEntradaProdutoLotes estado = _controller.ObterEstadoOperacaoComLotes();
+        return estado.Itens.Any(item => item.Lotes.Count > 0);
     }
 
     // Captura as leituras do grid e delega somente a persistencia LOCAL ao controller.
@@ -1636,7 +2198,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private async void ReadWeightLegend_Click(object? sender, EventArgs e)
     {
-        if (!_isProductionStarted || _isReadingWeight)
+        if (!_isProductionStarted || _isReadingWeight || PesagemBloqueadaNoFluxoLotes)
         {
             return;
         }
@@ -1690,25 +2252,17 @@ public partial class ProcessoEntradaProdutoForm : Form
             }
 
             string weight = leitura.Peso;
-            if (!RegistrarPesoLido(linhaItem, weight, out EntradaProdutoPesagem? pesagemCriada) || pesagemCriada is null)
+            EntradaProdutoPesagemEmMemoria? pesagemCriada = await RegistrarPesoLidoOperacaoComLotesAsync(
+                linhaItem,
+                weight,
+                EntradaProdutoPesagemCalculos.OrigemBalanca,
+                weight);
+            if (pesagemCriada is null)
             {
                 return;
             }
 
-            statusLabel.Text = "Peso registrado localmente. Finalize a leitura para gravar o lançamento.";
-            // Regra definitiva: imprime SOMENTE a pesagem recém-criada (peso líquido dela), nunca o total da linha.
-            DadosEtiquetaMateriaPrima label = ConstruirEtiquetaPorPesagem(linhaItem, pesagemCriada);
-            if (!await TentarImprimirEtiquetaAposLeituraAsync(label))
-            {
-                MessageBox.Show(
-                    "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.",
-                    "Etiqueta não impressa",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-                return;
-            }
-
-            statusLabel.Text = $"Pesagem {FormatarPesoEtiquetaMateriaPrima(pesagemCriada.PesoLiquidoKg.ToString(System.Globalization.CultureInfo.InvariantCulture))} kg registrada no item {GetCellValue(linhaItem, "productionCodeColumn")} e etiqueta enviada para impressão.";
+            statusLabel.Text = "Pesagem registrada no lote em memória. Impressão do novo fluxo de lotes ainda não habilitada.";
         }
         catch (Exception ex)
         {
@@ -1723,7 +2277,8 @@ public partial class ProcessoEntradaProdutoForm : Form
         finally
         {
             _isReadingWeight = false;
-            SetReadWeightEnabled(_isProductionStarted);
+            // §4: uma leitura assíncrona não pode reabilitar controles durante persistência/retry.
+            SetReadWeightEnabled(_isProductionStarted && !PesagemBloqueadaNoFluxoLotes);
         }
     }
 
@@ -1816,7 +2371,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (!_isProductionStarted)
+        if (!_isProductionStarted || PesagemBloqueadaNoFluxoLotes)
         {
             return;
         }
@@ -1862,7 +2417,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (!_isProductionStarted)
+        if (!_isProductionStarted || PesagemBloqueadaNoFluxoLotes)
         {
             return;
         }
@@ -2137,7 +2692,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (!_isProductionStarted)
+        if (!_isProductionStarted || PesagemBloqueadaNoFluxoLotes)
         {
             statusLabel.Text = "Inicie a leitura antes de informar o peso manual.";
             return;
@@ -2183,35 +2738,22 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
-        if (!TryParsePesoKg(normalizedWeight, out decimal pesoManual)
-            || !AdicionarLeituraNaLinha(
-                selectedRow,
-                pesoManual,
-                "MANUAL",
-                manualWeight,
-                out EntradaProdutoPesagem? pesagemManual)
-            || pesagemManual is null)
+        if (!TryParsePesoKg(normalizedWeight, out decimal pesoManual))
         {
             return;
         }
 
-        ApplyProductionRowStyle(selectedRow, selectedRow.Index);
-        ClearGridSelection(productionDataGridView);
-        selectedRow.Selected = true;
-        SetCurrentProductionCell(selectedRow, "productionPesoLidoColumn");
-        UpdateProductionCounters();
-
-        // Peso manual também é UMA pesagem individual: imprime a etiqueta dela (peso líquido). Falha de impressão
-        // mantém a pesagem (permite reimprimir pelo detalhe).
-        DadosEtiquetaMateriaPrima labelManual = ConstruirEtiquetaPorPesagem(selectedRow, pesagemManual);
-        if (!await TentarImprimirEtiquetaAutomaticaAsync(labelManual, "peso manual"))
+        EntradaProdutoPesagemEmMemoria? pesagemManual = await RegistrarPesoLidoOperacaoComLotesAsync(
+            selectedRow,
+            normalizedWeight,
+            EntradaProdutoPesagemCalculos.OrigemManual,
+            manualWeight);
+        if (pesagemManual is null)
         {
-            statusLabel.Text =
-                "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.";
             return;
         }
 
-        statusLabel.Text = $"Pesagem manual {pesagemManual.PesoLiquidoKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg registrada e etiqueta enviada para impressão.";
+        statusLabel.Text = "Pesagem registrada no lote em memória. Impressão do novo fluxo de lotes ainda não habilitada.";
     }
 
     private void UpdateProductionState(bool started)
@@ -2220,6 +2762,13 @@ public partial class ProcessoEntradaProdutoForm : Form
         sidePanel.BackColor = Color.White;
         sideReadingStatusLabel.Text = started ? "Ativo" : "Inativo";
         sideReadingStatusLabel.ForeColor = started ? ReadingStatusActiveColor : ReadingStatusInactiveColor;
+        // §2: os quatro estados do fluxo por lotes governam Enabled/Visible de forma coerente.
+        bool persistindo = _finalizandoPesagem;
+        bool aguardandoRetry = _lotesFinalizadosAguardandoPersistencia;
+        bool bloqueiaPesagem = persistindo || aguardandoRetry; // == PesagemBloqueadaNoFluxoLotes
+        bool podePararOuTentarNovamente = (started || aguardandoRetry)
+            && !persistindo
+            && PossuiPermissaoEntrada(PermissoesSistema.Acoes.Finalizar);
         bool podeAlternarLeitura = started
             ? PossuiPermissaoEntrada(PermissoesSistema.Acoes.Finalizar)
             : PodeIniciarLeitura();
@@ -2244,8 +2793,10 @@ public partial class ProcessoEntradaProdutoForm : Form
         iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
         iniciarLeituraButton.IconGlyph = started ? "\uE71A" : "\uE768";
         iniciarLeituraButton.PrimaryText = started ? "PARAR LEITURA" : "INICIAR LEITURA";
-        iniciarLeituraButton.Enabled = podeAlternarLeitura;
-        iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
+        // Durante persistência E durante retry o alternador lateral (Iniciar/Parar leitura) fica desabilitado.
+        // No retry, somente o painel Parar (stopActionPanel) pode iniciar a nova tentativa.
+        iniciarLeituraButton.Enabled = podeAlternarLeitura && !bloqueiaPesagem;
+        iniciarLeituraButton.Cursor = iniciarLeituraButton.Enabled ? Cursors.Hand : Cursors.Default;
         iniciarLeituraButton.Invalidate();
         lerEtiquetaButton.Visible = started;
         leituraManualButton.Visible =
@@ -2255,8 +2806,15 @@ public partial class ProcessoEntradaProdutoForm : Form
             ? DataGridViewSelectionMode.FullRowSelect
             : DataGridViewSelectionMode.CellSelect;
 
-        stopActionPanel.Visible = started;
-        stopActionPanel.Enabled = started && podeAlternarLeitura;
+        // Pedido desabilitado durante leitura ativa, persistência e retry.
+        pedidoComboBox.Enabled = !started
+            && !bloqueiaPesagem
+            && PossuiPermissaoEntrada(PermissoesSistema.Acoes.Consultar)
+            && PossuiPermissaoEntrada(PermissoesSistema.Acoes.SincronizarCache);
+
+        // Parar: visível durante leitura e durante retry; habilitado apenas quando pode parar/tentar de novo.
+        stopActionPanel.Visible = started || aguardandoRetry;
+        stopActionPanel.Enabled = podePararOuTentarNovamente;
         stopActionPanel.Cursor = stopActionPanel.Enabled ? Cursors.Hand : Cursors.Default;
         stopActionIconLabel.Cursor = stopActionPanel.Cursor;
         stopActionTextLabel.Cursor = stopActionPanel.Cursor;
@@ -2266,12 +2824,17 @@ public partial class ProcessoEntradaProdutoForm : Form
             ClearGridSelection(productionDataGridView);
         }
 
-        SetReadWeightEnabled(started);
-        SetDeleteActionsEnabled(started);
+        // §4: leitura/manual/cancelamentos desabilitados durante persistência e retry, não só pelos handlers.
+        SetReadWeightEnabled(started && !bloqueiaPesagem);
+        SetDeleteActionsEnabled(started && !bloqueiaPesagem);
     }
 
     private bool PodeIniciarLeitura()
-        => PossuiPermissaoEntrada(PermissoesSistema.Acoes.Executar)
+        // §8: após persistir, não se inicia nova leitura sobre a mesma projeção; recarregar o pedido limpa o
+        // código e a projeção. Também não se inicia enquanto aguarda o retry da gravação.
+        => !_codigoLancamentoPersistido.HasValue
+            && !_lotesFinalizadosAguardandoPersistencia
+            && PossuiPermissaoEntrada(PermissoesSistema.Acoes.Executar)
             && PedidoSelecionadoValido();
 
     private bool PedidoSelecionadoValido()
@@ -2431,9 +2994,16 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private async Task AbrirPesagemMultiplaParaLinhaAsync(DataGridViewRow linhaItem)
     {
+        // §6: pesagem múltipla desabilitada durante persistência/retry da gravação local.
+        if (PesagemBloqueadaNoFluxoLotes)
+        {
+            statusLabel.Text = MensagemRetryPersistenciaLotes;
+            return;
+        }
+
         if (!LinhaPertenceAoGridProducao(linhaItem))
         {
-            statusLabel.Text = "Selecione um item valido do pedido para pesar.";
+            statusLabel.Text = "Selecione um item válido do pedido para pesar.";
             return;
         }
 
@@ -2450,40 +3020,46 @@ public partial class ProcessoEntradaProdutoForm : Form
         string itemId = GetCellValue(linhaItem, "productionItemIdColumn");
         if (!long.TryParse(itemId, out long codigoItem) || codigoItem <= 0)
         {
-            statusLabel.Text = "Item invalido para pesagem.";
+            statusLabel.Text = "Item inválido para pesagem.";
             return;
         }
 
-        IReadOnlyList<EntradaProdutoPesagem> leiturasAtuais =
-            ObterLeiturasItem(codigoItem);
+        if (!await GarantirLoteAtivoParaLinhaAsync(linhaItem))
+        {
+            return;
+        }
 
-        // Callbacks de impressão POR PESAGEM: a janela imprime cada nova leitura imediatamente (não há mais
-        // impressão consolidada ao concluir). Cada etiqueta usa pesagem.PesoLiquidoKg.
-        Func<EntradaProdutoPesagem, Task<bool>> imprimirPesagem = pesagem =>
-            TentarImprimirEtiquetaAutomaticaAsync(ConstruirEtiquetaPorPesagem(linhaItem, pesagem), "pesagem");
-        Func<EntradaProdutoPesagem, Task<bool>> reimprimirPesagem = pesagem =>
-            TentarReimprimirEtiquetaPesagemAsync(ConstruirEtiquetaPorPesagem(linhaItem, pesagem));
+        IReadOnlyList<EntradaProdutoPesagemEmMemoria> pesagensAtuais =
+            _controller.ObterPesagensLoteAtivoOperacaoComLotes(codigoItem);
 
         using PesagemMultiplaItemForm form = new(
             _balancaLeituraServico,
             itemPedido,
             tara,
             _idBalancaSelecionada,
-            leiturasAtuais,
-            imprimirPesagem,
-            reimprimirPesagem);
-        // A janela sempre retorna OK (Fechar preserva as pesagens adicionadas). Nenhuma etiqueta consolidada aqui.
+            pesagensAtuais,
+            (peso, origem, leitura) => Task.FromResult(_controller.RegistrarPesagemOperacaoComLotes(
+                codigoItem,
+                peso,
+                EntradaProdutoQuantidadeSap.ConverterTaraParaKg(tara.PesoKg, "KG"),
+                tara.CodigoTara,
+                origem,
+                string.Equals(origem, EntradaProdutoPesagemCalculos.OrigemBalanca, StringComparison.OrdinalIgnoreCase)
+                    ? _idBalancaSelecionada
+                    : null,
+                leitura,
+                DateTimeOffset.Now)),
+            codigoLocalPesagem => Task.FromResult(_controller.CancelarPesagemOperacaoComLotes(codigoItem, codigoLocalPesagem)),
+            imprimirPesagemAsync: null,
+            reimprimirPesagemAsync: null);
+
         form.ShowDialog(this);
 
-        // Re-localiza a linha pelo id do item: apos o dialogo, a referencia original pode estar
-        // desatualizada se o grid foi recarregado. Garante que o total acumulado seja gravado na linha viva.
         DataGridViewRow linhaAlvo = LocalizarLinhaProducaoPorItemId(itemId) ?? linhaItem;
         linhaAlvo.Tag = tara;
-        _leiturasPorItem[codigoItem] = form.Pesagens.ToList();
-
-        if (!AtualizarTotaisDaLinha(linhaAlvo, _leiturasPorItem[codigoItem]))
+        if (!SincronizarLeiturasItemComOperacaoLotes(linhaAlvo, codigoItem))
         {
-            statusLabel.Text = "Nao foi possivel consolidar o peso na linha do item.";
+            statusLabel.Text = "Não foi possível sincronizar as pesagens do lote ativo.";
             return;
         }
 
@@ -2492,9 +3068,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         linhaAlvo.Selected = true;
         SetCurrentProductionCell(linhaAlvo, "productionPesoLidoColumn");
         UpdateProductionCounters();
-
-        // Total apenas para consulta na linha — as etiquetas já foram impressas individualmente.
-        statusLabel.Text = $"Pesagens atualizadas. Total do item: {form.PesoTotalTexto} kg.";
+        statusLabel.Text = $"Pesagens atualizadas no lote em memória. Total do item: {EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(ObterLeiturasItem(codigoItem)).ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg.";
     }
 
     // Reimpressão por pesagem individual (permissão Reimprimir). Usada pela janela de pesagens (duplo clique).
@@ -2831,19 +3405,28 @@ public partial class ProcessoEntradaProdutoForm : Form
         if (!long.TryParse(
                 GetCellValue(linhaItem, "productionItemIdColumn"),
                 out long codigoItem)
-            || !_leiturasPorItem.TryGetValue(
-                codigoItem,
-                out List<EntradaProdutoPesagem>? leituras)
-            || leituras.Count == 0)
+            || codigoItem <= 0)
         {
             return false;
         }
 
-        _leiturasPorItem[codigoItem] =
-            [.. EntradaProdutoPesagemCalculos.Cancelar(leituras)];
-        AtualizarTotaisDaLinha(linhaItem, _leiturasPorItem[codigoItem]);
-        UpdateProductionCounters();
-        return true;
+        try
+        {
+            int canceladas = _controller.CancelarPesagensOperacaoComLotes(codigoItem);
+            if (canceladas <= 0)
+            {
+                return false;
+            }
+
+            bool sincronizado = SincronizarLeiturasItemComOperacaoLotes(linhaItem, codigoItem);
+            UpdateProductionCounters();
+            return sincronizado;
+        }
+        catch (Exception ex)
+        {
+            statusLabel.Text = GetFriendlyErrorMessage(ex);
+            return false;
+        }
     }
 
     private string ObterNomeTerminalAtual()
@@ -3065,11 +3648,23 @@ public partial class ProcessoEntradaProdutoForm : Form
         pedidoComboBox.DropDownWidth = Math.Max(220, pedidoComboBox.Width);
     }
 
+
     private void PedidoComboBox_TextUpdate(object? sender, EventArgs e)
     {
+        if (_restaurandoPedidoOperacaoLotes)
+        {
+            return;
+        }
+
+        string numeroPedidoSolicitado = pedidoComboBox.Text.Trim();
+        if (BloquearTrocaPedidoComOperacaoEmMemoria(numeroPedidoSolicitado, restaurarTexto: true))
+        {
+            return;
+        }
+
         _consultaPedidoCts?.Cancel();
         if (!string.Equals(
-                pedidoComboBox.Text.Trim(),
+                numeroPedidoSolicitado,
                 _numeroPedidoCarregado,
                 StringComparison.OrdinalIgnoreCase))
         {
@@ -3079,6 +3674,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         AtualizarDisponibilidadeInicioLeitura();
     }
+
 
     private async void PedidoComboBox_SelectedIndexChanged(object? sender, EventArgs e)
     {
@@ -3098,6 +3694,11 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         string numeroPedido = pedidoComboBox.Text.Trim();
         if (!PodeAtualizarTela())
+        {
+            return;
+        }
+
+        if (BloquearTrocaPedidoComOperacaoEmMemoria(numeroPedido, restaurarTexto: true))
         {
             return;
         }
@@ -3575,3 +4176,5 @@ public partial class ProcessoEntradaProdutoForm : Form
         grid.CurrentCell = null;
     }
 }
+
+

@@ -1,0 +1,39 @@
+FUGAPET - DIFF OBJETIVO INCREMENTAL 044 DEV REV6 -> REV7
+
+SQL MODIFICADO:
+
+044_produto_acabado_hu_caixa_DEV_PROPOSTA_GAIA.sql
+LINHA_REV6_851:
+- JOIN LATERAL aclexplode(COALESCE(c.relacl,ARRAY[]::aclitem[])) a ON true
++ JOIN LATERAL aclexplode(c.relacl) a ON true
+LINHA_REV6_2408:
+-         JOIN LATERAL aclexplode(COALESCE(c.relacl,ARRAY[]::aclitem[])) a ON true
++         JOIN LATERAL aclexplode(c.relacl) a ON true
+
+044_produto_acabado_hu_caixa_DEV_VALIDACAO_GAIA.sql
+LINHA_53:
+-       FROM aclexplode(COALESCE(c.relacl,ARRAY[]::aclitem[])) a
++       FROM aclexplode(c.relacl) a
+LINHA_400:
+-       JOIN LATERAL aclexplode(COALESCE(c.relacl,ARRAY[]::aclitem[])) a ON true
++       JOIN LATERAL aclexplode(c.relacl) a ON true
+
+044_produto_acabado_hu_caixa_DEV_ROLLBACK_GAIA.sql
+LINHA_381:
+-       FROM aclexplode(COALESCE(c.relacl,ARRAY[]::aclitem[])) a
++       FROM aclexplode(c.relacl) a
+
+044_produto_acabado_hu_caixa_DEV_PREFLIGHT_GAIA.sql
+SEM ALTERACAO; PRESERVADO BYTE A BYTE.
+
+DOCUMENTACAO:
+- README promovido para REV7 e acrescido da causa-raiz, escopo e controles negativos.
+- RELATORIO_044_REV7_CORRECAO_ACL.txt adicionado.
+- MANIFEST_SHA256.txt recalculado.
+
+COMPROVACAO_ESTATICA:
+- linhas SQL modificadas: 5;
+- todas as linhas SQL modificadas substituem apenas o argumento do aclexplode;
+- contagens de BEGIN, COMMIT, LOCK TABLE, CREATE TABLE, CREATE INDEX, GRANT,
+  COMMENT ON e RAISE EXCEPTION permanecem iguais entre REV6 e REV7;
+- ocorrencias SQL de aclexplode(COALESCE(...ARRAY[]::aclitem[])) apos correcao: 0.

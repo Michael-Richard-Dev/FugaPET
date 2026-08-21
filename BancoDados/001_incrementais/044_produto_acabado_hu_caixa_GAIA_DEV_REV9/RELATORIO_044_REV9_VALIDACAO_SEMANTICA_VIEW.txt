@@ -1,0 +1,166 @@
+RELATORIO TECNICO - INCREMENTAL 044 DEV REV9
+VALIDACAO SEMANTICA DE desenvolvimento.vw_hu_caixas_sem_palete
+
+CLASSIFICACAO=PACOTE_044_DEV_REV9_PREPARADO_PARA_AUDITORIA_E_NAO_EXECUTADO
+DATA_PREPARACAO=2026-08-06
+RESPONSAVEL=Michael Richard
+
+====================================================================
+1. BASE DOCUMENTAL E FALHA REV8
+====================================================================
+
+PACOTE_BASE=044_produto_acabado_hu_caixa_GAIA_DEV_REV8.zip
+SHA256_PACOTE_BASE=55D4B5A0E6BDBB92A5FF489BD6D7F1B1B23FFBA3C216C5CF8EB3EC9E09732C5D
+SHA256_PROPOSTA_REV8_EXECUTADA=F16262133E7C2AF3D053D1AECF3894AAD1955E58388B35276093198A46C43A83
+LOG_OFICIAL=resultado_proposta_044_dev_rev8_20260806_155850_integral.txt
+SHA256_LOG_OFICIAL_INFORMADO=4961A78DE8CDEBB4FD144F588F41FB78275B10C3620C81FA8178A6C88159BCF9
+LOG_OFICIAL_LOCALIZADO_NESTA_MISSAO=NAO
+
+CODIGO_SAIDA_PSQL_REV8=3
+BEGIN_IDENTIFICADO_REV8=SIM
+COMMIT_CONFIRMADO_REV8=NAO
+ROLLBACK_CONFIRMADO_REV8=NAO
+ESTADO_TRANSACIONAL_REV8=INDETERMINADO
+REEXECUCAO_REV8=PROIBIDA
+ERRO_LITERAL_REV8=PROPOSTA_044_DEV_REV8_REPROVADA_VIEW_NAO_PRESERVADA
+OWNER_PRESERVADO_REV8=SIM
+COMENTARIO_PRESERVADO_REV8=SIM
+GRANTS_PRESERVADOS_REV8=SIM
+DEFINICAO_TEXTUAL_IGUAL_REV8=NAO
+
+====================================================================
+2. CAUSA-RAIZ ESTATICA
+====================================================================
+
+A REV8 capturava pg_get_viewdef antes de alterar os tipos das colunas-base,
+recriava a view com a definicao capturada e bloqueava a transacao se o texto
+devolvido por pg_get_viewdef depois da recriacao nao fosse byte a byte igual.
+
+A view projeta campos afetados pela proposta:
+- hu_caixa.material: text -> varchar(18);
+- hu_caixa.peso_bruto: numeric(14,3) -> numeric(15,3);
+- hu_caixa.peso_liquido: numeric(14,3) -> numeric(15,3);
+- hu_caixa.peso_tara: numeric(14,3) -> numeric(15,3);
+- hu_caixa.unidade_peso: text -> varchar(3).
+
+Depois da mudanca dos tipos e da nova analise da arvore SQL, o PostgreSQL pode
+normalizar casts e coercoes na representacao retornada por pg_get_viewdef. A
+regra relacional pode permanecer equivalente enquanto o texto deixa de ser
+identico. O resultado REV8 confirma esse isolamento: owner, comentario e grants
+foram preservados, mas definicao_igual=f.
+
+EXPRESSOES_SUJEITAS_A_NORMALIZACAO=material,peso_bruto,peso_liquido,peso_tara,unidade_peso
+
+====================================================================
+3. CORRECAO REV9
+====================================================================
+
+A comparacao textual foi mantida apenas como NOTICE diagnostico. Ela nao aprova
+nem reprova isoladamente a view. Em seu lugar, os quatro caminhos documentais
+validam semanticamente:
+
+- identidade exata do schema, nome e relkind da view;
+- owner e comentario catalogados;
+- grants preservados dinamicamente nos fluxos que capturam estado;
+- exatamente 11 colunas, com nomes e ordem aprovados;
+- dependencias relacionais exatamente em desenvolvimento.hu_caixa e
+  desenvolvimento.hu_palete_item, por pg_rewrite e pg_depend;
+- filtro situacao_hu_caixa=true;
+- status externos CONFIRMADA_SAP, ETIQUETADA e ENVIADA_SAP;
+- NOT EXISTS correlacionado por codigo_hu_caixa;
+- filtro situacao_hu_palete_item=true;
+- status de vinculo VINCULADO, ENVIADO_SAP e CONFIRMADO_SAP;
+- conjunto total dos seis literais, sem status extra;
+- ausencia de ACL e comentario por coluna;
+- ausencia de regra adicional e trigger nao interno;
+- abertura funcional com SELECT limitado.
+
+O ROLLBACK preserva tambem uma assinatura canonica unidimensional dos grants,
+obtida por unnest(relacl), para comparar o estado restaurado sem construir array
+multidimensional de aclitem[].
+
+====================================================================
+4. LINHAS SQL ALTERADAS - REV8 x REV9
+====================================================================
+
+PREFLIGHT:
+- cabecalho/classificacoes: linhas 4-12;
+- classificacao de resultado: linhas 605-613 e 871-877;
+- validacao semantica adicionada: linhas 974-1112.
+
+PROPOSTA:
+- cabecalho/classificacoes: linhas 4-12;
+- classificacoes promovidas para REV9: linhas 501-508, 1230-1236 e 2580-2673;
+- comparacao textual convertida em NOTICE: linhas 2413-2428;
+- validacao semantica adicionada: linhas 2430-2568.
+
+VALIDACAO:
+- cabecalho/classificacoes: linhas 4-12;
+- classificacoes promovidas para REV9: linhas 105-119 e 567-603;
+- comparacao textual convertida em NOTICE: linhas 385-422;
+- validacao semantica adicionada: linhas 424-562.
+
+ROLLBACK:
+- cabecalho/classificacoes: linhas 4-11;
+- classificacoes promovidas para REV9: linhas 61-67, 449-455 e 828-834;
+- assinatura canonica de grants no snapshot: linhas 353-391;
+- restauracao e comparacao de metadata: linhas 773-883;
+- validacao semantica adicionada: linhas 885-1023.
+
+O diff integral, com cada linha adicionada, removida e seu contexto, esta em:
+DIFF_044_REV8_REV9.txt
+
+====================================================================
+5. VARREDURA ESTATICA
+====================================================================
+
+PREFLIGHT_ACLEXPLODE_C_RELACL=0
+PROPOSTA_ACLEXPLODE_C_RELACL=2
+VALIDACAO_ACLEXPLODE_C_RELACL=2
+ROLLBACK_ACLEXPLODE_C_RELACL=1
+PADRAO_ACL_MULTIDIMENSIONAL_ARRAY_VAZIO=0
+
+O PREFLIGHT conserva o uso preexistente de
+aclexplode(COALESCE(c.relacl,acldefault(...))). Esse fallback retorna aclitem[]
+unidimensional e nao e o padrao defeituoso com ARRAY[]::aclitem[].
+
+COMPARACAO_TEXTUAL_RIGIDA_BLOQUEANTE_RESTANTE=0
+COMPARACAO_TEXTUAL_DIAGNOSTICA_NOTICE=SIM
+VALIDACAO_SEMANTICA_PRESENTE_PREFLIGHT=SIM
+VALIDACAO_SEMANTICA_PRESENTE_PROPOSTA=SIM
+VALIDACAO_SEMANTICA_PRESENTE_VALIDACAO=SIM
+VALIDACAO_SEMANTICA_PRESENTE_ROLLBACK=SIM
+IDENTIFICADOR_OPERACIONAL_REV8_NOS_SQL_REV9=0
+ALTERACAO_DE_OBJETO_DE_PALETE=NAO
+ALTERACAO_DE_MODELAGEM_FORA_DO_ESCOPO=NAO
+
+COMPARACAO_ESTRUTURAL_REV8_REV9:
+- LOCK TABLE: contagem preservada nos quatro scripts;
+- CREATE TABLE: contagem preservada nos quatro scripts;
+- ALTER TABLE: contagem preservada nos quatro scripts;
+- CREATE INDEX: contagem preservada nos quatro scripts;
+- CREATE OR REPLACE FUNCTION: contagem preservada nos quatro scripts;
+- CREATE TRIGGER: contagem preservada nos quatro scripts;
+- GRANT, REVOKE e COMMENT ON: contagens preservadas nos quatro scripts;
+- cada script recebeu exatamente um bloco DO adicional de validacao semantica;
+- todos os delimitadores dollar-quoted permanecem pareados.
+
+====================================================================
+6. DECLARACOES DE CONTROLE
+====================================================================
+
+REV9_EXECUCAO_AUTORIZADA=NAO
+BANCO_ACESSADO=NAO
+SQL_EXECUTADO=NAO
+PSQL_EXECUTADO=NAO
+PG_DUMP_EXECUTADO=NAO
+PG_RESTORE_EXECUTADO=NAO
+SAP_ACESSADO=NAO
+CPI_ACESSADO=NAO
+CSHARP_ALTERADO=NAO
+HML_ACESSADO=NAO
+PRD_ACESSADO=NAO
+COMMIT_GIT_EXECUTADO=NAO
+PUSH_GIT_EXECUTADO=NAO
+
+DESTINO=DEDAO_PARA_AUDITORIA_ESTATICA_E_HERA_PARA_DECISAO_FORMAL

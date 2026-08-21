@@ -11,7 +11,8 @@
 [CmdletBinding()]
 param(
     [string]$DestinoRaiz,
-    [switch]$NaoGerarZip
+    [switch]$NaoGerarZip,
+    [string]$ValidarCaminhoPacote
 )
 
 Set-StrictMode -Version Latest
@@ -35,7 +36,8 @@ $DiretoriosBloqueados = @(
     'bin',
     'obj',
     '.claude',
-    'pacotes_limpos'
+    'pacotes_limpos',
+    'TestResults'
 )
 
 function Testar-NomeConfiguracaoReal {
@@ -43,6 +45,27 @@ function Testar-NomeConfiguracaoReal {
 
     return $NomeArquivo -match '^configuracao\..+\.json$' -and
         $NomeArquivo -notmatch '\.exemplo\.json$'
+}
+
+function Testar-NomeArquivoSensivel {
+    param([Parameter(Mandatory)] [string]$NomeArquivo)
+
+    $NomeNormalizado = $NomeArquivo.ToLowerInvariant()
+    if (Testar-NomeConfiguracaoReal -NomeArquivo $NomeArquivo) {
+        return $true
+    }
+
+    if ($NomeNormalizado -match '^configuracao\..+\.json\.(bak_.*|backup.*|old.*)$') {
+        return $true
+    }
+
+    if ($NomeNormalizado -eq '.env' -or
+        $NomeNormalizado -like '.env*' -or
+        $NomeNormalizado -like '*.env') {
+        return $true
+    }
+
+    return [System.IO.Path]::GetExtension($NomeNormalizado) -in @('.pfx', '.p12', '.key', '.pem')
 }
 
 function Testar-DiretorioBloqueado {
@@ -87,7 +110,7 @@ function Testar-ScriptHabilitaEscritaSap {
 function Testar-ArquivoBloqueado {
     param([Parameter(Mandatory)] [System.IO.FileInfo]$Arquivo)
 
-    if (Testar-NomeConfiguracaoReal -NomeArquivo $Arquivo.Name) {
+    if (Testar-NomeArquivoSensivel -NomeArquivo $Arquivo.Name) {
         return $true
     }
 
@@ -160,7 +183,7 @@ function Validar-ObjetoConfiguracao {
             $Valor = $Propriedade.Value
 
             if ($ValidarCredenciais -and
-                $NomeNormalizado -in @('password', 'senha', 'username', 'usuario') -and
+                $NomeNormalizado -in @('password', 'senha', 'username', 'usuario', 'clientsecret', 'authorization') -and
                 $Valor -is [string] -and
                 -not [string]::IsNullOrWhiteSpace($Valor) -and
                 $Valor -notmatch '^DEFINIR_[A-Z0-9_]+$') {
@@ -216,8 +239,7 @@ function Validar-NomeArquivoPacote {
         [Parameter(Mandatory)] [string]$Origem
     )
 
-    if ($NomeArquivo -ieq 'configuracao.sap.json' -or
-        (Testar-NomeConfiguracaoReal -NomeArquivo $NomeArquivo)) {
+    if (Testar-NomeArquivoSensivel -NomeArquivo $NomeArquivo) {
         throw "Pacote bloqueado: configuracao real encontrada em $Origem."
     }
 
@@ -238,11 +260,11 @@ function Validar-PastaPacote {
     foreach ($Arquivo in Get-ChildItem -LiteralPath $Pasta -File -Recurse -Force) {
         Validar-NomeArquivoPacote -NomeArquivo $Arquivo.Name -Origem $Arquivo.FullName
 
-        if ($Arquivo.Name -match '^configuracao\..+\.exemplo\.json$') {
+        if ($Arquivo.Extension -ieq '.json') {
             Validar-ArquivoConfiguracao `
                 -Conteudo (Get-Content -LiteralPath $Arquivo.FullName -Raw) `
                 -Origem $Arquivo.FullName `
-                -ValidarCredenciais ($Arquivo.Name -ieq 'configuracao.sap.exemplo.json')
+                -ValidarCredenciais ($Arquivo.Name -notmatch '\.exemplo\.json$')
         }
     }
 }
@@ -270,13 +292,13 @@ function Validar-ZipPacote {
 
             Validar-NomeArquivoPacote -NomeArquivo $Entrada.Name -Origem $Entrada.FullName
 
-            if ($Entrada.Name -match '^configuracao\..+\.exemplo\.json$') {
+            if ([System.IO.Path]::GetExtension($Entrada.Name) -ieq '.json') {
                 $Leitor = [System.IO.StreamReader]::new($Entrada.Open())
                 try {
                     Validar-ArquivoConfiguracao `
                         -Conteudo $Leitor.ReadToEnd() `
                         -Origem $Entrada.FullName `
-                        -ValidarCredenciais ($Entrada.Name -ieq 'configuracao.sap.exemplo.json')
+                        -ValidarCredenciais ($Entrada.Name -notmatch '\.exemplo\.json$')
                 }
                 finally {
                     $Leitor.Dispose()
@@ -323,6 +345,15 @@ function Compactar-PastaComBarrasNormais {
     }
 }
 
+if (-not [string]::IsNullOrWhiteSpace($ValidarCaminhoPacote)) {
+    if (-not (Test-Path -LiteralPath $ValidarCaminhoPacote -PathType Container)) {
+        throw "Pacote bloqueado: pasta para validacao nao encontrada."
+    }
+
+    Validar-PastaPacote -Pasta $ValidarCaminhoPacote
+    Write-Host 'Pacote limpo validado com sucesso; nenhum ZIP foi gerado.' -ForegroundColor Green
+    return
+}
 New-Item -ItemType Directory -Path $DestinoRaiz -Force | Out-Null
 
 if (Test-Path -LiteralPath $DestinoPacote) {

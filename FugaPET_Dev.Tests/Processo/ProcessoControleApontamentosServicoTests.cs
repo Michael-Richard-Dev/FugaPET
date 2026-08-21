@@ -850,7 +850,27 @@ public sealed class ProcessoControleApontamentosServicoTests
     // Autorização permissiva: estes testes exercitam o FLUXO, não o gate de permissão
     // (coberto em ControleApontamentosCorrecoesFinaisTests).
     private static ProcessoControleApontamentosServico Criar(SapFake sap, RepositorioFake repo)
-        => new(sap, () => repo, null, new AutorizacaoPermissiva());
+        => new(sap, () => repo, null, new AutorizacaoPermissiva(), new RoteiroManualFake());
+
+    // GATE 048-E: roteiro que marca TODAS as operações da OP como manuais (PP_FORM). Estes testes exercitam
+    // o FLUXO/sequência, não a regra PP_FORM (coberta em ControleApontamentosMarcadorPpFormTests).
+    private sealed class RoteiroManualFake : IProductionRoutingSapServico
+    {
+        public Task<RoteiroProducaoSap?> ResolverRoteiroDaOrdemAsync(
+            OrdemProducaoSap ordem, CancellationToken cancellationToken = default)
+            => Task.FromResult<RoteiroProducaoSap?>(new RoteiroProducaoSap
+            {
+                Operacoes = ordem.Operacoes
+                    .Where(o => !string.IsNullOrWhiteSpace(o.Operacao))
+                    .Select(o => new OperacaoRoteiroSap
+                    {
+                        Operacao = o.Operacao,
+                        CodigoTextoPadrao = "PP_FORM",
+                        TextoPadraoObtido = true
+                    })
+                    .ToList()
+            });
+    }
 
     private sealed class AutorizacaoPermissiva : IControleApontamentosAutorizacaoServico
     {

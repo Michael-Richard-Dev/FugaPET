@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 public sealed class ProdutoAcabadoOrdem
 {
@@ -17,4 +17,19 @@ public sealed class ProdutoAcabadoOrdem
     public string StatusOrdem { get; init; } = string.Empty;
     public bool Liberada { get; init; }
     public bool EncerradaOuDeletada { get; init; }
+    public IReadOnlyList<ProdutoAcabadoComponenteOrdem> Componentes { get; init; } = [];
 }
+
+public sealed record ProdutoAcabadoComponenteOrdem
+{
+    public string Material { get; init; } = string.Empty;
+    public string Centro { get; init; } = string.Empty;
+    public string Deposito { get; init; } = string.Empty;
+    public decimal QuantidadeNecessaria { get; init; }
+    public string Unidade { get; init; } = string.Empty;
+    public string Reserva { get; init; } = string.Empty;
+    public string ItemReserva { get; init; } = string.Empty;
+    public string Lote { get; init; } = string.Empty;
+    public string TipoMovimento { get; init; } = string.Empty;
+}
+

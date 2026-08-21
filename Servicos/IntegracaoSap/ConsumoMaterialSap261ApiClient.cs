@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -22,6 +23,36 @@ public sealed class ConsumoMaterialSap261ApiClient
     private readonly ConfiguracaoSap _configuracao;
     private readonly HttpClient _httpClient;
     private readonly Uri _baseUri;
+    private static readonly object TraceSync = new();
+    private static string TraceLogPath => System.IO.Path.Combine(AppContext.BaseDirectory, "logs", "pa045_runtime_trace.log");
+
+    private static void RegistrarTraceHttp(string correlationId, string marco, string detalhe)
+    {
+        try
+        {
+            string linha = $"{DateTimeOffset.UtcNow:O}|cid={SanitizarTrace(correlationId)}|codigo_caixa=N/A|etapa=261|marco={marco}|{SanitizarTrace(detalhe)}" + Environment.NewLine;
+            lock (TraceSync)
+            {
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(TraceLogPath)!);
+                System.IO.File.AppendAllText(TraceLogPath, linha, System.Text.Encoding.UTF8);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[PA045_HTTP_TRACE] Falha ao gravar trace HTTP: {ex.GetType().Name}");
+        }
+    }
+
+    private static string Sha256Hex(string valor)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(valor ?? string.Empty)));
+
+    private static string SanitizarTrace(string? detalhe)
+    {
+        if (string.IsNullOrWhiteSpace(detalhe)) { return "vazio"; }
+        string limpo = detalhe.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
+        return limpo.Length <= 1200 ? limpo : limpo[..1200] + "...";
+    }
+
     private readonly AuthenticationHeaderValue _autorizacao;
 
     public ConsumoMaterialSap261ApiClient(ConfiguracaoSap configuracao, HttpClient httpClient)
@@ -77,12 +108,15 @@ public sealed class ConsumoMaterialSap261ApiClient
 
             // ---- POST (payload do builder da Tarefa 6 — sem duplicar montagem) ----
             string json = ConsumoMaterialSapPayloadBuilder.SerializarPreview(requisicao);
+            RegistrarTraceHttp(correlationId, "HTTP01", $"payload_pronto;bytes={Encoding.UTF8.GetByteCount(json)};sha256={Sha256Hex(json)}");
             Uri urlCriacao = MontarUrlCriacao();
             using HttpRequestMessage post = CriarRequisicao(HttpMethod.Post, urlCriacao);
             post.Content = new StringContent(json, Encoding.UTF8, "application/json");
             post.Headers.TryAddWithoutValidation("X-CSRF-Token", token);
 
+            RegistrarTraceHttp(correlationId, "HTTP02", $"antes_SendAsync_POST;endpoint={urlCriacao.GetLeftPart(UriPartial.Path)};ct_cancelado={cancellationToken.IsCancellationRequested}");
             using HttpResponseMessage respostaPost = await _httpClient.SendAsync(post, cancellationToken);
+            RegistrarTraceHttp(correlationId, "HTTP03", $"retorno_SendAsync_POST;status={(int)respostaPost.StatusCode};sucesso={respostaPost.IsSuccessStatusCode}");
             string corpo = await respostaPost.Content.ReadAsStringAsync(cancellationToken);
             return respostaPost.IsSuccessStatusCode
                 ? InterpretarSucesso((int)respostaPost.StatusCode, corpo, correlationId)
@@ -95,12 +129,14 @@ public sealed class ConsumoMaterialSap261ApiClient
                     correlationId,
                     json);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
+            RegistrarTraceHttp(correlationId, "HTTP04", $"excecao_http_cancelada;tipo={ex.GetType().Name};ct_cancelado={cancellationToken.IsCancellationRequested};mensagem={ex.Message}");
             throw;
         }
         catch (Exception ex)
         {
+            RegistrarTraceHttp(correlationId, "HTTP04", $"excecao_http;tipo={ex.GetType().Name};ct_cancelado={cancellationToken.IsCancellationRequested};mensagem={ex.Message}");
             // Rede/TLS/timeout/URL — antes ou durante o HTTP. Sem credenciais, mas preservando tipo/mensagem.
             string detalhe = MaterialDocumentSapApiClient.SanitizarExcecaoTecnica(
                 ex, _autorizacao.Parameter, _configuracao.Usuario, _configuracao.Senha);

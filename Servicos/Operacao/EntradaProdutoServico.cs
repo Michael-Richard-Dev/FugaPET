@@ -1,4 +1,4 @@
-using FugaPET_Dev.AcessoDados.Banco;
+﻿using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Modelo.Entrada;
@@ -132,6 +132,145 @@ public sealed class EntradaProdutoServico
         }
     }
 
+
+    public async Task<ResultadoPersistenciaEntradaComLotes> RegistrarLancamentoComLotesAsync(
+        EntradaProdutoLancamentoComLotesPersistencia entrada,
+        CancellationToken cancellationToken = default)
+    {
+        (EntradaProdutoLancamentoComLotesPersistencia snapshot, ContextoAuditoriaEntradaLotes contexto) =
+            await PrepararLancamentoComLotesAsync(entrada, cancellationToken);
+
+        return await _repositorio.RegistrarLancamentoComLotesAsync(snapshot, contexto, cancellationToken);
+    }
+
+    /// <summary>
+    /// Ação de idempotência auditada quando a árvore informada diverge da árvore já persistida sob a mesma
+    /// correlation_id. Constante estável para consultas na trilha de auditoria.
+    /// </summary>
+    internal const string AcaoAuditoriaIdempotenciaDivergente = "ENTRADA_LOTES_IDEMPOTENCIA_DIVERGENTE";
+
+    public async Task<ResultadoPersistenciaEntradaComLotes> RegistrarOuRecuperarLancamentoComLotesAsync(
+        EntradaProdutoLancamentoComLotesPersistencia entrada,
+        CancellationToken cancellationToken = default)
+    {
+        (EntradaProdutoLancamentoComLotesPersistencia snapshot, ContextoAuditoriaEntradaLotes contexto) =
+            await PrepararLancamentoComLotesAsync(entrada, cancellationToken);
+
+        try
+        {
+            return await _repositorio.RegistrarOuRecuperarLancamentoComLotesAsync(snapshot, contexto, cancellationToken);
+        }
+        catch (ConflitoPersistenciaEntradaLotesException ex)
+        {
+            // §10/§11: audita (best-effort) o diagnóstico SANITIZADO e mapeia para a exceção operacional
+            // com a mensagem pública genérica. Encapsulado para ser testável sem banco.
+            throw await MapearConflitoIdempotenciaAsync(ex, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// §10/§11 — audita o conflito (best-effort, diagnóstico técnico sanitizado) e devolve a exceção
+    /// operacional a ser lançada, com a mensagem pública genérica e o conflito preservado como
+    /// InnerException. A falha da auditoria NUNCA transforma o conflito em sucesso.
+    /// </summary>
+    internal async Task<ErroOperacionalEsperadoException> MapearConflitoIdempotenciaAsync(
+        ConflitoPersistenciaEntradaLotesException conflito,
+        CancellationToken cancellationToken)
+    {
+        await AuditarConflitoIdempotenciaAsync(conflito, cancellationToken);
+        return new ErroOperacionalEsperadoException(conflito.MensagemUsuario, conflito);
+    }
+
+    private async Task AuditarConflitoIdempotenciaAsync(
+        ConflitoPersistenciaEntradaLotesException conflito,
+        CancellationToken cancellationToken)
+    {
+        if (_auditoria is null)
+        {
+            return;
+        }
+
+        string mensagem = conflito.DivergenciaTecnica;
+        if (conflito.CorrelationId is Guid correlationId)
+        {
+            mensagem += $" | correlation_id={correlationId}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(conflito.NumeroItemSap))
+        {
+            mensagem += $" | item={conflito.NumeroItemSap}";
+        }
+
+        try
+        {
+            await _auditoria.RegistrarErroAsync(
+                AcaoAuditoriaIdempotenciaDivergente,
+                mensagem,
+                TelaAuditoria,
+                cancellationToken);
+        }
+        catch
+        {
+            // Best-effort: a impossibilidade de auditar não pode liberar nem alterar o resultado do conflito.
+        }
+    }
+
+    private async Task<(EntradaProdutoLancamentoComLotesPersistencia Snapshot, ContextoAuditoriaEntradaLotes Contexto)>
+        PrepararLancamentoComLotesAsync(
+            EntradaProdutoLancamentoComLotesPersistencia entrada,
+            CancellationToken cancellationToken)
+    {
+        ContextoAuditoriaEntradaLotes contexto = CapturarContextoAuditoriaEntradaLotes();
+        EntradaProdutoLancamentoComLotesPersistencia snapshot = EntradaProdutoArvoreLotesSnapshot.Criar(entrada);
+        ValidadorEntradaProdutoArvoreLotes.Validar(snapshot, contexto.DataReferencia);
+        ValidadorEntradaProdutoPersistenciaLotes.ValidarSetorObrigatorio(snapshot.Lancamento.CodigoSetor, contexto);
+
+        bool temPermissao =
+            AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Finalizar)
+            || AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Executar);
+        if (!temPermissao)
+        {
+            await NegarAsync(
+                contexto.CodigoUsuario,
+                AutorizacaoEntradaProdutoServico.MensagemSemPermissao(PermissoesSistema.Acoes.Finalizar),
+                cancellationToken);
+        }
+
+        IReadOnlyList<EntradaProdutoItem> itensComPesagem = snapshot.Itens
+            .Select(item => item.Item with
+            {
+                Pesagens = item.Lotes
+                    .SelectMany(lote => lote.Pesagens)
+                    .Select(pesagemLocal => pesagemLocal.Pesagem)
+                    .ToList()
+            })
+            .Where(item => item.Pesagens.Count > 0)
+            .ToList();
+
+        if (itensComPesagem.Count == 0)
+        {
+            throw new ErroOperacionalEsperadoException("Nenhuma pesagem informada para gravar.");
+        }
+
+        bool possuiManual = itensComPesagem
+            .SelectMany(item => item.Pesagens)
+            .Any(pesagem => string.Equals(pesagem.Origem, OrigemManual, StringComparison.Ordinal));
+        if (possuiManual && !AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.PesoManual))
+        {
+            await NegarAsync(
+                contexto.CodigoUsuario,
+                AutorizacaoEntradaProdutoServico.MensagemSemPermissao(PermissoesSistema.Acoes.PesoManual),
+                cancellationToken);
+        }
+
+        IReadOnlySet<long> tarasDoSetor = await CarregarTarasDoSetorAsync(snapshot.Lancamento.CodigoSetor, cancellationToken);
+        foreach (EntradaProdutoItem item in itensComPesagem)
+        {
+            await ValidarItemComLotesAsync(contexto, snapshot.Lancamento.NumeroPedido, item, tarasDoSetor, cancellationToken);
+        }
+
+        return (snapshot, contexto);
+    }
     public Task<EntradaProdutoItemPersistido?> ObterItemPersistidoAsync(
         long codigoLancamento,
         long codigoSapPedidoCompraItem,
@@ -194,6 +333,46 @@ public sealed class EntradaProdutoServico
         }
     }
 
+    private async Task ValidarItemComLotesAsync(
+        ContextoAuditoriaEntradaLotes contexto,
+        string numeroPedido,
+        EntradaProdutoItem item,
+        IReadOnlySet<long> tarasDoSetor,
+        CancellationToken cancellationToken)
+    {
+        ValidadorEntradaProdutoPersistenciaLotes.ValidarItemObrigatorio(item);
+
+        if (!_autorizacaoCentroDeposito.ItemAutorizado(item.Centro, item.Deposito))
+        {
+            await NegarAsync(contexto.CodigoUsuario, $"Item {item.NumeroItem} fora do centro/deposito autorizado para a entrada.", cancellationToken);
+        }
+
+        long codigoSap = item.CodigoSapPedidoCompraItem!.Value;
+        ValidacaoItemPesagem validacao = await _itemRepositorio.ValidarItemAsync(codigoSap, cancellationToken);
+        if (!validacao.Existe)
+        {
+            await NegarAsync(contexto.CodigoUsuario, $"Item {item.NumeroItem} nao encontrado no cache do pedido.", cancellationToken);
+        }
+        if (!validacao.PedidoAtivo)
+        {
+            await NegarAsync(contexto.CodigoUsuario, "Pedido de compra inativo. Entrada nao permitida.", cancellationToken);
+        }
+        if (!validacao.ItemAtivo)
+        {
+            await NegarAsync(contexto.CodigoUsuario, $"Item {item.NumeroItem} inativo. Entrada nao permitida.", cancellationToken);
+        }
+        if (!validacao.MaterialPresente)
+        {
+            await NegarAsync(contexto.CodigoUsuario, $"Item {item.NumeroItem} sem material valido. Entrada nao permitida.", cancellationToken);
+        }
+
+        ValidadorEntradaProdutoPersistenciaLotes.ValidarCoerenciaCacheSap(numeroPedido, item, validacao);
+
+        foreach (EntradaProdutoPesagem pesagem in item.Pesagens)
+        {
+            await ValidarPesagemAsync(contexto.CodigoUsuario, contexto.CodigoSetorUsuario, item, pesagem, tarasDoSetor, cancellationToken);
+        }
+    }
     private async Task ValidarItemAsync(
         long usuario, long? codigoSetor, EntradaProdutoItem item,
         IReadOnlySet<long> tarasDoSetor, CancellationToken cancellationToken)
@@ -270,25 +449,35 @@ public sealed class EntradaProdutoServico
         {
             await NegarAsync(usuario, $"Peso liquido deve ser igual ao bruto menos a tara (item {item.NumeroItem}).", cancellationToken);
         }
-
-        // Tara x setor: a tara usada deve ser ativa e do setor do lancamento.
-        if (pesagem.CodigoTara is long codigoTara && codigoTara > 0
-            && tarasDoSetor.Count > 0 && !tarasDoSetor.Contains(codigoTara))
+        try
         {
-            await NegarAsync(usuario, $"Tara selecionada nao pertence ao setor autorizado (item {item.NumeroItem}).", cancellationToken);
+            ValidadorEntradaProdutoPersistenciaLotes.ValidarTaraDoSetor(
+                pesagem.CodigoTara,
+                tarasDoSetor,
+                item.NumeroItem);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await NegarAsync(usuario, ex.Message, cancellationToken);
         }
 
-        // Balanca: quando informada, deve estar ativa e pertencer ao setor do lancamento.
-        if (pesagem.CodigoBalanca is long codigoBalanca && codigoBalanca > 0 && _balancaRepositorio is not null)
+        if (pesagem.CodigoBalanca is long codigoBalanca && codigoBalanca > 0)
         {
-            BalancaCadastro? balanca = await _balancaRepositorio.ObterPorIdAsync(codigoBalanca, cancellationToken);
-            if (balanca is null || !balanca.SituacaoBalanca)
+            BalancaCadastro? balanca = _balancaRepositorio is null
+                ? null
+                : await _balancaRepositorio.ObterPorIdAsync(codigoBalanca, cancellationToken);
+            try
             {
-                await NegarAsync(usuario, $"Balanca informada nao encontrada ou inativa (item {item.NumeroItem}).", cancellationToken);
+                ValidadorEntradaProdutoPersistenciaLotes.ValidarBalancaDoSetor(
+                    pesagem.CodigoBalanca,
+                    balanca,
+                    _balancaRepositorio is not null,
+                    codigoSetor ?? 0,
+                    item.NumeroItem);
             }
-            if (codigoSetor is long setorLancamento && balanca!.CodigoSetor != setorLancamento)
+            catch (InvalidOperationException ex)
             {
-                await NegarAsync(usuario, $"Balanca nao pertence ao setor do lancamento (item {item.NumeroItem}).", cancellationToken);
+                await NegarAsync(usuario, ex.Message, cancellationToken);
             }
         }
     }
@@ -304,6 +493,15 @@ public sealed class EntradaProdutoServico
         return taras.Select(tara => tara.CodigoTara).ToHashSet();
     }
 
+    private static ContextoAuditoriaEntradaLotes CapturarContextoAuditoriaEntradaLotes()
+    {
+        SessaoUsuarioAplicacao? sessao = EstadoSessaoUsuarioAtual.SessaoAtual;
+        return ContextoAuditoriaEntradaLotes.Criar(
+            sessao?.IdUsuario,
+            sessao?.Login,
+            sessao?.IdSetorPadrao,
+            DateTime.Today.Date);
+    }
     private static long ExigirUsuarioAutenticado()
     {
         long? usuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
@@ -343,3 +541,7 @@ public sealed class EntradaProdutoServico
         }
     }
 }
+
+
+
+

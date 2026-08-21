@@ -20,7 +20,11 @@ public sealed class PesagemMultiplaItemForm : Form
     private readonly Button _concluirButton = new();
     private readonly Button _cancelarButton = new();
     private readonly List<EntradaProdutoPesagem> _pesagens = [];
+    private readonly List<EntradaProdutoPesagemEmMemoria> _pesagensCanonicas = [];
     private readonly CultureInfo _cultura = CultureInfo.GetCultureInfo("pt-BR");
+    private readonly bool _modoCanonico;
+    private readonly Func<decimal, string, string, Task<EntradaProdutoPesagemEmMemoria>>? _registrarPesagemCanonicaAsync;
+    private readonly Func<Guid, Task<EntradaProdutoPesagemEmMemoria>>? _cancelarPesagemCanonicaAsync;
 
     // Impressão por pesagem individual (regra definitiva). Callbacks injetados pelo formulário pai — a janela
     // não fala com banco/impressora diretamente. Devolvem true se a etiqueta foi impressa.
@@ -33,8 +37,10 @@ public sealed class PesagemMultiplaItemForm : Form
     // Índices das pesagens que já dispararam impressão automática nesta sessão (para a mensagem de cancelamento).
     private readonly HashSet<int> _pesagensImpressas = [];
 
-    public IReadOnlyList<EntradaProdutoPesagem> Pesagens =>
-        EntradaProdutoPesagemCalculos.ValidarSequencias(_pesagens);
+    public IReadOnlyList<EntradaProdutoPesagem> Pesagens => _modoCanonico
+        ? _pesagens.Select(p => p with { }).ToList()
+        : EntradaProdutoPesagemCalculos.ValidarSequencias(_pesagens);
+    public IReadOnlyList<EntradaProdutoPesagemEmMemoria> PesagensComCodigoLocal => _pesagensCanonicas.AsReadOnly();
     public decimal PesoTotal => EntradaProdutoPesagemCalculos.SomarPesoBrutoValido(_pesagens);
     public string PesoTotalTexto => FormatarPeso(PesoTotal);
 
@@ -124,6 +130,39 @@ public sealed class PesagemMultiplaItemForm : Form
         AtualizarResumo();
     }
 
+    public PesagemMultiplaItemForm(
+        BalancaLeituraServico balancaLeituraServico,
+        string itemPedido,
+        TaraCadastro tara,
+        long? codigoBalanca,
+        IReadOnlyList<EntradaProdutoPesagemEmMemoria> pesagensAtuais,
+        Func<decimal, string, string, Task<EntradaProdutoPesagemEmMemoria>> registrarPesagemAsync,
+        Func<Guid, Task<EntradaProdutoPesagemEmMemoria>> cancelarPesagemAsync,
+        Func<EntradaProdutoPesagem, Task<bool>>? imprimirPesagemAsync = null,
+        Func<EntradaProdutoPesagem, Task<bool>>? reimprimirPesagemAsync = null)
+        : this(
+            balancaLeituraServico,
+            itemPedido,
+            tara,
+            codigoBalanca,
+            (pesagensAtuais ?? throw new ArgumentNullException(nameof(pesagensAtuais)))
+                .OrderBy(p => p.Pesagem.Sequencia)
+                .Select(p => p.Pesagem)
+                .ToList(),
+            imprimirPesagemAsync,
+            reimprimirPesagemAsync)
+    {
+        _modoCanonico = true;
+        _registrarPesagemCanonicaAsync = registrarPesagemAsync ?? throw new ArgumentNullException(nameof(registrarPesagemAsync));
+        _cancelarPesagemCanonicaAsync = cancelarPesagemAsync ?? throw new ArgumentNullException(nameof(cancelarPesagemAsync));
+        _pesagensCanonicas.AddRange(pesagensAtuais
+            .OrderBy(p => p.Pesagem.Sequencia)
+            .Select(ValidarPesagemCanonica));
+        SincronizarPesagensLegadasComCanonicas();
+        RecarregarGrid();
+        AtualizarResumo();
+    }
+
     private void ConfigurarGrid()
     {
         _pesagensGrid.Location = new Point(24, 110);
@@ -171,7 +210,7 @@ public sealed class PesagemMultiplaItemForm : Form
 
         _lerBalancaButton.Click += async (_, _) => await LerBalancaAsync();
         _adicionarManualButton.Click += async (_, _) => await AdicionarPesoManualAsync();
-        _removerButton.Click += (_, _) => CancelarPesoSelecionado();
+        _removerButton.Click += async (_, _) => await CancelarPesoSelecionadoAsync();
         _concluirButton.Click += async (_, _) => await ConcluirAsync();
         // "Fechar" preserva as pesagens adicionadas (que já podem ter impresso etiqueta) — retorna OK ao pai,
         // NUNCA descarta silenciosamente. Cancelar uma leitura específica é feito por "Cancelar leitura".
@@ -236,33 +275,46 @@ public sealed class PesagemMultiplaItemForm : Form
         }
     }
 
-    private async Task AdicionarPesoManualAsync()
+    private async Task<bool> AdicionarPesoManualAsync()
     {
         string leituraOriginal = _pesoManualTextBox.Text;
         if (!TryParsePeso(leituraOriginal, out decimal peso))
         {
             _statusLabel.Text = "Informe um peso manual válido.";
-            return;
+            ManterPesoManualParaCorrecao(leituraOriginal);
+            return false;
         }
 
-        await AdicionarPesoAsync(peso, "MANUAL", leituraOriginal);
-        _pesoManualTextBox.Clear();
-        _pesoManualTextBox.Focus();
+        bool adicionado = await AdicionarPesoAsync(peso, "MANUAL", leituraOriginal);
+        if (adicionado)
+        {
+            _pesoManualTextBox.Clear();
+            _pesoManualTextBox.Focus();
+            return true;
+        }
+
+        ManterPesoManualParaCorrecao(leituraOriginal);
+        return false;
     }
 
-    private async Task AdicionarPesoAsync(decimal peso, string origem, string leituraOriginal)
+    private async Task<bool> AdicionarPesoAsync(decimal peso, string origem, string leituraOriginal)
     {
         if (_somenteConsulta)
         {
             _statusLabel.Text = "Lançamento já finalizado: pesagens em modo somente consulta/reimpressão.";
-            return;
+            return false;
+        }
+
+        if (_modoCanonico)
+        {
+            return await AdicionarPesoCanonicoAsync(peso, origem, leituraOriginal);
         }
 
         decimal pesoLiquido = peso - _tara.PesoKg;
         if (peso <= 0m || pesoLiquido <= 0m)
         {
             _statusLabel.Text = "O peso bruto deve ser maior que a tara.";
-            return;
+            return false;
         }
 
         EntradaProdutoPesagem nova = new()
@@ -288,7 +340,7 @@ public sealed class PesagemMultiplaItemForm : Form
         if (_imprimirPesagemAsync is null)
         {
             _statusLabel.Text = $"Pesagem líquida {FormatarPeso(pesoLiquido)} kg adicionada.";
-            return;
+            return true;
         }
 
         bool impressa = await _imprimirPesagemAsync(nova);
@@ -302,6 +354,96 @@ public sealed class PesagemMultiplaItemForm : Form
             _statusLabel.Text =
                 "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.";
         }
+
+        return true;
+    }
+
+    private async Task<bool> AdicionarPesoCanonicoAsync(decimal peso, string origem, string leituraOriginal)
+    {
+        if (peso <= 0m)
+        {
+            _statusLabel.Text = "Informe um peso bruto maior que zero.";
+            return false;
+        }
+
+        if (_registrarPesagemCanonicaAsync is null)
+        {
+            _statusLabel.Text = "Registro canônico de pesagem não configurado.";
+            return false;
+        }
+
+        EntradaProdutoPesagemEmMemoria pesagemCanonica;
+        try
+        {
+            pesagemCanonica = ValidarPesagemCanonica(await _registrarPesagemCanonicaAsync(peso, origem, leituraOriginal));
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Não foi possível registrar a pesagem: {ex.Message}";
+            return false;
+        }
+
+        if (!string.Equals(pesagemCanonica.Pesagem.StatusPesagem, EntradaProdutoPesagemCalculos.StatusValida, StringComparison.OrdinalIgnoreCase))
+        {
+            _statusLabel.Text = "O registro retornou uma pesagem que não está válida.";
+            return false;
+        }
+
+        if (_pesagensCanonicas.Any(p => p.CodigoLocalPesagem == pesagemCanonica.CodigoLocalPesagem))
+        {
+            _statusLabel.Text = "O registro retornou um identificador de pesagem já existente.";
+            return false;
+        }
+
+        if (_pesagensCanonicas.Any(p => p.Pesagem.Sequencia == pesagemCanonica.Pesagem.Sequencia))
+        {
+            _statusLabel.Text = "O registro retornou uma sequência de pesagem já existente.";
+            return false;
+        }
+
+        _pesagensCanonicas.Add(pesagemCanonica);
+        OrdenarPesagensCanonicas();
+        SincronizarPesagensLegadasComCanonicas();
+        RecarregarGrid();
+        AtualizarResumo();
+
+        if (_imprimirPesagemAsync is null)
+        {
+            _statusLabel.Text = $"Pesagem líquida {FormatarPeso(pesagemCanonica.Pesagem.PesoLiquidoKg)} kg adicionada.";
+            return true;
+        }
+
+        bool impressa;
+        try
+        {
+            impressa = await _imprimirPesagemAsync(pesagemCanonica.Pesagem);
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Pesagem registrada, mas ocorreu uma falha ao imprimir a etiqueta: {ex.Message}";
+            return true;
+        }
+
+        int indice = _pesagensCanonicas.FindIndex(p => p.CodigoLocalPesagem == pesagemCanonica.CodigoLocalPesagem);
+        if (impressa && indice >= 0)
+        {
+            _pesagensImpressas.Add(indice);
+            _statusLabel.Text = $"Pesagem {pesagemCanonica.Pesagem.Sequencia} — {FormatarPeso(pesagemCanonica.Pesagem.PesoLiquidoKg)} kg: etiqueta impressa.";
+        }
+        else if (!impressa)
+        {
+            _statusLabel.Text =
+                "Pesagem registrada, mas a etiqueta não foi impressa. Dê dois cliques na pesagem para reimprimir após corrigir a impressora.";
+        }
+
+        return true;
+    }
+
+    private void ManterPesoManualParaCorrecao(string leituraOriginal)
+    {
+        _pesoManualTextBox.Text = leituraOriginal;
+        _pesoManualTextBox.SelectAll();
+        _pesoManualTextBox.Focus();
     }
 
     private async Task ReimprimirPesagemAsync(int rowIndex)
@@ -324,7 +466,7 @@ public sealed class PesagemMultiplaItemForm : Form
             : "Não foi possível reimprimir a etiqueta desta pesagem.";
     }
 
-    private void CancelarPesoSelecionado()
+    private async Task CancelarPesoSelecionadoAsync()
     {
         if (_somenteConsulta)
         {
@@ -350,8 +492,62 @@ public sealed class PesagemMultiplaItemForm : Form
             return;
         }
 
+        if (_modoCanonico)
+        {
+            await CancelarPesoCanonicoAsync(row.Index);
+            return;
+        }
+
         // Marca como CANCELADA (retira do total, preserva o histórico) — não tenta "desimprimir" a etiqueta física.
         _pesagens[row.Index] = _pesagens[row.Index] with { StatusPesagem = "CANCELADA" };
+        RecarregarGrid();
+        AtualizarResumo();
+        _statusLabel.Text = "Pesagem marcada como cancelada. Descarte fisicamente a etiqueta, se impressa.";
+    }
+
+    private async Task CancelarPesoCanonicoAsync(int indice)
+    {
+        if (_cancelarPesagemCanonicaAsync is null || indice < 0 || indice >= _pesagensCanonicas.Count)
+        {
+            _statusLabel.Text = "Cancelamento canônico de pesagem não configurado.";
+            return;
+        }
+
+        EntradaProdutoPesagemEmMemoria original = _pesagensCanonicas[indice];
+        Guid codigoSolicitado = original.CodigoLocalPesagem;
+        EntradaProdutoPesagemEmMemoria cancelada;
+        try
+        {
+            cancelada = ValidarPesagemCanonica(await _cancelarPesagemCanonicaAsync(codigoSolicitado));
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text = $"Não foi possível cancelar a pesagem: {ex.Message}";
+            return;
+        }
+
+        if (cancelada.CodigoLocalPesagem != codigoSolicitado)
+        {
+            _statusLabel.Text = "O cancelamento retornou uma pesagem diferente da solicitada.";
+            return;
+        }
+
+        if (!ValidarRetornoCancelamentoCanonico(original, cancelada))
+        {
+            _statusLabel.Text = "O cancelamento retornou uma pesagem com dados divergentes do contrato canônico.";
+            return;
+        }
+
+        int indiceAtual = _pesagensCanonicas.FindIndex(p => p.CodigoLocalPesagem == codigoSolicitado);
+        if (indiceAtual < 0)
+        {
+            _statusLabel.Text = "Pesagem cancelada não pertence à lista atual.";
+            return;
+        }
+
+        _pesagensCanonicas[indiceAtual] = cancelada;
+        OrdenarPesagensCanonicas();
+        SincronizarPesagensLegadasComCanonicas();
         RecarregarGrid();
         AtualizarResumo();
         _statusLabel.Text = "Pesagem marcada como cancelada. Descarte fisicamente a etiqueta, se impressa.";
@@ -363,8 +559,11 @@ public sealed class PesagemMultiplaItemForm : Form
         for (int index = 0; index < _pesagens.Count; index++)
         {
             EntradaProdutoPesagem pesagem = _pesagens[index];
+            int sequenciaExibida = _modoCanonico
+                ? pesagem.Sequencia
+                : index + 1;
             _pesagensGrid.Rows.Add(
-                index + 1,
+                sequenciaExibida,
                 FormatarPeso(pesagem.PesoBrutoKg),
                 FormatarPeso(pesagem.PesoTaraKg),
                 FormatarPeso(pesagem.PesoLiquidoKg),
@@ -382,6 +581,43 @@ public sealed class PesagemMultiplaItemForm : Form
             EntradaProdutoPesagemCalculos.PossuiLeituraValida(_pesagens);
     }
 
+    private void SincronizarPesagensLegadasComCanonicas()
+    {
+        _pesagens.Clear();
+        _pesagens.AddRange(_pesagensCanonicas
+            .OrderBy(p => p.Pesagem.Sequencia)
+            .Select(p => p.Pesagem));
+    }
+
+    private void OrdenarPesagensCanonicas()
+        => _pesagensCanonicas.Sort((a, b) => a.Pesagem.Sequencia.CompareTo(b.Pesagem.Sequencia));
+
+    private static EntradaProdutoPesagemEmMemoria ValidarPesagemCanonica(EntradaProdutoPesagemEmMemoria pesagem)
+    {
+        ArgumentNullException.ThrowIfNull(pesagem);
+        if (pesagem.CodigoLocalPesagem == Guid.Empty)
+        {
+            throw new InvalidOperationException("Pesagem canônica retornou identificador local vazio.");
+        }
+
+        return pesagem;
+    }
+
+    private static bool ValidarRetornoCancelamentoCanonico(
+        EntradaProdutoPesagemEmMemoria original,
+        EntradaProdutoPesagemEmMemoria retornada)
+        => retornada.CodigoLocalPesagem == original.CodigoLocalPesagem
+            && retornada.Pesagem.Sequencia == original.Pesagem.Sequencia
+            && retornada.Pesagem.PesoBrutoKg == original.Pesagem.PesoBrutoKg
+            && retornada.Pesagem.PesoTaraKg == original.Pesagem.PesoTaraKg
+            && retornada.Pesagem.PesoLiquidoKg == original.Pesagem.PesoLiquidoKg
+            && retornada.Pesagem.CodigoTara == original.Pesagem.CodigoTara
+            && retornada.Pesagem.CodigoBalanca == original.Pesagem.CodigoBalanca
+            && string.Equals(retornada.Pesagem.Origem, original.Pesagem.Origem, StringComparison.Ordinal)
+            && string.Equals(retornada.Pesagem.LeituraOriginal, original.Pesagem.LeituraOriginal, StringComparison.Ordinal)
+            && retornada.Pesagem.PesadoEm == original.Pesagem.PesadoEm
+            && string.Equals(retornada.Pesagem.StatusPesagem, EntradaProdutoPesagemCalculos.StatusCancelada, StringComparison.OrdinalIgnoreCase);
+
     // Mantem o total colado na margem direita do dialogo; como o label e AutoSize,
     // a largura acompanha o texto e numeros grandes nao sao mais cortados.
     private void AlinharTotalADireita()
@@ -397,10 +633,14 @@ public sealed class PesagemMultiplaItemForm : Form
         // Em consulta, "Concluir" apenas fecha (preservando).
         if (!_somenteConsulta && !string.IsNullOrWhiteSpace(_pesoManualTextBox.Text))
         {
-            await AdicionarPesoManualAsync();
+            bool adicionada = await AdicionarPesoManualAsync();
+            if (!adicionada)
+            {
+                return;
+            }
         }
 
-        // Concluir NÃO imprime etiqueta consolidada — cada pesagem já imprimiu individualmente.
+        // Concluir NÃO imprime etiqueta consolidada ? cada pesagem já imprimiu individualmente.
         DialogResult = DialogResult.OK;
         Close();
     }

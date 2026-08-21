@@ -204,6 +204,88 @@ public sealed class LeitorConfiguracaoSapTests : IDisposable
         Assert.Equal("product_base_url n?o configurada no configuracao.sap.json.", semProduct.MensagemProductMasterAusente());
     }
 
+    [Fact]
+    public void Packaging_DeveLerUrlEHostsDoArquivoECredenciaisSomenteDoAmbiente()
+    {
+        string json = JsonSerializer.Serialize(new
+        {
+            sap = new
+            {
+                base_url = "https://sap.exemplo.local/odata",
+                hosts_permitidos = new[] { "sap.exemplo.local" },
+                packaging_base_url = "https://suite.cfapps.br10.hana.ondemand.com/http/packaging/GetPackagingSet",
+                packaging_hosts_permitidos = new[] { "suite.cfapps.br10.hana.ondemand.com" },
+                usuario = "std-user",
+                senha = "std-pass"
+            }
+        });
+        File.WriteAllText(_arquivoTemporario, json);
+
+        Dictionary<string, string> ambiente = new()
+        {
+            ["FUGAPET_SAP_PACKAGING_USERNAME"] = "pkg-user",
+            ["FUGAPET_SAP_PACKAGING_PASSWORD"] = "pkg-pass"
+        };
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(
+            _arquivoTemporario, nome => ambiente.GetValueOrDefault(nome));
+
+        Assert.Equal("https://suite.cfapps.br10.hana.ondemand.com/http/packaging/GetPackagingSet", configuracao.PackagingBaseUrl);
+        Assert.Contains("suite.cfapps.br10.hana.ondemand.com", configuracao.PackagingHostsPermitidos);
+        Assert.Equal("pkg-user", configuracao.PackagingUsuario);
+        Assert.Equal("pkg-pass", configuracao.PackagingSenha);
+        Assert.True(configuracao.PackagingConfigurado);
+    }
+
+
+    [Fact]
+    public void Carregar_DeveLerConfiguracaoInt012DoArquivoQuandoAmbienteNaoInformado()
+    {
+        string json = JsonSerializer.Serialize(new
+        {
+            sap = new
+            {
+                base_url = "https://sap.exemplo.local/odata",
+                hosts_permitidos = new[] { "sap.exemplo.local" },
+                pa_pipeline_habilitado = true,
+                pallet_int012_base_url = "https://cpi.exemplo.local/http/int012",
+                pallet_int012_hosts_permitidos = new[] { "cpi.exemplo.local" }
+            }
+        });
+        File.WriteAllText(_arquivoTemporario, json);
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(
+            _arquivoTemporario,
+            _ => null);
+
+        Assert.True(configuracao.ProdutoAcabadoPipelineHabilitado);
+        Assert.Equal("https://cpi.exemplo.local/http/int012", configuracao.PalletInt012BaseUrl);
+        Assert.Contains("cpi.exemplo.local", configuracao.PalletInt012HostsPermitidos);
+    }
+    [Fact]
+    public void Packaging_CredenciaisNuncaVemDoArquivo_NemDasStandard()
+    {
+        // usuario/senha standard no arquivo NAO devem virar credencial da embalagem.
+        string json = JsonSerializer.Serialize(new
+        {
+            sap = new
+            {
+                packaging_base_url = "https://suite.local/GetPackagingSet",
+                packaging_hosts_permitidos = new[] { "suite.local" },
+                usuario = "std-user",
+                senha = "std-pass"
+            }
+        });
+        File.WriteAllText(_arquivoTemporario, json);
+
+        ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(_arquivoTemporario, _ => null);
+
+        Assert.Equal(string.Empty, configuracao.PackagingUsuario);
+        Assert.Equal(string.Empty, configuracao.PackagingSenha);
+        Assert.False(configuracao.PackagingConfigurado);        // sem credencial propria
+        Assert.True(configuracao.PackagingCredencialAusente);   // url+host ok, so falta credencial
+    }
+
     public void Dispose()
     {
         File.Delete(_arquivoTemporario);

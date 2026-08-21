@@ -1,10 +1,18 @@
-﻿using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela;
 
 public partial class ProcessoProducaoForm : UserControl
 {
     private const string ProducaoIconPath = "Servicos\\icone\\producao_24x_red.png";
+    private RoundedPanel? paletizacaoCard;
+    private Label? paletizacaoIconLabel;
+    private Label? paletizacaoTitleLabel;
+    private Label? paletizacaoDescriptionLabel;
+    private Label? paletizacaoStatusLabel;
+    private Label? paletizacaoShortcutLabel;
+    private Label? paletizacaoArrowLabel;
 
     // Tarefa Entrada 24.1b: cards separados de Entrada por modo (Matéria-Prima × Químicos).
     public event EventHandler? EntradaMateriaPrimaRequested;
@@ -16,6 +24,7 @@ public partial class ProcessoProducaoForm : UserControl
     public event EventHandler? HistoricoConsumoMaterialRequested;
     public event EventHandler? DiagnosticoConsumoSap261Requested;
     public event EventHandler? OrdensAndamentoRequested;
+    public event EventHandler? PaletizacaoRequested;
 
     /// <summary>Controle de Apontamentos (F8): leitura/início/término das operações da OP.</summary>
     public event EventHandler? ControleApontamentosRequested;
@@ -23,6 +32,7 @@ public partial class ProcessoProducaoForm : UserControl
     public ProcessoProducaoForm()
     {
         InitializeComponent();
+        AddPaletizacaoCard();
         ApplyProductionIcons();
         AddHistoricoConsumoButton();
         AddDiagnosticoConsumoButton();
@@ -71,6 +81,140 @@ public partial class ProcessoProducaoForm : UserControl
         diagnosticoConsumoButton.BringToFront();
     }
 
+    private void AddPaletizacaoCard()
+    {
+        contentPanel.AutoScroll = true;
+        paletizacaoCard = CriarModuloCard(
+            "paletizacaoCard",
+            new Point(28, 602),
+            "Paletização por\r\nHU",
+            "Formação de paletes\r\npor HU de caixas",
+            "F9",
+            out paletizacaoIconLabel,
+            out paletizacaoTitleLabel,
+            out paletizacaoDescriptionLabel,
+            out paletizacaoStatusLabel,
+            out paletizacaoShortcutLabel,
+            out paletizacaoArrowLabel);
+
+        contentPanel.Controls.Add(paletizacaoCard);
+        paletizacaoCard.BringToFront();
+    }
+
+    private static RoundedPanel CriarModuloCard(
+        string name,
+        Point location,
+        string title,
+        string description,
+        string shortcut,
+        out Label iconLabel,
+        out Label titleLabel,
+        out Label descriptionLabel,
+        out Label statusLabel,
+        out Label shortcutLabel,
+        out Label arrowLabel)
+    {
+        RoundedPanel card = new()
+        {
+            BackColor = Color.Transparent,
+            BorderColor = Color.FromArgb(226, 232, 240),
+            Cursor = Cursors.Hand,
+            Location = location,
+            Name = name,
+            ShadowBlur = 0,
+            ShadowOffsetY = 0,
+            Size = new Size(240, 250)
+        };
+
+        RoundedPanel iconPanel = new()
+        {
+            BackColor = Color.Transparent,
+            BorderRadius = 9,
+            Cursor = Cursors.Hand,
+            FillColor = Color.FromArgb(254, 226, 226),
+            Location = new Point(92, 20),
+            Name = name + "IconPanel",
+            ShadowBlur = 0,
+            ShadowOffsetY = 0,
+            Size = new Size(56, 56)
+        };
+        iconLabel = new Label
+        {
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(229, 27, 43),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            Text = string.Empty,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        iconPanel.Controls.Add(iconLabel);
+
+        titleLabel = new Label
+        {
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(17, 24, 39),
+            Location = new Point(20, 92),
+            Size = new Size(202, 62),
+            Text = title,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        descriptionLabel = new Label
+        {
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(71, 85, 105),
+            Location = new Point(20, 156),
+            Size = new Size(175, 46),
+            Text = description,
+            TextAlign = ContentAlignment.TopCenter
+        };
+        statusLabel = new Label
+        {
+            BackColor = Color.FromArgb(220, 252, 231),
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", 8F, FontStyle.Bold, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(22, 163, 74),
+            Location = new Point(20, 214),
+            Size = new Size(82, 28),
+            Text = "Disponível",
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        shortcutLabel = new Label
+        {
+            BackColor = Color.FromArgb(241, 245, 249),
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(30, 41, 59),
+            Location = new Point(110, 214),
+            Size = new Size(38, 28),
+            Text = shortcut,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        arrowLabel = new Label
+        {
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI", 16F, FontStyle.Regular, GraphicsUnit.Point, 0),
+            ForeColor = Color.FromArgb(239, 68, 68),
+            Location = new Point(190, 207),
+            Size = new Size(32, 36),
+            Text = "→",
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        card.Controls.Add(iconPanel);
+        card.Controls.Add(titleLabel);
+        card.Controls.Add(descriptionLabel);
+        card.Controls.Add(statusLabel);
+        card.Controls.Add(shortcutLabel);
+        card.Controls.Add(arrowLabel);
+        return card;
+    }
     private void ApplyProductionIcons()
     {
         string? iconPath = ResolveProductionIconPath();
@@ -88,6 +232,7 @@ public partial class ProcessoProducaoForm : UserControl
         semiAcabadoIconLabel.Image = new Bitmap(source);
         ordensIconLabel.Image = new Bitmap(source);
         apontamentosIconLabel.Image = new Bitmap(source);
+        if (paletizacaoIconLabel is not null) { paletizacaoIconLabel.Image = new Bitmap(source); }
         entradaIconLabel.Text = string.Empty;
         entradaQuimicosIconLabel.Text = string.Empty;
         processIconLabel.Text = string.Empty;
@@ -96,6 +241,7 @@ public partial class ProcessoProducaoForm : UserControl
         semiAcabadoIconLabel.Text = string.Empty;
         ordensIconLabel.Text = string.Empty;
         apontamentosIconLabel.Text = string.Empty;
+        if (paletizacaoIconLabel is not null) { paletizacaoIconLabel.Text = string.Empty; }
     }
 
     private static string? ResolveProductionIconPath()
@@ -199,6 +345,20 @@ public partial class ProcessoProducaoForm : UserControl
         apontamentosStatusLabel.Click += OnControleApontamentosClick;
         apontamentosShortcutLabel.Click += OnControleApontamentosClick;
         apontamentosArrowLabel.Click += OnControleApontamentosClick;
+
+        ConectarPaletizacaoCard();
+    }
+
+    private void ConectarPaletizacaoCard()
+    {
+        if (paletizacaoCard is null) { return; }
+        paletizacaoCard.Click += OnPaletizacaoClick;
+        paletizacaoIconLabel!.Click += OnPaletizacaoClick;
+        paletizacaoTitleLabel!.Click += OnPaletizacaoClick;
+        paletizacaoDescriptionLabel!.Click += OnPaletizacaoClick;
+        paletizacaoStatusLabel!.Click += OnPaletizacaoClick;
+        paletizacaoShortcutLabel!.Click += OnPaletizacaoClick;
+        paletizacaoArrowLabel!.Click += OnPaletizacaoClick;
     }
 
     private void OnEntradaMateriaPrimaClick(object? sender, EventArgs e)
@@ -253,5 +413,16 @@ public partial class ProcessoProducaoForm : UserControl
     {
         ControleApontamentosRequested?.Invoke(this, EventArgs.Empty);
     }
+
+    private void OnPaletizacaoClick(object? sender, EventArgs e)
+    {
+        PaletizacaoRequested?.Invoke(this, EventArgs.Empty);
+    }
 }
+
+
+
+
+
+
 

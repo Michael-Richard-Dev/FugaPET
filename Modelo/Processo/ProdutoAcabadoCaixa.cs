@@ -35,6 +35,9 @@ public sealed class ProdutoAcabadoCaixa
     public string UnidadeQuantidade { get; init; } = "UN";
     public string OrigemPesagem { get; init; } = string.Empty;
 
+    /// <summary>Balança usada na pesagem (coluna hu_caixa.codigo_balanca). Nula em pesagem MANUAL.</summary>
+    public long? CodigoBalanca { get; init; }
+
     // Integração / Handling Unit
     public Guid CorrelationId { get; init; }
     public StatusIntegracaoCaixa StatusIntegracao { get; set; } = StatusIntegracaoCaixa.EmPesagem;
@@ -43,6 +46,12 @@ public sealed class ProdutoAcabadoCaixa
     public string? ResponsePayload { get; set; }
     public string? ErroSanitizado { get; set; }
     public int? HttpStatus { get; set; }
+
+    /// <summary>Número da tentativa corrente (coluna <c>tentativas</c>). Congelado no claim; usado na finalização.</summary>
+    public int Tentativas { get; set; }
+
+    /// <summary>Token do claim atômico (coluna <c>claim_token</c>). Exigido para finalizar a tentativa corrente.</summary>
+    public Guid? ClaimToken { get; set; }
 
     // Auditoria
     public DateTimeOffset CriadoEm { get; init; } = DateTimeOffset.Now;

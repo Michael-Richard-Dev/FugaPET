@@ -42,7 +42,13 @@ public enum CenarioLeituraApontamento
     ConfirmacaoPendente,
     SucessoInicio,
     SucessoTermino,
-    FalhaConsultaSap
+    FalhaConsultaSap,
+
+    /// <summary>GATE 048-E: operação existe na OP mas é AUTOMÁTICA no SAP (Standard Text Code ≠ PP_FORM). Não aponta.</summary>
+    OperacaoAutomatica,
+
+    /// <summary>GATE 048-E: roteiro/marcador PP_FORM não resolvido com segurança (fail-closed). Não aponta.</summary>
+    ContratoRoteiroNaoResolvido
 }
 
 /// <summary>

@@ -233,6 +233,333 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         Assert.Equal(0, materialDoc.Chamadas);
     }
 
+    // ===================================================================================================
+    // SAP 12/019 (shelf life) — payload por LOTE com Batch/ManufactureDate/ShelfLifeExpirationDate. A..G.
+    // ===================================================================================================
+
+    // A. Um lote com fabricacao e validade ⇒ payload traz Batch, ManufactureDate e ShelfLifeExpirationDate.
+    [Fact]
+    public async Task Enviar_UmLoteComDatas_DevePreencherBatchManufactureEShelfLife()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        DateTime fab = new(2026, 1, 10);
+        DateTime val = new(2027, 1, 10);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true,
+            itens: [Item("10", numeroLote: "L-777", dataFabricacao: fab, dataValidade: val)]);
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        MaterialDocumentSapItemRequest item = Assert.Single(materialDoc.UltimaRequisicao!.Itens);
+        Assert.Equal("L-777", item.Batch);
+        Assert.Equal(fab, item.ManufactureDate);
+        Assert.Equal(val, item.ShelfLifeExpirationDate);
+    }
+
+    // B. Dois lotes do mesmo item ⇒ duas posicoes SAP distintas, quantidades NAO agregadas, datas proprias.
+    [Fact]
+    public async Task Enviar_DoisLotesDoMesmoItem_GeraDuasPosicoesSemAgregarComDatasProprias()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap loteA = Item("10", numeroLote: "L-A", dataValidade: new DateTime(2027, 3, 1), pesoLiquido: 3m);
+        EntradaProdutoItemEnvioSap loteB = Item("10", numeroLote: "L-B", dataValidade: new DateTime(2027, 9, 1), pesoLiquido: 5m);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [loteA, loteB]);
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        IReadOnlyList<MaterialDocumentSapItemRequest> itens = materialDoc.UltimaRequisicao!.Itens;
+        Assert.Equal(2, itens.Count);
+        Assert.All(itens, i => Assert.Equal("00010", i.PurchaseOrderItem)); // mesmo item do pedido
+        Assert.Contains(itens, i => i.Batch == "L-A"
+            && decimal.Parse(i.QuantityInEntryUnit, CultureInfo.InvariantCulture) == 3m);
+        Assert.Contains(itens, i => i.Batch == "L-B"
+            && decimal.Parse(i.QuantityInEntryUnit, CultureInfo.InvariantCulture) == 5m);
+        // Quantidades NAO agregadas: nao existe uma posicao unica de 8 KG.
+        Assert.DoesNotContain(itens, i => decimal.Parse(i.QuantityInEntryUnit, CultureInfo.InvariantCulture) == 8m);
+        Assert.Equal(new DateTime(2027, 3, 1), itens.Single(i => i.Batch == "L-A").ShelfLifeExpirationDate);
+        Assert.Equal(new DateTime(2027, 9, 1), itens.Single(i => i.Batch == "L-B").ShelfLifeExpirationDate);
+    }
+
+    // C. Validade ausente e obrigatoria ⇒ bloqueia ANTES do HTTP; POST nao executado.
+    [Fact]
+    public async Task Enviar_ValidadeAusente_DeveBloquearAntesDoPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap semValidade = Item("10") with { DataValidade = null };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [semValidade]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("validade", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // D. Fabricacao presente e validade ausente ⇒ NAO calcula validade; bloqueia (sem POST).
+    [Fact]
+    public async Task Enviar_FabricacaoPresenteEValidadeAusente_NaoCalculaEBloqueia()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap item = Item("10", dataFabricacao: new DateTime(2026, 2, 1)) with { DataValidade = null };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [item]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("validade", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // E. Validade anterior a fabricacao ⇒ bloqueia ANTES do POST.
+    [Fact]
+    public async Task Enviar_ValidadeAnteriorAFabricacao_DeveBloquearAntesDoPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap item = Item("10",
+            dataFabricacao: DateTime.Today.AddDays(-1),
+            dataValidade: DateTime.Today.AddDays(-2)); // validade antes da fabricacao
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [item]);
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("fabrica", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // F. Serializacao ⇒ Batch como string e datas em OData V2 "/Date(ms)/" (mesmo contrato de PostingDate).
+    [Fact]
+    public void Serializar_ComLoteEDatas_ProduzBatchEDatasODataV2()
+    {
+        MaterialDocumentSapItemRequest item = new()
+        {
+            Material = "3500027", Plant = "3007", StorageLocation = "PP01",
+            GoodsMovementType = "101", GoodsMovementRefDocType = "B",
+            QuantityInEntryUnit = "1.000", EntryUnit = "KG",
+            PurchaseOrder = "4500000010", PurchaseOrderItem = "00010",
+            Batch = "L-1",
+            ManufactureDate = new DateTime(2026, 1, 10),
+            ShelfLifeExpirationDate = new DateTime(2027, 1, 10)
+        };
+        MaterialDocumentSapRequest req = new()
+        {
+            GoodsMovementCode = "01",
+            PostingDate = new DateTime(2026, 7, 29),
+            DocumentDate = new DateTime(2026, 7, 29),
+            MaterialDocumentHeaderText = "FP 4500000010 L99",
+            Itens = [item]
+        };
+
+        string json = MaterialDocumentSapApiClient.SerializarPayload(req);
+
+        long fabMs = new DateTimeOffset(DateTime.SpecifyKind(new DateTime(2026, 1, 10), DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        long valMs = new DateTimeOffset(DateTime.SpecifyKind(new DateTime(2027, 1, 10), DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        Assert.Contains("\"Batch\":\"L-1\"", json);
+        Assert.Contains($"\"ManufactureDate\":\"/Date({fabMs})/\"", json);
+        Assert.Contains($"\"ShelfLifeExpirationDate\":\"/Date({valMs})/\"", json);
+    }
+
+    // G. Reenvio apos HTTP 400 ⇒ nao perde lancamento/lotes, nao cria nova persistencia/documento e
+    //    reabre para reenvio (status local -> ERRO_SAP), com um unico POST por acao.
+    [Fact]
+    public async Task Enviar_Falha400_PreservaLancamentoEReabreParaReenvioComoErroSap()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new()
+        {
+            Sucesso = false,
+            MensagemFalha = "Etapa POST_DOCUMENTO_MATERIAL: HTTP 400 Bad Request."
+        };
+        CenarioEnvioSapEntrada? cenarioStatusLocal = null;
+        RastreabilidadeDocumentoMaterialSap? rastreabilidade = null;
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [Item("10")],
+            atualizarStatus: (_, _, cenario, rastro, _) =>
+            {
+                cenarioStatusLocal = cenario;
+                rastreabilidade = rastro;
+                return Task.FromResult(ResultadoOperacao.Ok());
+            });
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Falha, resultado.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);                             // um unico POST por acao
+        Assert.Equal(CenarioEnvioSapEntrada.Falha, cenarioStatusLocal);    // status local -> ERRO_SAP (reenvio liberado)
+        Assert.Null(rastreabilidade);                                      // nenhum documento/rastreabilidade gravado
+        Assert.True(resultado.StatusLocalAtualizado);                      // persistencia local preservada
+        Assert.NotEqual(CenarioEnvioSapEntrada.FalhaPersistenciaLocal, resultado.Cenario);
+    }
+
+    // ===================================================================================================
+    // MM_IM_ODATA_API_MDOC/014 — payload CONDICIONAL por administracao de lote SAP (A_ProductPlant). C..J.
+    // (A/B/H = material administrado por lote: ver testes acima com Batch/datas via stub padrao batch.)
+    // ===================================================================================================
+
+    // C. Material NAO administrado por lote ⇒ Batch/datas ausentes, POST permitido, peso enviado.
+    [Fact]
+    public async Task Enviar_MaterialNaoAdministradoPorLote_NaoEnviaBatchNemDatasEPermitePost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true,
+            itens: [Item("10", numeroLote: "L-X", pesoLiquido: 7m)],
+            consultarProdutoCentro: (mat, ce, ct) => Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, false)));
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, resultado.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        MaterialDocumentSapItemRequest item = Assert.Single(materialDoc.UltimaRequisicao!.Itens);
+        Assert.Null(item.Batch);
+        Assert.Null(item.ManufactureDate);
+        Assert.Null(item.ShelfLifeExpirationDate);
+        Assert.Equal(7m, decimal.Parse(item.QuantityInEntryUnit, CultureInfo.InvariantCulture));
+    }
+
+    // D. Dois lotes locais de material NAO administrado ⇒ uma unica posicao, soma dos pesos, sem Batch/datas,
+    //    preservando os dois codigos de lote local na posicao preparada.
+    [Fact]
+    public async Task Preparar_DoisLotesNaoAdministrado_ConsolidaEmUmaPosicaoPreservandoCodigosDeLote()
+    {
+        EntradaProdutoItemEnvioSap loteA = Item("10", numeroLote: "L-A", pesoLiquido: 3m) with { CodigoEntradaProdutoLote = 101 };
+        EntradaProdutoItemEnvioSap loteB = Item("10", numeroLote: "L-B", pesoLiquido: 5m) with { CodigoEntradaProdutoLote = 202 };
+
+        ResultadoPreparacaoPayloadEntrada preparo = await PreparadorPayloadMaterialDocumentEntrada.PrepararAsync(
+            99, "4500000010", [loteA, loteB],
+            (mat, ce, ct) => Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, false)),
+            CancellationToken.None);
+
+        Assert.Null(preparo.Bloqueio);
+        EntradaProdutoPosicaoMaterialDocument posicao = Assert.Single(preparo.Posicoes!);
+        Assert.Null(posicao.Item.Batch);
+        Assert.Null(posicao.Item.ShelfLifeExpirationDate);
+        Assert.Equal(8m, decimal.Parse(posicao.Item.QuantityInEntryUnit, CultureInfo.InvariantCulture));
+        Assert.Equal(new long[] { 101, 202 }, posicao.CodigosLotesLocais.OrderBy(codigo => codigo));
+    }
+
+    // E. Documento MISTO: um material administrado por lote + um nao administrado ⇒ cada item usa sua regra.
+    [Fact]
+    public async Task Enviar_DocumentoMisto_CadaMaterialUsaSuaRegra()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap comLote = Item("10", numeroLote: "L-BM") with { Material = "MAT-BATCH" };
+        EntradaProdutoItemEnvioSap semLote = Item("20", numeroLote: "L-NB", pesoLiquido: 4m) with { Material = "MAT-NOBATCH", DataValidade = null };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [comLote, semLote],
+            consultarProdutoCentro: (mat, ce, ct) => Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, mat == "MAT-BATCH")));
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, resultado.Cenario);
+        IReadOnlyList<MaterialDocumentSapItemRequest> itens = materialDoc.UltimaRequisicao!.Itens;
+        MaterialDocumentSapItemRequest posBatch = itens.Single(i => i.Material == "MAT-BATCH");
+        MaterialDocumentSapItemRequest posNaoBatch = itens.Single(i => i.Material == "MAT-NOBATCH");
+        Assert.Equal("L-BM", posBatch.Batch);
+        Assert.NotNull(posBatch.ShelfLifeExpirationDate);
+        Assert.Null(posNaoBatch.Batch);          // nao administrado: sem Batch mesmo com lote local
+        Assert.Null(posNaoBatch.ShelfLifeExpirationDate); // e sem validade (nem exigida)
+    }
+
+    // F. Consulta A_ProductPlant indeterminada (null) ⇒ POST NAO executado, mensagem com material e centro.
+    [Fact]
+    public async Task Enviar_ConsultaProductPlantIndeterminada_BloqueiaSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [Item("10")],
+            consultarProdutoCentro: (_, _, _) => Task.FromResult<ProdutoCentroSapMestre?>(null));
+
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("3500027", resultado.Mensagem); // material
+        Assert.Contains("3007", resultado.Mensagem);    // centro
+    }
+
+    // G. Material 1000395 / centro 3007 simulado como NON-batch ⇒ payload sem as tres propriedades proibidas.
+    [Fact]
+    public async Task Enviar_Material1000395NonBatch_PayloadSemAsTresPropriedadesProibidas()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap item = Item("10", numeroLote: "L-1") with { Material = "1000395", Centro = "3007" };
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true, itens: [item],
+            consultarProdutoCentro: (mat, ce, ct) => Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, false)));
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        MaterialDocumentSapItemRequest posicao = Assert.Single(materialDoc.UltimaRequisicao!.Itens);
+        Assert.Equal("1000395", posicao.Material);
+        Assert.Null(posicao.Batch);
+        Assert.Null(posicao.ManufactureDate);
+        Assert.Null(posicao.ShelfLifeExpirationDate);
+        string json = MaterialDocumentSapApiClient.SerializarPayload(materialDoc.UltimaRequisicao!);
+        Assert.DoesNotContain("Batch", json);
+        Assert.DoesNotContain("ManufactureDate", json);
+        Assert.DoesNotContain("ShelfLifeExpirationDate", json);
+    }
+
+    // I. Cache por envio: varios lotes do mesmo material+centro ⇒ um unico GET A_ProductPlant.
+    [Fact]
+    public async Task Enviar_MultiplosLotesMesmoMaterialCentro_ConsultaProductPlantUmaVez()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        int consultas = 0;
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc, ehHomologacao: true,
+            itens: [Item("10", numeroLote: "L-A"), Item("10", numeroLote: "L-B"), Item("10", numeroLote: "L-C")],
+            consultarProdutoCentro: (mat, ce, ct) => { consultas++; return Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, true)); });
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(1, consultas); // um unico GET por material+centro
+        Assert.Equal(3, materialDoc.UltimaRequisicao!.Itens.Count); // administrado: 3 posicoes (uma por lote)
+    }
+
+    // J. Nenhuma chamada SAP automatica (ProductPlant nem Material Document) na finalizacao local.
+    [Fact]
+    public async Task FinalizarLeitura_NaoDeveChamarProductPlantNemMaterialDocument()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        int consultas = 0;
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico(), materialDoc, ehHomologacao: true, itens: [Item()],
+            consultarProdutoCentro: (mat, ce, ct) => { consultas++; return Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, true)); });
+
+        await controller.FinalizarLeituraAsync(Lancamento());
+
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Equal(0, consultas);
+    }
+
     [Fact]
     public async Task Enviar_MaterialDocumentNaoConfigurado_DeveBloquearSemPost()
     {
@@ -387,32 +714,21 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     }
 
     // Regex que cobre as formas de habilitar a escrita SAP em .cmd/.bat/.ps1 (com/sem aspas, $env:,
-    // SetEnvironmentVariable). Espelha Testar-ScriptHabilitaEscritaSap do GerarPacoteLimpo.ps1.
+    // SetEnvironmentVariable), preservando a varredura de scripts locais perigosos.
     private const string PadraoHabilitaEscritaSap =
         @"(FUGAPET_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true)"
         + @"|(SetEnvironmentVariable\s*\(\s*[""']FUGAPET_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true)";
+
+    // Detecta somente comandos efetivos. Literais de regex, comentarios e mensagens do gerador nao contam.
+    private const string PadraoExecucaoEfetivaEscritaSap =
+        @"^\s*(?:set\s+|\$env:)?FUGAPET_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true"
+        + @"|^\s*\[Environment\]::SetEnvironmentVariable\s*\(\s*[""']FUGAPET_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true";
 
     [Fact]
     public void Projeto_NaoDeveConterScriptQueHabilitaEscritaSap()
     {
         string raiz = RaizProjeto();
-        string[] dirsIgnoradas = ["bin", "obj", "pacotes_limpos", ".git", ".vs", "_backup"];
-        string[] extensoes = [".cmd", ".bat", ".ps1"];
-
-        List<string> scriptsPerigosos = Directory
-            .EnumerateFiles(raiz, "*.*", SearchOption.AllDirectories)
-            .Where(arquivo => extensoes.Any(ext =>
-                arquivo.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
-            .Where(arquivo => !string.Equals(
-                Path.GetFileName(arquivo), "GerarPacoteLimpo.ps1", StringComparison.OrdinalIgnoreCase))
-            .Where(arquivo => dirsIgnoradas.All(dir =>
-                !arquivo.Contains($"{Path.DirectorySeparatorChar}{dir}{Path.DirectorySeparatorChar}",
-                    StringComparison.OrdinalIgnoreCase)))
-            .Where(arquivo => System.Text.RegularExpressions.Regex.IsMatch(
-                File.ReadAllText(arquivo),
-                PadraoHabilitaEscritaSap,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-            .ToList();
+        List<string> scriptsPerigosos = ObterScriptsPerigosos(raiz);
 
         Assert.True(
             scriptsPerigosos.Count == 0,
@@ -421,40 +737,86 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     }
 
     [Fact]
-    public void GerarPacoteLimpo_DeveBloquearScriptsQueHabilitamEscritaSap()
+    public void GerarPacoteLimpo_DeveSerPreservadoESomenteSeuCaminhoCanonicoPodeSerIgnorado()
     {
-        string script = File.ReadAllText(Path.Combine(RaizProjeto(), "Scripts", "GerarPacoteLimpo.ps1"));
+        string raiz = RaizProjeto();
+        string caminhoGerador = Path.Combine(raiz, "Scripts", "GerarPacoteLimpo.ps1");
 
-        Assert.Contains("function Testar-ScriptHabilitaEscritaSap", script, StringComparison.Ordinal);
-        // Cobre as formas alem do '=' direto: $env: e SetEnvironmentVariable.
-        Assert.Contains("$env:FUGAPET_SAP_WRITE_ENABLED", script, StringComparison.Ordinal);
-        Assert.Contains("SetEnvironmentVariable", script, StringComparison.Ordinal);
-        // Aplica a .cmd, .bat e .ps1.
-        Assert.Contains("'.cmd', '.bat', '.ps1'", script, StringComparison.Ordinal);
+        Assert.True(File.Exists(caminhoGerador), "Scripts/GerarPacoteLimpo.ps1 deve existir localmente.");
 
-        // A regex de deteccao realmente casa as variacoes pedidas.
-        string[] exemplosBloqueados =
-        [
-            "set FUGAPET_SAP_WRITE_ENABLED=true",
-            "$env:FUGAPET_SAP_WRITE_ENABLED = \"true\"",
-            "$env:FUGAPET_SAP_WRITE_ENABLED='true'",
-            "[Environment]::SetEnvironmentVariable(\"FUGAPET_SAP_WRITE_ENABLED\", \"true\", \"User\")"
-        ];
-        foreach (string exemplo in exemplosBloqueados)
-        {
-            Assert.True(
-                System.Text.RegularExpressions.Regex.IsMatch(
-                    exemplo, PadraoHabilitaEscritaSap,
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase),
-                $"Deveria bloquear: {exemplo}");
-        }
-
-        // Conteudo inofensivo nao e bloqueado.
+        string conteudoGerador = File.ReadAllText(caminhoGerador);
         Assert.False(System.Text.RegularExpressions.Regex.IsMatch(
-            "Write-Host 'build ok'", PadraoHabilitaEscritaSap,
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+            conteudoGerador,
+            PadraoExecucaoEfetivaEscritaSap,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                | System.Text.RegularExpressions.RegexOptions.Multiline));
+        Assert.Contains("function Testar-ScriptHabilitaEscritaSap", conteudoGerador, StringComparison.Ordinal);
+        Assert.Contains("FUGAPET_SAP_WRITE_ENABLED", conteudoGerador, StringComparison.Ordinal);
+        Assert.Contains("SetEnvironmentVariable", conteudoGerador, StringComparison.Ordinal);
+        Assert.Contains("'.cmd', '.bat', '.ps1'", conteudoGerador, StringComparison.Ordinal);
+
+        string raizTemporaria = Path.Combine(
+            Path.GetTempPath(),
+            $"fugapet-governanca-{Guid.NewGuid():N}");
+
+        try
+        {
+            string diretorioCanonico = Path.Combine(raizTemporaria, "Scripts");
+            string diretorioMalicioso = Path.Combine(raizTemporaria, "Outro");
+            Directory.CreateDirectory(diretorioCanonico);
+            Directory.CreateDirectory(diretorioMalicioso);
+
+            File.WriteAllText(
+                Path.Combine(diretorioCanonico, "GerarPacoteLimpo.ps1"),
+                "$env:FUGAPET_SAP_WRITE_ENABLED = 'true'");
+            string scriptMalicioso = Path.Combine(diretorioMalicioso, "GerarPacoteLimpo.ps1");
+            File.WriteAllText(scriptMalicioso, "$env:FUGAPET_SAP_WRITE_ENABLED = 'true'");
+
+            List<string> scriptsPerigosos = ObterScriptsPerigosos(raizTemporaria);
+
+            Assert.Single(scriptsPerigosos);
+            Assert.Equal(Path.GetFullPath(scriptMalicioso), Path.GetFullPath(scriptsPerigosos[0]));
+        }
+        finally
+        {
+            if (Directory.Exists(raizTemporaria))
+            {
+                Directory.Delete(raizTemporaria, recursive: true);
+            }
+        }
     }
 
+    private static List<string> ObterScriptsPerigosos(string raiz)
+    {
+        string[] dirsIgnoradas = ["bin", "obj", "pacotes_limpos", ".git", ".vs", "_backup"];
+        string[] extensoes = [".cmd", ".bat", ".ps1"];
+
+        return Directory
+            .EnumerateFiles(raiz, "*.*", SearchOption.AllDirectories)
+            .Where(arquivo => extensoes.Any(ext =>
+                arquivo.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+            .Where(arquivo => !EhGeradorPacoteLimpoCanonico(raiz, arquivo))
+            .Where(arquivo => dirsIgnoradas.All(dir =>
+                !arquivo.Contains($"{Path.DirectorySeparatorChar}{dir}{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase)))
+            .Where(arquivo => System.Text.RegularExpressions.Regex.IsMatch(
+                File.ReadAllText(arquivo),
+                PadraoHabilitaEscritaSap,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .ToList();
+    }
+
+    private static bool EhGeradorPacoteLimpoCanonico(string raiz, string arquivo)
+    {
+        string caminhoRelativo = Path
+            .GetRelativePath(raiz, arquivo)
+            .Replace(Path.DirectorySeparatorChar, '/');
+
+        return string.Equals(
+            caminhoRelativo,
+            "Scripts/GerarPacoteLimpo.ps1",
+            StringComparison.OrdinalIgnoreCase);
+    }
     [Fact]
     public void Controller_DeveDiagnosticarUnidadeOriginalEPesoSapKgSemBloqueioAntigo()
     {
@@ -711,7 +1073,8 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             CenarioEnvioSapEntrada,
             RastreabilidadeDocumentoMaterialSap?,
             CancellationToken,
-            Task<ResultadoOperacao>>? atualizarStatus = null)
+            Task<ResultadoOperacao>>? atualizarStatus = null,
+        Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>>? consultarProdutoCentro = null)
         => new(
             new IntegracaoEntradaSapServico(pedido, materialDoc),
             new EntradaProdutoServico(null!, null!, null!, null, new AutorizacaoCentroDepositoEntrada([], []), null),
@@ -721,6 +1084,8 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             FabricaControladoresCadastro.CriarTaraController(),
             ehAmbienteHomologacao: () => ehHomologacao,
             carregarItensParaEnvio: (_, _) => Task.FromResult(itens),
+            // Por padrão, material ADMINISTRADO por lote (mantém o envio de Batch/datas dos testes existentes).
+            consultarProdutoCentroSap: consultarProdutoCentro ?? ProdutoCentroBatchManaged,
             obterStatusLancamento: (_, _) => Task.FromResult<string?>(statusLancamento),
             reservarLancamentoParaEnvio: (_, _) => Task.FromResult(reservaObtida),
             diagnosticarIntegracaoSap: _ => Task.FromResult(
@@ -758,18 +1123,38 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         });
     }
 
-    private static EntradaProdutoItemEnvioSap Item(string numeroItem = "10", string unidade = "KG")
+    private static EntradaProdutoItemEnvioSap Item(
+        string numeroItem = "10",
+        string unidade = "KG",
+        string? numeroLote = "LOTE-A",
+        DateTime? dataFabricacao = null,
+        DateTime? dataValidade = null,
+        decimal pesoLiquido = 8m,
+        decimal pesoBruto = 10m)
         => new()
         {
             NumeroPedido = "4500000010",
             NumeroItem = numeroItem,
-            PesoLiquidoKg = 8m,
-            PesoBrutoKg = 10m,
+            PesoLiquidoKg = pesoLiquido,
+            PesoBrutoKg = pesoBruto,
             Material = "3500027",
             Centro = "3007",
             Deposito = "PP01",
-            Unidade = unidade
+            Unidade = unidade,
+            NumeroLote = numeroLote,
+            CodigoEntradaProdutoLote = 0L,
+            // Datas civis validas por padrao (fabricacao no passado, validade no futuro), como um lote real.
+            DataFabricacao = dataFabricacao ?? DateTime.Today.AddMonths(-1),
+            DataValidade = dataValidade ?? DateTime.Today.AddYears(1)
         };
+
+    // Stub A_ProductPlant: material ADMINISTRADO por lote (envia Batch/datas).
+    private static Task<ProdutoCentroSapMestre?> ProdutoCentroBatchManaged(string material, string centro, CancellationToken ct)
+        => Task.FromResult<ProdutoCentroSapMestre?>(
+            new ProdutoCentroSapMestre { Material = material, Centro = centro, IsBatchManagementRequired = true, Consultado = true });
+
+    private static ProdutoCentroSapMestre Mestre(string material, string centro, bool? batch, bool consultado = true)
+        => new() { Material = material, Centro = centro, IsBatchManagementRequired = batch, Consultado = consultado };
 
     private static EntradaProdutoLancamento Lancamento()
         => new()
@@ -884,3 +1269,5 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             => Task.FromResult<IReadOnlyList<PedidoCompraSapItem>>([]);
     }
 }
+
+

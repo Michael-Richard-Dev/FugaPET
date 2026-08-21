@@ -33,8 +33,14 @@ public sealed class EntradaProdutoMensagensH20Tests
 
         Assert.Contains("LOCAL PENDENTE", form, StringComparison.Ordinal);
         Assert.Contains("LOCAL GRAVADO", form, StringComparison.Ordinal);
-        Assert.Contains("SAP HML: AGUARDANDO GRAVA\u00c7\u00c3O LOCAL", form, StringComparison.Ordinal);
-        Assert.Contains("SAP HML: LIBERADO PARA ENVIO", form, StringComparison.Ordinal);
+        Assert.Contains(
+            "SAP HML: AGUARDANDO GRAVAÇÃO LOCAL",
+            form,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SAP HML: LIBERADO PARA ENVIO",
+            form,
+            StringComparison.Ordinal);
         Assert.Contains("SAP HML: ENVIADO", form, StringComparison.Ordinal);
         Assert.Contains("SAP HML: FALHA", form, StringComparison.Ordinal);
         Assert.Contains("SAP HML: PARCIAL", form, StringComparison.Ordinal);
@@ -110,7 +116,7 @@ public sealed class EntradaProdutoMensagensH20Tests
     }
 
     [Fact]
-    public void LeituraBalanca_DeveRegistrarPesoAntesDaImpressaoNaoBloqueante()
+    public void LeituraBalanca_Fase4E_DeveRegistrarPesoEmMemoriaSemImpressaoImediata()
     {
         string form = LerForm();
         string metodo = ExtrairMetodo(
@@ -119,14 +125,15 @@ public sealed class EntradaProdutoMensagensH20Tests
             "private static string GetFriendlyErrorMessage");
 
         int leituraPeso = metodo.IndexOf("_balancaLeituraServico.LerPesoAsync", StringComparison.Ordinal);
-        int registrarPeso = metodo.IndexOf("RegistrarPesoLido", StringComparison.Ordinal);
-        int tentarImprimir = metodo.IndexOf("TentarImprimirEtiquetaAposLeituraAsync", StringComparison.Ordinal);
+        int registrarPeso = metodo.IndexOf("RegistrarPesoLidoOperacaoComLotesAsync", StringComparison.Ordinal);
+        int mensagemSemImpressao = metodo.IndexOf("Impressão do novo fluxo de lotes ainda não habilitada", StringComparison.Ordinal);
 
         Assert.True(leituraPeso >= 0);
         Assert.True(registrarPeso > leituraPeso);
-        Assert.True(tentarImprimir > registrarPeso);
+        Assert.True(mensagemSemImpressao > registrarPeso);
+        Assert.DoesNotContain("TentarImprimirEtiquetaAposLeituraAsync", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("GarantirImpressoraDisponivelAsync", metodo, StringComparison.Ordinal);
-        Assert.Contains("Peso registrado, mas a etiqueta n\u00e3o foi impressa.", form, StringComparison.Ordinal);
+        Assert.Contains("Peso registrado, mas a etiqueta não foi impressa.", form, StringComparison.Ordinal);
     }
 
     [Fact]

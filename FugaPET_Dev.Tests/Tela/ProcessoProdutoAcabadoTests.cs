@@ -1,12 +1,26 @@
-﻿using FugaPET_Dev.Controle.Processo;
+using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
+using FugaPET_Dev.Tela.Processo;
+using System.Windows.Forms;
 
 namespace FugaPET_Dev.Tests.Tela;
 
 public sealed class ProcessoProdutoAcabadoTests
 {
+    [Fact]
+    public void PaletizacaoAntiga_DoProdutoAcabado_FicaOcultaNoRuntime()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+
+        Assert.Contains("paletização saiu do Produto Acabado", form, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("_criarPaleteCard.Visible = false;", form, StringComparison.Ordinal);
+        Assert.Contains("paletesDataGridView.Visible = false;", form, StringComparison.Ordinal);
+        Assert.Contains("productionActionsButton.Visible = false;", form, StringComparison.Ordinal);
+        Assert.Contains("AdicionarColunaCaixa(\"caixaPaleteLocalColumn\", \"Palete local\", 110);", form, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void DeveUsarTelaExistenteSemCriarDuplicada()
     {
@@ -38,7 +52,10 @@ public sealed class ProcessoProdutoAcabadoTests
     [Fact]
     public async Task Controller_DeveConsultarOpEMapearProdutoAcabado()
     {
-        ProdutoAcabadoController controller = new(new ProductionOrderSapFakeServico(OrdemSapValida()));
+        // Norma vem da CONSULTA REAL (injetada aqui como fake): material caixa + qtd por caixa reais.
+        ProdutoAcabadoController controller = new(
+            new ProductionOrderSapFakeServico(OrdemSapValida()),
+            normaEmbalagemSapServico: NormaSapValidaFake("3500024", "EMB01", "12"));
 
         ResultadoConsultaProdutoAcabado resultado = await controller.ConsultarOrdemProducaoAsync("1000909");
 
@@ -53,7 +70,9 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Equal(10m, resultado.Ordem.QuantidadePlanejada);
         Assert.Equal(8m, resultado.Ordem.QuantidadePendente);
         Assert.NotNull(resultado.NormaEmbalagem);
-        Assert.Equal(1, resultado.NormaEmbalagem!.QuantidadeProdutosPorCaixa);
+        Assert.Equal("EMB01", resultado.NormaEmbalagem!.MaterialCaixa);
+        Assert.Equal(12, resultado.NormaEmbalagem.QuantidadeProdutosPorCaixa);
+        Assert.Equal("CONSULTADA SAP", resultado.NormaEmbalagem.Status);
     }
 
     [Fact]
@@ -88,20 +107,47 @@ public sealed class ProcessoProdutoAcabadoTests
     }
 
     [Fact]
-    public void NormaEmbalagem_DeveTerModeloClientEFallbackControlado()
+    public void NormaEmbalagem_DeveUsarDtoCruEModeloInterpretadoSemFallback()
     {
-        string modelo = LerArquivoProjeto("Modelo", "Processo", "ProdutoAcabadoNormaEmbalagem.cs");
-        string client = LerArquivoProjeto("Servicos", "IntegracaoSap", "ProdutoAcabadoPackagingApiClient.cs");
+        // DTO cru separado do modelo interpretado; sem cliente/fallback fictício (FALLBACK_MEMORIA removido).
+        string dto = LerArquivoProjeto("Modelo", "IntegracaoSap", "ConsultaNormaEmbalagemSapResponse.cs");
+        string modeloInterno = LerArquivoProjeto("Modelo", "Processo", "NormaEmbalagemProdutoAcabado.cs");
+        string interpretador = LerArquivoProjeto("Servicos", "IntegracaoSap", "InterpretadorNormaEmbalagemProdutoAcabado.cs");
 
-        Assert.Contains("public sealed class ProdutoAcabadoNormaEmbalagem", modelo, StringComparison.Ordinal);
-        Assert.Contains("public sealed class ProdutoAcabadoNormaItem", modelo, StringComparison.Ordinal);
-        Assert.Contains("ZAPI_PACKAGING_SRV/GetPackagingSet", client, StringComparison.Ordinal);
-        Assert.Contains("Norma de embalagem", client, StringComparison.Ordinal);
-        Assert.Contains("produto informado", client, StringComparison.Ordinal);
-        Assert.Contains("CriarFallbackControlado", client, StringComparison.Ordinal);
-        string url = ProdutoAcabadoPackagingApiClient.MontarUrlConsulta("3500024", "N001");
-        Assert.Contains("ZAPI_PACKAGING_SRV/GetPackagingSet", url, StringComparison.Ordinal);
-        Assert.Contains("sap-client=110", url, StringComparison.Ordinal);
+        Assert.Contains("JsonPropertyName(\"Material Type\")", dto, StringComparison.Ordinal);
+        Assert.Contains("public sealed class NormaEmbalagemProdutoAcabado", modeloInterno, StringComparison.Ordinal);
+        Assert.Contains("MaterialCaixa", modeloInterno, StringComparison.Ordinal);
+
+        // Fallback fictício não existe mais no projeto de produção.
+        Assert.False(File.Exists(Path.Combine(RaizProjeto(), "Servicos", "IntegracaoSap", "ProdutoAcabadoPackagingApiClient.cs")));
+        Assert.DoesNotContain("FALLBACK_MEMORIA", interpretador, StringComparison.Ordinal);
+        string controller = LerArquivoProjeto("Controle", "Processo", "ProdutoAcabadoController.cs");
+        Assert.DoesNotContain("FALLBACK_MEMORIA", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("CriarFallbackControlado", controller, StringComparison.Ordinal);
+    }
+
+    private static IProdutoAcabadoNormaEmbalagemSapServico NormaSapValidaFake(
+        string materialProduto, string materialCaixa, string quantidadePorCaixa)
+        => new NormaSapFakeTela(ResultadoConsultaNormaEmbalagemSap.DeEncontrada(
+            new ConsultaNormaEmbalagemSapResponse
+            {
+                Material = materialProduto,
+                PackagingInstruction = string.Empty,
+                PkgInstructionItems =
+                [
+                    new ConsultaNormaEmbalagemSapItemResponse { Material = materialCaixa, MaterialType = "P", Quantity = "1", QtyUOM = "ST", Item = "10" },
+                    new ConsultaNormaEmbalagemSapItemResponse { Material = materialProduto, MaterialType = "I", Quantity = quantidadePorCaixa, QtyUOM = "UN", Item = "20" }
+                ]
+            },
+            200, "https://host/GetPackagingSet", "cid"));
+
+    private sealed class NormaSapFakeTela : IProdutoAcabadoNormaEmbalagemSapServico
+    {
+        private readonly ResultadoConsultaNormaEmbalagemSap _resultado;
+        public NormaSapFakeTela(ResultadoConsultaNormaEmbalagemSap resultado) => _resultado = resultado;
+        public bool Configurado => true;
+        public Task<ResultadoConsultaNormaEmbalagemSap> ObterNormaAsync(string material, CancellationToken cancellationToken = default)
+            => Task.FromResult(_resultado);
     }
 
     [Fact]
@@ -140,8 +186,8 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("RegistrarPesoManualAsync", form, StringComparison.Ordinal);
         Assert.Contains("GarantirTaraCaixaSelecionadaAsync", form, StringComparison.Ordinal);
         Assert.Contains("decimal pesoLiquidoKg = pesoBrutoKg - taraKg;", form, StringComparison.Ordinal);
-        Assert.Contains("RegistrarCaixaProdutoAcabado(pesoBrutoKg, tara.PesoKg, \"BALANCA\")", form, StringComparison.Ordinal);
-        Assert.Contains("RegistrarCaixaProdutoAcabado(pesoBrutoKg, tara.PesoKg, \"MANUAL\")", form, StringComparison.Ordinal);
+        Assert.Contains("await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, \"BALANCA\")", form, StringComparison.Ordinal);
+        Assert.Contains("await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, \"MANUAL\")", form, StringComparison.Ordinal);
         Assert.Contains("Peso total das caixas ultrapassa o saldo pendente da OP.", form, StringComparison.Ordinal);
         // Tarefa 21.6 (Ajuste 6): colunas separadas (sem cabecalho combinado Tara/Líquido ou Origem/Status).
         Assert.Contains("AdicionarColunaCaixa(\"caixaTaraColumn\", \"Tara\"", form, StringComparison.Ordinal);
@@ -151,9 +197,11 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("AdicionarColunaCaixa(\"caixaPaleteLocalColumn\", \"Palete local\"", form, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Tara/Líquido\"", form, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Origem/Status\"", form, StringComparison.Ordinal);
-        Assert.Contains("CancelarUltimaCaixa", form, StringComparison.Ordinal);
-        Assert.Contains("POST SAP", form, StringComparison.Ordinal);
-        Assert.Contains("desativado", form, StringComparison.Ordinal);
+        Assert.Contains("SolicitarCancelamentoUltimaCaixaAsync", form, StringComparison.Ordinal);
+        // REV4-§11: texto NEUTRO (nunca hardcoda DEV/HML na regra de envio).
+        Assert.Contains("Envio de HU SAP não habilitado nesta execução", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("Envio SAP não autorizado no ambiente DEV", form, StringComparison.Ordinal);
+        Assert.Contains("await _controller.FinalizarCaixaLocalAsync(", form, StringComparison.Ordinal);
         Assert.DoesNotContain(".PostAsync(", form, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -195,33 +243,26 @@ public sealed class ProcessoProdutoAcabadoTests
     }
 
     [Fact]
-    public void Tela_DeveAtualizarFallbackQuantidadePorCaixaAntesDaLeitura()
+    public void Tela_DeveUsarNormaRealSemFallbackMemoria()
     {
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        string designer = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.Designer.cs");
 
-        Assert.Contains("AtualizarNormaFallbackAntesDaLeitura()", form, StringComparison.Ordinal);
-        Assert.Contains("PackagingInstruction, \"FALLBACK_MEMORIA\"", form, StringComparison.Ordinal);
+        // FALLBACK_MEMORIA removido; QTD. POR CAIXA sempre somente leitura (vem da consulta real).
+        Assert.DoesNotContain("FALLBACK_MEMORIA", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("NormaEmFallbackMemoria", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConsultarOuPrepararNormaEmbalagem", form, StringComparison.Ordinal);
+        Assert.Contains("readForecastBoxesTextBox.ReadOnly = true;", form, StringComparison.Ordinal);
         Assert.Contains("readForecastBoxesCaptionLabel.Text = \"QTD. POR CAIXA\";", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastPackagesCaptionLabel.Text = \"NORMA EMBALAGEM\";", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesCaptionLabel.Text = \"QTD. POR CAIXA\";", designer, StringComparison.Ordinal);
-        Assert.Contains("readForecastPackagesCaptionLabel.Text = \"NORMA EMBALAGEM\";", designer, StringComparison.Ordinal);
-        Assert.Contains("private void AtualizarCampoQuantidadePorCaixa()", form, StringComparison.Ordinal);
-        Assert.Contains("bool fallback = NormaEmFallbackMemoria();", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.ReadOnly = !fallback;", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.Enabled = _ordemAtual is not null;", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.Multiline = false;", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.TextAlign = HorizontalAlignment.Left;", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.Cursor = fallback ? Cursors.IBeam : Cursors.Default;", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.TabStop = fallback;", form, StringComparison.Ordinal);
-        Assert.Contains("Norma SAP indisponível. Informe a QTD. POR CAIXA antes de iniciar a leitura.", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.Focus();", form, StringComparison.Ordinal);
-        Assert.Contains("readForecastBoxesTextBox.SelectAll();", form, StringComparison.Ordinal);
-        Assert.Contains("Informe a QTD. POR CAIXA para continuar", form, StringComparison.Ordinal);
-        Assert.Contains("quantidade será usada em cada caixa pesada", form, StringComparison.Ordinal);
-        Assert.Contains("Quantidade por caixa definida: {quantidadePorCaixa} produto(s) por caixa.", form, StringComparison.Ordinal);
-        Assert.Contains("_controller.ConsultarOuPrepararNormaEmbalagem(", form, StringComparison.Ordinal);
-        Assert.Contains("PreencherNormaEmbalagem();", form, StringComparison.Ordinal);
+
+        // Validação antes da leitura bloqueia quando não há norma válida (SEM NORMA CADASTRADA).
+        Assert.Contains("private bool ValidarNormaEmbalagemAntesDaLeitura()", form, StringComparison.Ordinal);
+        string validar = ExtrairMetodo(form, "private bool ValidarNormaEmbalagemAntesDaLeitura()");
+        Assert.Contains("_normaEmbalagem.MaterialCaixa", validar, StringComparison.Ordinal);
+        Assert.Contains("_normaEmbalagem.QuantidadeProdutosPorCaixa <= 0", validar, StringComparison.Ordinal);
+
+        // STATUS NORMA usa o status real / SEM NORMA CADASTRADA; NORMA vazia mostra "NÃO INFORMADA".
+        Assert.Contains("SEM NORMA CADASTRADA", form, StringComparison.Ordinal);
+        Assert.Contains("NÃO INFORMADA", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -249,9 +290,10 @@ public sealed class ProcessoProdutoAcabadoTests
         ProdutoAcabadoPalete palete = controller.MontarPalete(
             OrdemProdutoAcabadoValida(),
             [caixa1, caixa2],
+            [], // REV4-§13: nenhum palete existente ainda
             1,
             2,
-            "PALLET01");
+            "PACK_TEST_001");
 
         ResultadoPreviewProdutoAcabadoPalete preview = controller.GerarPreviewPalete(palete);
 
@@ -264,7 +306,10 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Equal("KG", preview.Payload.WeightUnit);
         Assert.Equal("3007", preview.Payload.Plant);
         Assert.Equal("PA01", preview.Payload.StorageLocation);
-        Assert.Equal("PALLET01", preview.Payload.PackagingMaterial);
+        Assert.Equal("PACK_TEST_001", preview.Payload.PackagingMaterial);
+        Assert.True(string.IsNullOrWhiteSpace(caixa1.CodigoPaleteLocal));
+        Assert.True(string.IsNullOrWhiteSpace(caixa2.CodigoPaleteLocal));
+        controller.ConfirmarVinculoPaleteLocal(palete);
         Assert.Equal("PLT-1000909-0001-0002", caixa1.CodigoPaleteLocal);
         Assert.Equal("PLT-1000909-0001-0002", caixa2.CodigoPaleteLocal);
         Assert.Equal(2, palete.Caixas.Count);
@@ -277,7 +322,9 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("StorageLocation", preview.PayloadJson, StringComparison.Ordinal);
         Assert.Contains("PackagingMaterial", preview.PayloadJson, StringComparison.Ordinal);
         Assert.Contains("_HandlingUnitItem", preview.PayloadJson, StringComparison.Ordinal);
-        Assert.Contains("CX-1000909-0001", preview.PayloadJson, StringComparison.Ordinal);
+        // §18/§27: o payload contém as HUs SAP das caixas (não mais o CodigoCaixaLocal — fallback removido).
+        Assert.Contains("300010001", preview.PayloadJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("CX-1000909-0001", preview.PayloadJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -295,11 +342,12 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("Primeira caixa", form, StringComparison.Ordinal);
         Assert.Contains("Última caixa", form, StringComparison.Ordinal);
         Assert.Contains("Material embalagem", form, StringComparison.Ordinal);
-        Assert.Contains("PENDENTE SAP", form, StringComparison.Ordinal);
+        Assert.Contains("palete.StatusSap", form, StringComparison.Ordinal);
         Assert.Contains("productionActionsButton.Click += (_, _) => CriarPaleteLocal();", form, StringComparison.Ordinal);
         Assert.Contains("TryLerDadosPaletizacao(out int primeiraCaixa, out int ultimaCaixa, out string materialEmbalagem", form, StringComparison.Ordinal);
         Assert.Contains("MontarPaletePorIntervalo(primeiraCaixa, ultimaCaixa, materialEmbalagem)", form, StringComparison.Ordinal);
         Assert.Contains("private ProdutoAcabadoPalete MontarPaletePorIntervalo(int primeiraCaixa, int ultimaCaixa, string materialEmbalagem)", form, StringComparison.Ordinal);
+        Assert.Contains("_controller.CriarPaleteLocalPersistenteAsync(palete, usuario, terminal)", form, StringComparison.Ordinal);
         Assert.Contains("Informe a primeira caixa do palete.", form, StringComparison.Ordinal);
         Assert.Contains("Informe a última caixa do palete.", form, StringComparison.Ordinal);
         Assert.Contains("A primeira caixa não pode ser maior que a última.", form, StringComparison.Ordinal);
@@ -316,10 +364,18 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("primeiraCaixaTextBox.Text = string.Empty;", form, StringComparison.Ordinal);
         Assert.Contains("ultimaCaixaTextBox.Text = string.Empty;", form, StringComparison.Ordinal);
         Assert.Contains("Todas as caixas pesadas já foram vinculadas a paletes.", form, StringComparison.Ordinal);
-        Assert.Contains("System.Diagnostics.Trace.TraceInformation(\"[ProdutoAcabado] Payload Palete local", form, StringComparison.Ordinal);
-        Assert.Contains("Palete criado localmente. Envio SAP da HU/palete pendente de liberação da API.", form, StringComparison.Ordinal);
+        Assert.Contains("System.Diagnostics.Trace.TraceInformation(\"[ProdutoAcabado] Palete local persistido", form, StringComparison.Ordinal);
+        Assert.Contains("PALETE CRIADO LOCALMENTE em RASCUNHO. Nenhum envio SAP foi executado.", form, StringComparison.Ordinal);
         Assert.DoesNotContain("MessageBox.Show(preview.PayloadJson", form, StringComparison.Ordinal);
         Assert.DoesNotContain(".PostAsync(", form, StringComparison.OrdinalIgnoreCase);
+        // GATE 046-E §12: BANCO autoritativo — recarrega paletes persistidos ao carregar OP e após criar.
+        Assert.Contains("private async Task<bool> RecarregarPaletesPersistidosAsync()", form, StringComparison.Ordinal);
+        Assert.Contains("await _controller.RecarregarPaletesLocaisAsync(_ordemAtual.NumeroOrdem, terminal)", form, StringComparison.Ordinal);
+        Assert.Contains("await RecarregarPaletesPersistidosAsync();", form, StringComparison.Ordinal);
+        // GATE 046-E REV2 (Blocker 2): sem fallback de memória — persistir+reload-falhou NÃO injeta o objeto
+        // recém-criado na coleção nem afirma reconstrução persistente. BANCO continua fonte autoritativa.
+        Assert.DoesNotContain("_paletesMontados.Add(palete)", form, StringComparison.Ordinal);
+        Assert.Contains("Palete PERSISTIDO em RASCUNHO, mas a atualização da tela falhou", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -330,13 +386,16 @@ public sealed class ProcessoProdutoAcabadoTests
         ProdutoAcabadoCaixa caixa2 = Caixa(2, 11m, 1m, 10m);
 
         Assert.Throws<InvalidOperationException>(() =>
-            controller.MontarPalete(OrdemProdutoAcabadoValida(), [caixa1, caixa2], 2, 1, "PALLET01"));
+            controller.MontarPalete(OrdemProdutoAcabadoValida(), [caixa1, caixa2], [], 2, 1, "PACK_TEST_001"));
 
-        ProdutoAcabadoPalete palete = controller.MontarPalete(OrdemProdutoAcabadoValida(), [caixa1, caixa2], 1, 2, "PALLET01");
+        ProdutoAcabadoPalete palete = controller.MontarPalete(OrdemProdutoAcabadoValida(), [caixa1, caixa2], [], 1, 2, "PACK_TEST_001");
         Assert.NotEmpty(palete.CodigoPaleteLocal);
+        Assert.True(string.IsNullOrWhiteSpace(caixa1.CodigoPaleteLocal));
+        Assert.True(string.IsNullOrWhiteSpace(caixa2.CodigoPaleteLocal));
+        controller.ConfirmarVinculoPaleteLocal(palete);
 
         Assert.Throws<InvalidOperationException>(() =>
-            controller.MontarPalete(OrdemProdutoAcabadoValida(), [caixa1, caixa2], 1, 2, "PALLET01"));
+            controller.MontarPalete(OrdemProdutoAcabadoValida(), [caixa1, caixa2], [], 1, 2, "PACK_TEST_001"));
     }
 
     [Fact]
@@ -346,6 +405,7 @@ public sealed class ProcessoProdutoAcabadoTests
         ProdutoAcabadoPalete palete = controller.MontarPalete(
             OrdemProdutoAcabadoValida(),
             [Caixa(1, 10m, 1m, 9m)],
+            [],
             1,
             1,
             string.Empty);
@@ -386,7 +446,7 @@ public sealed class ProcessoProdutoAcabadoTests
         // §7/§11.C: guard explícito "uma caixa por vez" (não usa apenas Count+1 como autorização).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
 
-        Assert.Contains("private const bool PrimeiraEntregaHu = true;", form, StringComparison.Ordinal);
+        Assert.Contains("private static readonly bool PrimeiraEntregaHu = true;", form, StringComparison.Ordinal);
         Assert.Contains("if (PrimeiraEntregaHu && ExisteCaixaAtiva())", form, StringComparison.Ordinal);
         Assert.Contains("private bool ExisteCaixaAtiva()", form, StringComparison.Ordinal);
         Assert.Contains("Confirme o envio ou cancele a caixa atual antes de pesar outra.", form, StringComparison.Ordinal);
@@ -395,15 +455,18 @@ public sealed class ProcessoProdutoAcabadoTests
     [Fact]
     public void FormHu_PaleteForaDoFluxoAtivo()
     {
-        // §8/§11.D: CriarPaleteLocal não acionável; card/grid de palete ocultos na 1ª entrega.
+        // REV8/§6: palete FORA do fluxo por PADRÃO (HU-only), porém NÃO permanentemente. Fica oculto/inativo
+        // apenas quando PrimeiraEntregaHu E o gate do pipeline 045 está DESLIGADO; com o gate ligado, o palete
+        // volta a ser montável (local, zero POST) e integrável (INT012 por ação explícita).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        string criarPalete = ExtrairMetodo(form, "private void CriarPaleteLocal()");
+        string criarPalete = ExtrairMetodo(form, "private async void CriarPaleteLocal()");
 
-        // O acionamento retorna cedo enquanto PrimeiraEntregaHu (Form não monta palete / não gera preview).
-        Assert.Contains("if (PrimeiraEntregaHu)", criarPalete, StringComparison.Ordinal);
+        // O acionamento retorna cedo SOMENTE em HU-only (gate off) — não mais permanentemente.
+        Assert.Contains("if (PrimeiraEntregaHu && !_controller.PipelinePaGateHabilitado)", criarPalete, StringComparison.Ordinal);
         Assert.Contains("return;", criarPalete, StringComparison.Ordinal);
-        Assert.DoesNotContain("MontarPaletePorIntervalo", criarPalete.Split("if (PrimeiraEntregaHu)")[0], StringComparison.Ordinal);
-        // Card, título e grid de palete ocultados.
+        Assert.DoesNotContain("MontarPaletePorIntervalo", criarPalete.Split("if (PrimeiraEntregaHu")[0], StringComparison.Ordinal);
+        // Card/título/grid ocultados apenas no modo HU-only (mesma condição do gate).
+        Assert.Contains("PrimeiraEntregaHu && !_controller.PipelinePaGateHabilitado", form, StringComparison.Ordinal);
         Assert.Contains("_criarPaleteCard.Visible = false;", form, StringComparison.Ordinal);
         Assert.Contains("paletesDataGridView.Visible = false;", form, StringComparison.Ordinal);
     }
@@ -413,33 +476,46 @@ public sealed class ProcessoProdutoAcabadoTests
     {
         // §9/§11.E: material de embalagem por origem controlada (nunca PALLET01); preview inválido bloqueia add.
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        string registrar = ExtrairMetodo(form, "private bool RegistrarCaixaProdutoAcabado(decimal pesoBrutoKg, decimal taraKg, string origem)");
+        string registrar = ExtrairMetodo(form, "private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem)");
 
         Assert.Contains("ObterMaterialEmbalagemCaixaControlada()", registrar, StringComparison.Ordinal);
-        Assert.Contains("if (!preview.Sucesso)", registrar, StringComparison.Ordinal);
-        // A caixa só é adicionada DEPOIS da checagem do preview.
-        int idxCheck = registrar.IndexOf("if (!preview.Sucesso)", StringComparison.Ordinal);
-        int idxAdd = registrar.IndexOf("_caixasPesadas.Add(caixa);", StringComparison.Ordinal);
-        Assert.True(idxCheck >= 0 && idxAdd > idxCheck, "O Add da caixa deve ocorrer após a validação do preview.");
+        Assert.Contains("await _controller.FinalizarCaixaLocalAsync(", registrar, StringComparison.Ordinal);
+        Assert.Contains("if (!resultado.Sucesso || resultado.Caixa is null)", registrar, StringComparison.Ordinal);
+        // A caixa (snapshot persistido) só é adicionada DEPOIS da checagem de sucesso da persistência.
+        int idxCheck = registrar.IndexOf("if (!resultado.Sucesso || resultado.Caixa is null)", StringComparison.Ordinal);
+        int idxAdd = registrar.IndexOf("_caixasPesadas.Add(resultado.Caixa);", StringComparison.Ordinal);
+        Assert.True(idxCheck >= 0 && idxAdd > idxCheck, "O Add do snapshot deve ocorrer após a checagem de sucesso.");
         // Origem controlada nunca PALLET01.
         Assert.Contains("private static bool EhMaterialPalete(string? material)", form, StringComparison.Ordinal);
         Assert.Contains("OrigemMaterialEmbalagemCaixa.NaoInformada", form, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void FormHu_BotaoEnvioManualPreparadoEDesabilitado()
+    public void FormHu_BotaoEnvioDinamico_HabilitaPorEstadoEAutorizacao()
     {
-        // §10/§11.F: botão "ENVIAR CAIXA SAP HML" existe, desabilitado, tooltip de pendências; sem POST.
+        // REV2 §5/§6: botão "ENVIAR CAIXA SAP" DINÂMICO — habilitado só com gateway autorizado + caixa
+        // elegível + sem envio em andamento; o clique delega ao Controller (a Form nunca faz HTTP).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
 
-        Assert.Contains("Text = \"ENVIAR CAIXA SAP HML\",", form, StringComparison.Ordinal);
+        // REV4-§11: rótulo NEUTRO (sem sufixo de ambiente HML).
+        Assert.Contains("Text = \"ENVIAR CAIXA SAP\",", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ENVIAR CAIXA SAP HML", form, StringComparison.Ordinal);
         Assert.Contains("private void ConfigurarBotaoEnvioCaixaSap()", form, StringComparison.Ordinal);
-        string cfg = ExtrairMetodo(form, "private void ConfigurarBotaoEnvioCaixaSap()");
-        Assert.Contains("Enabled = false,", cfg, StringComparison.Ordinal);
-        Assert.Contains("contrato OP_HANDLINGUNIT_0001 pendente", cfg, StringComparison.Ordinal);
-        Assert.Contains("POST ao SAP não autorizado", cfg, StringComparison.Ordinal);
-        // Sempre desabilitado nesta fase e nenhum POST/PatchAsync na Form.
-        Assert.Contains("_enviarCaixaSapButton.Enabled = false;", form, StringComparison.Ordinal);
+        // O clique delega ao handler async (nenhum POST/HTTP direto na Form).
+        Assert.Contains("await SolicitarEnvioCaixaSapAsync()", form, StringComparison.Ordinal);
+        Assert.Contains("await _controller.EnviarCaixaHandlingUnitAsync(codigo, usuario, terminal)", form, StringComparison.Ordinal);
+
+        // Estado do botão é DINÂMICO (não mais fixo em false).
+        string atualizar = ExtrairMetodo(form, "private void AtualizarEstadoEnvioCaixaSap()");
+        Assert.Contains("_controller.EnvioHuAutorizado && elegivelEnvio", atualizar, StringComparison.Ordinal);
+        // REV3-B5: bloqueio local por estado indeterminado (nunca reabilita por objeto stale).
+        Assert.Contains("!_envioCaixaSapEmAndamento && !bloqueadaPorEstadoIndeterminado", atualizar, StringComparison.Ordinal);
+        Assert.Contains("StatusIntegracaoCaixa.AguardandoAutorizacaoSap", atualizar, StringComparison.Ordinal);
+        Assert.Contains("StatusIntegracaoCaixa.ProntaParaEnvio", atualizar, StringComparison.Ordinal);
+        Assert.DoesNotContain("_enviarCaixaSapButton.Enabled = false;", atualizar, StringComparison.Ordinal); // não é fixo
+        // Proteção de duplo clique + fail-closed textual NEUTRO + nenhum POST/PatchAsync na Form.
+        Assert.Contains("if (_envioCaixaSapEmAndamento", form, StringComparison.Ordinal);
+        Assert.Contains("Envio de HU SAP não habilitado nesta execução", form, StringComparison.Ordinal);
         Assert.DoesNotContain(".PostAsync(", form, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(".PatchAsync(", form, StringComparison.OrdinalIgnoreCase);
         // Estados visuais preparados.
@@ -454,10 +530,13 @@ public sealed class ProcessoProdutoAcabadoTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
         string atualizar = ExtrairMetodo(form, "private void AtualizarBotoesOperacao()");
         string limpar = ExtrairMetodo(form, "private bool LimparOp()");
-        string cancelar = ExtrairMetodo(form, "private void CancelarUltimaCaixa()");
+        string cancelar = ExtrairMetodo(form, "private async Task SolicitarCancelamentoUltimaCaixaAsync()");
         string teclas = ExtrairMetodo(form, "private async void ProcessoProdutoAcabadoForm_KeyDown(object? sender, KeyEventArgs e)");
 
-        Assert.Contains("if (PrimeiraEntregaHu)", atualizar, StringComparison.Ordinal);
+        // §3: cancelamento persiste via Controller (nunca só memória).
+        Assert.Contains("CancelarCaixaHandlingUnitAsync(codigo", cancelar, StringComparison.Ordinal);
+        // REV8/§6: palete oculto em toda atualização SÓ em HU-only (gate off); gate on ⇒ palete acessível.
+        Assert.DoesNotContain("if (PrimeiraEntregaHu && !_controller.PipelinePaGateHabilitado)", atualizar, StringComparison.Ordinal);
         Assert.Contains("productionActionsButton.Visible = false;", atualizar, StringComparison.Ordinal);
         Assert.Contains("productionActionsButton.Enabled = false;", atualizar, StringComparison.Ordinal);
         Assert.Contains("_criarPaleteCard.Visible = false;", atualizar, StringComparison.Ordinal);
@@ -470,10 +549,127 @@ public sealed class ProcessoProdutoAcabadoTests
         int guardaLimpeza = limpar.IndexOf("if (!PodeTrocarOuLimparOp())", StringComparison.Ordinal);
         int descarte = limpar.IndexOf("_caixasPesadas.Clear();", StringComparison.Ordinal);
         Assert.True(guardaLimpeza >= 0 && descarte > guardaLimpeza);
-        int transicaoCancelamento = cancelar.IndexOf("caixa.TransicionarPara(StatusIntegracaoCaixa.Cancelada);", StringComparison.Ordinal);
-        int remocao = cancelar.IndexOf("_caixasPesadas.RemoveAt", StringComparison.Ordinal);
+        int transicaoCancelamento = form.IndexOf("caixa.TransicionarPara(StatusIntegracaoCaixa.Cancelada);", StringComparison.Ordinal);
+        int remocao = form.IndexOf("caixas.RemoveAt(caixas.Count - 1);", StringComparison.Ordinal);
         Assert.True(transicaoCancelamento >= 0 && remocao > transicaoCancelamento);
+        Assert.Contains("MessageBoxButtons.YesNo", cancelar, StringComparison.Ordinal);
+        Assert.Contains("MessageBoxDefaultButton.Button2", cancelar, StringComparison.Ordinal);
         Assert.Contains("PodeFecharTela()", teclas, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormHu_RegistroReal_DeveAtualizarEstadoVisualDoF6()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string registrar = ExtrairMetodo(
+            form,
+            "private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem)");
+        // §1: delega ao Controller/Service persistente (nunca transição manual de estado persistente).
+        int delegacao = registrar.IndexOf("await _controller.FinalizarCaixaLocalAsync(", StringComparison.Ordinal);
+        int atualizacaoVisual = registrar.IndexOf("AtualizarBotoesOperacao();", StringComparison.Ordinal);
+        Assert.True(delegacao >= 0 && atualizacaoVisual > delegacao);
+        Assert.DoesNotContain("caixa.TransicionarPara(StatusIntegracaoCaixa.AguardandoAutorizacaoSap);", registrar, StringComparison.Ordinal);
+        Assert.DoesNotContain("caixa.TransicionarPara(StatusIntegracaoCaixa.PreviewHuGerado);", registrar, StringComparison.Ordinal);
+        Assert.Contains("_caixasPesadas.Add(resultado.Caixa);", registrar, StringComparison.Ordinal);
+
+        global::FugaPET_Dev.Tela.ActionPillButton botao = new();
+        List<ProdutoAcabadoCaixa> caixas = [];
+        ProcessoProdutoAcabadoForm.AtualizarEstadoBotaoExcluirUltima(botao, caixas);
+        Assert.False(botao.Enabled);
+
+        ProdutoAcabadoCaixa caixa = CaixaCancelavel();
+        caixa.StatusIntegracao = StatusIntegracaoCaixa.FinalizadaLocal;
+        caixas.Add(caixa);
+        caixa.TransicionarPara(StatusIntegracaoCaixa.PreviewHuGerado);
+        caixa.TransicionarPara(StatusIntegracaoCaixa.AguardandoAutorizacaoSap);
+        ProcessoProdutoAcabadoForm.AtualizarEstadoBotaoExcluirUltima(botao, caixas);
+        Assert.True(botao.Enabled);
+        Assert.Equal(Cursors.Hand, botao.Cursor);
+
+        Assert.False(ProcessoProdutoAcabadoForm.CancelarUltimaCaixaEmMemoria(caixas, DialogResult.No));
+        ProcessoProdutoAcabadoForm.AtualizarEstadoBotaoExcluirUltima(botao, caixas);
+        Assert.True(botao.Enabled);
+        Assert.Single(caixas);
+        Assert.Equal(60, caixas.Sum(item => item.QuantidadeProdutos));
+
+        Assert.True(ProcessoProdutoAcabadoForm.CancelarUltimaCaixaEmMemoria(caixas, DialogResult.Yes));
+        ProcessoProdutoAcabadoForm.AtualizarEstadoBotaoExcluirUltima(botao, caixas);
+        Assert.False(botao.Enabled);
+        Assert.Empty(caixas);
+        Assert.Equal(0, caixas.Sum(item => item.QuantidadeProdutos));
+    }
+
+    [Fact]
+    public void FormHu_CancelamentoNo_DevePreservarCaixaProdutosEStatus()
+    {
+        ProdutoAcabadoCaixa caixa = CaixaCancelavel();
+        List<ProdutoAcabadoCaixa> caixas = [caixa];
+
+        bool cancelada = ProcessoProdutoAcabadoForm.CancelarUltimaCaixaEmMemoria(caixas, DialogResult.No);
+
+        Assert.False(cancelada);
+        Assert.Single(caixas);
+        Assert.Equal(60, caixas.Sum(item => item.QuantidadeProdutos));
+        Assert.Equal(StatusIntegracaoCaixa.AguardandoAutorizacaoSap, caixa.StatusIntegracao);
+    }
+
+    [Fact]
+    public void FormHu_CancelamentoYes_DeveTransicionarAntesDeRemoverELiberarNovaPesagem()
+    {
+        ProdutoAcabadoCaixa caixa = CaixaCancelavel();
+        List<ProdutoAcabadoCaixa> caixas = [caixa];
+
+        bool cancelada = ProcessoProdutoAcabadoForm.CancelarUltimaCaixaEmMemoria(caixas, DialogResult.Yes);
+
+        Assert.True(cancelada);
+        Assert.Equal(StatusIntegracaoCaixa.Cancelada, caixa.StatusIntegracao);
+        Assert.Empty(caixas);
+        Assert.Equal(0, caixas.Sum(item => item.QuantidadeProdutos));
+        Assert.False(ProcessoProdutoAcabadoForm.PodeCancelarUltimaCaixa(caixas));
+    }
+
+    [Theory]
+    [InlineData(StatusIntegracaoCaixa.ConfirmadaSap)]
+    [InlineData(StatusIntegracaoCaixa.EnviandoSap)]
+    public void FormHu_EstadoNaoCancelavel_DeveBloquearCancelamento(StatusIntegracaoCaixa status)
+    {
+        ProdutoAcabadoCaixa caixa = CaixaCancelavel();
+        caixa.StatusIntegracao = status;
+        List<ProdutoAcabadoCaixa> caixas = [caixa];
+
+        Assert.False(ProcessoProdutoAcabadoForm.PodeCancelarUltimaCaixa(caixas));
+        Assert.False(ProcessoProdutoAcabadoForm.CancelarUltimaCaixaEmMemoria(caixas, DialogResult.Yes));
+        Assert.Single(caixas);
+        Assert.Equal(status, caixa.StatusIntegracao);
+    }
+
+    [Fact]
+    public void FormHu_BotaoEF6_DevemUsarMesmaRotinaEF7FicarForaDoFluxo()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+        string eventos = ExtrairMetodo(form, "private void ConfigurarEventos()");
+        string teclas = ExtrairMetodo(form, "private async void ProcessoProdutoAcabadoForm_KeyDown(object? sender, KeyEventArgs e)");
+        string atualizar = ExtrairMetodo(form, "private void AtualizarBotoesOperacao()");
+
+        Assert.Contains("excluirUltimaButton.Click += ExcluirUltimaButton_Click;", eventos, StringComparison.Ordinal);
+        Assert.DoesNotContain("deleteLastLegendPanel.Click", eventos, StringComparison.Ordinal);
+        Assert.Contains("=> await SolicitarCancelamentoUltimaCaixaAsync();", form, StringComparison.Ordinal);
+        Assert.Contains("e.KeyCode is Keys.F6 or Keys.Delete", teclas, StringComparison.Ordinal);
+        Assert.Contains("e.SuppressKeyPress = true;", teclas, StringComparison.Ordinal);
+        Assert.Contains("excluirUltimaButton.Visible && excluirUltimaButton.Enabled", teclas, StringComparison.Ordinal);
+        Assert.Contains("await SolicitarCancelamentoUltimaCaixaAsync();", teclas, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegistrarPeso", teclas[teclas.IndexOf("Keys.F6 or Keys.Delete", StringComparison.Ordinal)..], StringComparison.Ordinal);
+
+        Assert.Contains("AtualizarEstadoBotaoExcluirUltima(excluirUltimaButton, _caixasPesadas);", atualizar, StringComparison.Ordinal);
+        string atualizarExcluir = ExtrairMetodo(
+            form,
+            "internal static void AtualizarEstadoBotaoExcluirUltima(");
+        Assert.Contains("botao.Enabled = podeCancelarUltimaCaixa;", atualizarExcluir, StringComparison.Ordinal);
+        Assert.Contains("PodeCancelarUltimaCaixa(caixas)", atualizarExcluir, StringComparison.Ordinal);
+        Assert.Contains("excluirCodigoButton.Visible = false;", eventos, StringComparison.Ordinal);
+        Assert.Contains("excluirCodigoButton.KeyHint = string.Empty;", eventos, StringComparison.Ordinal);
+        Assert.DoesNotContain("Keys.F7", teclas, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProdutoAcabadoRepositorioIndisponivel", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -485,15 +681,17 @@ public sealed class ProcessoProdutoAcabadoTests
 
         Assert.DoesNotContain("EMB_CX_PADRAO", form + controller, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("_caixasPesadas.Count + 1", form, StringComparison.Ordinal);
-        Assert.Contains("MontarCaixaSemIdentidadeSequencial", form, StringComparison.Ordinal);
+        // §1: a Form NÃO monta identidade/numeração local — delega a finalização persistente ao Controller.
+        Assert.Contains("await _controller.FinalizarCaixaLocalAsync(", form, StringComparison.Ordinal);
         Assert.Contains("OrigemMaterialEmbalagemCaixa.NaoInformada", form, StringComparison.Ordinal);
         Assert.Contains("Material de embalagem da caixa não informado.",
-            LerArquivoProjeto("Servicos", "IntegracaoSap", "ProdutoAcabadoHandlingUnitCaixaPayloadBuilder.cs"),
+            LerArquivoProjeto("Servicos", "IntegracaoSap", "ProdutoAcabadoHandlingUnitCaixaRequestBuilder.cs"),
             StringComparison.Ordinal);
-        Assert.Contains("alocar", contrato, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("UNIQUE(numero_ordem_producao, numero_caixa)", contrato, StringComparison.Ordinal);
-        Assert.Contains("UNIQUE(codigo_caixa_local)", contrato, StringComparison.Ordinal);
-        Assert.Contains("UNIQUE(correlation_id)", contrato, StringComparison.Ordinal);
+        // A identidade (numero_caixa/codigo_caixa_local/hu_caixa) é gerada ATOMICAMENTE pelo banco — o app nunca a fornece.
+        Assert.Contains("gerada ATOMICAMENTE pelo banco", contrato, StringComparison.Ordinal);
+        Assert.Contains("numero_caixa", contrato, StringComparison.Ordinal);
+        Assert.Contains("correlation_id", contrato, StringComparison.Ordinal);
+        Assert.Contains("Uma caixa por vez por terminal", contrato, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -504,23 +702,46 @@ public sealed class ProcessoProdutoAcabadoTests
         string configurar = ExtrairMetodo(form, "private void ConfigurarBotaoEnvioCaixaSap()");
         string atualizar = ExtrairMetodo(form, "private void AtualizarEstadoEnvioCaixaSap()");
 
-        Assert.Contains("Location = leituraManualButton.Location,", configurar, StringComparison.Ordinal);
-        Assert.Contains("Size = leituraManualButton.Size,", configurar, StringComparison.Ordinal);
+        // REGRA 2: ENVIAR CAIXA SAP tem POSIÇÃO PRÓPRIA (faixa livre y=534), não a do botão de PESAGEM MANUAL.
+        Assert.Contains("Location = new Point(leituraManualButton.Location.X, 534),", configurar, StringComparison.Ordinal);
+        Assert.Contains("Size = new Size(leituraManualButton.Size.Width, leituraManualButton.Size.Height),", configurar, StringComparison.Ordinal);
         Assert.Contains("Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,", configurar, StringComparison.Ordinal);
-        Assert.Contains("leituraManualButton.Visible = _leituraIniciada && !temCaixaFinalizada;", atualizar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Location = leituraManualButton.Location,", configurar, StringComparison.Ordinal);
+        // REGRA 2: AtualizarEstadoEnvioCaixaSap NÃO esconde mais a PESAGEM MANUAL (visibilidade é de AtualizarBotoesOperacao).
+        Assert.DoesNotContain("leituraManualButton.Visible", atualizar, StringComparison.Ordinal);
 
+        // Não-sobreposição: o botão SAP (y=534..572) fica ABAIXO do botão de pesagem manual (y=442..480) e
+        // dentro do painel (215x604).
         const int parentWidth = 215;
         const int parentHeight = 604;
         const int left = 12;
-        const int top = 442;
+        const int manualTop = 442;
+        const int manualHeight = 38;
+        const int sapTop = 534;
         const int width = 190;
         const int height = 38;
         Assert.True(left + width <= parentWidth);
-        Assert.True(top + height <= parentHeight);
+        Assert.True(sapTop >= manualTop + manualHeight, "SAP não sobrepõe PESAGEM MANUAL");
+        Assert.True(sapTop + height <= parentHeight, "SAP dentro do painel");
         Assert.Contains("sidePanel.Size = new Size(215, 604);", designer, StringComparison.Ordinal);
         Assert.Contains("leituraManualButton.Location = new Point(12, 442);", designer, StringComparison.Ordinal);
         Assert.Contains("leituraManualButton.Size = new Size(190, 38);", designer, StringComparison.Ordinal);
+        // A faixa y=534 é a de excluirCodigoButton, que é permanentemente oculto (sem conflito visual).
+        Assert.Contains("excluirCodigoButton.Location = new Point(12, 534);", designer, StringComparison.Ordinal);
     }
+
+    private static ProdutoAcabadoCaixa CaixaCancelavel()
+        => new()
+        {
+            NumeroOrdemProducao = "1001951",
+            Material = "4000108",
+            PesoBrutoKg = 2.500m,
+            TaraKg = 0.500m,
+            PesoLiquidoKg = 2.000m,
+            QuantidadeProdutos = 60,
+            CorrelationId = Guid.NewGuid(),
+            StatusIntegracao = StatusIntegracaoCaixa.AguardandoAutorizacaoSap
+        };
 
     private static OrdemProducaoSap OrdemSapValida()
         => new()
@@ -577,13 +798,18 @@ public sealed class ProcessoProdutoAcabadoTests
     private static ProdutoAcabadoCaixa Caixa(int numero, decimal bruto, decimal tara, decimal liquido)
         => new()
         {
+            CodigoProdutoAcabadoCaixa = numero,
             NumeroCaixa = numero,
             CodigoCaixaLocal = $"CX-1000909-{numero:0000}",
+            NumeroOrdemProducao = "1000909",
             PesoBrutoKg = bruto,
             TaraKg = tara,
             PesoLiquidoKg = liquido,
             QuantidadeProdutos = 12,
-            OrigemPesagem = "MANUAL"
+            OrigemPesagem = "MANUAL",
+            // Palete só aceita CONFIRMADA_SAP com HU SAP individual (regras endurecidas §10/§11).
+            StatusIntegracao = StatusIntegracaoCaixa.ConfirmadaSap,
+            HandlingUnitExternalId = $"30001{numero:0000}"
         };
 
     [Fact]
@@ -596,7 +822,9 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("readForecastBoxesCaptionLabel.Text = \"QTD. POR CAIXA\";", form, StringComparison.Ordinal);
         Assert.Contains("readForecastPackagesCaptionLabel.Text = \"NORMA EMBALAGEM\";", form, StringComparison.Ordinal);
         Assert.Contains("balanceCaptionLabel.Text = \"STATUS NORMA\";", form, StringComparison.Ordinal);
-        Assert.Contains("\"FALLBACK MEMÓRIA\"", form, StringComparison.Ordinal);
+        // STATUS NORMA agora reflete a consulta real (CONSULTADA SAP) ou SEM NORMA CADASTRADA (sem fallback).
+        Assert.Contains("CONSULTADA SAP", form, StringComparison.Ordinal);
+        Assert.Contains("SEM NORMA CADASTRADA", form, StringComparison.Ordinal);
         Assert.Contains("MATERIAL CAIXA", form, StringComparison.Ordinal);
     }
 
@@ -649,8 +877,9 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("boxesTitleLabel.Text = \"CAIXAS PESADAS\";", form, StringComparison.Ordinal);
         Assert.Contains("packagesTitleLabel.Text = \"PESO REGISTRADO\";", form, StringComparison.Ordinal);
         Assert.DoesNotContain("LEITURA - PACOTES", form, StringComparison.Ordinal);
-        // Tarefa 21.6.2 (Ajuste 10): excluir fica visível porém desabilitado (cinza) sem caixa.
-        Assert.Contains("deleteLastLegendPanel.Enabled = possuiCaixa;", form, StringComparison.Ordinal);
+        Assert.Contains("AtualizarEstadoBotaoExcluirUltima(excluirUltimaButton, _caixasPesadas);", form, StringComparison.Ordinal);
+        Assert.Contains("TransicaoStatusIntegracaoCaixa.PodeTransitar", form, StringComparison.Ordinal);
+        Assert.Contains("deleteLastLegendPanel.Enabled = false;", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -719,8 +948,8 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("EnvolverCampoArredondado(ultimaCaixaTextBox", form, StringComparison.Ordinal);
         Assert.Contains("EnvolverCampoArredondado(materialEmbalagemPaleteTextBox", form, StringComparison.Ordinal);
         // card com mensagens de estado
-        Assert.Contains("Registre caixas para criar um palete.", form, StringComparison.Ordinal);
-        Assert.Contains("Todas as caixas já foram vinculadas a paletes.", form, StringComparison.Ordinal);
+        Assert.Contains("paletização saiu do Produto Acabado", form, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("paletesDataGridView.Visible = false;", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -956,6 +1185,11 @@ public sealed class ProcessoProdutoAcabadoTests
             => Task.FromResult(ResultadoConsultaOrdemProducaoSap.Encontrada(_ordem));
     }
 }
+
+
+
+
+
 
 
 

@@ -3,41 +3,95 @@ using FugaPET_Dev.Modelo.Processo;
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
 /// <summary>
-/// Persistência produtiva de Produto Acabado BLOQUEADA_POR_SCHEMA_PRODUTO_ACABADO_PENDENTE: não existe
-/// tabela aplicável no banco. Este repositório NÃO finge persistência (não usa memória/arquivo como
-/// banco): toda operação de escrita/leitura lança <see cref="PersistenciaProdutoAcabadoIndisponivelException"/>.
-/// É o default de produção até a Gaia Dados aplicar o schema. Os testes usam um fake em memória próprio.
+/// Fallback fail-closed de persistência de Produto Acabado: NÃO finge banco (não usa memória/arquivo).
+/// Toda operação lança <see cref="PersistenciaProdutoAcabadoIndisponivelException"/>. Usado quando o banco
+/// está desabilitado/indisponível; o repositório produtivo real é <see cref="ProdutoAcabadoRepositorio"/>.
 /// </summary>
 public sealed class ProdutoAcabadoRepositorioIndisponivel : IProdutoAcabadoRepositorio
 {
     private const string Motivo =
-        "Persistência de Produto Acabado indisponível: schema do banco pendente "
-        + "(BLOQUEADA_POR_SCHEMA_PRODUTO_ACABADO_PENDENTE).";
+        "Persistência de Produto Acabado indisponível: banco não configurado/indisponível nesta execução.";
+
+    private static PersistenciaProdutoAcabadoIndisponivelException Falha() => new(Motivo);
 
     public Task<ProdutoAcabadoCaixa> RegistrarCaixaAsync(ProdutoAcabadoCaixa caixa, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+        => throw Falha();
 
-    public Task<ProdutoAcabadoCaixa?> ObterCaixaAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<long> RegistrarPesagemAsync(RegistroPesagemHuCaixa pesagem, CancellationToken cancellationToken = default)
+        => throw Falha();
 
-    public Task<ProdutoAcabadoCaixa?> ObterCaixaPorCodigoAsync(long codigoProdutoAcabadoCaixa, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<bool> FinalizarLocalAsync(long codigo, long usuario, string terminal, CancellationToken cancellationToken = default)
+        => throw Falha();
 
-    public Task AtualizarPreviewHuAsync(long codigoProdutoAcabadoCaixa, string requestPayloadSanitizado, StatusIntegracaoCaixa status, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<bool> SalvarPreviewAsync(long codigo, string requestJsonSanitizado, string endpointSanitizado, CancellationToken cancellationToken = default)
+        => throw Falha();
 
-    public Task<ProdutoAcabadoCaixa?> TentarReservarEnvioSapAsync(long codigoProdutoAcabadoCaixa, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<bool> AguardarAutorizacaoAsync(long codigo, CancellationToken cancellationToken = default)
+        => throw Falha();
 
-    public Task RegistrarSucessoHuAsync(long codigoProdutoAcabadoCaixa, string handlingUnitExternalId, string responsePayloadSanitizado, int? httpStatus, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<bool> AutorizarEnvioAsync(long codigo, long usuario, string terminal, CancellationToken cancellationToken = default)
+        => throw Falha();
 
-    public Task RegistrarErroHuAsync(long codigoProdutoAcabadoCaixa, string erroSanitizado, string responsePayloadSanitizado, int? httpStatus, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<ProdutoAcabadoCaixa?> ClaimEnvioAsync(long codigo, long usuario, string terminal, CancellationToken cancellationToken = default)
+        => throw Falha();
 
-    public Task CancelarCaixaAsync(long codigoProdutoAcabadoCaixa, CancellationToken cancellationToken = default)
-        => throw new PersistenciaProdutoAcabadoIndisponivelException(Motivo);
+    public Task<bool> RegistrarSucessoAsync(
+        long codigo, int numeroTentativa, Guid claimToken, string handlingUnitExternalId, string? warehouse,
+        int httpStatus, string? responseJsonSanitizado, string? sapMessagesJson, string? etag,
+        string? createdByUserSap, DateTimeOffset? creationDatetimeSap, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> RegistrarErroAsync(
+        long codigo, int numeroTentativa, Guid claimToken, int? httpStatus, string? responseJsonSanitizado,
+        string? sapMessagesJson, string erroSanitizado, ResultadoErroHu resultado, bool podeReprocessar,
+        CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> RegistrarTimeoutAsync(
+        long codigo, int numeroTentativa, Guid claimToken, string? sapMessagesJson, string erroSanitizado,
+        CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> ConfirmarReconciliacaoAsync(
+        long codigo, string handlingUnitExternalId, string? warehouse, int httpStatus, string? responseJsonSanitizado,
+        string? sapMessagesJson, string? etag, string? createdByUserSap, DateTimeOffset? creationDatetimeSap,
+        bool comparacaoAprovada, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> RegistrarReconciliacaoNaoEncontradaAsync(
+        long codigo, string handlingUnitExternalId, string? warehouse, int httpStatus, string? responseJsonSanitizado,
+        string? sapMessagesJson, string erroSanitizado, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> BloquearConfiguracaoAsync(
+        long codigo, long usuario, string terminal, string erroSanitizado, string? sapMessagesJson,
+        CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> CancelarAsync(long codigo, long usuario, string terminal, string motivo, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<bool> LiberarReprocessamentoAsync(long codigo, long usuario, string terminal, string motivo, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<ProdutoAcabadoCaixa?> ObterPorCodigoAsync(long codigo, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorOrdemTerminalAsync(string numeroOrdemProducao, string terminal, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorContextoAsync(string numeroOrdemProducao, string itemOrdemProducao, string material, string lote, string terminal, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorHandlingUnitsAsync(IReadOnlyList<string> husExternais, CancellationToken cancellationToken = default)
+        => throw Falha();
+
+    public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorIntervaloHandlingUnitAsync(string huInicial, string huFinal, string? material, CancellationToken cancellationToken = default)
+        => throw Falha();
 }
 
-/// <summary>Persistência de Produto Acabado indisponível por schema pendente (não é erro técnico da operação).</summary>
+/// <summary>Persistência de Produto Acabado indisponível (banco não configurado). Não é erro técnico da operação.</summary>
 public sealed class PersistenciaProdutoAcabadoIndisponivelException(string mensagem) : Exception(mensagem);

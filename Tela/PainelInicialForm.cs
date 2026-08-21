@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Cadastro = FugaPET_Dev.Tela.Cadastro;
 using Consulta = FugaPET_Dev.Tela.Consulta;
 using Processo = FugaPET_Dev.Tela.Processo;
@@ -856,6 +856,7 @@ public partial class PainelInicialForm : Form
         view.HistoricoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialHistoricoAsync();
         view.DiagnosticoConsumoSap261Requested += async (_, _) => await OpenDiagnosticoConsumoSap261Async();
         view.OrdensAndamentoRequested += async (_, _) => await OpenConsultaOrdemProducaoAsync();
+        view.PaletizacaoRequested += async (_, _) => await OpenPaletizacaoAsync();
 
         return view;
     }
@@ -1348,6 +1349,35 @@ public partial class PainelInicialForm : Form
             await OpenControleApontamentosAsync();
             e.Handled = true;
         }
+
+        if (e.KeyCode == Keys.F9 && _currentContentView == _processoProducaoForm)
+        {
+            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            await OpenPaletizacaoAsync();
+            e.Handled = true;
+        }
+    }
+
+    // INCREMENTAL 047: abre a nova tela de Paletização (por HU de caixas). Mesmo módulo/permissão do processo de produção.
+    private async Task OpenPaletizacaoAsync()
+    {
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Paletização")) return;
+
+        if (!PodeAbrirProcesso())
+        {
+            return;
+        }
+
+        Processo.PaletizacaoForm form = new();
+        form.FormClosed += (_, _) => Show();
+
+        Hide();
+        form.Show(this);
     }
 
     private static void ApplyRoundedRegion(Control control, int radius)
@@ -1457,6 +1487,7 @@ public partial class PainelInicialForm : Form
         cellHoraText.Text = now.ToString("HH:mm", ptBr);
     }
 }
+
 
 
 

@@ -1,0 +1,123 @@
+RELATORIO TECNICO - INCREMENTAL 044 DEV REV10
+CORRECAO DOCUMENTAL CONTROLADA DA REV9
+
+CLASSIFICACAO=PACOTE_044_DEV_REV10_PREPARADO_PARA_AUDITORIA_E_NAO_EXECUTADO
+DATA_PREPARACAO=2026-08-06
+RESPONSAVEL=Michael Richard
+
+====================================================================
+1. PACOTE BASE
+====================================================================
+
+PACOTE_BASE=044_produto_acabado_hu_caixa_GAIA_DEV_REV9.zip
+TAMANHO_PACOTE_BASE_BYTES=70316
+SHA256_PACOTE_BASE=FAE645C3309DB7A01356B6E68E7ABEC8C24CE9B884E6A382A5042965A87BAD5A
+INTEGRIDADE_ZIP_BASE=APROVADA
+ARQUIVOS_BASE=8
+HASHES_INTERNOS_BASE=APROVADOS
+REV9_EXECUTADA=NAO
+
+====================================================================
+2. CORRECOES DOCUMENTAIS
+====================================================================
+
+- cabecalho e classificacao atuais promovidos para REV10;
+- identificadores operacionais dos quatro SQLs promovidos literalmente de
+  REV9 para REV10;
+- ordem operacional futura atualizada exclusivamente para REV10;
+- lista atual de artefatos atualizada para o relatorio e o diff REV10;
+- destino corrigido de DEDAO para DEDALO;
+- secoes historicas REV6, REV7, REV8 e REV9 preservadas como historico;
+- nenhuma logica SQL alterada.
+
+DESTINO=DEDALO_PARA_AUDITORIA_ESTATICA_E_HERA_PARA_DECISAO_FORMAL
+
+====================================================================
+3. PRESERVACAO DOS QUATRO SQLS
+====================================================================
+
+METODO=SUBSTITUICAO_BINARIA_LITERAL_REV9_POR_REV10
+PREFLIGHT_SUBSTITUICOES=14
+PROPOSTA_SUBSTITUICOES=23
+VALIDACAO_SUBSTITUICOES=16
+ROLLBACK_SUBSTITUICOES=15
+TOTAL_SUBSTITUICOES=68
+
+PROVA_DE_EQUIVALENCIA=AO_REVERTER_LITERALMENTE_REV10_PARA_REV9_OS_BYTES_E_HASHES_COINCIDEM_COM_A_REV9
+ALTERACAO_LOGICA_SQL=NAO
+ALTERACAO_DDL=NAO
+ALTERACAO_DML=NAO
+ALTERACAO_GRANTS=NAO
+ALTERACAO_FUNCOES=NAO
+ALTERACAO_TRIGGERS=NAO
+ALTERACAO_LOCKS=NAO
+ALTERACAO_TRANSACOES=NAO
+ALTERACAO_VALIDACAO_SEMANTICA_VIEW=NAO
+
+VALIDACAO_SEMANTICA_VIEW:
+PREFLIGHT_BLOCOS=1
+PROPOSTA_BLOCOS=1
+VALIDACAO_BLOCOS=1
+ROLLBACK_BLOCOS=1
+
+CORRECAO_ACL:
+PREFLIGHT_ACLEXPLODE_C_RELACL=0
+PROPOSTA_ACLEXPLODE_C_RELACL=2
+VALIDACAO_ACLEXPLODE_C_RELACL=2
+ROLLBACK_ACLEXPLODE_C_RELACL=1
+PADRAO_ACL_ARRAY_VAZIO_INSEGURO=0
+
+COMPARACAO_TEXTUAL_PG_GET_VIEWDEF=NOTICE_COMPLEMENTAR
+COMPARACAO_TEXTUAL_RIGIDA_BLOQUEANTE=0
+
+====================================================================
+4. ORDEM OPERACIONAL ATUAL
+====================================================================
+
+1. auditoria estatica da REV10 pelo Dedalo;
+2. autorizacao formal da Hera exclusivamente para PREFLIGHT REV10;
+3. execucao unica do PREFLIGHT REV10 somente leitura;
+4. auditoria do estado real pelo Dedalo;
+5. ratificacao do backup existente somente se o estado estiver nao aplicado,
+   integro e sem residuos;
+6. autorizacao separada da PROPOSTA REV10;
+7. auditoria integral da PROPOSTA;
+8. autorizacao separada da VALIDACAO REV10;
+9. ROLLBACK somente mediante contingencia formal.
+
+REV10_EXECUCAO_AUTORIZADA=NAO
+PREFLIGHT_REV10_AUTORIZADO=NAO
+PROPOSTA_REV10_AUTORIZADA=NAO
+VALIDACAO_REV10_AUTORIZADA=NAO
+ROLLBACK_REV10_AUTORIZADO=NAO
+
+====================================================================
+5. VARREDURA FINAL
+====================================================================
+
+REFERENCIAS_OPERACIONAIS_REV9_NOS_SQL_REV10=0
+REFERENCIAS_OPERACIONAIS_REV8_NO_FLUXO_ATUAL_DO_README=0
+ARTEFATOS_LISTADOS_NO_README_AUSENTES_DO_ZIP=0
+ARTEFATOS_DO_ZIP_AUSENTES_DA_LISTA_ATUAL_DO_README=0
+PADRAO_ACL_INSEGURO=0
+COMPARACAO_TEXTUAL_RIGIDA_BLOQUEANTE=0
+
+====================================================================
+6. CONTROLES
+====================================================================
+
+BANCO_ACESSADO=NAO
+SQL_EXECUTADO=NAO
+PSQL_EXECUTADO=NAO
+PG_DUMP_EXECUTADO=NAO
+PG_RESTORE_EXECUTADO=NAO
+SAP_ACESSADO=NAO
+CPI_ACESSADO=NAO
+CSHARP_ALTERADO=NAO
+HML_ACESSADO=NAO
+PRD_ACESSADO=NAO
+COMMIT_GIT_EXECUTADO=NAO
+PUSH_GIT_EXECUTADO=NAO
+
+REV10_EXECUTADA=NAO
+DESTINO_FINAL=DEDALO_PARA_AUDITORIA_ESTATICA

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -27,15 +27,23 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
     internal const string MensagemBalancaProdutoAcabadoNaoConfigurada =
         "Balança de produto acabado não configurada para esta operação.";
+    // REV4-§11: mensagem NEUTRA (não hardcodar DEV/HML). Reflete a regra "sem envio automático", válida em
+    // qualquer ambiente; a habilitação real do envio manual é governada dinamicamente pelo gate HU.
     internal const string MensagemPostSapDesativado =
-        "Produto acabado salvo localmente em memória. POST SAP automático está desativado nesta etapa.";
+        "Caixa persistida no banco. Nenhum POST automático é executado; o envio ao SAP é sempre manual e confirmado.";
 
     private readonly ProdutoAcabadoController _controller;
     private readonly BalancaLeituraServico _balancaLeituraServico = new();
+    private readonly ImpressaoProdutoAcabadoServico _impressaoProdutoAcabadoServico = new(); // etiqueta da caixa (Zebra)
     private readonly List<ProdutoAcabadoCaixa> _caixasPesadas = [];
     private readonly List<ProdutoAcabadoPalete> _paletesMontados = [];
     private ProdutoAcabadoOrdem? _ordemAtual;
     private ProdutoAcabadoNormaEmbalagem? _normaEmbalagem;
+    private readonly ToolTip _toolTipNorma = new();
+    private bool _envioCaixaSapEmAndamento; // §6: proteção local contra duplo clique no envio ao SAP
+    private long? _codigoCaixaEnvioIndeterminado;
+    private long? _codigoCaixaPipeline045Bloqueada; // REV3-B5: caixa cujo estado final não pôde ser determinado (envio bloqueado)
+    private long? _codigoCaixaDestacada; // UX: caixa recém-confirmada a ser reselecionada visualmente na grid
     private TaraCadastro? _taraCaixaSelecionada;
     private ContextoTerminalLocal? _contextoTerminal;
     private long? _idSetorSelecionado;
@@ -59,13 +67,15 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private Label? _statusNormaValorLabel;        // Tarefa 21.6 (Ajuste 2): STATUS NORMA / MATERIAL CAIXA
     private Label? _avisoNormaFallbackLabel;
 
-    // Correção HU (1ª entrega): Produto Acabado por CAIXA INDIVIDUAL via Handling Unit.
-    // Enquanto true: uma caixa por vez, área de palete fora do fluxo ativo e botão de envio manual apenas
-    // preparado (desabilitado — schema e contrato OP_HANDLINGUNIT_0001 pendentes; nenhum POST).
-    private const bool PrimeiraEntregaHu = true;
+    // Produto Acabado por CAIXA INDIVIDUAL via Handling Unit: uma caixa por vez e área de palete fora do
+    // fluxo ativo. O envio ao SAP é MANUAL por caixa; a habilitação do botão é DINÂMICA (gate HU + estado
+    // elegível da caixa). Feature flag NÃO é const: evita ramos "compile-time unreachable" (CS0162) mantendo
+    // o fluxo de palete inacessível nesta entrega. Nunca reativar palete.
+    private static readonly bool PrimeiraEntregaHu = true;
     // §6: NÃO existe fallback de material de embalagem inventado. A única origem confirmada é a norma SAP
     // (MaterialCaixa). Sem origem real ⇒ vazio e o preview bloqueia a finalização (mensagem clara).
-    private Button? _enviarCaixaSapButton; // §10: "ENVIAR CAIXA SAP HML" (preparado/desabilitado)
+    private Button? _enviarCaixaSapButton; // "ENVIAR CAIXA SAP" — habilitado dinamicamente pelo gate HU + estado
+    private ToolTip? _enviarCaixaSapTooltip; // REV4-§11: tooltip dinâmico/neutro (nunca hardcoda DEV/HML)
 
     public ProcessoProdutoAcabadoForm()
         : this(new ProdutoAcabadoController())
@@ -214,7 +224,14 @@ public partial class ProcessoProdutoAcabadoForm : Form
         manualLotLegendPanel.Click += LeituraManual_Click;
         manualLotLegendIconLabel.Click += LeituraManual_Click;
         manualLotLegendTextLabel.Click += LeituraManual_Click;
-        deleteLastLegendPanel.Click += (_, _) => CancelarUltimaCaixa();
+        excluirUltimaButton.Click += ExcluirUltimaButton_Click;
+        excluirCodigoButton.Enabled = false;
+        excluirCodigoButton.Visible = false;
+        excluirCodigoButton.KeyHint = string.Empty;
+        deleteLastLegendPanel.Enabled = false;
+        deleteLastLegendPanel.Visible = false;
+        deleteByCodeLegendPanel.Enabled = false;
+        deleteByCodeLegendPanel.Visible = false;
         productionActionsButton.Click += (_, _) => CriarPaleteLocal();
         // "Os três pontinhos" (menu) retorna à tela de Processos: fecha o diálogo (com a mesma proteção
         // de fechamento), devolvendo o controle ao painel.
@@ -353,6 +370,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
         productionDataGridView.AutoGenerateColumns = false;
         productionDataGridView.ReadOnly = true;
         productionDataGridView.MultiSelect = false;
+        // UX pós-confirmação: seleção de LINHA INTEIRA apenas para inspeção/reimpressão futura. A seleção NÃO
+        // é entrada da regra de envio (o botão ENVIAR CAIXA SAP depende só do estado da caixa ativa, nunca da
+        // linha selecionada) — CONFIRMADA_SAP/CANCELADA/INDETERMINADO_TIMEOUT permanecem NÃO reenviáveis.
+        productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        // Duplo clique = REIMPRESSÃO explícita da etiqueta da caixa (com confirmação + permissão). Nunca SAP.
+        productionDataGridView.CellDoubleClick -= ProductionDataGridView_CellDoubleClick;
+        productionDataGridView.CellDoubleClick += ProductionDataGridView_CellDoubleClick;
         productionDataGridView.Columns.Clear();
         productionDataGridView.ScrollBars = ScrollBars.Vertical;
         // Tarefa 21.6.2 (Ajuste 7): colunas preenchem a largura útil (Fill + FillWeight por coluna).
@@ -436,7 +460,10 @@ public partial class ProcessoProdutoAcabadoForm : Form
         materialEmbalagemLabel.Size = new Size(200, 16);
         _criarPaleteCard.Controls.Add(materialEmbalagemLabel);
         materialEmbalagemPaleteTextBox = CriarTextBoxPaletizacao("materialEmbalagemPaleteTextBox");
-        materialEmbalagemPaleteTextBox.Text = "PALLET01";
+        // §8: NÃO usar o placeholder legado "PALLET01" (não confirmado por Ares). Inicia vazio; a origem real
+        // do material de embalagem do palete é DEPENDENCIA_ARES. O builder/gateway bloqueiam vazio/PALLET01.
+        materialEmbalagemPaleteTextBox.Text = string.Empty;
+        materialEmbalagemPaleteTextBox.PlaceholderText = "Não informado";
         _criarPaleteCard.Controls.Add(EnvolverCampoArredondado(materialEmbalagemPaleteTextBox, new Point(286, 52), 200));
 
         // Mensagem de estado do card (fonte legível).
@@ -489,6 +516,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
         paletesDataGridView.ColumnHeadersDefaultCellStyle.Font = FonteGridHeader;
         paletesDataGridView.DefaultCellStyle.Font = FonteGridCell;
         paletesDataGridView.RowTemplate.Height = 28; // Tarefa 21.6.5 (Ajuste 7)
+        // REV8/§4: AÇÃO EXPLÍCITA de integração INT012 — duplo clique num palete montado dispara o POST_FORMACAO
+        // (via Controller.EnviarPaleteInt012Async). Montar/selecionar/preview NUNCA fazem POST (§5).
+        paletesDataGridView.CellDoubleClick += async (_, e) => await IntegrarPaleteSelecionadoAsync(e.RowIndex);
         paletesDataGridView.Columns.Add("paleteLocalColumn", "Palete local");
         paletesDataGridView.Columns.Add("paletePrimeiraCaixaColumn", "Primeira caixa");
         paletesDataGridView.Columns.Add("paleteUltimaCaixaColumn", "Última caixa");
@@ -542,55 +572,56 @@ public partial class ProcessoProdutoAcabadoForm : Form
         productionReadingsPanel.Controls.Add(_areaInferior);
         _areaInferior.BringToFront();
 
-        // §8: 1ª entrega por caixa individual (HU) — palete FORA do fluxo ativo. Oculta integralmente o card
-        // CRIAR PALETE, o título e o grid de paletes, e colapsa as linhas correspondentes da área inferior.
-        if (PrimeiraEntregaHu)
-        {
-            _criarPaleteCard.Visible = false;
-            paletesCriadosTituloLabel.Visible = false;
-            paletesDataGridView.Visible = false;
-            productionActionsButton.Visible = false;
-            _areaInferior.RowStyles[0] = new RowStyle(SizeType.Percent, 100F); // caixas ocupam a área
-            _areaInferior.RowStyles[1] = new RowStyle(SizeType.Absolute, 0F);
-            _areaInferior.RowStyles[2] = new RowStyle(SizeType.Absolute, 0F);
-            _areaInferior.RowStyles[3] = new RowStyle(SizeType.Absolute, 0F);
-            ConfigurarBotaoEnvioCaixaSap();
-        }
+        // INC-047: paletização saiu do Produto Acabado e fica na tela independente Paletização por HU.
+        // Mantém estruturas existentes sem remoção física arriscada; apenas oculta grupo/botão/grid no runtime.
+        _criarPaleteCard.Visible = false;
+        paletesCriadosTituloLabel.Visible = false;
+        paletesDataGridView.Visible = false;
+        productionActionsButton.Visible = false;
+        _areaInferior.RowStyles[0] = new RowStyle(SizeType.Percent, 100F); // caixas ocupam a área
+        _areaInferior.RowStyles[1] = new RowStyle(SizeType.Absolute, 0F);
+        _areaInferior.RowStyles[2] = new RowStyle(SizeType.Absolute, 0F);
+        _areaInferior.RowStyles[3] = new RowStyle(SizeType.Absolute, 0F);
+        // O botão "ENVIAR CAIXA SAP" é SEMPRE configurado (envio manual da caixa; roteia p/ pipeline quando gate on).
+        ConfigurarBotaoEnvioCaixaSap();
     }
 
     /// <summary>
-    /// §10: prepara o botão "ENVIAR CAIXA SAP HML". Estrutura visual apenas — enquanto o schema do banco e o
-    /// contrato OP_HANDLINGUNIT_0001 estiverem pendentes o botão permanece DESABILITADO e nenhum POST ocorre.
-    /// Fica visível somente após uma caixa finalizada.
+    /// Prepara o botão "ENVIAR CAIXA SAP". O envio é MANUAL por caixa; a habilitação e o tooltip são
+    /// DINÂMICOS (governados pelo gate HU + estado elegível da caixa) — nunca hardcodam DEV/HML. Fica
+    /// visível somente após uma caixa finalizada.
     /// </summary>
     private void ConfigurarBotaoEnvioCaixaSap()
     {
+        // REGRA 2: posição PRÓPRIA (não sobre o botão de PESAGEM MANUAL). Ocupa a faixa livre de
+        // excluirCodigoButton (permanentemente oculto), abaixo de excluirUltimaButton — sem esconder/substituir
+        // PESAGEM MANUAL, preservando a largura responsiva (Anchor Top|Left|Right).
         _enviarCaixaSapButton = new Button
         {
             Name = "enviarCaixaSapButton",
-            Text = "ENVIAR CAIXA SAP HML",
+            Text = "ENVIAR CAIXA SAP",
             Font = FonteBotao,
-            Location = leituraManualButton.Location,
-            Size = leituraManualButton.Size,
+            Location = new Point(leituraManualButton.Location.X, 534),
+            Size = new Size(leituraManualButton.Size.Width, leituraManualButton.Size.Height),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             TabIndex = leituraManualButton.TabIndex,
             FlatStyle = FlatStyle.Flat,
             ForeColor = Color.White,
-            BackColor = Color.FromArgb(156, 163, 175), // cinza = desabilitado
+            BackColor = Color.FromArgb(156, 163, 175),
             Enabled = false,
             Visible = false,
             Cursor = Cursors.Default
         };
         _enviarCaixaSapButton.FlatAppearance.BorderSize = 0;
 
-        ToolTip tooltip = new();
-        tooltip.SetToolTip(_enviarCaixaSapButton,
-            "Envio manual indisponível: schema do banco pendente e contrato OP_HANDLINGUNIT_0001 pendente. "
-            + "POST ao SAP não autorizado nesta fase.");
+        _enviarCaixaSapTooltip = new ToolTip();
+        _enviarCaixaSapTooltip.SetToolTip(_enviarCaixaSapButton,
+            "O envio da HU ao SAP é manual e confirmado. A ação fica disponível quando a caixa está elegível "
+            + "e o envio de HU está habilitado nesta execução.");
 
-        // Nenhum handler de POST: o clique não executa HTTP. Enquanto desabilitado nem dispara.
-        _enviarCaixaSapButton.Click += (_, _) =>
-            statusLabel.Text = "Envio ao SAP não autorizado nesta fase (schema/contrato pendentes). Nenhum POST executado.";
+        // §4/§6: handler async real — delega ao Controller/Service/Gateway. Só executa POST quando o gateway
+        // está autorizado (flag HU) e a caixa persistida é elegível; a Form nunca faz HTTP diretamente.
+        _enviarCaixaSapButton.Click += async (_, _) => await SolicitarEnvioCaixaSapAsync();
 
         sidePanel.Controls.Add(_enviarCaixaSapButton);
         _enviarCaixaSapButton.BringToFront();
@@ -598,8 +629,10 @@ public partial class ProcessoProdutoAcabadoForm : Form
     }
 
     /// <summary>
-    /// §10: reflete o estado da caixa no botão de envio e no status. O botão só aparece após uma caixa
-    /// finalizada e permanece DESABILITADO enquanto schema/gateway estiverem pendentes (nenhum POST).
+    /// §5: estado DINÂMICO do botão de envio. Visível quando há caixa HU; habilitado SOMENTE quando o
+    /// gateway está autorizado (flag HU), a caixa persistida está elegível (AGUARDANDO_AUTORIZACAO_SAP ou
+    /// PRONTA_PARA_ENVIO) e não há envio em andamento. Nunca habilita p/ CONFIRMADA/CANCELADA/ENVIANDO/
+    /// INDETERMINADO_TIMEOUT/BLOQUEADA. Com a flag HU false o botão fica desabilitado (nenhum claim/POST).
     /// </summary>
     private void AtualizarEstadoEnvioCaixaSap()
     {
@@ -609,21 +642,446 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
 
         ProdutoAcabadoCaixa? caixa = _caixasPesadas.LastOrDefault();
-        bool temCaixaFinalizada = caixa is not null
-            && caixa.StatusIntegracao is StatusIntegracaoCaixa.FinalizadaLocal
-                or StatusIntegracaoCaixa.PreviewHuGerado
-                or StatusIntegracaoCaixa.AguardandoAutorizacaoSap
-                or StatusIntegracaoCaixa.ProntaParaEnvio
-                or StatusIntegracaoCaixa.ErroSap;
+        bool temCaixaHu = caixa is not null && caixa.StatusIntegracao is not StatusIntegracaoCaixa.EmPesagem;
+        // Defesa 2 (Hera): só caixa do centro PET 3007 é elegível ao envio (nunca por linha selecionada).
+        bool elegivelEnvio = caixa is { CodigoProdutoAcabadoCaixa: not null }
+            && RegraCentroPetProdutoAcabado.CentroPermitido(caixa.Centro)
+            && caixa.StatusIntegracao is StatusIntegracaoCaixa.AguardandoAutorizacaoSap
+                or StatusIntegracaoCaixa.ProntaParaEnvio;
+        // REV3-B5: se o estado final desta caixa ficou indeterminado, o envio permanece bloqueado
+        // localmente (nunca reabilita por objeto stale) até que um snapshot confiável a substitua.
+        bool bloqueadaPorEstadoIndeterminado =
+            caixa is { CodigoProdutoAcabadoCaixa: not null }
+            && caixa.CodigoProdutoAcabadoCaixa == _codigoCaixaEnvioIndeterminado;
+        bool bloqueadaPorPipeline045 =
+            caixa is { CodigoProdutoAcabadoCaixa: not null }
+            && caixa.CodigoProdutoAcabadoCaixa == _codigoCaixaPipeline045Bloqueada;
 
-        _enviarCaixaSapButton.Visible = temCaixaFinalizada;
-        // Sempre desabilitado nesta fase: schema pendente + contrato pendente + POST não autorizado.
-        _enviarCaixaSapButton.Enabled = false;
-        leituraManualButton.Visible = _leituraIniciada && !temCaixaFinalizada;
+        bool habilitado =
+            _controller.EnvioHuAutorizado && elegivelEnvio
+            && !_envioCaixaSapEmAndamento && !bloqueadaPorEstadoIndeterminado && !bloqueadaPorPipeline045;
+        _enviarCaixaSapButton.Visible = temCaixaHu;
+        _enviarCaixaSapButton.Enabled = habilitado;
+        // REGRA 3: a APARÊNCIA reflete (não define) a elegibilidade. Habilitado ⇒ verde positivo do FugaPET;
+        // não elegível ⇒ cinza neutro. A elegibilidade continua definida só pelas regras funcionais acima.
+        _enviarCaixaSapButton.BackColor = habilitado
+            ? Color.FromArgb(34, 166, 82)     // verde = ação liberada
+            : Color.FromArgb(156, 163, 175);  // cinza = não elegível
+        _enviarCaixaSapButton.Cursor = habilitado ? Cursors.Hand : Cursors.Default;
+        // REGRA 2: PESAGEM MANUAL não é escondida por causa do envio HU — sua visibilidade/enabled é governada
+        // por AtualizarBotoesOperacao (visível durante leitura; desabilitada com caixa ativa). Nada aqui a oculta.
 
-        if (caixa is not null)
+        // REV4-§11: tooltip DINÂMICO/NEUTRO — nunca hardcoda DEV/HML nem afirma "desabilitado" quando o gate
+        // HU está ativo e a caixa é elegível.
+        if (_enviarCaixaSapTooltip is not null)
         {
-            _enviarCaixaSapButton.Text = "ENVIAR CAIXA SAP HML";
+            string dica = !_controller.EnvioHuAutorizado
+                ? "Envio de HU SAP não habilitado nesta execução."
+                : bloqueadaPorPipeline045
+                    ? "Estado 045 da caixa exige reconciliação. Não tente enviar novamente."
+                    : bloqueadaPorEstadoIndeterminado
+                    ? "Estado final da caixa indeterminado. Não envie novamente; verifique o estado antes de continuar."
+                    : elegivelEnvio
+                        ? "Envio de HU ao SAP disponível: revise e confirme para criar a Handling Unit desta caixa."
+                        : "Envio disponível apenas quando a caixa está elegível (aguardando autorização ou pronta para envio).";
+            _enviarCaixaSapTooltip.SetToolTip(_enviarCaixaSapButton, dica);
+        }
+    }
+
+    /// <summary>
+    /// REGRA 4: SALDO PENDENTE exibido = saldo pendente da OP (fonte SAP: <c>QuantidadePendente</c>) menos a
+    /// produção que EFETIVAMENTE concluiu o fluxo (caixas CONFIRMADA_SAP). NÃO abate caixa cancelada, apenas
+    /// pesada, AguardandoAutorizacaoSap, EnviandoSap, ErroSap, IndeterminadoTimeout ou não confirmada. Regra
+    /// ÚNICA, reutilizada no carregamento da OP e após cada confirmação — sem acessar banco/OData na Form.
+    /// </summary>
+    private decimal CalcularSaldoPendenteExibido()
+        => _ordemAtual is null
+            ? 0m
+            : CalculoSaldoProdutoAcabado.SaldoPendenteExibido(_ordemAtual.QuantidadePendente, _caixasPesadas);
+
+    /// <summary>REGRA 4: atualiza IMEDIATAMENTE o campo SALDO PENDENTE (sem recarregar a OP), pela regra única.</summary>
+    private void AtualizarSaldoPendente()
+    {
+        if (_ordemAtual is not null)
+        {
+            classificationDateTextBox.Text = FormatarKg(CalcularSaldoPendenteExibido());
+        }
+    }
+
+    /// <summary>
+    /// §6/§7: envio manual da caixa persistida elegível ao SAP (POST /HandlingUnit). Confirmação humana,
+    /// proteção contra duplo clique, autorização local quando AGUARDANDO_AUTORIZACAO_SAP, delegação ao
+    /// Controller/Service e atualização visual pelo SNAPSHOT persistido retornado (nunca estado simulado).
+    /// </summary>
+    private async Task SolicitarEnvioCaixaSapAsync()
+    {
+        if (_envioCaixaSapEmAndamento || _enviarCaixaSapButton is null)
+        {
+            return;
+        }
+
+        // REV4-§4/§17: quando o NOVO pipeline está habilitado, o botão executa EXCLUSIVAMENTE 261→101→HU.
+        // HU isolada fica PROIBIDA neste modo — nunca cai no caminho HU-only abaixo.
+        if (_controller.PipelinePaGateHabilitado)
+        {
+            await SolicitarEnvioCaixaPipelineAsync();
+            return;
+        }
+
+        if (!_controller.EnvioHuAutorizado)
+        {
+            statusLabel.Text = "Envio de HU SAP não habilitado nesta execução. Nenhum POST executado.";
+            return;
+        }
+
+        ProdutoAcabadoCaixa? caixa = _caixasPesadas.LastOrDefault();
+        if (caixa?.CodigoProdutoAcabadoCaixa is not long codigo
+            || caixa.StatusIntegracao is not (StatusIntegracaoCaixa.AguardandoAutorizacaoSap or StatusIntegracaoCaixa.ProntaParaEnvio))
+        {
+            statusLabel.Text = "Nenhuma caixa elegível para envio ao SAP.";
+            return;
+        }
+
+        // Defesa 3 (Hera): antes de autorizar localmente, do claim e de qualquer POST, revalidar o centro PET.
+        // Centro != 3007 ⇒ nada de autorização/claim/POST; estado bloqueado ao operador.
+        ResultadoBloqueioPipeline045 bloqueioPersistido = await _controller.VerificarBloqueioPipeline045Async(codigo);
+        if (bloqueioPersistido.Bloqueado)
+        {
+            _codigoCaixaPipeline045Bloqueada = codigo;
+            AtualizarEstadoEnvioCaixaSap();
+            statusLabel.Text = bloqueioPersistido.Mensagem;
+            MessageBox.Show(bloqueioPersistido.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (!RegraCentroPetProdutoAcabado.CentroPermitido(caixa.Centro))
+        {
+            statusLabel.Text = RegraCentroPetProdutoAcabado.MensagemCentroNaoPermitido;
+            return;
+        }
+
+        if (EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario is not long usuario)
+        {
+            MessageBox.Show("Usuário não identificado para enviar a caixa.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        DialogResult confirmacao = MessageBox.Show(
+            $"Confirmar envio da caixa {caixa.CodigoCaixaLocal} ao SAP (POST HandlingUnit)?",
+            "Produto Acabado", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+        if (confirmacao != DialogResult.Yes)
+        {
+            return;
+        }
+
+        string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+        _envioCaixaSapEmAndamento = true;
+        AtualizarEstadoEnvioCaixaSap(); // desabilita durante o envio (bloqueio de duplo clique)
+        try
+        {
+            // §6/REV5-§6: autoriza localmente só quando ainda está AGUARDANDO_AUTORIZACAO_SAP. Se a autorização
+            // NÃO for aplicada (false), FAIL-CLOSED antes do claim: nenhum POST é executado (POST_COUNT=0);
+            // recarrega o snapshot, atualiza a UI e informa. Nunca segue para o envio com estado presumido.
+            if (caixa.StatusIntegracao == StatusIntegracaoCaixa.AguardandoAutorizacaoSap)
+            {
+                bool autorizado = await _controller.AutorizarEnvioCaixaAsync(codigo, usuario, terminal);
+                if (!autorizado)
+                {
+                    ProdutoAcabadoCaixa? snapshotAutorizacao = await _controller.ObterCaixaPorCodigoAsync(codigo);
+                    if (snapshotAutorizacao is not null)
+                    {
+                        SubstituirCaixaNoCache(snapshotAutorizacao);
+                    }
+
+                    statusLabel.Text = "Autorização local de envio não foi aplicada. Nenhum POST executado. "
+                        + "Verifique o estado da caixa antes de continuar.";
+                    return; // sai pelo finally; POST_COUNT=0
+                }
+            }
+
+            ResultadoEnvioCaixaHu resultado = await _controller.EnviarCaixaHandlingUnitAsync(codigo, usuario, terminal);
+            if (resultado.Caixa is not null)
+            {
+                SubstituirCaixaNoCache(resultado.Caixa); // snapshot persistido substitui o objeto do cache
+            }
+
+            if (resultado.Cenario == CenarioEnvioCaixaHu.Confirmado && resultado.Caixa is not null)
+            {
+                // UX pós-confirmação: confirmação visual INEQUÍVOCA (número da caixa + HU SAP). NÃO altera
+                // nenhuma regra de envio: a caixa fica CONFIRMADA_SAP e permanece NÃO reenviável.
+                ProdutoAcabadoCaixa confirmada = resultado.Caixa;
+                string numeroCaixaFmt = confirmada.NumeroCaixa > 0
+                    ? confirmada.NumeroCaixa.ToString("0000", CultureInfo.InvariantCulture)
+                    : confirmada.CodigoCaixaLocal;
+                _codigoCaixaDestacada = confirmada.CodigoProdutoAcabadoCaixa; // reselecionar após recarregar a grid
+                statusLabel.Text = $"Caixa {confirmada.CodigoCaixaLocal} confirmada no SAP (HU {confirmada.HandlingUnitExternalId}).";
+                MessageBox.Show(
+                    "Caixa enviada ao SAP com sucesso.\r\n"
+                    + $"Caixa: {numeroCaixaFmt}\r\n"
+                    + $"HU SAP: {confirmada.HandlingUnitExternalId}",
+                    "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // Efeito INDEPENDENTE: imprime a etiqueta da caixa. Falha de impressão é isolada e NUNCA
+                // desfaz/reenvia a HU SAP nem altera numero_tentativa (tratada dentro do método).
+                await ImprimirEtiquetaCaixaAsync(confirmada);
+            }
+            else
+            {
+                statusLabel.Text = resultado.Mensagem;
+            }
+        }
+        catch (Exception ex)
+        {
+            // REV3-B5: NUNCA instruir "tente novamente" (risco de 2º POST). Recarrega o snapshot persistido;
+            // se não for possível, o envio dessa caixa fica BLOQUEADO localmente (nunca reabilita por objeto stale).
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha durante o envio da caixa ao SAP: {ex.GetType().Name}");
+            ProdutoAcabadoCaixa? snapshot = null;
+            try
+            {
+                snapshot = await _controller.ObterCaixaPorCodigoAsync(codigo);
+            }
+            catch (Exception recarga)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao recarregar a caixa após erro: {recarga.GetType().Name}");
+            }
+
+            if (snapshot is not null)
+            {
+                SubstituirCaixaNoCache(snapshot);
+                _codigoCaixaEnvioIndeterminado = null;
+                statusLabel.Text = $"Estado da caixa {caixa.CodigoCaixaLocal} recarregado do banco: {MapeadorStatusHuCaixa.ParaTextoBanco(snapshot.StatusIntegracao)}.";
+            }
+            else
+            {
+                _codigoCaixaEnvioIndeterminado = codigo; // bloqueia reenvio local (estado final desconhecido)
+                MessageBox.Show(
+                    "Não foi possível determinar o estado final da caixa. Não tente enviar novamente. "
+                    + "Verifique o estado antes de continuar.",
+                    "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        finally
+        {
+            _envioCaixaSapEmAndamento = false;
+            AtualizarGridCaixas();
+            AtualizarResumoOperacional();
+            AtualizarEstadoEnvioCaixaSap();
+            AtualizarBotoesOperacao();
+            // REGRA 4: recalcula o SALDO PENDENTE pela regra única (abate apenas caixas CONFIRMADA_SAP) após o
+            // resultado DEFINITIVO e persistido do envio — sem recarregar a OP manualmente.
+            AtualizarSaldoPendente();
+        }
+    }
+
+    /// <summary>
+    /// REV4-§3/§6/§11: caminho do NOVO pipeline (261→101→HU). Fail-closed: pipeline indisponível
+    /// (DEPENDENCIA_GAIA) OU commands incompletos (DEPENDENCIA_ARES) ⇒ nenhum POST; UI informa o estado.
+    /// A View NÃO monta payload SAP — apenas entrega a origem (OP + caixa + correlação local); o builder de
+    /// domínio converte/valida. NUNCA envia HU isolada aqui.
+    /// </summary>
+    private async Task SolicitarEnvioCaixaPipelineAsync()
+    {
+        if (!_controller.PipelinePaDisponivel)
+        {
+            // §5/§16: gate ligado porém store persistente ainda não disponível ⇒ fail-closed, zero HTTP.
+            statusLabel.Text = $"Pipeline SAP (261→101→HU) não disponível: {_controller.PipelinePaMotivo}. Nenhum POST executado.";
+            return;
+        }
+
+        ProdutoAcabadoCaixa? caixa = _caixasPesadas.LastOrDefault();
+        if (caixa?.CodigoProdutoAcabadoCaixa is not long codigo)
+        {
+            statusLabel.Text = "Nenhuma caixa elegível para o pipeline SAP.";
+            return;
+        }
+
+        ResultadoBloqueioPipeline045 bloqueioPersistido = await _controller.VerificarBloqueioPipeline045Async(codigo);
+        if (bloqueioPersistido.Bloqueado)
+        {
+            _codigoCaixaPipeline045Bloqueada = codigo;
+            AtualizarEstadoEnvioCaixaSap();
+            statusLabel.Text = bloqueioPersistido.Mensagem;
+            MessageBox.Show(bloqueioPersistido.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (!RegraCentroPetProdutoAcabado.CentroPermitido(caixa.Centro))
+        {
+            statusLabel.Text = RegraCentroPetProdutoAcabado.MensagemCentroNaoPermitido;
+            return;
+        }
+
+        if (EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario is not long usuario)
+        {
+            MessageBox.Show("Usuário não identificado para enviar a caixa.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+        // Origem SEM inferência: a View só entrega dados funcionais confiáveis (OP + caixa). Identidade técnica
+        // de tentativa/correlation é responsabilidade do orquestrador/store. Campos 261/101 seguem fail-closed.
+        ProdutoAcabadoPipelineOrigem origem = MontarOrigemPipelineRuntime(caixa, _ordemAtual, DateTime.UtcNow);
+
+        _envioCaixaSapEmAndamento = true;
+        AtualizarEstadoEnvioCaixaSap();
+        try
+        {
+            ResultadoPipelineProdutoAcabado resultado = await _controller.EnviarCaixaPipelineAsync(origem, usuario, terminal);
+            AtualizarEstadosPipeline(resultado);
+            ExibirResultadoOperacionalPipeline(resultado);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha no pipeline SAP: {ex.GetType().Name}");
+            statusLabel.Text = "Envio interrompido em estado que exige reconciliação. Não tente enviar novamente.";
+            MessageBox.Show(statusLabel.Text, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _envioCaixaSapEmAndamento = false;
+            // §7 (Dédalo V6, blocker 5): após o pipeline (sucesso/bloqueio/erro/exceção) a AUTORIDADE é o banco.
+            // Recarrega o snapshot persistido da caixa (mesmo mecanismo do caminho HU-only). Se a recarga FALHAR,
+            // NÃO reabilita o envio por objeto stale: bloqueia localmente até nova carga/consulta.
+            try
+            {
+                ProdutoAcabadoCaixa? snapshot = await _controller.ObterCaixaPorCodigoAsync(codigo);
+                if (snapshot is not null)
+                {
+                    SubstituirCaixaNoCache(snapshot);
+                    _codigoCaixaEnvioIndeterminado = null;
+                    await AtualizarBloqueioPipeline045PersistidoAsync(codigo);
+                }
+                else
+                {
+                    _codigoCaixaEnvioIndeterminado = codigo; // estado desconhecido ⇒ bloqueia reenvio local
+                }
+            }
+            catch (Exception recarga)
+            {
+                System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao recarregar a caixa após o pipeline: {recarga.GetType().Name}");
+                _codigoCaixaEnvioIndeterminado = codigo; // recarga falhou ⇒ nunca reabilitar por cache stale
+            }
+            AtualizarGridCaixas();
+            AtualizarResumoOperacional();
+            AtualizarEstadoEnvioCaixaSap();
+            AtualizarBotoesOperacao();
+            AtualizarSaldoPendente();
+        }
+    }
+
+    /// <summary>
+    /// Data operacional real do pipeline PA: usa o carimbo do envio e normaliza para a data UTC,
+    /// espelhando o contrato homologado do 261 (PostingDate e DocumentDate recebem a mesma data explícita).
+    /// Sem data de envio, retorna MinValue para o builder bloquear fail-closed.
+    /// </summary>
+    internal static ProdutoAcabadoPipelineOrigem MontarOrigemPipelineRuntime(
+        ProdutoAcabadoCaixa caixa,
+        ProdutoAcabadoOrdem? ordem,
+        DateTime dataLancamentoUtc)
+    {
+        ArgumentNullException.ThrowIfNull(caixa);
+
+        DateTime dataOperacionalPipeline = NormalizarDataLancamentoPipeline(dataLancamentoUtc);
+        ProdutoAcabadoOrdem? origemOrdem = ordem;
+
+        return new ProdutoAcabadoPipelineOrigem
+        {
+            CodigoCaixa = caixa.CodigoProdutoAcabadoCaixa ?? 0,
+            NumeroOrdem = caixa.NumeroOrdemProducao ?? origemOrdem?.NumeroOrdem ?? string.Empty,
+            PostingDate = dataOperacionalPipeline,
+            DocumentDate = dataOperacionalPipeline,
+            Componentes = MontarComponentesPipelineRuntime(origemOrdem),
+            Material101 = caixa.Material,
+            Plant101 = caixa.Centro,
+            StorageLocation101 = caixa.Deposito,
+            ManufacturingOrderItem = caixa.ItemOrdemProducao,
+            QuantityInEntryUnit = caixa.QuantidadeProdutos.ToString(CultureInfo.InvariantCulture),
+            EntryUnit = caixa.UnidadeQuantidade,
+            Batch101 = caixa.Lote
+        };
+    }
+
+    private static IReadOnlyList<ProdutoAcabadoComponenteOrigem> MontarComponentesPipelineRuntime(ProdutoAcabadoOrdem? ordem)
+    {
+        if (ordem?.Componentes is null || ordem.Componentes.Count == 0)
+        {
+            return [];
+        }
+
+        return ordem.Componentes
+            .Where(componente => string.IsNullOrWhiteSpace(componente.TipoMovimento)
+                || string.Equals(componente.TipoMovimento.Trim(), "261", StringComparison.OrdinalIgnoreCase))
+            .Select(componente => new ProdutoAcabadoComponenteOrigem
+            {
+                Material = componente.Material,
+                Plant = componente.Centro,
+                StorageLocation = componente.Deposito,
+                Quantidade = componente.QuantidadeNecessaria,
+                Unidade = componente.Unidade,
+                Reservation = componente.Reserva,
+                ReservationItem = componente.ItemReserva,
+                Batch = componente.Lote
+            })
+            .ToArray();
+    }
+
+    private static DateTime NormalizarDataLancamentoPipeline(DateTime dataLancamentoUtc)
+        => dataLancamentoUtc == DateTime.MinValue ? DateTime.MinValue : dataLancamentoUtc.ToUniversalTime().Date;
+    /// <summary>
+    /// REV4-§11: apresenta os estados 261/101/HU da caixa atual (Pendente/Processando/Confirmado/Erro/
+    /// Indeterminado + MaterialDocument/Year quando houver). Compacto: usa o statusLabel (sem novos controles,
+    /// zero risco de regressão de layout do fluxo HU homologado).
+    /// </summary>
+    private async Task AtualizarBloqueioPipeline045PersistidoAsync(long codigo)
+    {
+        ResultadoBloqueioPipeline045 bloqueio = await _controller.VerificarBloqueioPipeline045Async(codigo);
+        _codigoCaixaPipeline045Bloqueada = bloqueio.Bloqueado ? codigo : null;
+        if (bloqueio.Bloqueado)
+        {
+            statusLabel.Text = bloqueio.Mensagem;
+        }
+    }
+
+    private static void ExibirResultadoOperacionalPipeline(ResultadoPipelineProdutoAcabado resultado)
+    {
+        ApresentacaoResultadoPipelineProdutoAcabado apresentacao = ProdutoAcabadoPipelineResultadoPresenter.Construir(resultado);
+        MessageBox.Show(
+            apresentacao.Mensagem,
+            apresentacao.Titulo,
+            MessageBoxButtons.OK,
+            MapearIconeResultadoPipeline(apresentacao.Icone));
+    }
+
+    private static MessageBoxIcon MapearIconeResultadoPipeline(IconeResultadoPipelineProdutoAcabado icone)
+        => icone switch
+        {
+            IconeResultadoPipelineProdutoAcabado.Informacao => MessageBoxIcon.Information,
+            IconeResultadoPipelineProdutoAcabado.Erro => MessageBoxIcon.Error,
+            _ => MessageBoxIcon.Warning
+        };
+    private void AtualizarEstadosPipeline(ResultadoPipelineProdutoAcabado resultado)
+    {
+        ProdutoAcabadoPipelineSnapshot? s = resultado.Snapshot;
+        if (s is null)
+        {
+            statusLabel.Text = $"Pipeline SAP: {resultado.Mensagem}";
+            return;
+        }
+
+        string doc261 = string.IsNullOrWhiteSpace(s.MaterialDocument261) ? string.Empty : $" (Doc {s.MaterialDocument261}/{s.MaterialDocumentYear261})";
+        string doc101 = string.IsNullOrWhiteSpace(s.MaterialDocument101) ? string.Empty : $" (Doc {s.MaterialDocument101}/{s.MaterialDocumentYear101})";
+        statusLabel.Text =
+            $"Pipeline SAP — 261: {s.Estado261}{doc261} | 101: {s.Estado101}{doc101} | HU: {MapeadorStatusHuCaixa.ParaTextoBanco(s.EstadoHu)}. {resultado.Mensagem}";
+    }
+
+    /// <summary>Substitui no cache visual a caixa pelo SNAPSHOT persistido (por código); mantém a linha visível.</summary>
+    private void SubstituirCaixaNoCache(ProdutoAcabadoCaixa snapshot)
+    {
+        for (int i = 0; i < _caixasPesadas.Count; i++)
+        {
+            if (_caixasPesadas[i].CodigoProdutoAcabadoCaixa == snapshot.CodigoProdutoAcabadoCaixa)
+            {
+                _caixasPesadas[i] = snapshot;
+                return;
+            }
         }
     }
 
@@ -638,6 +1096,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             StatusIntegracaoCaixa.EnviandoSap => "ENVIANDO SAP",
             StatusIntegracaoCaixa.ConfirmadaSap => "CONFIRMADA SAP",
             StatusIntegracaoCaixa.ErroSap => "ERRO SAP",
+            StatusIntegracaoCaixa.IndeterminadoTimeout => "INDETERMINADO (TIMEOUT)",
             StatusIntegracaoCaixa.Cancelada => "CANCELADA",
             StatusIntegracaoCaixa.Bloqueada => "BLOQUEADA",
             _ => "EM PESAGEM"
@@ -757,9 +1216,14 @@ public partial class ProcessoProdutoAcabadoForm : Form
             _ultimaOpConsultada = _ordemAtual.NumeroOrdem; // Tarefa 21.6.3 (Ajuste 1): não reconsultar a mesma OP no Leave
             _normaEmbalagem = resultado.NormaEmbalagem;
             _caixasPesadas.Clear();
-            _paletesMontados.Clear();
-            AtualizarGridPaletes();
+            // GATE 046-E §12: BANCO autoritativo — ao carregar a OP, recarrega os paletes locais persistidos.
+            await RecarregarPaletesPersistidosAsync();
             _taraCaixaSelecionada = null;
+
+            // §2: BANCO = fonte da verdade. Ao abrir/atualizar, recupera a caixa ATIVA do terminal e usa o
+            // snapshot persistido (nunca inventa estado local). Uma caixa ativa por terminal continua obrigatória.
+            string aviso = await RecuperarCaixasPersistidasAsync();
+
             PreencherDadosOrdem();
             PreencherNormaEmbalagem();
             AtualizarCampoQuantidadePorCaixa();
@@ -767,16 +1231,12 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AtualizarResumoOperacional();
             statusValueLabel.Text = "INATIVA";
             statusHintLabel.Text = "OP carregada. Inicie a leitura para pesar caixas.";
-            if (NormaEmFallbackMemoria())
-            {
-                statusLabel.Text = "Norma SAP indisponível. Informe a QTD. POR CAIXA antes de iniciar a leitura.";
-                readForecastBoxesTextBox.Focus();
-                readForecastBoxesTextBox.SelectAll();
-            }
-            else
-            {
-                statusLabel.Text = $"OP {_ordemAtual.NumeroOrdem} carregada para produto acabado.";
-            }
+            bool normaValida = _normaEmbalagem?.NormaValida == true;
+            statusLabel.Text = !string.IsNullOrEmpty(aviso)
+                ? aviso
+                : normaValida
+                    ? $"OP {_ordemAtual.NumeroOrdem} carregada para produto acabado."
+                    : MensagemBloqueioNorma();
         }
         catch (Exception ex)
         {
@@ -815,11 +1275,19 @@ public partial class ProcessoProdutoAcabadoForm : Form
         finishedProductTextBox.Visible = descricaoUtil;
         lotTextBox.Text = _ordemAtual.Lote;
         ovenExitTextBox.Text = _ordemAtual.DepositoDestino;
-        classificationDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadePendente);
+        // REGRA 4: saldo pendente exibido = regra ÚNICA (OP.QuantidadePendente − caixas CONFIRMADA_SAP).
+        classificationDateTextBox.Text = FormatarKg(CalcularSaldoPendenteExibido());
         manufacturingDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadePlanejada);
         expirationDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadeEntregue);
         readForecastBoxesTextBox.Text = _normaEmbalagem?.QuantidadeProdutosPorCaixa.ToString(CultureInfo.InvariantCulture) ?? "0";
-        readForecastPackagesTextBox.Text = _normaEmbalagem?.PackagingInstruction ?? string.Empty;
+        // NORMA EMBALAGEM: PackagingInstruction quando preenchido; "NÃO INFORMADA" quando há norma válida
+        // sem código; vazio quando não há norma válida.
+        bool temNorma = _normaEmbalagem?.NormaValida == true;
+        readForecastPackagesTextBox.Text = !temNorma
+            ? string.Empty
+            : string.IsNullOrWhiteSpace(_normaEmbalagem!.PackagingInstruction)
+                ? "NÃO INFORMADA"
+                : _normaEmbalagem.PackagingInstruction;
     }
 
     private void PreencherNormaEmbalagem()
@@ -840,41 +1308,71 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
     private void AtualizarCampoQuantidadePorCaixa()
     {
-        bool fallback = NormaEmFallbackMemoria();
+        // Norma vem da CONSULTA REAL (somente leitura). Sem fallback: ou há norma VÁLIDA, ou o rótulo do cenário.
+        bool temNorma = _normaEmbalagem?.NormaValida == true;
 
         readForecastBoxesCaptionLabel.Text = "QTD. POR CAIXA";
         readForecastPackagesCaptionLabel.Text = "NORMA EMBALAGEM";
-        readForecastBoxesTextBox.ReadOnly = !fallback;
+        // QTD. POR CAIXA sempre vem da API — campo SOMENTE LEITURA (sem digitação manual).
+        readForecastBoxesTextBox.ReadOnly = true;
         readForecastBoxesTextBox.Enabled = _ordemAtual is not null;
         readForecastBoxesTextBox.Multiline = false;
         readForecastBoxesTextBox.TextAlign = HorizontalAlignment.Left;
-        readForecastBoxesTextBox.BackColor = fallback ? Color.White : Color.FromArgb(248, 250, 252);
+        readForecastBoxesTextBox.BackColor = Color.FromArgb(248, 250, 252);
         readForecastBoxesTextBox.ForeColor = Color.FromArgb(17, 24, 39);
-        readForecastBoxesTextBox.Cursor = fallback ? Cursors.IBeam : Cursors.Default;
-        readForecastBoxesTextBox.TabStop = fallback;
+        readForecastBoxesTextBox.Cursor = Cursors.Default;
+        readForecastBoxesTextBox.TabStop = false;
 
-        // Tarefa 21.6 (Ajuste 2): STATUS NORMA + MATERIAL CAIXA + aviso discreto de fallback.
-        // Tarefa 21.6.3 (Ajuste 14): fallback em ÂMBAR (não vermelho crítico); SAP OK em verde discreto.
-        balanceTextBox.Text = _ordemAtual is null
-            ? string.Empty
-            : fallback ? "FALLBACK MEMÓRIA" : "SAP OK";
+        // STATUS NORMA: rótulo do cenário real (§9). "CONSULTADA SAP" em verde; qualquer outro (NAO
+        // CONFIGURADA / ERRO DE AUTENTICACAO / ACESSO NAO AUTORIZADO / ERRO NA CONSULTA / SEM NORMA
+        // CADASTRADA) em âmbar. Nunca força "SEM NORMA CADASTRADA" para todo erro.
+        string rotuloStatus = _normaEmbalagem is null || string.IsNullOrWhiteSpace(_normaEmbalagem.Status)
+            ? "SEM NORMA CADASTRADA"
+            : _normaEmbalagem.Status;
+        balanceTextBox.Text = _ordemAtual is null ? string.Empty : rotuloStatus;
         balanceTextBox.ForeColor = _ordemAtual is null
             ? Color.FromArgb(17, 24, 39)
-            : fallback ? Color.FromArgb(180, 83, 9)     // âmbar/laranja discreto
-                       : Color.FromArgb(22, 101, 52);   // verde discreto
+            : temNorma ? Color.FromArgb(22, 101, 52)    // verde discreto
+                       : Color.FromArgb(180, 83, 9);    // âmbar (cenário não-válido)
+
+        // Tooltip/diagnóstico sanitizado do cenário (nunca contém segredo).
+        _toolTipNorma?.SetToolTip(balanceTextBox, _normaEmbalagem?.DiagnosticoSanitizado ?? string.Empty);
+
         if (_statusNormaValorLabel is not null)
         {
             // A coluna já tem a legenda "MATERIAL CAIXA" — aqui vai só o valor (ou "-").
-            _statusNormaValorLabel.Text = _normaEmbalagem is null || string.IsNullOrWhiteSpace(_normaEmbalagem.MaterialCaixa)
-                ? "-"
-                : _normaEmbalagem.MaterialCaixa;
+            _statusNormaValorLabel.Text = temNorma ? _normaEmbalagem!.MaterialCaixa : "-";
         }
 
         if (_avisoNormaFallbackLabel is not null)
         {
-            _avisoNormaFallbackLabel.Visible = fallback;
-            _avisoNormaFallbackLabel.Text = "Norma SAP indisponível. Quantidade por caixa informada manualmente.";
+            _avisoNormaFallbackLabel.Visible = _ordemAtual is not null && !temNorma;
+            _avisoNormaFallbackLabel.Text = MensagemBloqueioNorma();
         }
+    }
+
+    /// <summary>
+    /// Mensagem orientadora de bloqueio conforme o cenário real da consulta (§9). Distingue falta de
+    /// configuração, erro de autenticação/autorização, erro técnico e ausência de cadastro — sem expor segredo.
+    /// </summary>
+    private string MensagemBloqueioNorma()
+    {
+        string status = _normaEmbalagem?.Status ?? "SEM NORMA CADASTRADA";
+        return status switch
+        {
+            "CONSULTADA SAP" => "Norma de embalagem consultada no SAP.",
+            "NAO CONFIGURADA" =>
+                "Consulta da norma de embalagem não configurada. Configure a API de embalagem (URL/host/credenciais) "
+                + "para liberar a leitura.",
+            "ERRO DE AUTENTICACAO" =>
+                "Falha de autenticação na API de embalagem. Verifique as credenciais próprias da embalagem. Leitura bloqueada.",
+            "ACESSO NAO AUTORIZADO" =>
+                "Acesso não autorizado à API de embalagem para este material. Leitura bloqueada.",
+            "SEM NORMA CADASTRADA" =>
+                "Sem norma de embalagem cadastrada para o produto desta OP. Leitura bloqueada até haver norma no SAP.",
+            _ =>
+                "Não foi possível consultar a norma de embalagem (erro técnico). Tente novamente. Leitura bloqueada."
+        };
     }
 
     /// <summary>
@@ -1034,10 +1532,6 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
     }
 
-    private bool NormaEmFallbackMemoria()
-        => _normaEmbalagem is not null
-            && string.Equals(_normaEmbalagem.PackagingInstruction, "FALLBACK_MEMORIA", StringComparison.OrdinalIgnoreCase);
-
     private void ToggleProductionFromSideButton_Click(object? sender, EventArgs e)
     {
         if (_leituraIniciada)
@@ -1060,7 +1554,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
-        if (!AtualizarNormaFallbackAntesDaLeitura())
+        if (!ValidarNormaEmbalagemAntesDaLeitura())
         {
             return;
         }
@@ -1117,7 +1611,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
-        RegistrarCaixaProdutoAcabado(pesoBrutoKg, tara.PesoKg, "BALANCA");
+        await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, "BALANCA");
     }
 
     private async Task RegistrarPesoManualAsync()
@@ -1146,18 +1640,18 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
-        RegistrarCaixaProdutoAcabado(pesoBrutoKg, tara.PesoKg, "MANUAL");
+        await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, "MANUAL");
     }
 
-    private bool RegistrarCaixaProdutoAcabado(decimal pesoBrutoKg, decimal taraKg, string origem)
+    private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem)
     {
         if (_ordemAtual is null || _normaEmbalagem is null)
         {
             return false;
         }
 
-        // §7: UMA CAIXA POR VEZ. Enquanto houver uma caixa ativa, não registra outra — sem usar apenas
-        // Count+1 como autorização. Exige confirmar/cancelar a caixa atual antes da próxima.
+        // §7: UMA CAIXA POR VEZ. Cache local espelha o banco (a caixa ativa também é recuperada na abertura
+        // via ObterCaixaAtivaPorTerminalAsync). Exige confirmar/cancelar a caixa atual antes da próxima.
         if (PrimeiraEntregaHu && ExisteCaixaAtiva())
         {
             MessageBox.Show(
@@ -1183,50 +1677,168 @@ public partial class ProcessoProdutoAcabadoForm : Form
         // §9: material de embalagem da CAIXA obtido explicitamente (origem controlada, nunca PALLET01).
         (string materialEmbalagem, OrigemMaterialEmbalagemCaixa origemEmbalagem) = ObterMaterialEmbalagemCaixaControlada();
 
-        ProdutoAcabadoCaixa caixa;
+        long? codigoUsuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+        string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+
+        // §1: a finalização REAL delega ao Controller → ProdutoAcabadoHuService → Repository (banco = fonte
+        // da verdade). O snapshot PERSISTIDO (com numeração/estado do banco) substitui o objeto temporário.
+        ResultadoFinalizacaoCaixa resultado;
         try
         {
-            caixa = _controller.MontarCaixaSemIdentidadeSequencial(
+            resultado = await _controller.FinalizarCaixaLocalAsync(
                 _ordemAtual,
                 _normaEmbalagem,
                 pesoBrutoKg,
                 taraKg,
                 origem,
+                terminal,
+                codigoUsuario: codigoUsuario,
                 materialEmbalagem: string.IsNullOrWhiteSpace(materialEmbalagem) ? null : materialEmbalagem,
                 origemMaterialEmbalagem: origemEmbalagem);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao registrar caixa no banco: {ex.GetType().Name}");
+            MessageBox.Show("Não foi possível registrar a caixa no banco. Tente novamente.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
 
-        // §9: valida o preview da HU ANTES de adicionar a caixa. Preview inválido (ex.: material de embalagem
-        // ausente) BLOQUEIA a finalização — a pesagem não é perdida em silêncio nem a caixa é adicionada.
-        FugaPET_Dev.Servicos.IntegracaoSap.ResultadoPreviewHandlingUnitCaixa preview =
-            _controller.GerarPreviewHandlingUnitCaixa(_ordemAtual, caixa);
-        if (!preview.Sucesso)
+        if (!resultado.Sucesso || resultado.Caixa is null)
         {
-            MessageBox.Show(
-                $"Não foi possível preparar a caixa para o SAP: {preview.Mensagem}",
-                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(resultado.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
-        _caixasPesadas.Add(caixa);
-        // Produto Acabado deixou o movimento 101: preview é da Handling Unit da caixa (contrato SAP ainda não
-        // confirmado; nenhum POST). Nome interno de propriedades, não o JSON externo definitivo.
-        System.Diagnostics.Trace.TraceInformation(
-            "[ProdutoAcabado] Preview Handling Unit caixa {0} (contrato SAP não confirmado): {1}",
-            caixa.NumeroCaixa, preview.PayloadJsonSanitizado);
-        caixa.TransicionarPara(StatusIntegracaoCaixa.PreviewHuGerado);
-        caixa.TransicionarPara(StatusIntegracaoCaixa.AguardandoAutorizacaoSap);
+        // §1: usa o snapshot persistido — NÃO altera estados manualmente e NÃO simula persistência.
+        _caixasPesadas.Add(resultado.Caixa);
         AtualizarGridCaixas();
         AtualizarCamposPaletizacaoPadrao();
         AtualizarResumoOperacional();
         AtualizarEstadoEnvioCaixaSap();
-        statusLabel.Text = $"Caixa registrada em memória, aguardando numeração persistente (FINALIZADA LOCAL). Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
+        AtualizarBotoesOperacao();
+        statusLabel.Text =
+            $"Caixa {resultado.Caixa.CodigoCaixaLocal} registrada e persistida ("
+            + $"{MapeadorStatusHuCaixa.ParaTextoBanco(resultado.Caixa.StatusIntegracao)}). "
+            + $"Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
         return true;
+    }
+
+    /// <summary>
+    /// §2/REV3-B2: recupera do BANCO TODAS as caixas persistidas da OP+terminal (qualquer estado, incluindo
+    /// CONFIRMADA_SAP/CANCELADA) e reconstrói a grid — o cache é apenas view-model; a verdade é o banco. A
+    /// "caixa ativa" continua determinada pela regra existente (ExisteCaixaAtiva). Nunca acessa o banco direto.
+    /// </summary>
+    private async Task<string> RecuperarCaixasPersistidasAsync()
+    {
+        if (_ordemAtual is null)
+        {
+            return string.Empty;
+        }
+
+        string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(terminal))
+        {
+            return string.Empty;
+        }
+
+        // REV4-§12: recupera por CONTEXTO completo (OP + item + material + lote + terminal) — os mesmos campos
+        // que o Controller grava na caixa (ItemOrdem/MaterialProduzido/Lote) — para NÃO misturar caixas de
+        // outro item/material/lote sob a mesma OP no terminal.
+        IReadOnlyList<ProdutoAcabadoCaixa> caixas;
+        try
+        {
+            caixas = await _controller.ListarCaixasPersistidasPorContextoAsync(
+                _ordemAtual.NumeroOrdem,
+                _ordemAtual.ItemOrdem ?? string.Empty,
+                _ordemAtual.MaterialProduzido ?? string.Empty,
+                _ordemAtual.Lote ?? string.Empty,
+                terminal);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao recuperar caixas persistidas: {ex.GetType().Name}");
+            return string.Empty;
+        }
+
+        _caixasPesadas.Clear();
+        _caixasPesadas.AddRange(caixas);
+
+        // REV4-§13: caixa ATIVA no mesmo terminal pertencente a OUTRA OP/contexto NÃO é misturada na grid;
+        // o operador é avisado. A proteção de banco (uma caixa ativa por terminal) permanece como AUTORIDADE
+        // que bloqueia registrar uma nova caixa até resolver a ativa.
+        string avisoConflito = await DetectarCaixaAtivaDeOutroContextoAsync(terminal);
+        if (avisoConflito.Length > 0)
+        {
+            return avisoConflito;
+        }
+
+        if (caixas.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        foreach (ProdutoAcabadoCaixa caixaRecuperada in caixas)
+        {
+            if (caixaRecuperada.CodigoProdutoAcabadoCaixa is long codigoRecuperado)
+            {
+                ResultadoBloqueioPipeline045 bloqueio = await _controller.VerificarBloqueioPipeline045Async(codigoRecuperado);
+                if (bloqueio.Bloqueado)
+                {
+                    _codigoCaixaPipeline045Bloqueada = codigoRecuperado;
+                    return bloqueio.Mensagem;
+                }
+            }
+        }
+
+        ProdutoAcabadoCaixa? ativa = caixas.FirstOrDefault(c =>
+            c.StatusIntegracao is not (StatusIntegracaoCaixa.ConfirmadaSap or StatusIntegracaoCaixa.Cancelada));
+        return ativa is not null
+            ? $"Caixa {ativa.CodigoCaixaLocal} recuperada do banco ({MapeadorStatusHuCaixa.ParaTextoBanco(ativa.StatusIntegracao)})."
+            : $"{caixas.Count} caixa(s) da OP recuperada(s) do banco. Nenhuma ativa — pronto para a próxima caixa.";
+    }
+
+    /// <summary>
+    /// REV4-§13: detecta uma caixa ATIVA no terminal que pertença a OUTRO contexto (OP/item/material/lote)
+    /// que não o atualmente carregado. Retorna o aviso ao operador (ou vazio se não houver conflito). Somente
+    /// UX: a proteção de banco continua sendo a autoridade que impede registrar nova caixa.
+    /// </summary>
+    private async Task<string> DetectarCaixaAtivaDeOutroContextoAsync(string terminal)
+    {
+        if (_ordemAtual is null)
+        {
+            return string.Empty;
+        }
+
+        ProdutoAcabadoCaixa? ativaTerminal;
+        try
+        {
+            ativaTerminal = await _controller.ObterCaixaAtivaPorTerminalAsync(terminal);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao verificar caixa ativa do terminal: {ex.GetType().Name}");
+            return string.Empty;
+        }
+
+        if (ativaTerminal is null)
+        {
+            return string.Empty;
+        }
+
+        static string N(string? v) => (v ?? string.Empty).Trim();
+        bool mesmoContexto =
+            string.Equals(N(ativaTerminal.NumeroOrdemProducao), N(_ordemAtual.NumeroOrdem), StringComparison.Ordinal)
+            && string.Equals(N(ativaTerminal.ItemOrdemProducao), N(_ordemAtual.ItemOrdem), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(N(ativaTerminal.Material), N(_ordemAtual.MaterialProduzido), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(N(ativaTerminal.Lote), N(_ordemAtual.Lote), StringComparison.OrdinalIgnoreCase);
+        if (mesmoContexto)
+        {
+            return string.Empty;
+        }
+
+        return $"Atenção: existe uma caixa ATIVA no terminal ({ativaTerminal.CodigoCaixaLocal}, OP "
+            + $"{ativaTerminal.NumeroOrdemProducao}, status {MapeadorStatusHuCaixa.ParaTextoBanco(ativaTerminal.StatusIntegracao)}) "
+            + "pertencente a OUTRO contexto. Conclua ou cancele essa caixa antes de registrar uma nova nesta OP.";
     }
 
     /// <summary>§7: existe caixa ativa (não confirmada/cancelada) em andamento na tela.</summary>
@@ -1296,35 +1908,26 @@ public partial class ProcessoProdutoAcabadoForm : Form
         return true;
     }
 
-    private bool AtualizarNormaFallbackAntesDaLeitura()
+    /// <summary>
+    /// Norma vem da CONSULTA REAL (somente leitura) na abertura da OP — não há mais entrada manual de QTD
+    /// nem fallback em memória. Só permite iniciar a leitura quando há norma VÁLIDA (material de caixa e
+    /// quantidade por caixa reais); caso contrário bloqueia (SEM NORMA CADASTRADA).
+    /// </summary>
+    private bool ValidarNormaEmbalagemAntesDaLeitura()
     {
-        if (_ordemAtual is null || _normaEmbalagem is null)
+        if (_ordemAtual is null
+            || _normaEmbalagem is null
+            || !_normaEmbalagem.NormaValida
+            || string.IsNullOrWhiteSpace(_normaEmbalagem.MaterialCaixa)
+            || _normaEmbalagem.QuantidadeProdutosPorCaixa <= 0)
         {
-            return false;
-        }
-
-        if (!string.Equals(_normaEmbalagem.PackagingInstruction, "FALLBACK_MEMORIA", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (!int.TryParse(readForecastBoxesTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int quantidadePorCaixa)
-            || quantidadePorCaixa <= 0)
-        {
-            string mensagem = "Informe a QTD. POR CAIXA para continuar. Enquanto a norma de embalagem SAP não estiver disponível, essa quantidade será usada em cada caixa pesada.";
+            // Mensagem específica do cenário (falta de config, autenticação, autorização, técnico ou sem cadastro).
+            string mensagem = MensagemBloqueioNorma();
             statusLabel.Text = mensagem;
             MessageBox.Show(mensagem, "Norma de Embalagem", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            readForecastBoxesTextBox.Focus();
-            readForecastBoxesTextBox.SelectAll();
             return false;
         }
 
-        _normaEmbalagem = _controller.ConsultarOuPrepararNormaEmbalagem(
-            _ordemAtual.MaterialProduzido,
-            quantidadePorCaixa,
-            _normaEmbalagem.PackagingInstruction);
-        PreencherNormaEmbalagem();
-        statusLabel.Text = $"Quantidade por caixa definida: {quantidadePorCaixa} produto(s) por caixa.";
         return true;
     }
 
@@ -1404,42 +2007,138 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 string.IsNullOrWhiteSpace(caixa.CodigoPaleteLocal) ? "-" : caixa.CodigoPaleteLocal,
                 string.IsNullOrWhiteSpace(caixa.HandlingUnitExternalId) ? "-" : caixa.HandlingUnitExternalId);
         }
+
+        DestacarLinhaCaixaConfirmada();
     }
 
-    private void CancelarUltimaCaixa()
+    /// <summary>
+    /// UX pós-confirmação: seleciona VISUALMENTE (apenas destaque/inspeção) a linha da caixa recém-confirmada.
+    /// É estritamente apresentação — a seleção NUNCA habilita envio: o estado do botão continua governado por
+    /// <see cref="AtualizarEstadoEnvioCaixaSap"/> (estado da caixa ativa), não pela linha selecionada.
+    /// </summary>
+    private void DestacarLinhaCaixaConfirmada()
     {
-        if (_caixasPesadas.Count == 0)
+        productionDataGridView.ClearSelection();
+        if (_codigoCaixaDestacada is not long codigoSelecionar)
         {
             return;
         }
 
-        ProdutoAcabadoCaixa caixa = _caixasPesadas[^1];
-        if (!TransicaoStatusIntegracaoCaixa.PodeTransitar(caixa.StatusIntegracao, StatusIntegracaoCaixa.Cancelada))
+        for (int i = 0; i < _caixasPesadas.Count && i < productionDataGridView.Rows.Count; i++)
         {
-            MessageBox.Show(
-                "A caixa atual não pode ser cancelada no estado de integração em que se encontra.",
-                "Produto Acabado",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+            if (_caixasPesadas[i].CodigoProdutoAcabadoCaixa == codigoSelecionar)
+            {
+                productionDataGridView.Rows[i].Selected = true;
+                if (!productionDataGridView.Rows[i].Displayed)
+                {
+                    try { productionDataGridView.FirstDisplayedScrollingRowIndex = i; }
+                    catch (ArgumentOutOfRangeException) { /* grid ainda não pronta para rolar */ }
+                }
+
+                return;
+            }
+        }
+    }
+
+    private async void ExcluirUltimaButton_Click(object? sender, EventArgs e)
+        => await SolicitarCancelamentoUltimaCaixaAsync();
+
+    /// <summary>
+    /// §3: cancelamento PERSISTENTE — delega ao Controller/Service (fn_hu_caixa_cancelar) com o CÓDIGO
+    /// PERSISTIDO + usuário + terminal + motivo (nunca UPDATE direto). Só atualiza o cache visual após o
+    /// banco confirmar CANCELADA (usa o snapshot recarregado).
+    /// </summary>
+    private async Task SolicitarCancelamentoUltimaCaixaAsync()
+    {
+        ProdutoAcabadoCaixa? caixa = _caixasPesadas.LastOrDefault();
+        if (caixa is null || !PodeCancelarUltimaCaixa(_caixasPesadas))
+        {
             return;
         }
 
-        caixa.TransicionarPara(StatusIntegracaoCaixa.Cancelada);
-        _caixasPesadas.RemoveAt(_caixasPesadas.Count - 1);
+        DialogResult confirmacao = MessageBox.Show(
+            "Deseja cancelar a última caixa registrada?\r\nO cancelamento será persistido no banco.",
+            "Produto Acabado",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirmacao != DialogResult.Yes)
+        {
+            return;
+        }
+
+        if (caixa.CodigoProdutoAcabadoCaixa is not long codigo)
+        {
+            MessageBox.Show("Caixa sem código persistido — não é possível cancelar.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario is not long usuario)
+        {
+            MessageBox.Show("Usuário não identificado para cancelar a caixa.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+        ResultadoEnvioCaixaHu resultado;
+        try
+        {
+            resultado = await _controller.CancelarCaixaHandlingUnitAsync(codigo, usuario, terminal, "Cancelamento manual pelo operador.");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao cancelar caixa: {ex.GetType().Name}");
+            MessageBox.Show("Não foi possível cancelar a caixa no banco. Tente novamente.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        // Reflete o snapshot recarregado: só atualiza o cache visual quando o banco confirmou CANCELADA.
+        if (resultado.Caixa is not { StatusIntegracao: StatusIntegracaoCaixa.Cancelada })
+        {
+            MessageBox.Show(resultado.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // Atualiza o cache visual SOMENTE após a confirmação do banco (remove a caixa da sessão).
+        CancelarUltimaCaixaEmMemoria(_caixasPesadas, DialogResult.Yes);
         AtualizarGridCaixas();
         AtualizarCamposPaletizacaoPadrao();
         AtualizarResumoOperacional();
         AtualizarEstadoEnvioCaixaSap();
         AtualizarBotoesOperacao();
-        statusLabel.Text = "Última caixa de produto acabado cancelada.";
+        statusLabel.Text = $"Caixa {caixa.CodigoCaixaLocal} cancelada e persistida (CANCELADA).";
     }
 
-    private void CriarPaleteLocal()
+    internal static bool PodeCancelarUltimaCaixa(IReadOnlyList<ProdutoAcabadoCaixa> caixas)
     {
-        // §8: na 1ª entrega (caixa individual via HU) a formação de palete está FORA do fluxo ativo.
-        // O acionamento é neutralizado aqui — a Form não monta palete nem gera preview de palete.
-        // O código permanece para fase futura, mas não é acionável enquanto PrimeiraEntregaHu.
-        if (PrimeiraEntregaHu)
+        ProdutoAcabadoCaixa? caixa = caixas.LastOrDefault();
+        return caixa is not null
+            && TransicaoStatusIntegracaoCaixa.PodeTransitar(
+                caixa.StatusIntegracao,
+                StatusIntegracaoCaixa.Cancelada);
+    }
+
+    internal static bool CancelarUltimaCaixaEmMemoria(
+        IList<ProdutoAcabadoCaixa> caixas,
+        DialogResult confirmacao)
+    {
+        if (confirmacao != DialogResult.Yes || !PodeCancelarUltimaCaixa(caixas.ToArray()))
+        {
+            return false;
+        }
+
+        ProdutoAcabadoCaixa caixa = caixas[^1];
+        caixa.TransicionarPara(StatusIntegracaoCaixa.Cancelada);
+        caixas.RemoveAt(caixas.Count - 1);
+        return true;
+    }
+
+    private async void CriarPaleteLocal()
+    {
+        // §5/§6: montar palete é LOCAL (zero POST). Neutralizado apenas no modo HU-only homologado (gate off);
+        // com o gate do pipeline 045 habilitado, a montagem local fica disponível (a integração INT012 é uma
+        // AÇÃO EXPLÍCITA separada — duplo clique no grid de paletes — nunca automática na montagem).
+        if (PrimeiraEntregaHu && !_controller.PipelinePaGateHabilitado)
         {
             return;
         }
@@ -1468,14 +2167,39 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 return;
             }
 
-            _paletesMontados.Add(palete);
+            long? usuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+            string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+            ResultadoPaletePersistenciaLocal persistencia = await _controller.CriarPaleteLocalPersistenteAsync(palete, usuario, terminal);
+            if (!persistencia.Sucesso)
+            {
+                statusLabel.Text = persistencia.Mensagem;
+                MessageBox.Show(persistencia.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // GATE 046-E REV2 (Blocker 2): BANCO = fonte AUTORITATIVA. Após o COMMIT, a grade só é reconstruída
+            // pelo reload persistente. Se o reload falhar, NÃO preenchemos a grade com o objeto recém-criado em
+            // memória (isso afirmaria uma reconstrução persistente que não ocorreu). O COMMIT já aconteceu: não
+            // desfazer, não recriar, não duplicar estado — a próxima leitura/reabertura reconstrói pelo banco.
+            bool recarregou = await RecarregarPaletesPersistidosAsync();
             AtualizarGridCaixas();
-            AtualizarGridPaletes();
             AtualizarCamposPaletizacaoPadrao();
             AtualizarResumoOperacional();
-            System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Payload Palete local {0}: {1}", palete.CodigoPaleteLocal, preview.PayloadJson);
-            statusLabel.Text = "Palete criado localmente. Envio SAP da HU/palete pendente de liberação da API.";
-            MessageBox.Show("Palete criado localmente. Envio SAP da HU/palete pendente de liberação da API.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Palete local persistido {0} codigo_hu_palete={1}: {2}", palete.CodigoPaleteLocal, palete.CodigoHuPalete, preview.PayloadJson);
+            if (recarregou)
+            {
+                statusLabel.Text = "PALETE CRIADO LOCALMENTE em RASCUNHO. Nenhum envio SAP foi executado.";
+                MessageBox.Show("PALETE CRIADO LOCALMENTE em RASCUNHO. Nenhum envio SAP foi executado.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                // Persistência OK, mas a releitura da tela falhou: postura fail-closed, sem duplicar estado local.
+                statusLabel.Text = "Palete PERSISTIDO em RASCUNHO, mas a atualização da tela falhou. Reabra a OP para recarregar do banco.";
+                MessageBox.Show(
+                    "O palete foi persistido localmente em RASCUNHO, porém a releitura da tela a partir do banco falhou.\r\n"
+                    + "Nenhum envio SAP foi executado. Reabra/recarregue a OP para exibir os paletes do banco.",
+                    "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         catch (Exception ex)
         {
@@ -1569,9 +2293,11 @@ public partial class ProcessoProdutoAcabadoForm : Form
             throw new InvalidOperationException("OP não carregada para montar palete.");
         }
 
+        // REV4-§13: passa os paletes JÁ montados para o validador (caixa em outro palete ⇒ bloqueia).
         return _controller.MontarPalete(
             _ordemAtual,
             _caixasPesadas,
+            _paletesMontados,
             primeiraCaixa,
             ultimaCaixa,
             materialEmbalagem);
@@ -1620,9 +2346,89 @@ public partial class ProcessoProdutoAcabadoForm : Form
             primeiraCaixaTextBox.Text = caixasLivres.FirstOrDefault()?.NumeroCaixa.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             ultimaCaixaTextBox.Text = caixasLivres.LastOrDefault()?.NumeroCaixa.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         }
-        if (string.IsNullOrWhiteSpace(materialEmbalagemPaleteTextBox.Text))
+        // REV4-§12: NENHUMA ocorrência produtiva preenche "PALLET01" (placeholder não confirmado por Ares). O
+        // material de embalagem do palete permanece vazio quando não informado; o builder/gateway bloqueiam
+        // vazio/PALLET01. Origem real do PackagingMaterial = DEPENDENCIA_ARES.
+    }
+
+    /// <summary>
+    /// REV8/§4: ação EXPLÍCITA de integração do palete no INT012 (POST_FORMACAO). Só executa por acionamento do
+    /// operador (duplo clique num palete montado). Fail-closed: gate/store/CPI/packaging ausentes ⇒ Controller
+    /// retorna NaoEnviado e nada é postado. Mensagens sanitizadas (sem token/senha/cookie/Authorization).
+    /// </summary>
+    private async Task IntegrarPaleteSelecionadoAsync(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _paletesMontados.Count)
         {
-            materialEmbalagemPaleteTextBox.Text = "PALLET01";
+            return;
+        }
+
+        ProdutoAcabadoPalete palete = _paletesMontados[rowIndex];
+        DialogResult confirmacao = MessageBox.Show(
+            $"Integrar o palete {palete.CodigoPaleteLocal} ao SAP (POST_FORMACAO INT012)?",
+            "Produto Acabado", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+        if (confirmacao != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            // GATE 046-AP: TODO desfecho (inclusive falhas pré-claim: write gate off, orquestrador indisponível,
+            // snapshot/preview inválido) vira uma mensagem CONTROLADA E EXPLÍCITA — nada some silenciosamente
+            // após o "Sim". O envio real permanece governado pelo gate/credencial/persistência do Controller.
+            ResultadoPaleteInt012 resultado = await _controller.EnviarPaleteInt012Async(palete);
+            ApresentacaoEnvioPaleteInt012 apresentacao =
+                ProdutoAcabadoPaleteEnvioPresenter.Construir(palete.CodigoPaleteLocal, resultado);
+            statusLabel.Text = apresentacao.Mensagem;
+            MessageBox.Show(apresentacao.Mensagem, apresentacao.Titulo, MessageBoxButtons.OK,
+                apresentacao.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao integrar palete INT012: {ex.GetType().Name}");
+            ApresentacaoEnvioPaleteInt012 apresentacao =
+                ProdutoAcabadoPaleteEnvioPresenter.ParaExcecao(palete.CodigoPaleteLocal);
+            statusLabel.Text = apresentacao.Mensagem;
+            MessageBox.Show(apresentacao.Mensagem, apresentacao.Titulo, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            AtualizarGridPaletes();
+        }
+    }
+
+    /// <summary>
+    /// GATE 046-E §7/§10/§12: recarrega os paletes locais persistidos da OP atual (BANCO autoritativo) e
+    /// reconstrói a grade sem depender de estado anterior em memória. Retorna true se a fonte persistente
+    /// respondeu (mesmo com zero paletes); false em fail-closed (persistência indisponível/erro), preservando
+    /// o comportamento local. Nunca chama SAP/INT012.
+    /// </summary>
+    private async Task<bool> RecarregarPaletesPersistidosAsync()
+    {
+        if (_ordemAtual is null)
+        {
+            _paletesMontados.Clear();
+            AtualizarGridPaletes();
+            return false;
+        }
+
+        string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+        try
+        {
+            IReadOnlyList<ProdutoAcabadoPalete> persistidos =
+                await _controller.RecarregarPaletesLocaisAsync(_ordemAtual.NumeroOrdem, terminal);
+            _paletesMontados.Clear();
+            _paletesMontados.AddRange(persistidos);
+            AtualizarGridPaletes();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Fail-closed: recarga indisponível não derruba a tela nem inventa palete. Mantém a projeção atual.
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao recarregar paletes persistidos: {ex.GetType().Name}");
+            AtualizarGridPaletes();
+            return false;
         }
     }
 
@@ -1645,14 +2451,100 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 FormatarKg(palete.PesoLiquidoKg),
                 FormatarKg(palete.TaraKg),
                 palete.PackagingMaterial,
-                "PENDENTE SAP");
+                palete.StatusSap);
         }
     }
 
+    /// <summary>
+    /// Impressão da etiqueta da caixa (Zebra). Efeito PURAMENTE local e ISOLADO: qualquer falha de impressão
+    /// é tratada aqui e NUNCA propaga — não desfaz a HU SAP confirmada, não reenvia, não altera numero_tentativa
+    /// nem dispara retry/POST. A integração SAP e a impressão são independentes.
+    /// </summary>
     private async Task ImprimirEtiquetaCaixaAsync(ProdutoAcabadoCaixa caixa)
     {
-        await Task.CompletedTask;
-        System.Diagnostics.Trace.TraceInformation("[ProdutoAcabado] Ponto de extensão etiqueta caixa: {0}", caixa.CodigoCaixaLocal);
+        try
+        {
+            await _impressaoProdutoAcabadoServico.ImprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual());
+            statusLabel.Text = $"Etiqueta da caixa {caixa.CodigoCaixaLocal} impressa com sucesso.";
+            // UX: confirmação EXPLÍCITA de sucesso da IMPRESSÃO (não habilita reenvio SAP).
+            MessageBox.Show(
+                $"Etiqueta impressa com sucesso.\r\nCaixa: {caixa.CodigoCaixaLocal}\r\nHU SAP: {caixa.HandlingUnitExternalId}",
+                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            // Falha de impressão é reportada ao operador, mas NÃO afeta o estado da HU/integração.
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao imprimir etiqueta da caixa: {ex.GetType().Name}");
+            MessageBox.Show(
+                "A caixa foi confirmada no SAP, mas a impressão da etiqueta falhou. "
+                + "Use a reimpressão (duplo clique na caixa) quando a impressora estiver pronta.\r\n\r\n"
+                + ExtrairMensagemImpressao(ex),
+                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Reimpressão explícita da etiqueta de uma caixa (duplo clique na grid). Exige confirmação humana e
+    /// permissão Reimprimir. NUNCA chama SAP (claim/autorização/gateway/POST): é só impressão.
+    /// Elegibilidade (regra central no SERVICE): SOMENTE CONFIRMADA_SAP + identidade persistida
+    /// (codigo/codigo_caixa_local) + HandlingUnitExternalId não vazio é imprimível/reimprimível.
+    /// CANCELADA = NÃO. INDETERMINADO_TIMEOUT = NÃO. ERRO_SAP = NÃO. Demais estados não confirmados = NÃO.
+    /// (Qualquer caixa é apenas SELECIONÁVEL para inspeção; nada disso habilita reenvio ao SAP.)
+    /// </summary>
+    private async Task ReimprimirEtiquetaCaixaAsync(ProdutoAcabadoCaixa caixa)
+    {
+        // Regra central (SERVICE): só CONFIRMADA_SAP com HU + identidade persistida. Bloqueia antes do diálogo
+        // e antes de qualquer acesso ao driver Zebra. NUNCA toca SAP.
+        try
+        {
+            ImpressaoProdutoAcabadoServico.ValidarCaixaElegivelParaEtiqueta(caixa);
+        }
+        catch (ErroOperacionalEsperadoException ex)
+        {
+            MessageBox.Show(ex.Message, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        using ConfirmarReimpressaoEtiquetaForm confirmacao = new(caixa.CodigoCaixaLocal);
+        if (confirmacao.ShowDialog(this) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await _impressaoProdutoAcabadoServico.ReimprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual());
+            statusLabel.Text = $"Etiqueta da caixa {caixa.CodigoCaixaLocal} reimpressa com sucesso.";
+            // UX: confirmação EXPLÍCITA de sucesso da REIMPRESSÃO (diferenciada da impressão inicial; sem reenvio SAP).
+            MessageBox.Show(
+                $"Etiqueta reimpressa com sucesso.\r\nCaixa: {caixa.CodigoCaixaLocal}\r\nHU SAP: {caixa.HandlingUnitExternalId}",
+                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao reimprimir etiqueta da caixa: {ex.GetType().Name}");
+            MessageBox.Show(
+                "Não foi possível reimprimir a etiqueta da caixa.\r\n\r\n" + ExtrairMensagemImpressao(ex),
+                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    /// <summary>Descrição do material da OP carregada (dado de exibição da etiqueta; a rastreabilidade é a caixa).</summary>
+    private string ObterDescricaoMaterialAtual()
+        => _ordemAtual?.DescricaoMaterial ?? string.Empty;
+
+    private static string ExtrairMensagemImpressao(Exception ex)
+        => ex is ErroOperacionalEsperadoException ? ex.Message : "Verifique a impressora Zebra do terminal.";
+
+    // Duplo clique na grid de caixas: ação EXPLÍCITA de reimpressão da etiqueta (nunca envio ao SAP).
+    private async void ProductionDataGridView_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.RowIndex >= _caixasPesadas.Count)
+        {
+            return;
+        }
+
+        await ReimprimirEtiquetaCaixaAsync(_caixasPesadas[e.RowIndex]);
     }
 
     private async Task ImprimirEtiquetaPaleteAsync(ProdutoAcabadoPalete palete)
@@ -1709,6 +2601,18 @@ public partial class ProcessoProdutoAcabadoForm : Form
         headerSubtitleLabel.Cursor = customTitleBarPanel.Cursor;
     }
 
+    internal static void AtualizarEstadoBotaoExcluirUltima(
+        global::FugaPET_Dev.Tela.ActionPillButton botao,
+        IReadOnlyList<ProdutoAcabadoCaixa> caixas)
+    {
+        bool podeCancelarUltimaCaixa = PodeCancelarUltimaCaixa(caixas);
+        botao.Enabled = podeCancelarUltimaCaixa;
+        botao.BaseForeColor = podeCancelarUltimaCaixa
+            ? Color.FromArgb(212, 122, 28)
+            : ActionDisabledColor;
+        botao.Cursor = podeCancelarUltimaCaixa ? Cursors.Hand : Cursors.Default;
+        botao.Invalidate();
+    }
     private void AtualizarBotoesOperacao()
     {
         // Tarefa 21.6.2 (Ajuste 1): iniciar verde com OP + QTD. por caixa válida (falta de balança não impede).
@@ -1733,69 +2637,41 @@ public partial class ProcessoProdutoAcabadoForm : Form
         lerEtiquetaButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null && !caixaAtiva;
         leituraManualButton.Enabled = livre && _leituraIniciada && _ordemAtual is not null && !caixaAtiva;
 
-        // §3: na 1ª entrega (caixa individual via HU) o fluxo de palete NÃO pode reaparecer em NENHUMA
-        // atualização de estado. Ramo explícito mantém botão/card/título/grid ocultos e desabilitados.
-        if (PrimeiraEntregaHu)
+        // INC-047: formação de palete não é mais função do Produto Acabado. A coluna Palete local permanece
+        // informativa/read-only, mas grupo/botão/grid de palete ficam ocultos em toda atualização.
+        productionActionsButton.Visible = false;
+        productionActionsButton.Enabled = false;
+        if (_criarPaleteCard is not null)
         {
-            productionActionsButton.Visible = false;
-            productionActionsButton.Enabled = false;
-            if (_criarPaleteCard is not null)
-            {
-                _criarPaleteCard.Visible = false;
-            }
-
-            OcultarControlePaletePorNome("paletesCriadosTituloLabel");
-            if (paletesDataGridView is not null)
-            {
-                paletesDataGridView.Visible = false;
-            }
-
-            if (_paleteMensagemLabel is not null)
-            {
-                _paleteMensagemLabel.Visible = false;
-            }
+            _criarPaleteCard.Visible = false;
         }
-        else
+
+        OcultarControlePaletePorNome("paletesCriadosTituloLabel");
+        if (paletesDataGridView is not null)
         {
-            // Comportamento futuro do palete existente (fora do escopo desta 1ª entrega).
-            productionActionsButton.Visible = !_leituraIniciada;
-            productionActionsButton.Enabled = !_leituraIniciada && livre && ExisteCaixaLivreParaPalete();
-            if (_paleteMensagemLabel is not null)
-            {
-                _paleteMensagemLabel.Text = _caixasPesadas.Count == 0
-                    ? "Registre caixas para criar um palete."
-                    : ExisteCaixaLivreParaPalete() ? string.Empty
-                    : "Todas as caixas já foram vinculadas a paletes.";
-                _paleteMensagemLabel.Visible = _paleteMensagemLabel.Text.Length > 0;
-            }
+            paletesDataGridView.Visible = false;
+        }
+
+        if (_paleteMensagemLabel is not null)
+        {
+            _paleteMensagemLabel.Visible = false;
         }
 
         AtualizarEstadoEnvioCaixaSap();
 
-        // Tarefa 21.6.2 (Ajuste 10): "Excluir última caixa" fica VISÍVEL porém cinza/desabilitado sem caixa.
-        // (deleteByCodeLegendPanel aqui é "Esc - Fechar" — NÃO desabilitar, senão trava o fechamento.)
-        bool possuiCaixa = _caixasPesadas.Count > 0;
-        deleteLastLegendPanel.Enabled = possuiCaixa;
-        deleteLastLegendTextLabel.ForeColor = possuiCaixa ? Color.FromArgb(229, 231, 235) : Color.FromArgb(120, 126, 136);
+        AtualizarEstadoBotaoExcluirUltima(excluirUltimaButton, _caixasPesadas);
+
+        excluirCodigoButton.Enabled = false;
+        excluirCodigoButton.Visible = false;
+        excluirCodigoButton.KeyHint = string.Empty;
+        deleteLastLegendPanel.Enabled = false;
+        deleteByCodeLegendPanel.Enabled = false;
     }
 
     /// <summary>Tarefa 21.6.2: QTD. por caixa válida (norma real ou fallback digitado &gt; 0).</summary>
     private bool QuantidadePorCaixaValida()
-    {
-        if (_normaEmbalagem is null)
-        {
-            return false;
-        }
-
-        if (_normaEmbalagem.QuantidadeProdutosPorCaixa > 0)
-        {
-            return true;
-        }
-
-        return NormaEmFallbackMemoria()
-            && int.TryParse(readForecastBoxesTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int q)
-            && q > 0;
-    }
+        // Só o cenário Encontrada (norma válida) habilita a leitura — nenhum outro cenário libera o botão.
+        => _normaEmbalagem?.NormaValida == true && _normaEmbalagem.QuantidadeProdutosPorCaixa > 0;
 
     private bool ExisteCaixaLivreParaPalete()
         => _caixasPesadas.Any(c => string.IsNullOrWhiteSpace(c.CodigoPaleteLocal));
@@ -1830,7 +2706,11 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 : "de 0";
         }
 
-        productionFooterLabel.Text = $"{qtdCaixas} caixa(s) registrada(s). POST SAP desativado.";
+        // REV3-§10: o texto reflete o estado real do gate de escrita HU (não afirma "desativado" quando autorizado).
+        string estadoEnvio = _controller.EnvioHuAutorizado
+            ? "Envio SAP (Handling Unit) autorizado — envio manual por caixa."
+            : "Envio SAP não autorizado neste ambiente; nenhum POST automático.";
+        productionFooterLabel.Text = $"{qtdCaixas} caixa(s) registrada(s). {estadoEnvio}";
     }
 
     private bool LimparOp()
@@ -2083,10 +2963,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
             e.SuppressKeyPress = true;
             await RegistrarPesoManualAsync();
         }
-        else if (e.KeyCode == Keys.Delete)
+        else if (e.KeyCode is Keys.F6 or Keys.Delete)
         {
             e.SuppressKeyPress = true;
-            CancelarUltimaCaixa();
+            if (excluirUltimaButton.Visible && excluirUltimaButton.Enabled)
+            {
+                await SolicitarCancelamentoUltimaCaixaAsync();
+            }
         }
         else if (e.KeyCode == Keys.Escape)
         {
@@ -2172,5 +3055,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
         };
     }
 }
+
+
+
+
+
+
+
+
 
 

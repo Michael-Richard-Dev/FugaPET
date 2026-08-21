@@ -99,6 +99,21 @@ public sealed class EntradaImpressaoPorPesagemTests
         Assert.Equal(50m, form.Pesagens[0].PesoLiquidoKg);
     }
 
+    [Fact]
+    public void NovoFluxoLotes_DeveBloquearImpressaoEnquantoNaoPersistido()
+    {
+        string form = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
+        string leituraBalanca = ExtrairTrecho(form, "private async void ReadWeightLegend_Click", "private static string GetFriendlyErrorMessage");
+        string leituraManual = ExtrairTrecho(form, "private async void LeituraManual_Click", "private void UpdateProductionState");
+        string pesagemMultipla = ExtrairTrecho(form, "private async Task AbrirPesagemMultiplaParaLinhaAsync", "private async Task<bool> TentarReimprimirEtiquetaPesagemAsync");
+
+        Assert.Contains("Impressão do novo fluxo de lotes ainda não habilitada", form, StringComparison.Ordinal);
+        Assert.Contains("imprimirPesagemAsync: null", pesagemMultipla, StringComparison.Ordinal);
+        Assert.Contains("reimprimirPesagemAsync: null", pesagemMultipla, StringComparison.Ordinal);
+        Assert.DoesNotContain("TentarImprimirEtiquetaAposLeituraAsync", leituraBalanca, StringComparison.Ordinal);
+        Assert.DoesNotContain("TentarImprimirEtiquetaAposLeituraAsync", leituraManual, StringComparison.Ordinal);
+        Assert.Contains("TentarReimprimirEtiquetaPesagemAsync", form, StringComparison.Ordinal);
+    }
     // ---- Repositório: lista cada pesagem (não SUM), ordenada, parametrizada ----
 
     [Fact]
@@ -122,22 +137,29 @@ public sealed class EntradaImpressaoPorPesagemTests
     // ---- Tela: leitura direta e peso manual imprimem por pesagem (líquido), não pelo total ----
 
     [Fact]
-    public void Tela_LeituraDireta_RegistrarPesoLidoDevolvePesagem_EImprimeApenasEla()
+    public void Tela_LeituraDireta_RegistraEmMemoriaENaoImprimeNestaFase()
     {
         string form = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
-        Assert.Contains("bool RegistrarPesoLido(DataGridViewRow linhaItem, string weight, out EntradaProdutoPesagem? pesagemCriada)", form, StringComparison.Ordinal);
-        Assert.Contains("RegistrarPesoLido(linhaItem, weight, out EntradaProdutoPesagem? pesagemCriada)", form, StringComparison.Ordinal);
-        Assert.Contains("ConstruirEtiquetaPorPesagem(linhaItem, pesagemCriada)", form, StringComparison.Ordinal);
-        // A leitura direta NÃO monta mais etiqueta pela linha consolidada.
-        Assert.DoesNotContain("ConstruirDadosEtiquetaMateriaPrima(linhaItem)", form, StringComparison.Ordinal);
+        string leitura = ExtrairTrecho(form, "private async void ReadWeightLegend_Click", "private static string GetFriendlyErrorMessage");
+
+        Assert.Contains("RegistrarPesoLidoOperacaoComLotesAsync", leitura, StringComparison.Ordinal);
+        Assert.Contains("EntradaProdutoPesagemCalculos.OrigemBalanca", leitura, StringComparison.Ordinal);
+        Assert.Contains("Impressão do novo fluxo de lotes ainda não habilitada", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstruirEtiquetaPorPesagem(linhaItem", leitura, StringComparison.Ordinal);
+        Assert.DoesNotContain("TentarImprimirEtiquetaAposLeituraAsync", leitura, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Tela_PesoManual_ImprimeEtiquetaDaPesagem()
+    public void Tela_PesoManual_RegistraEmMemoriaENaoImprimeNestaFase()
     {
         string form = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
-        Assert.Contains("out EntradaProdutoPesagem? pesagemManual", form, StringComparison.Ordinal);
-        Assert.Contains("ConstruirEtiquetaPorPesagem(selectedRow, pesagemManual)", form, StringComparison.Ordinal);
+        string manual = ExtrairTrecho(form, "private async void LeituraManual_Click", "private void UpdateProductionState");
+
+        Assert.Contains("RegistrarPesoLidoOperacaoComLotesAsync", manual, StringComparison.Ordinal);
+        Assert.Contains("EntradaProdutoPesagemCalculos.OrigemManual", manual, StringComparison.Ordinal);
+        Assert.Contains("Impressão do novo fluxo de lotes ainda não habilitada", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstruirEtiquetaPorPesagem(selectedRow", manual, StringComparison.Ordinal);
+        Assert.DoesNotContain("TentarImprimirEtiquetaAposLeituraAsync", manual, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -171,6 +193,14 @@ public sealed class EntradaImpressaoPorPesagemTests
         Assert.Contains("somenteConsulta: true", metodo, StringComparison.Ordinal);
     }
 
+    private static string ExtrairTrecho(string fonte, string inicio, string fim)
+    {
+        int indiceInicio = fonte.IndexOf(inicio, StringComparison.Ordinal);
+        Assert.True(indiceInicio >= 0, $"Início não encontrado: {inicio}");
+        int indiceFim = fonte.IndexOf(fim, indiceInicio + 1, StringComparison.Ordinal);
+        Assert.True(indiceFim > indiceInicio, $"Fim não encontrado: {fim}");
+        return fonte[indiceInicio..indiceFim];
+    }
     private static async Task AdicionarManualAsync(PesagemMultiplaItemForm form, string peso)
     {
         TextBox tb = (TextBox)typeof(PesagemMultiplaItemForm)

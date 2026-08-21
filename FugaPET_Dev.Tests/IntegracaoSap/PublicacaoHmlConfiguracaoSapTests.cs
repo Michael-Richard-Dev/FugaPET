@@ -29,6 +29,13 @@ public sealed class PublicacaoHmlConfiguracaoSapTests
         Assert.Contains("API_PRODUCT_SRV", sap.GetProperty("product_base_url").GetString(), StringComparison.Ordinal);
         Assert.Equal("DEFINIR_USUARIO_OU_USAR_VARIAVEL_AMBIENTE", sap.GetProperty("usuario").GetString());
         Assert.Equal("DEFINIR_SENHA_OU_USAR_VARIAVEL_AMBIENTE", sap.GetProperty("senha").GetString());
+
+        // API de embalagem (Integration Suite): endpoint + allowlist própria no exemplo; NUNCA credencial.
+        Assert.Contains("GetPackagingSet", sap.GetProperty("packaging_base_url").GetString(), StringComparison.Ordinal);
+        Assert.True(sap.TryGetProperty("packaging_hosts_permitidos", out _));
+        Assert.False(sap.TryGetProperty("packaging_usuario", out _));
+        Assert.False(sap.TryGetProperty("packaging_senha", out _));
+
         Assert.DoesNotContain("Authorization", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Basic ", json, StringComparison.OrdinalIgnoreCase);
     }
@@ -53,6 +60,12 @@ public sealed class PublicacaoHmlConfiguracaoSapTests
         Assert.Contains("product_base_url", checklist, StringComparison.Ordinal);
         Assert.Contains("Test-NetConnection", checklist, StringComparison.Ordinal);
         Assert.Contains("$metadata", checklist, StringComparison.Ordinal);
+
+        // API de embalagem (Integration Suite): URL/host próprios + variáveis específicas + GET de validação 200.
+        Assert.Contains("packaging_base_url", checklist, StringComparison.Ordinal);
+        Assert.Contains("FUGAPET_SAP_PACKAGING_USERNAME", checklist, StringComparison.Ordinal);
+        Assert.Contains("FUGAPET_SAP_PACKAGING_PASSWORD", checklist, StringComparison.Ordinal);
+        Assert.Contains("GetPackagingSet", checklist, StringComparison.Ordinal);
     }
 
     private static string LerArquivoProjeto(params string[] partes)

@@ -114,7 +114,8 @@ public class AuditoriaServico
         string resultado,
         string mensagem,
         string? tela = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? dadosContextoJson = null)
     {
         long? operador = Seguranca.EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
         return ExecutarSeguroAsync(() => _acaoUsuarioServico.RegistrarAsync(
@@ -124,6 +125,7 @@ public class AuditoriaServico
             mensagem: mensagem,
             modulo: ModuloCadastro,
             tela: tela,
+            dadosContextoJson: dadosContextoJson,
             cancellationToken: cancellationToken));
     }
 

@@ -26,9 +26,25 @@ public sealed class ProdutoAcabadoPaletePayloadBuilder
             return ResultadoPreviewProdutoAcabadoPalete.Falha("Pesos do palete inválidos.");
         }
 
+        // §12/§19: PackagingMaterial real é obrigatório (nunca PALLET01 hardcoded). Ausente ⇒ DEPENDENCIA_ARES / fail-closed.
         if (string.IsNullOrWhiteSpace(palete.PackagingMaterial))
         {
-            return ResultadoPreviewProdutoAcabadoPalete.Falha("Material de embalagem do palete não informado.");
+            return ResultadoPreviewProdutoAcabadoPalete.Falha(
+                "Material de embalagem do palete não informado (DEPENDENCIA_ARES: PackagingMaterial real).");
+        }
+
+        // §10/§11/§18: SOMENTE caixa CONFIRMADA_SAP entra no palete.
+        if (palete.Caixas.Any(caixa => caixa.StatusIntegracao != StatusIntegracaoCaixa.ConfirmadaSap))
+        {
+            return ResultadoPreviewProdutoAcabadoPalete.Falha(
+                "Todas as caixas do palete precisam estar CONFIRMADA_SAP.");
+        }
+
+        // §10 (problema 2): HU SAP individual OBRIGATÓRIA. SEM fallback para CodigoCaixaLocal — HU ausente ⇒ fail-closed.
+        if (palete.Caixas.Any(caixa => string.IsNullOrWhiteSpace(caixa.HandlingUnitExternalId)))
+        {
+            return ResultadoPreviewProdutoAcabadoPalete.Falha(
+                "Caixa sem HU SAP individual: palete bloqueado (o payload só aceita HUs SAP reais).");
         }
 
         ProdutoAcabadoPaleteRequest payload = new()
@@ -41,13 +57,9 @@ public sealed class ProdutoAcabadoPaletePayloadBuilder
             Plant = palete.Plant,
             StorageLocation = palete.StorageLocation,
             PackagingMaterial = palete.PackagingMaterial,
+            // §18/§27: _HandlingUnitItem contém EXATAMENTE as HUs SAP das caixas (HandlingUnitExternalId), sem fallback.
             HandlingUnitItems = palete.Caixas
-                .Select(caixa => new ProdutoAcabadoPaleteItemRequest
-                {
-                    HandlingUnit = string.IsNullOrWhiteSpace(caixa.HandlingUnitCaixa)
-                        ? caixa.CodigoCaixaLocal
-                        : caixa.HandlingUnitCaixa
-                })
+                .Select(caixa => new ProdutoAcabadoPaleteItemRequest { HandlingUnit = caixa.HandlingUnitExternalId! })
                 .ToArray()
         };
 
