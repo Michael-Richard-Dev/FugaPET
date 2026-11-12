@@ -492,11 +492,13 @@ public partial class ProcessoControleApontamentosForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    private static bool AmbienteQAtivo()
-        => string.Equals(
-            Environment.GetEnvironmentVariable(ValidadorAmbienteQ.VariavelAmbienteAppEnv, EnvironmentVariableTarget.Process),
-            "Q",
-            StringComparison.Ordinal);
+    /// <summary>
+    /// Na linha DEV a resposta e sempre NAO: esta nao e a instalacao Q. O atalho oculto
+    /// Ctrl+Shift+R de recuperacao de consumo confirmado e um gate do ambiente Q, e ler
+    /// FUGAPET_Q_APP_ENV aqui o ligava por acidente sempre que essa variavel estivesse
+    /// definida na maquina do desenvolvedor, que e o caso. Fail-closed por construcao.
+    /// </summary>
+    private static bool AmbienteQAtivo() => false;
 
     private async Task ExecutarRecoveryConsumoConfirmadoAsync()
     {

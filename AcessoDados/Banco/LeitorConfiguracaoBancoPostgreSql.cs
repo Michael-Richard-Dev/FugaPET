@@ -5,8 +5,11 @@ namespace FugaPET_Dev.AcessoDados.Banco;
 public static class LeitorConfiguracaoBancoPostgreSql
 {
     private const string NomeArquivoConfiguracao = "configuracao.banco.json";
-    private const string VariavelAmbienteConexao = "FUGAPET_Q_CONEXAO_POSTGRES";
-    private const string VariavelAmbienteSenha = "FUGAPET_Q_POSTGRES_SENHA";
+    // Esta linha e o DEV: as credenciais do DEV sao FUGAPET_DEV_*. A promocao da linha Q trouxe os
+    // nomes FUGAPET_Q_*, e como FUGAPET_Q_CONEXAO_POSTGRES tem precedencia sobre o arquivo e esta
+    // definida nesta maquina, o DEV passaria a conectar no banco de homologacao do Q.
+    private const string VariavelAmbienteConexao = "FUGAPET_DEV_CONEXAO_POSTGRES";
+    private const string VariavelAmbienteSenha = "FUGAPET_DEV_POSTGRES_SENHA";
 
     public static ConfiguracaoBancoPostgreSql Carregar()
         => Carregar(ObterVariavelAmbiente, Path.Combine(AppContext.BaseDirectory, NomeArquivoConfiguracao));
@@ -20,7 +23,7 @@ public static class LeitorConfiguracaoBancoPostgreSql
         {
             // GATE 20D: o caminho por connection string preserva Host/Port/Database/Username/SearchPath da
             // própria string; a SENHA, quando não materializada de forma válida na connection string
-            // (Password ausente/blank), é complementada EXCLUSIVAMENTE por FUGAPET_Q_POSTGRES_SENHA. Sem
+            // (Password ausente/blank), é complementada EXCLUSIVAMENTE por FUGAPET_DEV_POSTGRES_SENHA. Sem
             // fallback HML, sem senha default, sem hardcode — ausência de secret permanece fail-closed.
             return ParsePorConnectionString(conexaoAmbiente, obterVariavelAmbiente(VariavelAmbienteSenha));
         }
@@ -72,7 +75,7 @@ public static class LeitorConfiguracaoBancoPostgreSql
         }
 
         // GATE 20D: precedência da connection string para Password; se ausente/blank, complementa por
-        // FUGAPET_Q_POSTGRES_SENHA. Ausência de ambos ⇒ senha vazia (fail-closed). Sem fallback/hardcode.
+        // FUGAPET_DEV_POSTGRES_SENHA. Ausência de ambos ⇒ senha vazia (fail-closed). Sem fallback/hardcode.
         string senhaConexao = LerChave(itens, "Password", string.Empty);
         string senhaFinal = !string.IsNullOrWhiteSpace(senhaConexao)
             ? senhaConexao

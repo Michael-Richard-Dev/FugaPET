@@ -12,33 +12,33 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 public static class LeitorConfiguracaoSap
 {
     private const string NomeArquivoConfiguracao = "configuracao.sap.json";
-    private const string VariavelAmbienteBaseUrl = "FUGAPET_Q_SAP_BASE_URL";
-    private const string VariavelAmbientePurchaseOrderBaseUrl = "FUGAPET_Q_SAP_PURCHASE_ORDER_BASE_URL";
-    private const string VariavelAmbienteMaterialDocumentBaseUrl = "FUGAPET_Q_SAP_MATERIAL_DOCUMENT_BASE_URL";
-    private const string VariavelAmbienteProductionOrderBaseUrl = "FUGAPET_Q_SAP_PRODUCTION_ORDER_BASE_URL";
-    private const string VariavelAmbienteProductionOrderConfirmationBaseUrl = "FUGAPET_Q_SAP_PRODUCTION_ORDER_CONFIRMATION_BASE_URL";
-    private const string VariavelAmbienteProductBaseUrl = "FUGAPET_Q_SAP_PRODUCT_BASE_URL";
+    private const string VariavelAmbienteBaseUrl = "FUGAPET_SAP_BASE_URL";
+    private const string VariavelAmbientePurchaseOrderBaseUrl = "FUGAPET_SAP_PURCHASE_ORDER_BASE_URL";
+    private const string VariavelAmbienteMaterialDocumentBaseUrl = "FUGAPET_SAP_MATERIAL_DOCUMENT_BASE_URL";
+    private const string VariavelAmbienteProductionOrderBaseUrl = "FUGAPET_SAP_PRODUCTION_ORDER_BASE_URL";
+    private const string VariavelAmbienteProductionOrderConfirmationBaseUrl = "FUGAPET_SAP_PRODUCTION_ORDER_CONFIRMATION_BASE_URL";
+    private const string VariavelAmbienteProductBaseUrl = "FUGAPET_SAP_PRODUCT_BASE_URL";
     private const string VariavelAmbientePackagingBaseUrl = "FUGAPET_SAP_PACKAGING_BASE_URL";
     private const string VariavelAmbientePackagingUsuario = "FUGAPET_SAP_PACKAGING_USERNAME";
     private const string VariavelAmbientePackagingSenha = "FUGAPET_SAP_PACKAGING_PASSWORD";
     private const string VariavelAmbientePackagingHostsPermitidos = "FUGAPET_SAP_PACKAGING_ALLOWED_HOSTS";
     private const string VariavelAmbientePackagingSapClient = "FUGAPET_SAP_PACKAGING_CLIENT";
-    private const string VariavelAmbienteUsuario = "FUGAPET_Q_SAP_USERNAME";
-    private const string VariavelAmbienteSenha = "FUGAPET_Q_SAP_PASSWORD";
-    private const string VariavelAmbienteSapClient = "FUGAPET_Q_SAP_CLIENT";
-    private const string VariavelAmbienteHostsPermitidos = "FUGAPET_Q_SAP_ALLOWED_HOSTS";
-    private const string VariavelAmbienteEscritaHabilitada = "FUGAPET_Q_SAP_WRITE_ENABLED";
-    private const string VariavelAmbienteHuWriteHabilitado = "FUGAPET_Q_SAP_HU_WRITE_ENABLED";
-    private const string VariavelAmbienteHandlingUnitBaseUrl = "FUGAPET_Q_SAP_HANDLING_UNIT_BASE_URL";
-    private const string VariavelAmbientePaMaterialDocumentWriteHabilitado = "FUGAPET_Q_SAP_PA_MATERIAL_DOCUMENT_WRITE_ENABLED";
-    private const string VariavelAmbientePalletWriteHabilitado = "FUGAPET_Q_SAP_PALLET_WRITE_ENABLED";
-    private const string VariavelAmbientePaPipelineHabilitado = "FUGAPET_Q_SAP_PA_PIPELINE_ENABLED";
+    private const string VariavelAmbienteUsuario = "FUGAPET_SAP_USERNAME";
+    private const string VariavelAmbienteSenha = "FUGAPET_SAP_PASSWORD";
+    private const string VariavelAmbienteSapClient = "FUGAPET_SAP_CLIENT";
+    private const string VariavelAmbienteHostsPermitidos = "FUGAPET_SAP_ALLOWED_HOSTS";
+    private const string VariavelAmbienteEscritaHabilitada = "FUGAPET_SAP_WRITE_ENABLED";
+    private const string VariavelAmbienteHuWriteHabilitado = "FUGAPET_SAP_HU_WRITE_ENABLED";
+    private const string VariavelAmbienteHandlingUnitBaseUrl = "FUGAPET_SAP_HANDLING_UNIT_BASE_URL";
+    private const string VariavelAmbientePaMaterialDocumentWriteHabilitado = "FUGAPET_SAP_PA_MATERIAL_DOCUMENT_WRITE_ENABLED";
+    private const string VariavelAmbientePalletWriteHabilitado = "FUGAPET_SAP_PALLET_WRITE_ENABLED";
+    private const string VariavelAmbientePaPipelineHabilitado = "FUGAPET_SAP_PA_PIPELINE_ENABLED";
     private const string VariavelAmbientePalletInt012BaseUrl = "FUGAPET_SAP_PALLET_INT012_BASE_URL";
     private const string VariavelAmbientePalletInt012HostsPermitidos = "FUGAPET_SAP_PALLET_INT012_ALLOWED_HOSTS";
     private const string VariavelAmbientePalletInt012Usuario = "FUGAPET_SAP_PALLET_INT012_USERNAME";
     private const string VariavelAmbientePalletInt012Senha = "FUGAPET_SAP_PALLET_INT012_PASSWORD";
     // GATE Q PACKAGING-05: habilitação da capability de norma de embalagem — Q-namespaced, alvo Process.
-    internal const string VariavelAmbientePackagingHabilitado = "FUGAPET_Q_SAP_PACKAGING_ENABLED";
+    internal const string VariavelAmbientePackagingHabilitado = "FUGAPET_SAP_PACKAGING_ENABLED";
 
     /// <summary>Caminho canonico da configuracao local (ao lado do EXE).</summary>
     public static string CaminhoConfiguracaoLocal
