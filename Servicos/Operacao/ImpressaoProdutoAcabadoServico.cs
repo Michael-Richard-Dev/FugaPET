@@ -51,6 +51,26 @@ public sealed class ImpressaoProdutoAcabadoServico
             () => _impressoraEtiquetaServico.ImprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial)));
     }
 
+    /// <summary>
+    /// Etiqueta emitida no momento da PESAGEM, assim que a caixa foi persistida — antes, portanto, de
+    /// qualquer integração SAP. É a mesma etiqueta e o mesmo layout da <see cref="ImprimirCaixaAsync"/>;
+    /// muda apenas a elegibilidade, que aqui exige somente identidade persistida.
+    /// <para>
+    /// A Handling Unit ainda não existe neste instante e sai como PENDENTE na etiqueta. Isso é deliberado:
+    /// a caixa física precisa ser identificada na linha no momento em que é fechada, e o envio ao SAP pode
+    /// nem estar habilitado no ambiente. Quando a HU for confirmada, a reimpressão manual emite a etiqueta
+    /// já com ela.
+    /// </para>
+    /// Espelha o que a Entrada de Matéria-Prima faz desde sempre: imprime após a leitura de peso, sem
+    /// exigir resultado remoto.
+    /// </summary>
+    public Task ImprimirCaixaPesadaAsync(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
+    {
+        ValidarCaixaPesadaElegivelParaEtiqueta(caixa);
+        return ExecutarImpressaoComAuditoriaAsync(caixa, TipoOperacaoImpressao,
+            () => _impressoraEtiquetaServico.ImprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial)));
+    }
+
     public Task ReimprimirCaixaAsync(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
     {
         ValidarCaixaElegivelParaEtiqueta(caixa);
@@ -99,6 +119,25 @@ public sealed class ImpressaoProdutoAcabadoServico
     /// (CANCELADA/INDETERMINADO_TIMEOUT/ERRO_SAP/ENVIANDO_SAP/PRONTA/AGUARDANDO/PREVIEW/FINALIZADA/EM_PESAGEM/
     /// BLOQUEADA). Nenhum fluxo operacional de impressão/reimpressão alcança "HU SAP: PENDENTE". NÃO toca SAP.
     /// </summary>
+    /// <summary>
+    /// Elegibilidade da etiqueta de PESAGEM: exige apenas que a caixa exista no banco, com código local.
+    /// Não exige SAP, porque no momento da pesagem não há — nem pode haver — resultado remoto.
+    /// <para>
+    /// O que esta regra ainda impede: imprimir etiqueta de uma caixa que não foi persistida. Uma etiqueta
+    /// sem lastro no banco é uma caixa física sem rastreabilidade, e isso continua barrado.
+    /// </para>
+    /// </summary>
+    public static void ValidarCaixaPesadaElegivelParaEtiqueta(ProdutoAcabadoCaixa caixa)
+    {
+        ArgumentNullException.ThrowIfNull(caixa);
+
+        if (caixa.CodigoProdutoAcabadoCaixa is null || string.IsNullOrWhiteSpace(caixa.CodigoCaixaLocal))
+        {
+            throw new ErroOperacionalEsperadoException(
+                "A caixa não possui identidade persistida (código local). Impressão indisponível.");
+        }
+    }
+
     public static void ValidarCaixaElegivelParaEtiqueta(ProdutoAcabadoCaixa caixa)
     {
         ArgumentNullException.ThrowIfNull(caixa);

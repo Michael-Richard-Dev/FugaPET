@@ -820,9 +820,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
                     + $"HU SAP: {confirmada.HandlingUnitExternalId}",
                     "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                // Efeito INDEPENDENTE: imprime a etiqueta da caixa. Falha de impressão é isolada e NUNCA
-                // desfaz/reenvia a HU SAP nem altera numero_tentativa (tratada dentro do método).
-                await ImprimirEtiquetaCaixaAsync(confirmada);
+                // A etiqueta desta caixa já saiu na pesagem. Não se imprime de novo aqui: isso geraria duas
+                // etiquetas para a mesma caixa física, e duas etiquetas na mesma caixa é erro de operação.
+                // Para obter a etiqueta já com a HU confirmada, use a reimpressão.
             }
             else
             {
@@ -1720,7 +1720,32 @@ public partial class ProcessoProdutoAcabadoForm : Form
             $"Caixa {resultado.Caixa.CodigoCaixaLocal} registrada e persistida ("
             + $"{MapeadorStatusHuCaixa.ParaTextoBanco(resultado.Caixa.StatusIntegracao)}). "
             + $"Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
+
+        // Etiqueta da caixa a cada pesagem, depois da persistência e com a HU ainda PENDENTE. Vem por
+        // último de propósito: a caixa já está registrada e visível na grid, de modo que uma falha de
+        // impressora não desfaz nem esconde o registro.
+        await ImprimirEtiquetaCaixaPesadaAsync(resultado.Caixa);
         return true;
+    }
+
+    /// <summary>
+    /// Impressão no momento da pesagem. Efeito puramente local e isolado: qualquer falha é reportada
+    /// na barra de status e NUNCA propaga — a caixa persistida continua válida, e a etiqueta pode ser
+    /// emitida depois pela reimpressão. Sem caixa de diálogo, para não interromper quem está pesando.
+    /// </summary>
+    private async Task ImprimirEtiquetaCaixaPesadaAsync(ProdutoAcabadoCaixa caixa)
+    {
+        try
+        {
+            await _impressaoProdutoAcabadoServico.ImprimirCaixaPesadaAsync(caixa, ObterDescricaoMaterialAtual());
+            statusLabel.Text += $" Etiqueta impressa (HU PENDENTE).";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] Falha ao imprimir etiqueta da caixa pesada: {ex.GetType().Name}");
+            statusLabel.Text += " ATENCAO: a etiqueta NAO foi impressa — use a reimpressão.";
+        }
     }
 
     /// <summary>
@@ -2452,34 +2477,6 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 FormatarKg(palete.TaraKg),
                 palete.PackagingMaterial,
                 palete.StatusSap);
-        }
-    }
-
-    /// <summary>
-    /// Impressão da etiqueta da caixa (Zebra). Efeito PURAMENTE local e ISOLADO: qualquer falha de impressão
-    /// é tratada aqui e NUNCA propaga — não desfaz a HU SAP confirmada, não reenvia, não altera numero_tentativa
-    /// nem dispara retry/POST. A integração SAP e a impressão são independentes.
-    /// </summary>
-    private async Task ImprimirEtiquetaCaixaAsync(ProdutoAcabadoCaixa caixa)
-    {
-        try
-        {
-            await _impressaoProdutoAcabadoServico.ImprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual());
-            statusLabel.Text = $"Etiqueta da caixa {caixa.CodigoCaixaLocal} impressa com sucesso.";
-            // UX: confirmação EXPLÍCITA de sucesso da IMPRESSÃO (não habilita reenvio SAP).
-            MessageBox.Show(
-                $"Etiqueta impressa com sucesso.\r\nCaixa: {caixa.CodigoCaixaLocal}\r\nHU SAP: {caixa.HandlingUnitExternalId}",
-                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            // Falha de impressão é reportada ao operador, mas NÃO afeta o estado da HU/integração.
-            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao imprimir etiqueta da caixa: {ex.GetType().Name}");
-            MessageBox.Show(
-                "A caixa foi confirmada no SAP, mas a impressão da etiqueta falhou. "
-                + "Use a reimpressão (duplo clique na caixa) quando a impressora estiver pronta.\r\n\r\n"
-                + ExtrairMensagemImpressao(ex),
-                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 

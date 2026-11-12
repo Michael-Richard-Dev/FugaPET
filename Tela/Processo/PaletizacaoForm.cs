@@ -37,6 +37,7 @@ public sealed class PaletizacaoForm : Form
     private readonly ProdutoAcabadoController _controller;
     private readonly List<ProdutoAcabadoCaixa> _selecionadas = [];
     private readonly List<ProdutoAcabadoPalete> _paletesFormados = [];
+    private readonly Servicos.Operacao.ImpressaoPaleteProdutoAcabadoServico _impressaoPalete = new();
 
     // Seletor de modo
     private RadioButton _modoSequenciaRadio = null!;
@@ -556,12 +557,42 @@ public sealed class PaletizacaoForm : Form
             }
 
             statusLabel.Text = $"Palete {palete.CodigoPaleteLocal} gravado localmente em RASCUNHO.";
+            // Etiqueta padrão do palete, emitida na gravação. O código vem da persistência, que é
+            // quem define o sequencial — por isso a impressão vem depois dela, nunca antes.
+            await ImprimirEtiquetaPaleteAsync(palete, persistencia.CodigoHuPalete, terminal);
             LimparSelecao();
             await RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe());
         }
         catch (Exception ex)
         {
             statusLabel.Text = ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// Impressão da etiqueta do palete. Efeito puramente local e isolado: qualquer falha é avisada
+    /// na barra de status e NUNCA propaga — o palete gravado continua válido e pode ser reimpresso.
+    /// </summary>
+    private async Task ImprimirEtiquetaPaleteAsync(
+        ProdutoAcabadoPalete palete, long? codigoPalete, string terminal)
+    {
+        if (codigoPalete is not { } codigo || codigo <= 0)
+        {
+            // Sem o sequencial persistido não há número nem código de barras: não se inventa um.
+            statusLabel.Text += " Etiqueta NAO impressa: palete sem código persistido.";
+            return;
+        }
+
+        try
+        {
+            await _impressaoPalete.ImprimirPaleteAsync(palete, codigo, terminal);
+            statusLabel.Text += " Etiqueta do palete impressa.";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[Paletizacao] Falha ao imprimir etiqueta do palete: {ex.GetType().Name}");
+            statusLabel.Text += " ATENCAO: a etiqueta do palete NAO foi impressa.";
         }
     }
 

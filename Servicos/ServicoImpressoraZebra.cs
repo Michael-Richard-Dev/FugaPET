@@ -188,30 +188,72 @@ public sealed class ServicoImpressoraZebra
             ? "SEM-CODIGO"
             : etiqueta.CodigoCaixaLocal;
 
-        return "^XA\n" +
-               "^CI28\n" +
-               $"^PW{LabelWidthDots}\n" +
-               $"^LL{LabelHeightDots}\n" +
-               "^FWN\n" +
-               "^LH0,0\n" +
-               "^FO30,30^A0N,42,42^FDPRODUTO ACABADO - CAIXA^FS\n" +
-               "^FO30,84^GB779,0,3^FS\n" +
-               $"^FO30,104^A0N,28,28^FDOP: {Z(etiqueta.OrdemProducao)}    ITEM: {Z(etiqueta.ItemOrdem)}^FS\n" +
-               $"^FO30,150^A0N,28,28^FDMATERIAL: {Z(etiqueta.Material)}^FS\n" +
-               $"^FO30,192^A0N,24,24^FB779,2,0,L^FD{Z(etiqueta.DescricaoMaterial)}^FS\n" +
-               $"^FO30,258^A0N,28,28^FDLOTE: {Z(etiqueta.Lote)}^FS\n" +
-               $"^FO30,302^A0N,34,34^FDCAIXA No: {Z(etiqueta.NumeroCaixa)}^FS\n" +
-               $"^FO30,348^A0N,28,28^FDCOD. CAIXA: {Z(etiqueta.CodigoCaixaLocal)}^FS\n" +
-               "^FO30,392^GB779,0,2^FS\n" +
-               $"^FO30,404^A0N,28,28^FDBRUTO: {Z(etiqueta.PesoBruto)}   TARA: {Z(etiqueta.Tara)}   LIQ: {Z(etiqueta.PesoLiquido)}^FS\n" +
-               $"^FO30,446^A0N,28,28^FDQTDE: {Z(etiqueta.Quantidade)}^FS\n" +
-               $"^FO30,494^A0N,36,36^FDHU SAP: {Z(hu)}^FS\n" +
-               $"^FO30,544^A0N,22,22^FD{Z(etiqueta.DataHora)}    TERMINAL: {Z(etiqueta.Terminal)}^FS\n" +
-               // Código de barras Code128 do codigo_caixa_local na VERTICAL (orientação B = bottom-up/270°).
-               // A faixa ocupa a banda inferior livre; ^BY3 = módulo, 120 = largura da faixa (perpendicular às barras).
-               $"^FO60,600^BY3^BCB,120,Y,N,N^FD{Z(codigoBarras)}^FS\n" +
-               "^XZ";
+        // Geometria convertida de Relatorio/EtiquetaProduto8x5.rdlc, caixa por caixa. O RDLC esta em
+        // polegadas; aqui tudo vira dots a 203 dpi (8x5 cm = 3,15 x 1,97 pol = 640 x 400 dots).
+        const int Dpi = 203;
+        static int P(double polegadas) => (int)Math.Round(polegadas * Dpi);
+
+        int largura = P(3.15), altura = P(1.97);
+
+        // Caixa com borda e texto centralizado em duas linhas (rotulo em cima, valor embaixo),
+        // como no RDLC — ali cada Textbox traz "ROTULO\r\nVALOR".
+        static string CaixaDupla(int x, int y, int w, int h, string rotulo, string valor)
+            => $"^FO{x},{y}^GB{w},{h},2^FS\n"
+             + $"^FO{x},{y + 8}^A0N,20,20^FB{w},1,0,C^FD{SanitizarParaZpl(rotulo)}^FS\n"
+             + $"^FO{x},{y + 32}^A0N,26,26^FB{w},1,0,C^FD{SanitizarParaZpl(valor)}^FS\n";
+
+        var zpl = new StringBuilder();
+        zpl.Append("^XA\n^CI28\n")
+           .Append($"^PW{largura}\n^LL{altura}\n^FWN\n^LH0,0\n");
+
+        // --- Faixa superior: codigo de barras do produto (EAN) a esquerda, lote a direita ---
+        // O EAN do produto nao existe no sistema. Nao se imprime barra sem origem: um EAN errado
+        // e lido pelo cliente como outro produto. Fica o aviso no lugar reservado.
+        zpl.Append($"^FO{P(0.15)},{P(0.10)}^A0N,18,18^FB{P(1.50)},2,0,L^FDEAN DO PRODUTO\\&NAO CADASTRADO^FS\n");
+
+        zpl.Append($"^FO{P(1.80)},{P(0.30)}^GB{P(1.24)},{P(0.19)},2^FS\n")
+           .Append($"^FO{P(1.80)},{P(0.33)}^A0N,22,22^FB{P(1.24)},1,0,C^FDLote: {Z(etiqueta.Lote)}^FS\n");
+
+        // --- Descricao do produto, faixa inteira ---
+        zpl.Append($"^FO{P(0.03)},{P(0.52)}^GB{P(3.03)},{P(0.18)},2^FS\n")
+           .Append($"^FO{P(0.03)},{P(0.55)}^A0N,24,24^FB{P(3.03)},1,0,C^FD{Z(etiqueta.DescricaoMaterial)}^FS\n");
+
+        // A coluna dos pesos foi estreitada em relacao ao RDLC para abrir a faixa da direita. O codigo
+        // local tem 15 caracteres: em Code128 vertical ele precisa de ~200 dots de curso, e no desenho
+        // original so sobravam 118 — por isso a barra saia para fora da etiqueta.
+        int colDirX = P(1.73);
+        int colDirW = P(0.95);
+        int faixaX = colDirX + colDirW + P(0.06);
+        int faixaLargura = largura - faixaX - P(0.04);
+
+        // --- Grade: esquerda com identificacao e datas, direita com pesos ---
+        zpl.Append(CaixaDupla(P(0.03), P(0.72), P(1.70), P(0.33), "CODIGO DO PRODUTO", etiqueta.Material))
+           .Append(CaixaDupla(colDirX, P(0.72), colDirW, P(0.33), "PESO BRUTO", etiqueta.PesoBruto))
+           .Append(CaixaDupla(P(0.03), P(1.05), P(1.70), P(0.31), "DATA DE FABRICACAO", SemOrigem))
+           .Append(CaixaDupla(colDirX, P(1.05), colDirW, P(0.31), "PESO LIQUIDO", etiqueta.PesoLiquido))
+           .Append(CaixaDupla(P(0.03), P(1.36), P(1.70), P(0.31), "DATA DE VALIDADE", SemOrigem));
+
+        // --- Quantidade de pacotes ---
+        zpl.Append($"^FO{P(0.03)},{P(1.67)}^GB{P(1.70)},{P(0.20)},2^FS\n")
+           .Append($"^FO{P(0.03)},{P(1.70)}^A0N,22,22^FB{P(1.70)},1,0,C^FDQtd. Pacotes: {Z(etiqueta.Quantidade)}^FS\n");
+
+        // --- Codigo de barras VERTICAL na faixa da direita ---
+        // Em ^BCB o desenho sobe a partir da origem, entao a origem fica embaixo e o curso corre para
+        // cima dentro da etiqueta. Leva o codigo local da caixa: identificador real, que o sistema le.
+        // Nao e o numero do modelo (1919015), cuja origem ainda nao foi definida.
+        int baseBarra = altura - P(0.07);
+        zpl.Append($"^FO{faixaX},{baseBarra}^BY1^BCB,{faixaLargura},N,N,N^FD{Z(codigoBarras)}^FS\n");
+
+        // Leitura humana e HU ocupam o espaco livre abaixo dos pesos, sem invadir a faixa da barra.
+        zpl.Append($"^FO{colDirX},{P(1.45)}^A0N,18,18^FB{colDirW},1,0,C^FD{Z(codigoBarras)}^FS\n")
+           .Append($"^FO{colDirX},{P(1.67)}^A0N,16,16^FB{colDirW},1,0,C^FDHU: {Z(hu)}^FS\n")
+           .Append("^XZ");
+
+        return zpl.ToString();
     }
+
+    /// <summary>Texto de campo sem origem no sistema — nunca preenchido por suposicao.</summary>
+    private const string SemOrigem = "NAO INFORMADA";
 
     public string ConstruirZplEtiquetaMateriaPrimaGrafica(DadosEtiquetaMateriaPrima etiqueta)
     {
@@ -446,6 +488,97 @@ public sealed class ServicoImpressoraZebra
             .Replace('\n', ' ')
             .Replace("^", string.Empty, StringComparison.Ordinal)
             .Replace("~", string.Empty, StringComparison.Ordinal);
+    }
+
+    public ResultadoEnvioZebra ImprimirEtiquetaPaleteProdutoAcabado(
+        string nomeImpressora, DadosEtiquetaPaleteProdutoAcabado etiqueta)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nomeImpressora);
+        RawPrinterHelper.EnsurePrinterReady(nomeImpressora);
+        string zpl = ConstruirZplEtiquetaPaleteProdutoAcabado(etiqueta);
+        return RawPrinterHelper.SendStringToPrinter(nomeImpressora, zpl);
+    }
+
+    /// <summary>
+    /// Etiqueta do palete: identificacao, totais e o bloco de lotes com a quantidade de caixas de
+    /// cada um. Code128 do codigo de barras do palete para leitura na expedicao.
+    /// <para>
+    /// O bloco de lotes cresce para baixo, uma linha por lote, e a altura da etiqueta acompanha a
+    /// quantidade de lotes para que nenhuma linha seja cortada — um lote que nao aparece no papel
+    /// e um lote que some do inventario.
+    /// </para>
+    /// </summary>
+    public string ConstruirZplEtiquetaPaleteProdutoAcabado(DadosEtiquetaPaleteProdutoAcabado etiqueta)
+    {
+        ArgumentNullException.ThrowIfNull(etiqueta);
+
+        string codigoBarras = string.IsNullOrWhiteSpace(etiqueta.CodigoBarras) ? "SEM-CODIGO" : etiqueta.CodigoBarras;
+        // A descricao e a linha mais visivel do modelo. Vazia, o material ocupa o lugar — melhor um
+        // codigo legivel do que um espaco em branco no meio da etiqueta.
+        string titulo = string.IsNullOrWhiteSpace(etiqueta.DescricaoMaterial)
+            ? etiqueta.Material
+            : etiqueta.DescricaoMaterial;
+
+        const int Margem = 30;
+        const int Util = LabelWidthDots - (2 * Margem);   // largura util entre as margens
+        const int AlturaLinhaLote = 30;
+
+        // A moldura do codigo de barras e as linhas de lote definem a altura final.
+        const int TopoMoldura = 300;
+        const int AlturaMoldura = 210;
+        int topoTotais = TopoMoldura + AlturaMoldura + 28;
+        int topoLotes = topoTotais + 54;
+        int alturaLotes = Math.Max(1, etiqueta.Lotes.Count) * AlturaLinhaLote;
+        int altura = Math.Max(LabelHeightDots, topoLotes + alturaLotes + 40);
+
+        var zpl = new StringBuilder();
+        zpl.Append("^XA\n^CI28\n")
+           .Append($"^PW{LabelWidthDots}\n")
+           .Append($"^LL{altura}\n")
+           .Append("^FWN\n^LH0,0\n")
+           // Cabecalho: data/hora de impressao no alto, a direita.
+           .Append($"^FO{Margem},22^A0N,20,20^FB{Util},1,0,R^FDData/Hora de Impressao:   "
+                 + $"{Z(etiqueta.DataHoraImpressao)}^FS\n")
+           // Titulo centralizado.
+           .Append($"^FO{Margem},70^A0N,48,48^FB{Util},1,0,C^FDFUGA PET^FS\n")
+           // Numero a esquerda, data a direita, na mesma linha.
+           .Append($"^FO{Margem},146^A0N,38,38^FDNumero: {Z(etiqueta.Numero)}^FS\n")
+           .Append($"^FO{Margem},146^A0N,38,38^FB{Util},1,0,R^FDData: {Z(etiqueta.Data)}^FS\n")
+           // Descricao do produto, centralizada e grande, com regua embaixo.
+           .Append($"^FO{Margem},214^A0N,34,34^FB{Util},2,4,C^FD{Z(titulo)}^FS\n")
+           .Append($"^FO{Margem},{TopoMoldura - 14}^GB{Util},0,3^FS\n")
+           // Moldura do codigo de barras, com a leitura humana abaixo das barras.
+           .Append($"^FO{Margem + 140},{TopoMoldura}^GB{Util - 280},{AlturaMoldura},3^FS\n")
+           .Append($"^FO{Margem + 140},{TopoMoldura + 26}^BY3^BCN,120,Y,N,N"
+                 + $"^FB{Util - 280},1,0,C^FD{Z(codigoBarras)}^FS\n")
+           // Totais, com os mesmos rotulos do modelo.
+           .Append($"^FO{Margem},{topoTotais}^A0N,32,32^FDQt Cx./Sacos: {Z(etiqueta.QuantidadeCaixas)}"
+                 + $"    Qt Pct/PC: {Z(etiqueta.QuantidadeProdutos)}"
+                 + $"    Peso B.: {Z(etiqueta.PesoBruto)}"
+                 + $"    Peso L.: {Z(etiqueta.PesoLiquido)}^FS\n");
+
+        if (etiqueta.Lotes.Count == 0)
+        {
+            zpl.Append($"^FO{Margem},{topoLotes}^A0N,20,20^FDNENHUM LOTE IDENTIFICADO NAS CAIXAS^FS\n");
+        }
+        else
+        {
+            // Colunas em posicoes fixas: a leitura por lote precisa alinhar verticalmente.
+            int y = topoLotes;
+            foreach (LinhaLoteEtiquetaPalete lote in etiqueta.Lotes)
+            {
+                zpl.Append($"^FO{Margem},{y}^A0N,20,20^FDLOTE: {Z(lote.Lote)}^FS\n")
+                   .Append($"^FO{Margem + 190},{y}^A0N,20,20^FDDT. FABRI.: {Z(lote.DataFabricacao)}^FS\n")
+                   .Append($"^FO{Margem + 450},{y}^A0N,20,20^FDDT. VCTO.: {Z(lote.DataVencimento)}^FS\n")
+                   .Append($"^FO{Margem + 700},{y}^A0N,20,20^FDQTDE. CX.: "
+                         + $"{lote.QuantidadeCaixas.ToString(System.Globalization.CultureInfo.InvariantCulture)}^FS\n");
+                y += AlturaLinhaLote;
+            }
+        }
+
+        zpl.Append("^XZ");
+
+        return zpl.ToString();
     }
 
     private static string Z(string text)

@@ -127,6 +127,13 @@ public sealed class ImpressoraEtiquetaServico
             _servicoImpressoraZebra.ImprimirEtiquetaCaixaProdutoAcabado(impressora, etiqueta));
     }
 
+    public async Task ImprimirEtiquetaPaleteProdutoAcabadoAsync(DadosEtiquetaPaleteProdutoAcabado etiqueta)
+    {
+        await ExigirPermissaoImpressaoAsync(PermissoesSistema.Acoes.Imprimir, "impressão de etiqueta de palete");
+        await ExecutarOperacaoZebraAsync("imprimir etiqueta de palete produto acabado", impressora =>
+            _servicoImpressoraZebra.ImprimirEtiquetaPaleteProdutoAcabado(impressora, etiqueta));
+    }
+
     public async Task ImprimirEtiquetaMateriaPrimaAsync(DadosEtiquetaMateriaPrima etiqueta)
     {
         await ExigirPermissaoImpressaoAsync(PermissoesSistema.Acoes.Imprimir, "impressão após leitura");
