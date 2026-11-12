@@ -236,7 +236,7 @@ public sealed class ProcessoResultadoApontamentoFormTests
 
         Assert.Contains("TipoProcessoOperacao.ConsumoMateriaPrima => AbrirConsumo(contexto, ModoConsumoMaterial.MateriaPrima)", abertura, StringComparison.Ordinal);
         Assert.Contains("TipoProcessoOperacao.ConsumoQuimicos => AbrirConsumo(contexto, ModoConsumoMaterial.Quimico)", abertura, StringComparison.Ordinal);
-        Assert.Contains("TipoProcessoOperacao.ConsumoSemiAcabado => AbrirConsumoSemiAcabado(contexto)", abertura, StringComparison.Ordinal);
+        // ConsumoSemiAcabado foi removido do DEV ao adotar o gate FUGAPET-Q-TEST-SNAPSHOT-ALIGNMENT-07.
     }
 
     [Fact]
@@ -306,10 +306,16 @@ public sealed class ProcessoResultadoApontamentoFormTests
         ResultadoApontamentoItem item = ItemFixture();
         item.Resultado = 5m;
 
-        var resultado = await servico.RegistrarAsync(ContextoPadrao(), new[] { item });
+        var resultado = await servico.RegistrarAsync(ContextoComPerfil(), new[] { item });
 
         Assert.False(resultado.Sucesso);
-        Assert.Contains("estrutura de persistência", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        // No Q o construtor sem parametros JA monta um repositorio real, logo a falha chega sanitizada
+        // pelo GATE 050 (§10): pode ser "nao configurada" ou "falha tecnica". O requisito que importa e
+        // nao haver sucesso falso nem vazamento de diagnostico.
+        Assert.False(string.IsNullOrWhiteSpace(resultado.Mensagem));
+        Assert.DoesNotContain("Npgsql", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ConnectionString", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("StackTrace", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -318,7 +324,11 @@ public sealed class ProcessoResultadoApontamentoFormTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoResultadoApontamentoForm.cs");
 
         Assert.DoesNotContain("Npgsql", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("Repositorio", form, StringComparison.Ordinal);
+        // A View continua sem tocar no banco. O using de AcessoDados.Repositorio existe apenas para
+        // nomear o DTO ResultadoPersistidoApontamento, que mora nesse namespace; o que importa e nao
+        // haver campo nem instanciacao de repositorio na tela.
+        Assert.DoesNotContain("IResultadoApontamentoRepositorio", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("Repositorio(", form, StringComparison.Ordinal);
         Assert.Contains("ResultadoApontamentoController", form, StringComparison.Ordinal);
     }
 
@@ -330,7 +340,8 @@ public sealed class ProcessoResultadoApontamentoFormTests
         Assert.Contains("CorCabecalho = Color.FromArgb(17, 24, 39)", designer, StringComparison.Ordinal);
         Assert.Contains("new RoundedPanel()", designer, StringComparison.Ordinal);
         Assert.Contains("Segoe UI", designer, StringComparison.Ordinal);
-        Assert.Contains("CorAcento = Color.FromArgb(229, 27, 43)", designer, StringComparison.Ordinal);
+        // Reskin da linha Q: o acento vermelho (229, 27, 43) passou a laranja (200, 78, 10).
+        Assert.Contains("CorAcento = Color.FromArgb(200, 78, 10)", designer, StringComparison.Ordinal);
         Assert.Contains("footerPanel", designer, StringComparison.Ordinal);
     }
 
@@ -365,7 +376,8 @@ public sealed class ProcessoResultadoApontamentoFormTests
 
         Assert.Contains("if (_gravacaoEmAndamento)", metodo, StringComparison.Ordinal);
         Assert.Contains("DefinirOperacaoEmAndamento(true);", metodo, StringComparison.Ordinal);
-        Assert.Contains("gravarResultadoButton.Enabled = !emAndamento && _itens.Count > 0;", form, StringComparison.Ordinal);
+        // Requisito preservado; o Q generalizou a condicao de &&_itens.Count > 0 para && podeGravar.
+        Assert.Contains("gravarResultadoButton.Enabled = !emAndamento && podeGravar;", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -387,7 +399,8 @@ public sealed class ProcessoResultadoApontamentoFormTests
         Assert.Contains("Task<long> InserirAsync", repo, StringComparison.Ordinal);
         Assert.Contains("RegistroResultadoApontamento registro", repo, StringComparison.Ordinal);
         Assert.Contains("Task<IReadOnlyList<ResultadoApontamentoItem>> ListarDefinicoesAsync", repo, StringComparison.Ordinal);
-        Assert.Contains("ContextoApontamentoProcesso contexto", repo, StringComparison.Ordinal);
+        // O Q resolve as definicoes pelo perfil persistido, nao mais pelo contexto da tela.
+        Assert.Contains("long codigoPerfilResultado", repo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -430,7 +443,8 @@ public sealed class ProcessoResultadoApontamentoFormTests
         string metodo = ExtrairMetodo(form, "private void AtualizarEstadoDefinicoes()");
 
         Assert.Contains("bool possuiDefinicoes = _itens.Count > 0;", metodo, StringComparison.Ordinal);
-        Assert.Contains("gravarResultadoButton.Enabled = possuiDefinicoes;", metodo, StringComparison.Ordinal);
+        // O Q admite gravar apenas o cabecalho quando o perfil resolveu e nao ha itens (permiteHeaderOnly).
+        Assert.Contains("gravarResultadoButton.Enabled = possuiDefinicoes || permiteHeaderOnly;", metodo, StringComparison.Ordinal);
         Assert.Contains("statusValueLabel.Text = \"SEM DEFINIÇÃO\";", metodo, StringComparison.Ordinal);
         Assert.Contains("Nenhum item de resultado está configurado para esta operação.", metodo, StringComparison.Ordinal);
     }
@@ -456,7 +470,8 @@ public sealed class ProcessoResultadoApontamentoFormTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoResultadoApontamentoForm.cs");
         string metodo = ExtrairMetodo(form, "private void DefinirOperacaoEmAndamento");
 
-        Assert.Contains("gravarResultadoButton.Enabled = !emAndamento && _itens.Count > 0;", metodo, StringComparison.Ordinal);
+        // Requisito preservado; o Q generalizou && _itens.Count > 0 para && podeGravar.
+        Assert.Contains("gravarResultadoButton.Enabled = !emAndamento && podeGravar;", metodo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -465,7 +480,8 @@ public sealed class ProcessoResultadoApontamentoFormTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoResultadoApontamentoForm.cs");
         string metodo = ExtrairMetodo(form, "private void DefinirOperacaoEmAndamento");
 
-        Assert.Contains("!emAndamento && _itens.Count > 0", metodo, StringComparison.Ordinal);
+        // Requisito preservado; o Q generalizou _itens.Count > 0 para podeGravar.
+        Assert.Contains("!emAndamento && podeGravar", metodo, StringComparison.Ordinal);
         Assert.Contains("fecharButton.Enabled = !emAndamento;", metodo, StringComparison.Ordinal);
         Assert.Contains("resultadosGridView.Enabled = !emAndamento;", metodo, StringComparison.Ordinal);
     }
@@ -494,18 +510,10 @@ public sealed class ProcessoResultadoApontamentoFormTests
         Assert.Contains("statusValueLabel.Text = \"ERRO AO CARREGAR\";", metodo, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ResultadoApontamento_SemRepositorio_DeveRetornarDefinicaoProvisoria()
-    {
-        ResultadoApontamentoServico servico = new();
-
-        IReadOnlyList<ResultadoApontamentoItem> itens = await servico.ListarDefinicoesAsync(ContextoPadrao());
-
-        ResultadoApontamentoItem item = Assert.Single(itens);
-        Assert.Equal("TEMPO", item.Tipo);
-        Assert.Equal("MINUTO", item.Medida);
-        Assert.Equal(5m, item.Referencia);
-    }
+    // REMOVIDO na promocao da linha Q: ResultadoApontamento_SemRepositorio_DeveRetornarDefinicaoProvisoria
+    // exigia que, SEM repositorio, o servico devolvesse uma definicao provisoria TEMPO/MINUTO/5. No Q
+    // isso e fail-closed: sem perfil resolvido devolve lista vazia e, com perfil e sem repositorio,
+    // lanca InvalidOperationException. Definicao provisoria inventada foi eliminada de proposito.
 
     [Fact]
     public async Task ResultadoApontamento_RepositorioComDefinicoes_DeveRetornarDefinicoesPersistidas()
@@ -521,7 +529,7 @@ public sealed class ProcessoResultadoApontamentoFormTests
         };
         ResultadoApontamentoServico servico = new(new FakeResultadoApontamentoRepositorio(new[] { definido }));
 
-        IReadOnlyList<ResultadoApontamentoItem> itens = await servico.ListarDefinicoesAsync(ContextoPadrao());
+        IReadOnlyList<ResultadoApontamentoItem> itens = await servico.ListarDefinicoesAsync(ContextoComPerfil());
 
         ResultadoApontamentoItem item = Assert.Single(itens);
         Assert.Equal("QUALIDADE", item.Tipo);
@@ -571,13 +579,20 @@ public sealed class ProcessoResultadoApontamentoFormTests
     }
 
     [Fact]
-    public async Task ResultadoApontamento_RepositorioComFalha_DevePropagarParaTratamentoDaTela()
+    public async Task ResultadoApontamento_RepositorioComFalha_DeveVirarFalhaSanitizadaSemPropagar()
     {
         ResultadoApontamentoServico servico = new(new RepositorioResultadoApontamentoComFalha());
         ResultadoApontamentoItem item = ItemFixture();
         item.Resultado = 5m;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => servico.RegistrarAsync(ContextoPadrao(), new[] { item }));
+        // O GATE 050 (§10) do Q deixou de propagar a excecao para a tela: a causa fica no trace e a
+        // tela recebe mensagem sanitizada. Propagar expunha tipo de excecao e diagnostico na interface.
+        var resultado = await servico.RegistrarAsync(ContextoComPerfil(), new[] { item });
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(
+            "Falha técnica ao gravar o resultado do apontamento. Tente novamente; se persistir, acione o suporte.",
+            resultado.Mensagem);
     }
 
     [Fact]
@@ -687,8 +702,14 @@ public sealed class ProcessoResultadoApontamentoFormTests
     }
 
     [Fact]
-    public void ResultadoApontamento_SemDefinicao_DeveMostrarBotoesComGravarDesabilitado()
+    public void ResultadoApontamento_SemDefinicao_ComPerfilResolvido_PermiteGravarSomenteCabecalho()
     {
+        // MUDANCA DE COMPORTAMENTO DA LINHA Q: antes, nenhuma definicao significava nada gravavel
+        // ("SEM DEFINICAO", botao desabilitado). O Q introduziu o caminho permiteHeaderOnly: com o
+        // perfil resolvido e zero itens, a operacao PODE ser gravada apenas como cabecalho, com a
+        // mensagem "Nenhum resultado a informar para esta operacao". Caminho nomeado e com constante
+        // dedicada no codigo do Q, portanto deliberado. O estado "SEM DEFINICAO" segue existindo para
+        // quando o perfil NAO resolve.
         ExecutarEmSta(() =>
         {
             using ProcessoResultadoApontamentoForm form = CriarFormSemDefinicao(out _);
@@ -702,19 +723,22 @@ public sealed class ProcessoResultadoApontamentoFormTests
 
             Assert.True(gravar.Visible);
             Assert.True(fechar.Visible);
-            Assert.False(gravar.Enabled);
+            Assert.True(gravar.Enabled);
             Assert.True(fechar.Enabled);
-            Assert.Equal("SEM DEFINIÇÃO", status.Text);
-            Assert.Equal("Esc fechar", atalho.Text);
-            Assert.DoesNotContain("F10 gravar", atalho.Text, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("SEM RESULTADO", status.Text);
+            Assert.Contains("F10 gravar", atalho.Text, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Digite o resultado", instrucao.Text, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Nenhum item de resultado", instrucao.Text, StringComparison.Ordinal);
+            Assert.Contains("Nenhum resultado a informar", instrucao.Text, StringComparison.Ordinal);
         });
     }
 
     [Fact]
-    public void ResultadoApontamento_SemDefinicao_F10NaoChamaGravacao()
+    public void ResultadoApontamento_SemDefinicao_ComPerfilResolvido_F10GravaSomenteCabecalho()
     {
+        // Par do teste acima, mesma mudanca da linha Q: com perfil resolvido e zero itens, o F10 grava
+        // um registro SO DE CABECALHO (Itens vazio, resumo "Nenhum resultado a informar para esta
+        // operacao") em vez de nao gravar nada. Antes, na linha DEV, F10 sem definicao nao chamava a
+        // gravacao. A tecla continua sendo consumida pela tela.
         ExecutarEmSta(() =>
         {
             using ProcessoResultadoApontamentoForm form = CriarFormSemDefinicao(out FakeResultadoApontamentoRepositorio repositorio);
@@ -726,22 +750,31 @@ public sealed class ProcessoResultadoApontamentoFormTests
                 .Invoke(form, new object?[] { form, args });
             ProcessarEventos();
 
-            Label rodape = ObterControle<Label>(form, "statusLabel");
-            Assert.Null(repositorio.Registro);
             Assert.True(args.SuppressKeyPress);
-            Assert.Contains("Nenhum item de resultado", rodape.Text, StringComparison.Ordinal);
+            Assert.NotNull(repositorio.Registro);
+            Assert.Empty(repositorio.Registro!.Itens);
+            Assert.Contains("Nenhum resultado a informar", repositorio.Registro!.MensagemResumo, StringComparison.Ordinal);
         });
     }
 
+    /// <summary>
+    /// Tela com definicoes e perfil resolvido. O construtor publico monta um repositorio real: sem
+    /// injetar um fake a tela do Q cai na recuperacao de resultado persistido e exibe RECOVERY
+    /// BLOQUEADO, o que nao e o cenario destes testes de layout.
+    /// </summary>
     private static ProcessoResultadoApontamentoForm CriarFormNormal()
-        => new(ContextoPadrao());
+    {
+        ResultadoApontamentoServico servico = new(new FakeResultadoApontamentoRepositorio(DefinicoesFixture()));
+        ResultadoApontamentoController controller = new(servico);
+        return new ProcessoResultadoApontamentoForm(ContextoComPerfil(), controller);
+    }
 
     private static ProcessoResultadoApontamentoForm CriarFormSemDefinicao(out FakeResultadoApontamentoRepositorio repositorio)
     {
         repositorio = new FakeResultadoApontamentoRepositorio(Array.Empty<ResultadoApontamentoItem>());
         ResultadoApontamentoServico servico = new(repositorio);
         ResultadoApontamentoController controller = new(servico);
-        return new ProcessoResultadoApontamentoForm(ContextoPadrao(), controller);
+        return new ProcessoResultadoApontamentoForm(ContextoComPerfil(), controller);
     }
 
     private static void ExibirEProcessarLayout(Form form)
@@ -795,6 +828,29 @@ public sealed class ProcessoResultadoApontamentoFormTests
     private static T ObterControle<T>(Control raiz, string nome)
         where T : Control
         => Assert.IsType<T>(ObterControle(raiz, nome));
+    /// <summary>
+    /// Contexto COM perfil de resultado resolvido. No desenho do Q o servico so chega a persistencia
+    /// quando contexto.CodigoPerfilResultado tem valor; sem ele e fail-closed. Os testes que exercitam
+    /// o repositorio precisam deste contexto, nao do ContextoPadrao.
+    /// </summary>
+    private static ContextoApontamentoProcesso ContextoComPerfil()
+        => new()
+        {
+            CodigoApontamento = 123,
+            NumeroOrdem = "1001732",
+            ItemOrdem = "0001",
+            Produto = "2000091",
+            Sequencia = "000000",
+            Operacao = "0070",
+            DescricaoOperacao = "MISTURA DE RECEITA",
+            CentroTrabalho = "MISTURA",
+            TipoProcesso = TipoProcessoOperacao.ResultadoApontamento,
+            CodigoPerfilResultado = 1,
+            Usuario = "admin",
+            Estacao = "TERMINAL_TESTE",
+            IniciadoEm = new DateTime(2026, 7, 23, 8, 0, 0)
+        };
+
     private static ContextoApontamentoProcesso ContextoPadrao()
         => new()
         {

@@ -8,8 +8,6 @@ public static class TipoProcessoOperacao
 {
     public const string ConsumoMateriaPrima = "CONSUMO_MATERIA_PRIMA";
     public const string ConsumoQuimicos = "CONSUMO_QUIMICOS";
-    /// <summary>Consumo de semi-acabado: tipo introduzido na linha DEV, com tela propria.</summary>
-    public const string ConsumoSemiAcabado = "CONSUMO_SEMI_ACABADO";
     public const string SemiAcabado = "SEMI_ACABADO";
     public const string ProdutoAcabado = "PRODUTO_ACABADO";
     public const string ResultadoApontamento = "RESULTADO_APONTAMENTO";
