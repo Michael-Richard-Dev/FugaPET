@@ -10,6 +10,28 @@
       "codigo_etiqueta_padrao": null,
       "codigo_tara_padrao": null
     },
-    "terminais": []
+    "_terminais": "Mapeamento operacional real por maquina (nao e segredo). E o default aplicado no startup quando o nome da maquina casa; sem casamento vale 'padrao'. codigo_balanca_padrao e codigo_etiqueta_padrao referenciam os cadastros do banco local. impressora_padrao e o NOME DA FILA instalada no Windows daquela maquina — trocar a impressora fisica exige atualizar este nome.",
+    "terminais": [
+      {
+        "maquina": "NT-TI-256",
+        "nome_terminal": "TERMINAL_TI_TESTE",
+        "banco_local_nome": "LOCAL",
+        "codigo_setor_padrao": 1,
+        "codigo_balanca_padrao": 1,
+        "impressora_padrao": "Zebra Rede 200.97",
+        "codigo_etiqueta_padrao": 1,
+        "codigo_tara_padrao": 1
+      },
+      {
+        "maquina": "TERM-03",
+        "nome_terminal": "TERMINAL_FRIGOSUL_03",
+        "banco_local_nome": "LOCAL_FRIGOSUL_03",
+        "codigo_setor_padrao": 1,
+        "codigo_balanca_padrao": 1,
+        "impressora_padrao": "ZDesigner GK420t",
+        "codigo_etiqueta_padrao": 1,
+        "codigo_tara_padrao": 1
+      }
+    ]
   }
 }
