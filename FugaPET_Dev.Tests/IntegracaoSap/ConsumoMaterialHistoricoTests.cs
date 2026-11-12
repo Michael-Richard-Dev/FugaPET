@@ -1,4 +1,4 @@
-using FugaPET_Dev.AcessoDados.Repositorio;
+﻿using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Consumo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.IntegracaoSap;
@@ -254,3 +254,4 @@ public sealed class ConsumoMaterialHistoricoTests
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
     }
 }
+

@@ -1,0 +1,7 @@
+MANIFESTO SHA-256 - BANCO HOMOLOGACAO V1.1
+==========================================================
+
+696966fb1b4561c12853479cd2e8b4d27c1921c02a8ebd532667a84a33caaebe  000_execucao_completa_homologacao_v1_1.sql
+a3d7b2fe8ad11d75c2f8e8c4878fcd458f48b71281fd945439196eea39e27f53  001_bootstrap_admin_homologacao_v1_1_pgadmin.sql
+afcdb34839a8422e1256de354401ef42b07fc34cc7a38602275c5280a6b183ab  002_validar_banco_homologacao_v1_1.sql
+14a6c435d754fe61fada6fd4538c03d59996866681c9355d05b5ed1bc47c556e  README_EXECUCAO_BANCO_HOMOLOGACAO_V1_1.txt

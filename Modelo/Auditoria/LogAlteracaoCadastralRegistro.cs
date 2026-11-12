@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Auditoria;
+namespace FugaPET_Dev.Modelo.Auditoria;
 
 public sealed class LogAlteracaoCadastralRegistro
 {

@@ -21,7 +21,7 @@ namespace FugaPET_Dev.Tela.Processo;
 /// </summary>
 public sealed class PaletizacaoForm : Form
 {
-    private static readonly Color CorFugaVermelho = Color.FromArgb(229, 27, 43);
+    private static readonly Color CorFugaVermelho = Color.FromArgb(200, 78, 10);
     private static readonly Color CorHeaderEscuro = Color.FromArgb(17, 24, 39);
     private static readonly Color CorFundo = Color.FromArgb(245, 247, 250);
     private static readonly Color CorBorda = Color.FromArgb(226, 231, 238);

@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.Diagnostico;
+﻿using FugaPET_Dev.Modelo.Diagnostico;
 using FugaPET_Dev.Servicos.Diagnostico;
 
 namespace FugaPET_Dev.Controle.Processo;

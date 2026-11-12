@@ -69,6 +69,9 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
         Guid correlationId = Guid.NewGuid();
         Stopwatch cronometro = Stopwatch.StartNew();
 
+        // GATE 105G: mantém a mensagem SEGURA de configuração ausente (contrato existente, sem segredo).
+        // A classificação CONFIGURACAO_INVALIDA para o cache miss é derivada no controller de forma
+        // ESTRUTURAL (SapConfigurado == false), sem parsing desta mensagem.
         if (!_configuracaoSap.Configurado)
         {
             ResultadoOperacao falha =
@@ -94,6 +97,8 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
             PedidoCompraSap? pedido = await _clienteSap.Value.ConsultarPedidoAsync(
                 numeroPedido,
                 cancellationToken);
+            // GATE 105G: 404 é resultado CONHECIDO e sobe classificado (NAO_ENCONTRADO/404). Antes era
+            // degradado para "Pedido nao liberado para entrada." — um 404 disfarçado de veredito de negócio.
             if (pedido is null)
             {
                 await RegistrarLogAsync(
@@ -104,7 +109,11 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
                     "NAO_ENCONTRADO",
                     404,
                     "Pedido nao encontrado no SAP.");
-                return ResultadoOperacao.Falha(MensagemPedidoNaoLiberado);
+                throw new ConsultaSapException(
+                    CenarioFalhaConsultaSap.NaoEncontrado,
+                    404,
+                    "Pedido de compra nao encontrado no SAP.",
+                    correlationId.ToString());
             }
 
             if (pedido.Itens.Count == 0)
@@ -165,10 +174,23 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
                 "Consulta cancelada.");
             throw;
         }
-        catch (TaskCanceledException)
+        // GATE 105G: falha TÉCNICA de consulta NÃO é degradada para ResultadoOperacao textual. Registra o
+        // diagnóstico sanitizado e PROPAGA a exceção tipada, preservando Cenario/HttpStatus/CorrelationId
+        // até o controller (que decide a apresentação). Sem parsing de mensagem em nenhuma camada.
+        catch (ConsultaSapException falha)
         {
-            ResultadoOperacao timeout =
-                ResultadoOperacao.Falha("A consulta do pedido no SAP excedeu o tempo limite.");
+            await RegistrarLogAsync(
+                "CONSULTA_PEDIDO",
+                numeroPedido,
+                correlationId,
+                cronometro,
+                falha.Cenario == CenarioFalhaConsultaSap.Timeout ? "TIMEOUT" : "ERRO",
+                falha.HttpStatus,
+                falha.MensagemTecnicaSanitizada ?? $"Falha na consulta do pedido ({falha.Cenario}).");
+            throw;
+        }
+        catch (TaskCanceledException ex)
+        {
             await RegistrarLogAsync(
                 "CONSULTA_PEDIDO",
                 numeroPedido,
@@ -176,8 +198,13 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
                 cronometro,
                 "TIMEOUT",
                 null,
-                timeout.Mensagem);
-            return timeout;
+                "A consulta do pedido no SAP excedeu o tempo limite.");
+            throw new ConsultaSapException(
+                CenarioFalhaConsultaSap.Timeout,
+                httpStatus: null,
+                "A consulta do pedido no SAP excedeu o tempo limite.",
+                correlationId.ToString(),
+                ex);
         }
         catch
         {
@@ -372,32 +399,56 @@ public sealed class SincronizacaoPedidoCompraSapServico : IPedidoCompraSapServic
 
     /// <summary>
     /// Tarefa Entrada 23.1: cabeçalho FRESCO do pedido no SAP (GET direto, com status de aprovação/liberação).
-    /// Não usa cache. Não configurado / não encontrado / erro → null (o validador bloqueia por segurança).
+    /// Não usa cache.
+    /// GATE 105D — nova semântica de null: null significa EXCLUSIVAMENTE "não encontrado" (404). Qualquer
+    /// falha TÉCNICA (config inválida, 401/403/5xx, rede, TLS, timeout, resposta inválida) sobe como
+    /// <see cref="ConsultaSapException"/> com o cenário classificado; o swallow genérico que devolvia null
+    /// (e virava "pedido não liberado") foi REMOVIDO. Cancelamento do chamador é propagado.
     /// </summary>
     public async Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default)
     {
-        if (!_configuracaoSap.Configurado || string.IsNullOrWhiteSpace(numeroPedido))
+        if (string.IsNullOrWhiteSpace(numeroPedido))
         {
+            // Sem número não há o que consultar: é ausência de recurso, não falha técnica.
             return null;
+        }
+
+        if (!_configuracaoSap.Configurado)
+        {
+            throw new ConsultaSapException(
+                CenarioFalhaConsultaSap.ConfiguracaoInvalida,
+                httpStatus: null,
+                "Integracao SAP nao configurada para consultar o pedido de compra.");
         }
 
         try
         {
             return await _clienteSap.Value.ConsultarPedidoAsync(numeroPedido, cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning(
-                $"[Entrada][ValidacaoPedidoCompra] Falha ao consultar cabecalho do pedido {numeroPedido}: {ex.GetType().Name}.");
-            return null;
+            ConsultaSapException tipada = ClassificadorFalhaConsultaSap.Tipar(ex);
+            RegistrarDiagnosticoFalhaConsulta(numeroPedido, tipada);
+            throw tipada;
         }
     }
+
+    // GATE 105D: diagnóstico SANITIZADO da falha técnica (sem ex.ToString(), sem corpo bruto, sem segredo).
+    private static void RegistrarDiagnosticoFalhaConsulta(string numeroPedido, ConsultaSapException falha)
+        => System.Diagnostics.Trace.TraceWarning(
+            "[Entrada][ValidacaoPedidoCompra] "
+            + "OPERACAO=VALIDAR_LIBERACAO_PEDIDO; "
+            + $"PEDIDO={numeroPedido}; "
+            + $"CENARIO={falha.Cenario}; "
+            + $"HTTP_STATUS={(falha.HttpStatus is int status ? status.ToString() : "-")}; "
+            + $"CORRELATION_ID={falha.CorrelationId ?? "-"}; "
+            + $"TIPO_FALHA={falha.MensagemTecnicaSanitizada ?? "-"}");
 
     /// <summary>Fornecedor vinculado ao pedido no cache local, para preencher a tela de Entrada.</summary>
     public Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)

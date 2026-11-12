@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Diagnostico;
+﻿namespace FugaPET_Dev.Modelo.Diagnostico;
 
 public sealed class DiagnosticoConsumoSap261Item
 {

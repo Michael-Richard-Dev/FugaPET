@@ -16,6 +16,128 @@ namespace FugaPET_Dev.Tests.Tela;
 public sealed class PesagemMultiplaItemFormTests
 {
     [Fact]
+    public async Task ExcluirPesagem_DurantePrimeiroAwait_BloqueiaSegundoDisparo()
+    {
+        TaskCompletionSource<bool> operacaoPendente = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource primeiroDisparo = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int chamadas = 0;
+        using PesagemMultiplaItemForm form = CriarFormComPesagemPersistida(async _ =>
+        {
+            Interlocked.Increment(ref chamadas);
+            primeiroDisparo.TrySetResult();
+            return await operacaoPendente.Task;
+        });
+
+        Task primeira = ExcluirPesagemSelecionadaAsync(form);
+        await primeiroDisparo.Task;
+        Task segunda = ExcluirPesagemSelecionadaAsync(form);
+
+        int chamadasDuranteEspera = Volatile.Read(ref chamadas);
+        bool itemHabilitadoDuranteEspera = ObterItemExcluir(form).Enabled;
+        operacaoPendente.SetResult(false);
+        await Task.WhenAll(primeira, segunda);
+
+        Assert.Equal(1, chamadasDuranteEspera);
+        Assert.False(itemHabilitadoDuranteEspera);
+        Assert.True(ObterItemExcluir(form).Enabled);
+        await ExcluirPesagemSelecionadaAsync(form);
+        Assert.Equal(2, Volatile.Read(ref chamadas));
+    }
+
+    [Fact]
+    public async Task ExcluirPesagem_CallbackLanca_LiberaGateNoFinally()
+    {
+        int chamadas = 0;
+        using PesagemMultiplaItemForm form = CriarFormComPesagemPersistida(_ =>
+        {
+            Interlocked.Increment(ref chamadas);
+            throw new InvalidOperationException("falha focal");
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ExcluirPesagemSelecionadaAsync(form));
+        Assert.True(ObterItemExcluir(form).Enabled);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ExcluirPesagemSelecionadaAsync(form));
+        Assert.Equal(2, chamadas);
+    }
+
+    [Fact]
+    public async Task ExcluirPesagem_CallbackRetornaFalse_NaoDeixaGateTravado()
+    {
+        int chamadas = 0;
+        using PesagemMultiplaItemForm form = CriarFormComPesagemPersistida(_ =>
+        {
+            chamadas++;
+            return Task.FromResult(false);
+        });
+
+        await ExcluirPesagemSelecionadaAsync(form);
+        await ExcluirPesagemSelecionadaAsync(form);
+
+        Assert.Equal(2, chamadas);
+        Assert.True(ObterItemExcluir(form).Enabled);
+    }
+
+    // 058: o menu "Excluir pesagem" deve ser materializado também no fluxo do LOTE ATIVO em memória
+    // (construtor canônico) — o mesmo caminho usado por AbrirPesagemMultiplaParaLinhaAsync — quando o pai
+    // fornece o callback (permissão presente). Antes do fix, o construtor canônico não encaminhava o callback.
+    [Fact]
+    public void ExcluirPesagem_FluxoLoteAtivoCanonico_ComPermissao_MaterializaAcao()
+    {
+        using PesagemMultiplaItemForm form = CriarFormCanonicoComExclusao(
+            PesagemCanonicaPersistida(90, 1, 10m, 0.05m, 9.95m),
+            _ => Task.FromResult(true));
+
+        ContextMenuStrip? menu = ObterMenuExcluir(form);
+        Assert.NotNull(menu);
+        Assert.Equal("Excluir pesagem", menu!.Items[0].Text);
+    }
+
+    // Sem permissão (callback nulo) o menu NÃO é materializado nem no fluxo canônico — a regra de negócio
+    // permanece no pai; o Form apenas reflete a presença do callback autorizado.
+    [Fact]
+    public void ExcluirPesagem_FluxoLoteAtivoCanonico_SemPermissao_NaoMaterializaAcao()
+    {
+        using PesagemMultiplaItemForm form = CriarFormCanonicoComExclusao(
+            PesagemCanonicaPersistida(90, 1, 10m, 0.05m, 9.95m),
+            excluirPesagemAsync: null);
+
+        Assert.Null(ObterMenuExcluir(form));
+    }
+
+    // Pesagem recuperada já persistida (carrega PK): a exclusão delega ao pai com a PK correta.
+    [Fact]
+    public async Task ExcluirPesagem_FluxoLoteAtivoCanonico_PesagemPersistida_DelegaComPk()
+    {
+        long? pkRecebida = null;
+        using PesagemMultiplaItemForm form = CriarFormCanonicoComExclusao(
+            PesagemCanonicaPersistida(90, 1, 10m, 0.05m, 9.95m),
+            pesagem => { pkRecebida = pesagem.CodigoEntradaProdutoPesagem; return Task.FromResult(true); });
+        DataGridView grid = ObterGrid(form);
+        grid.CurrentCell = grid.Rows[0].Cells[0];
+
+        await ExcluirPesagemSelecionadaAsync(form);
+
+        Assert.Equal(90, pkRecebida);
+    }
+
+    // Prova de wiring no pai: AMBOS os pontos de abertura da janela na Entrada passam o callback de exclusão,
+    // cada um gated pela permissão EXATA EXCLUIR_PESAGEM (sem hardcode Enabled/visível).
+    [Fact]
+    public void ProcessoEntrada_AmbosOsCaminhosDeAbertura_PassamCallbackDeExclusaoSobPermissaoExata()
+    {
+        string src = LerArquivo("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
+        Assert.Equal(2, ContarOcorrencias(src, "excluirPesagemAsync: excluirPesagem"));
+        Assert.Equal(2, ContarOcorrencias(src, "PossuiPermissaoEntrada(PermissoesSistema.Acoes.ExcluirPesagem)"));
+
+        // o fluxo do lote ativo (canônico) também reidrata após exclusão e encaminha o callback.
+        int abrir = src.IndexOf("private async Task AbrirPesagemMultiplaParaLinhaAsync", StringComparison.Ordinal);
+        int fim = src.IndexOf("private async Task<bool> TentarReimprimirEtiquetaPesagemAsync", abrir, StringComparison.Ordinal);
+        string corpo = src.Substring(abrir, fim - abrir);
+        Assert.Contains("excluirPesagemAsync: excluirPesagem", corpo, StringComparison.Ordinal);
+        Assert.Contains("ReidratarAposExclusaoPesagemAsync()", corpo, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Concluir_IncorporaPesoManualPendente_SemImprimirConsolidado()
     {
         string conteudo = LerArquivo("Tela", "Processo", "PesagemMultiplaItemForm.cs");
@@ -740,6 +862,91 @@ public sealed class PesagemMultiplaItemFormTests
         => (DataGridView)typeof(PesagemMultiplaItemForm)
             .GetField("_pesagensGrid", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(form)!;
+
+    private static PesagemMultiplaItemForm CriarFormComPesagemPersistida(
+        Func<EntradaProdutoPesagem, Task<bool>> excluirPesagemAsync)
+    {
+        PesagemMultiplaItemForm form = new(
+            CriarBalanca(),
+            "4500001/10",
+            CriarTara(),
+            null,
+            [new EntradaProdutoPesagem
+            {
+                CodigoEntradaProdutoPesagem = 55,
+                Sequencia = 1,
+                PesoBrutoKg = 2m,
+                PesoLiquidoKg = 2m,
+                StatusPesagem = EntradaProdutoPesagemCalculos.StatusValida
+            }],
+            excluirPesagemAsync: excluirPesagemAsync);
+        DataGridView grid = ObterGrid(form);
+        grid.CurrentCell = grid.Rows[0].Cells[0];
+        return form;
+    }
+
+    private static async Task ExcluirPesagemSelecionadaAsync(PesagemMultiplaItemForm form)
+    {
+        MethodInfo metodo = typeof(PesagemMultiplaItemForm)
+            .GetMethod("ExcluirPesagemSelecionadaAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await (Task)metodo.Invoke(form, null)!;
+    }
+
+    private static ToolStripMenuItem ObterItemExcluir(PesagemMultiplaItemForm form)
+        => (ToolStripMenuItem)ObterGrid(form).ContextMenuStrip!.Items[0];
+
+    // 058: acessor null-safe — o menu só existe quando o callback de exclusão foi fornecido.
+    private static ContextMenuStrip? ObterMenuExcluir(PesagemMultiplaItemForm form)
+        => ObterGrid(form).ContextMenuStrip;
+
+    // 058: pesagem canônica (lote ativo em memória) que já carrega a PK persistida — cenário do gate.
+    private static EntradaProdutoPesagemEmMemoria PesagemCanonicaPersistida(
+        long pk, int sequencia, decimal bruto, decimal tara, decimal liquido)
+        => new()
+        {
+            CodigoLocalPesagem = Guid.NewGuid(),
+            Pesagem = new EntradaProdutoPesagem
+            {
+                CodigoEntradaProdutoPesagem = pk,
+                Sequencia = sequencia,
+                PesoBrutoKg = bruto,
+                PesoTaraKg = tara,
+                PesoLiquidoKg = liquido,
+                Origem = EntradaProdutoPesagemCalculos.OrigemManual,
+                LeituraOriginal = bruto.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                StatusPesagem = EntradaProdutoPesagemCalculos.StatusValida,
+                PesadoEm = new DateTimeOffset(2026, 9, 9, 8, sequencia, 0, TimeSpan.Zero)
+            }
+        };
+
+    // 058: cria o Form pelo construtor CANÔNICO (mesmo usado por AbrirPesagemMultiplaParaLinhaAsync),
+    // encaminhando o callback de exclusão.
+    private static PesagemMultiplaItemForm CriarFormCanonicoComExclusao(
+        EntradaProdutoPesagemEmMemoria pesagem,
+        Func<EntradaProdutoPesagem, Task<bool>>? excluirPesagemAsync)
+        => new(
+            CriarBalanca(),
+            "4500001/10",
+            CriarTara(),
+            null,
+            [pesagem],
+            RegistrarPadrao,
+            guid => Task.FromResult(pesagem.ComStatus(EntradaProdutoPesagemCalculos.StatusCancelada)),
+            imprimirPesagemAsync: null,
+            reimprimirPesagemAsync: null,
+            excluirPesagemAsync: excluirPesagemAsync);
+
+    private static int ContarOcorrencias(string texto, string alvo)
+    {
+        int total = 0;
+        int indice = 0;
+        while ((indice = texto.IndexOf(alvo, indice, StringComparison.Ordinal)) >= 0)
+        {
+            total++;
+            indice += alvo.Length;
+        }
+        return total;
+    }
 
     private static Button ObterBotao(PesagemMultiplaItemForm form, string nomeCampo)
         => (Button)typeof(PesagemMultiplaItemForm)

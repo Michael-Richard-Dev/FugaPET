@@ -1,4 +1,4 @@
-using FugaPET_Dev.Controle.Processo;
+﻿using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
@@ -90,7 +90,8 @@ public sealed class ProcessoProdutoAcabadoTests
                     Centro = "3007",
                     Deposito = "PA01",
                     QuantidadePrevista = 10m,
-                    QuantidadeEntregue = 10m,
+                    QuantidadePrevistaSap = 10m,
+                    QuantidadeRecebidaSap = 10m,
                     Unidade = "KG",
                     Lote = "L001"
                 }
@@ -186,7 +187,7 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("RegistrarPesoManualAsync", form, StringComparison.Ordinal);
         Assert.Contains("GarantirTaraCaixaSelecionadaAsync", form, StringComparison.Ordinal);
         Assert.Contains("decimal pesoLiquidoKg = pesoBrutoKg - taraKg;", form, StringComparison.Ordinal);
-        Assert.Contains("await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, \"BALANCA\")", form, StringComparison.Ordinal);
+        Assert.Contains("await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, \"BALANCA\", leitura.CodigoBalanca)", form, StringComparison.Ordinal);
         Assert.Contains("await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, \"MANUAL\")", form, StringComparison.Ordinal);
         Assert.Contains("Peso total das caixas ultrapassa o saldo pendente da OP.", form, StringComparison.Ordinal);
         // Tarefa 21.6 (Ajuste 6): colunas separadas (sem cabecalho combinado Tara/Líquido ou Origem/Status).
@@ -284,7 +285,28 @@ public sealed class ProcessoProdutoAcabadoTests
     [Fact]
     public void Palete_DeveGerarPreviewComHandlingUnitsESemPost()
     {
-        ProdutoAcabadoController controller = new(new ProductionOrderSapFakeServico(OrdemSapValida()));
+        // GATE 126V: a composicao outbound exige tara fisica resolvida por mandante + centro + material.
+        ProdutoAcabadoController controller = new(
+            new ProductionOrderSapFakeServico(OrdemSapValida()),
+            configuracaoSap: new ConfiguracaoSap
+            {
+                SapClient = "110",
+                // GATE 126X: identidade QAS110 exige perfil Q reconhecido + destino SAP Q validado.
+                PerfilLocalQ = true,
+                BaseUrl = $"https://{Servicos.Ambiente.ValidadorAmbienteQ.SapHostEsperado}:{Servicos.Ambiente.ValidadorAmbienteQ.SapPortaEsperada}/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
+                HostsPermitidos = [Servicos.Ambiente.ValidadorAmbienteQ.SapHostEsperado],
+                TarasFisicasEmbalagemPalete =
+                [
+                    new()
+                    {
+                        SapClient = "110",
+                        Centro = "3007",
+                        MaterialEmbalagem = "PACK_TEST_001",
+                        PesoKg = 1.000m,
+                        Unidade = "KG"
+                    }
+                ]
+            });
         ProdutoAcabadoCaixa caixa1 = Caixa(1, 10m, 1m, 9m);
         ProdutoAcabadoCaixa caixa2 = Caixa(2, 11m, 1m, 10m);
         ProdutoAcabadoPalete palete = controller.MontarPalete(
@@ -299,10 +321,13 @@ public sealed class ProcessoProdutoAcabadoTests
 
         Assert.True(preview.Sucesso);
         Assert.NotNull(preview.Payload);
-        Assert.Equal("PLT-1000909-0001-0002", preview.Payload!.HandlingUnitExternalID);
-        Assert.Equal(21m, preview.Payload.GrossWeight);
+        Assert.Equal("$1", preview.Payload!.HandlingUnitExternalID);
+        // GATE 126V: outbound = local + tara fisica (1.000). Local permanece 21/19/2; o liquido nao muda.
+        Assert.Equal(22m, preview.Payload.GrossWeight);
         Assert.Equal(19m, preview.Payload.NetWeight);
-        Assert.Equal(2m, preview.Payload.TareWeight);
+        Assert.Equal(3m, preview.Payload.TareWeight);
+        Assert.Equal(21m, palete.PesoBrutoKg); // rascunho local NAO alterado
+        Assert.Equal(2m, palete.TaraKg);
         Assert.Equal("KG", preview.Payload.WeightUnit);
         Assert.Equal("3007", preview.Payload.Plant);
         Assert.Equal("PA01", preview.Payload.StorageLocation);
@@ -476,7 +501,7 @@ public sealed class ProcessoProdutoAcabadoTests
     {
         // §9/§11.E: material de embalagem por origem controlada (nunca PALLET01); preview inválido bloqueia add.
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        string registrar = ExtrairMetodo(form, "private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem)");
+        string registrar = ExtrairMetodo(form, "private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem,");
 
         Assert.Contains("ObterMaterialEmbalagemCaixaControlada()", registrar, StringComparison.Ordinal);
         Assert.Contains("await _controller.FinalizarCaixaLocalAsync(", registrar, StringComparison.Ordinal);
@@ -563,7 +588,7 @@ public sealed class ProcessoProdutoAcabadoTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
         string registrar = ExtrairMetodo(
             form,
-            "private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem)");
+            "private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem,");
         // §1: delega ao Controller/Service persistente (nunca transição manual de estado persistente).
         int delegacao = registrar.IndexOf("await _controller.FinalizarCaixaLocalAsync(", StringComparison.Ordinal);
         int atualizacaoVisual = registrar.IndexOf("AtualizarBotoesOperacao();", StringComparison.Ordinal);
@@ -763,7 +788,8 @@ public sealed class ProcessoProdutoAcabadoTests
                     Centro = "3007",
                     Deposito = "PA01",
                     QuantidadePrevista = 10m,
-                    QuantidadeEntregue = 2m,
+                    QuantidadePrevistaSap = 10m,
+                    QuantidadeRecebidaSap = 2m,
                     Unidade = "KG",
                     Lote = "L001"
                 }
@@ -778,7 +804,7 @@ public sealed class ProcessoProdutoAcabadoTests
             Centro = "3007",
             DepositoDestino = "PA01",
             QuantidadePlanejada = 10m,
-            QuantidadeEntregue = 2m,
+            QuantidadeRecebidaSap = 2m,
             QuantidadePendente = 8m,
             Unidade = unidade,
             Lote = "L001",
@@ -1185,6 +1211,8 @@ public sealed class ProcessoProdutoAcabadoTests
             => Task.FromResult(ResultadoConsultaOrdemProducaoSap.Encontrada(_ordem));
     }
 }
+
+
 
 
 

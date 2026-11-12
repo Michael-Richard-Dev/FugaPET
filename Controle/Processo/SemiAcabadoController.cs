@@ -101,6 +101,18 @@ public sealed class SemiAcabadoController
         CancellationToken cancellationToken = default)
         => _semiAcabadoServico.SalvarEEnviarSap101Async(lancamento, cancellationToken);
 
+    // GATE 104C-D: identidade durável ANTES de armar a capability (persiste/recupera a PK; sem armar/claim/HTTP).
+    public Task<PreparacaoEnvioSemiAcabado> PrepararEnvio101Async(
+        LancamentoSemiAcabado lancamento,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.PrepararEnvio101Async(lancamento, cancellationToken);
+
+    // GATE 104C-D: envio do MESMO lançamento preparado (claim → writer one-shot → POST). Chamar após armar.
+    public Task<ResultadoEnvioSemiAcabadoSap> EnviarPreparado101Async(
+        PreparacaoEnvioSemiAcabado preparo,
+        CancellationToken cancellationToken = default)
+        => _semiAcabadoServico.EnviarPreparado101Async(preparo, cancellationToken);
+
     public Task<LancamentoSemiAcabado?> ObterLancamentoCompletoAsync(
         long codigoLancamento,
         CancellationToken cancellationToken = default)
@@ -159,7 +171,14 @@ public sealed class SemiAcabadoController
     private static SemiAcabadoOrdem MapearItem(OrdemProducaoSap ordemSap, ItemOrdemProducaoSap? item)
     {
         decimal planejada = item?.QuantidadePrevista ?? ordemSap.QuantidadePrevista;
-        decimal entregue = item?.QuantidadeEntregue ?? 0m;
+
+        // GATE 118B: a leitura de MfgOrderItemActualDeliveryQty foi removida do cliente porque esse
+        // campo NAO EXISTE no contrato real — logo esta linha SEMPRE valeu 0 aqui. O Semi-Acabado esta
+        // FORA do escopo 118B e este valor e PERSISTIDO (quantidade_entregue_kg); trocar a semantica
+        // dele agora mudaria dado gravado. Preservamos o comportamento vigente (zero) de forma
+        // EXPLICITA, sem coalescencia silenciosa de um campo inexistente.
+        // DIVIDA REGISTRADA: apontar o Semi-Acabado para MfgOrderItemGoodsReceiptQty exige gate proprio.
+        const decimal entregue = 0m;
         decimal pendente = Math.Max(planejada - entregue, 0m);
         bool encerrada = ordemSap.Confirmada || ordemSap.Excluida;
 
@@ -223,4 +242,5 @@ public sealed class ResultadoConsultaSemiAcabado
     public static ResultadoConsultaSemiAcabado Falha(string mensagem)
         => new(false, mensagem, string.Empty, []);
 }
+
 

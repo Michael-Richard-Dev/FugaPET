@@ -16,6 +16,18 @@ public sealed record OperacaoRoteiroSap
 
     /// <summary>True quando a propriedade OperationStandardTextCode foi realmente lida (mesmo vazia).</summary>
     public bool TextoPadraoObtido { get; init; }
+
+    /// <summary>
+    /// GATE 095F (seam 095E-R1): Plant (V3) da operacao de roteiro. Usado SOMENTE pela correlacao de ocorrencia
+    /// (CorrelacionadorOcorrenciaRoteiroSap), por Trim textual. NAO participa da regra PP_FORM.
+    /// </summary>
+    public string Plant { get; init; } = string.Empty;
+
+    /// <summary>
+    /// GATE 095F (seam 095E-R1): WorkCenter (V3) da operacao de roteiro. Usado SOMENTE pela correlacao de
+    /// ocorrencia, por Trim textual — NUNCA transformado numericamente. NAO participa da regra PP_FORM.
+    /// </summary>
+    public string WorkCenter { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -30,3 +42,4 @@ public sealed record RoteiroProducaoSap
     public string BillOfOperationsVariant { get; init; } = string.Empty;  // ProductionRouting (ex.: 1)
     public IReadOnlyList<OperacaoRoteiroSap> Operacoes { get; init; } = [];
 }
+

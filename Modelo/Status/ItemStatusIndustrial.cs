@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Status;
+namespace FugaPET_Dev.Modelo.Status;
 
 public sealed class ItemStatusIndustrial
 {

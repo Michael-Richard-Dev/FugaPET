@@ -30,6 +30,10 @@ public sealed class PesagemMultiplaItemForm : Form
     // não fala com banco/impressora diretamente. Devolvem true se a etiqueta foi impressa.
     private readonly Func<EntradaProdutoPesagem, Task<bool>>? _imprimirPesagemAsync;
     private readonly Func<EntradaProdutoPesagem, Task<bool>>? _reimprimirPesagemAsync;
+    // 054: EXCLUIR PESAGEM persistida (cancelamento lógico local). true = excluída → fecha e o pai recarrega.
+    private readonly Func<EntradaProdutoPesagem, Task<bool>>? _excluirPesagemAsync;
+    private ToolStripMenuItem? _itemExcluirPesagem;
+    private bool _exclusaoPesagemEmAndamento;
 
     // Modo somente consulta/reimpressão (lançamento já persistido): bloqueia incluir/cancelar.
     private readonly bool _somenteConsulta;
@@ -52,13 +56,15 @@ public sealed class PesagemMultiplaItemForm : Form
         IReadOnlyList<EntradaProdutoPesagem> pesagensAtuais,
         Func<EntradaProdutoPesagem, Task<bool>>? imprimirPesagemAsync = null,
         Func<EntradaProdutoPesagem, Task<bool>>? reimprimirPesagemAsync = null,
-        bool somenteConsulta = false)
+        bool somenteConsulta = false,
+        Func<EntradaProdutoPesagem, Task<bool>>? excluirPesagemAsync = null)
     {
         _balancaLeituraServico = balancaLeituraServico;
         _tara = tara;
         _codigoBalanca = codigoBalanca;
         _imprimirPesagemAsync = imprimirPesagemAsync;
         _reimprimirPesagemAsync = reimprimirPesagemAsync;
+        _excluirPesagemAsync = excluirPesagemAsync;
         _somenteConsulta = somenteConsulta;
         _pesagens.AddRange(pesagensAtuais);
 
@@ -102,12 +108,12 @@ public sealed class PesagemMultiplaItemForm : Form
         ConfigurarBotoes();
 
         _statusLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _statusLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        _statusLabel.ForeColor = Color.FromArgb(200, 78, 10);
         _statusLabel.Location = new Point(24, 404);
         _statusLabel.Size = new Size(470, 24);
         _totalValueLabel.AutoSize = true;
         _totalValueLabel.Font = new Font("Segoe UI", 20F, FontStyle.Bold);
-        _totalValueLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        _totalValueLabel.ForeColor = Color.FromArgb(200, 78, 10);
         _totalValueLabel.TextAlign = ContentAlignment.MiddleRight;
         // Posicao recalculada a cada atualizacao do total (AlinharTotalADireita),
         // para que valores grandes sempre apareçam inteiros, alinhados à direita.
@@ -139,7 +145,8 @@ public sealed class PesagemMultiplaItemForm : Form
         Func<decimal, string, string, Task<EntradaProdutoPesagemEmMemoria>> registrarPesagemAsync,
         Func<Guid, Task<EntradaProdutoPesagemEmMemoria>> cancelarPesagemAsync,
         Func<EntradaProdutoPesagem, Task<bool>>? imprimirPesagemAsync = null,
-        Func<EntradaProdutoPesagem, Task<bool>>? reimprimirPesagemAsync = null)
+        Func<EntradaProdutoPesagem, Task<bool>>? reimprimirPesagemAsync = null,
+        Func<EntradaProdutoPesagem, Task<bool>>? excluirPesagemAsync = null)
         : this(
             balancaLeituraServico,
             itemPedido,
@@ -150,7 +157,11 @@ public sealed class PesagemMultiplaItemForm : Form
                 .Select(p => p.Pesagem)
                 .ToList(),
             imprimirPesagemAsync,
-            reimprimirPesagemAsync)
+            reimprimirPesagemAsync,
+            // 058: encaminha o callback de exclusão também no fluxo do lote ativo em memória (pesagens
+            // recuperadas já persistidas). O menu só aparece quando o pai fornece o callback = permissão presente.
+            somenteConsulta: false,
+            excluirPesagemAsync: excluirPesagemAsync)
     {
         _modoCanonico = true;
         _registrarPesagemCanonicaAsync = registrarPesagemAsync ?? throw new ArgumentNullException(nameof(registrarPesagemAsync));
@@ -189,6 +200,84 @@ public sealed class PesagemMultiplaItemForm : Form
 
         // Duplo clique reimprime SOMENTE aquela pesagem (regra definitiva). Permissão é validada no callback do pai.
         _pesagensGrid.CellDoubleClick += async (_, e) => await ReimprimirPesagemAsync(e.RowIndex);
+
+        // 054: EXCLUIR PESAGEM persistida via menu de contexto (só quando o pai fornece o callback = permissão presente).
+        if (_excluirPesagemAsync is not null)
+        {
+            ContextMenuStrip menu = new();
+            _itemExcluirPesagem = new ToolStripMenuItem("Excluir pesagem");
+            _itemExcluirPesagem.Click += async (_, _) => await ExcluirPesagemSelecionadaAsync();
+            menu.Items.Add(_itemExcluirPesagem);
+            _pesagensGrid.ContextMenuStrip = menu;
+            _pesagensGrid.CellMouseDown += (_, e) =>
+            {
+                if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.RowIndex < _pesagensGrid.Rows.Count)
+                {
+                    _pesagensGrid.ClearSelection();
+                    _pesagensGrid.Rows[e.RowIndex].Selected = true;
+                }
+            };
+        }
+    }
+
+    // 054: mapeia a linha selecionada para a pesagem PERSISTIDA (por PK) e delega ao callback do pai (que confirma,
+    // valida permissão, executa a transação e recarrega). Sucesso => fecha a janela para o pai reidratar.
+    private async Task ExcluirPesagemSelecionadaAsync()
+    {
+        if (_exclusaoPesagemEmAndamento ||
+            _excluirPesagemAsync is null ||
+            _pesagensGrid.CurrentRow is not DataGridViewRow linha)
+        {
+            return;
+        }
+
+        int indice = linha.Index;
+        if (indice < 0 || indice >= _pesagens.Count)
+        {
+            return;
+        }
+
+        EntradaProdutoPesagem pesagem = _pesagens[indice];
+        if (pesagem.CodigoEntradaProdutoPesagem is not long codigo || codigo <= 0)
+        {
+            return; // pesagem em memória (sem PK persistida) não é excluível por este fluxo.
+        }
+
+        _exclusaoPesagemEmAndamento = true;
+        AtualizarEstadoAcaoExcluirPesagem();
+        try
+        {
+            bool excluida = await _excluirPesagemAsync(pesagem);
+            if (excluida)
+            {
+                DialogResult = DialogResult.OK;
+                Close();
+            }
+        }
+        finally
+        {
+            _exclusaoPesagemEmAndamento = false;
+            if (!IsDisposed && !Disposing)
+            {
+                AtualizarEstadoAcaoExcluirPesagem();
+            }
+        }
+    }
+
+    private void AtualizarEstadoAcaoExcluirPesagem()
+    {
+        if (_itemExcluirPesagem is null)
+        {
+            return;
+        }
+
+        bool pesagemPersistidaSelecionada =
+            _pesagensGrid.CurrentRow is DataGridViewRow linha &&
+            linha.Index >= 0 &&
+            linha.Index < _pesagens.Count &&
+            _pesagens[linha.Index].CodigoEntradaProdutoPesagem is > 0;
+
+        _itemExcluirPesagem.Enabled = !_exclusaoPesagemEmAndamento && pesagemPersistidaSelecionada;
     }
 
     private void ConfigurarEntradaManual()
@@ -205,7 +294,7 @@ public sealed class PesagemMultiplaItemForm : Form
         ConfigurarBotao(_lerBalancaButton, "Ler balança", Color.FromArgb(34, 166, 82), Color.White, new Point(170, 370), new Size(112, 32));
         ConfigurarBotao(_adicionarManualButton, "Adicionar", Color.FromArgb(45, 49, 56), Color.White, new Point(294, 370), new Size(104, 32));
         ConfigurarBotao(_removerButton, "Cancelar leitura", Color.White, Color.FromArgb(45, 49, 56), new Point(410, 370), new Size(110, 32));
-        ConfigurarBotao(_concluirButton, "Concluir", Color.FromArgb(184, 18, 32), Color.White, new Point(500, 454), new Size(110, 36));
+        ConfigurarBotao(_concluirButton, "Concluir", Color.FromArgb(200, 78, 10), Color.White, new Point(500, 454), new Size(110, 36));
         ConfigurarBotao(_cancelarButton, "Fechar", Color.White, Color.FromArgb(45, 49, 56), new Point(620, 454), new Size(110, 36));
 
         _lerBalancaButton.Click += async (_, _) => await LerBalancaAsync();

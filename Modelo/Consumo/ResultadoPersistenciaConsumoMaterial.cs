@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Consumo;
+﻿namespace FugaPET_Dev.Modelo.Consumo;
 
 /// <summary>Cenarios do salvamento LOCAL do consumo (Tarefa 5).</summary>
 public enum CenarioPersistenciaConsumo

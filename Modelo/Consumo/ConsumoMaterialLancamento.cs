@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Consumo;
+﻿namespace FugaPET_Dev.Modelo.Consumo;
 
 /// <summary>
 /// Cabecalho do consumo LOCAL por OP (tabela consumo_material_lancamento). Persistencia local,

@@ -24,6 +24,12 @@ public sealed class ContextoApontamentoProcesso
     public string Estacao { get; init; } = string.Empty;
     public DateTime IniciadoEm { get; init; }
     public string CodigoBarrasInicio { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Perfil de Resultado do Apontamento ativo para a operação (quando a rota resolve TipoProcesso
+    /// RESULTADO_APONTAMENTO). Null quando não resolvido — o Resultado do Apontamento opera fail-closed.
+    /// </summary>
+    public long? CodigoPerfilResultado { get; init; }
 }
 
 /// <summary>

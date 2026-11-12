@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.AcessoDados.Banco;
+namespace FugaPET_Dev.AcessoDados.Banco;
 
 public static class EstadoIntegracaoBanco
 {

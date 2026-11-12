@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Rota de envio ao SAP de um LANCAMENTO/consumo salvo (agregada a partir dos componentes consumidos).

@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Seguranca;
+namespace FugaPET_Dev.Servicos.Seguranca;
 
 /// <summary>
 /// Fonte UNICA das strings de permissao (modulo / rotina / acao), espelhando o seed do
@@ -86,6 +86,8 @@ public static class PermissoesSistema
         public const string PesoManual = "PESO_MANUAL";
         public const string SincronizarCache = "SINCRONIZAR_CACHE";
         public const string EnviarSap = "ENVIAR_SAP";
+        public const string HabilitarEscritaSap = "HABILITAR_ESCRITA_SAP";
+        public const string ExcluirPesagem = "EXCLUIR_PESAGEM";
         public const string Visualizar = "VISUALIZAR";
         public const string Exportar = "EXPORTAR";
         public const string Liberar = "LIBERAR";

@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tela.Processo;
+﻿namespace FugaPET_Dev.Tela.Processo;
 
 public sealed class ConfirmarReimpressaoEtiquetaForm : Form
 {
@@ -33,7 +33,7 @@ public sealed class ConfirmarReimpressaoEtiquetaForm : Form
         };
 
         Button naoButton = CriarBotao("Não", Color.White, Color.FromArgb(45, 49, 56), new Point(178, 124));
-        Button simButton = CriarBotao("Sim", Color.FromArgb(184, 18, 32), Color.White, new Point(294, 124));
+        Button simButton = CriarBotao("Sim", Color.FromArgb(200, 78, 10), Color.White, new Point(294, 124));
 
         naoButton.DialogResult = DialogResult.No;
         simButton.DialogResult = DialogResult.Yes;

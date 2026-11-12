@@ -11,20 +11,18 @@ namespace FugaPET_Dev.Tests.Repositorio;
 
 public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
 {
-    private const string Schema = "desenvolvimento";
-    private const string DatabaseEsperado = "fuga_jales_local_desenvolvimento";
+    private const string Schema = "homologacao";
 
     private readonly string _prefixo = "IT_LOTE_" + Guid.NewGuid().ToString("N")[..12];
-    private FabricaConexaoEntradaLotesDev? _fabrica;
+    private FabricaConexaoEntradaLotesHml? _fabrica;
     private string? _motivoIgnorado;
     private string? _hostSanitizado;
+    private string? _databaseSanitizado;
     private int _portaSanitizada;
-    private readonly List<long> _lancamentosCriados = [];
-    private readonly List<string> _terminaisCriados = [];
 
     public async Task InitializeAsync()
     {
-        if (!BancoTesteEntradaLotesDev.TentarCriar(out FabricaConexaoEntradaLotesDev fabrica, out string motivo, out string host, out int porta))
+        if (!BancoTesteEntradaLotesHml.TentarCriar(out FabricaConexaoEntradaLotesHml fabrica, out string motivo, out string host, out int porta))
         {
             _motivoIgnorado = motivo;
             return;
@@ -32,11 +30,12 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
 
         _fabrica = fabrica;
         _hostSanitizado = host;
+        _databaseSanitizado = fabrica.Database;
         _portaSanitizada = porta;
 
         try
         {
-            await BancoTesteEntradaLotesDev.ValidarEstruturaObrigatoriaAsync(fabrica);
+            await BancoTesteEntradaLotesHml.ValidarEstruturaObrigatoriaAsync(fabrica);
         }
         catch (Exception ex)
         {
@@ -45,25 +44,10 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         }
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         EstadoSessaoUsuarioAtual.Limpar();
-
-        if (_fabrica is null)
-        {
-            return;
-        }
-
-        foreach (long codigoLancamento in _lancamentosCriados.Distinct())
-        {
-            await LimparLancamentoAsync(codigoLancamento);
-        }
-
-        foreach (string terminal in _terminaisCriados.Distinct(StringComparer.Ordinal))
-        {
-            await LimparPorTerminalAsync(terminal);
-            Assert.Equal(0, await ContarLancamentosPorTerminalAsync(terminal));
-        }
+        return Task.CompletedTask;
     }
 
     [EntradaLotesIntegrationFact]
@@ -85,12 +69,12 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         string? appUsuarioId = await repositorio.ObterAppUsuarioIdNaTransacaoAsync(usuario.CodigoUsuario);
 
         Assert.Equal(usuario.CodigoUsuario.ToString(), appUsuarioId);
-        Console.WriteLine($"[Entrada Lotes DEV] app.usuario_id validado. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={DatabaseEsperado}; Schema={Schema}; Usuario={usuario.CodigoUsuario}.");
+        Console.WriteLine($"[Entrada Lotes HML] app.usuario_id validado. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={_databaseSanitizado}; Schema={Schema}; Usuario={usuario.CodigoUsuario}.");
     }
 
     [EntradaLotesIntegrationFact]
     [Trait("Categoria", "IntegracaoEntradaLotes")]
-    public async Task RegistrarLancamentoComLotesAsync_DevePersistirArvoreRealEConsolidarPesosComRollbackIntegral()
+    public async Task RegistrarLancamentoComLotesAsync_DevePersistirArvoreRealEReverterFalhaParcial()
     {
         BancoConfigurado();
 
@@ -100,8 +84,6 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         DateTime dataReferencia = DateTime.Today;
         string terminalSucesso = _prefixo + "_OK";
         string terminalFalha = _prefixo + "_FAIL";
-        _terminaisCriados.Add(terminalSucesso);
-        _terminaisCriados.Add(terminalFalha);
 
         Guid codigoLocalLoteA = Guid.NewGuid();
         Guid codigoLocalLoteB = Guid.NewGuid();
@@ -137,7 +119,6 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
 
         EntradaProdutoRepositorio repositorio = new(_fabrica!);
         ResultadoPersistenciaEntradaComLotes resultado = await repositorio.RegistrarLancamentoComLotesAsync(entrada, contexto);
-        _lancamentosCriados.Add(resultado.CodigoLancamento);
 
         Assert.True(resultado.CodigoLancamento > 0);
         Assert.True(resultado.CodigosItensPorNumeroItemSap.TryGetValue(itemSap.NumeroItemNormalizado, out long codigoItemPersistido));
@@ -153,6 +134,7 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         await ValidarItemAsync(codigoItemPersistido, itemSap, usuario);
         await ValidarLotesAsync(resultado, usuario, dataReferencia, codigoLocalLoteA, codigoLocalLoteB, correlationLoteA, correlationLoteB, numeroLoteA, numeroLoteB);
         await ValidarPesagensAsync(resultado, usuario, dataReferencia, codigoLocalLoteA, codigoLocalLoteB, numeroLoteA, numeroLoteB);
+        await ValidarAuditoriaInsercaoAsync(resultado.CodigoLancamento, codigoItemPersistido, resultado.CodigosPesagensPorCodigoLocal.Values);
 
         EntradaProdutoLancamentoComLotesPersistencia entradaComFalha = CriarEntrada(itemSap, setor, terminalFalha,
         [
@@ -171,7 +153,7 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         Assert.Equal(0, lotesFalha);
         Assert.Equal(0, pesagensFalha);
 
-        Console.WriteLine($"[Entrada Lotes DEV] Persistencia OK. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={DatabaseEsperado}; Schema={Schema}; Lancamento={resultado.CodigoLancamento}; Item={codigoItemPersistido}; Lotes={resultado.CodigosLotesPorCodigoLocal.Count}; Pesagens={resultado.CodigosPesagensPorCodigoLocal.Count}; TotalItem=18.000.");
+        Console.WriteLine($"[Entrada Lotes HML] Persistencia e auditoria OK. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={_databaseSanitizado}; Schema={Schema}; Lancamento={resultado.CodigoLancamento}; Item={codigoItemPersistido}; Lotes={resultado.CodigosLotesPorCodigoLocal.Count}; Pesagens={resultado.CodigosPesagensPorCodigoLocal.Count}; TotalItem=18.000.");
     }
 
     [EntradaLotesIntegrationFact]
@@ -186,8 +168,6 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         DateTime dataReferencia = DateTime.Today;
         string terminal = _prefixo + "_IDEMP";
         string terminalParcial = _prefixo + "_PARC";
-        _terminaisCriados.Add(terminal);
-        _terminaisCriados.Add(terminalParcial);
 
         Guid codigoLocalLoteA = Guid.NewGuid();
         Guid codigoLocalLoteB = Guid.NewGuid();
@@ -220,7 +200,6 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
 
         ResultadoPersistenciaEntradaComLotes primeira =
             await repositorio.RegistrarOuRecuperarLancamentoComLotesAsync(entrada, contexto);
-        _lancamentosCriados.Add(primeira.CodigoLancamento);
 
         // Segunda chamada: MESMA árvore, porém com o JSONB reordenado (equivalente) → deve RECUPERAR.
         EntradaProdutoLancamentoComLotesPersistencia recuperacaoEquivalente = CriarEntrada(itemSap, setor, terminal,
@@ -284,7 +263,7 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         Assert.Contains("parte das correlações", erroParcial.MensagemUsuario, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, await ContarLancamentosPorTerminalAsync(terminalParcial));
 
-        Console.WriteLine($"[Entrada Lotes DEV] Idempotencia por correlation_id + JSONB semantico OK. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={DatabaseEsperado}; Schema={Schema}; Lancamento={primeira.CodigoLancamento}.");
+        Console.WriteLine($"[Entrada Lotes HML] Idempotencia por correlation_id + JSONB semantico OK. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={_databaseSanitizado}; Schema={Schema}; Lancamento={primeira.CodigoLancamento}.");
     }
     // Runtime skip REAL: o xUnit v2 (core 2.9.3) não expõe Assert.Skip (SkipException.ForSkip só funciona em
     // v3). O mecanismo equivalente aqui é o skip em tempo de DESCOBERTA: EntradaLotesDoisItensIntegrationFact
@@ -306,7 +285,6 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         (ItemSapTeste itemA, ItemSapTeste itemB) = dois.Value;
         DateTime dataReferencia = DateTime.Today;
         string terminal = _prefixo + "_OMIT";
-        _terminaisCriados.Add(terminal);
 
         Guid correlationA = Guid.NewGuid();
         Guid correlationB = Guid.NewGuid();
@@ -317,7 +295,6 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
 
         ResultadoPersistenciaEntradaComLotes primeira =
             await repositorio.RegistrarOuRecuperarLancamentoComLotesAsync(completa, contexto);
-        _lancamentosCriados.Add(primeira.CodigoLancamento);
         Assert.False(primeira.PersistenciaRecuperada);
         Assert.Equal(2, primeira.CodigosItensPorNumeroItemSap.Count);
 
@@ -349,14 +326,14 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         Assert.Equal(2, itensTerminal);
         Assert.Equal(2, lotesTerminal);
 
-        Console.WriteLine($"[Entrada Lotes DEV] Repeticao omitindo item rejeitada. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={DatabaseEsperado}; Schema={Schema}; Lancamento={primeira.CodigoLancamento}.");
+        Console.WriteLine($"[Entrada Lotes HML] Repeticao omitindo item rejeitada. Host={_hostSanitizado}; Porta={_portaSanitizada}; Database={_databaseSanitizado}; Schema={Schema}; Lancamento={primeira.CodigoLancamento}.");
     }
 
     private void BancoConfigurado()
     {
         if (_fabrica is null)
         {
-            throw new InvalidOperationException($"Teste de integracao Entrada Lotes indisponivel: {_motivoIgnorado ?? "banco DEV nao configurado."}");
+            throw new InvalidOperationException($"Teste de integracao Entrada Lotes indisponivel: {_motivoIgnorado ?? "banco HML nao configurado."}");
         }
     }
 
@@ -829,50 +806,35 @@ public sealed class EntradaProdutoLotesIntegracaoBancoTests : IAsyncLifetime
         Assert.True(await leitor.ReadAsync());
         return (leitor.GetInt32(0), leitor.GetInt32(1), leitor.GetInt32(2), leitor.GetInt32(3));
     }
-    private async Task LimparLancamentoAsync(long codigoLancamento)
+    private async Task ValidarAuditoriaInsercaoAsync(
+        long codigoLancamento,
+        long codigoItem,
+        IEnumerable<long> codigosPesagens)
     {
         const string sql = """
-            DELETE FROM entrada_produto_pesagem
-             WHERE codigo_entrada_produto_item IN (
-                   SELECT codigo_entrada_produto_item FROM entrada_produto_item WHERE codigo_entrada_produto_lancamento = @codigo_lancamento);
-            DELETE FROM entrada_produto_lote
-             WHERE codigo_entrada_produto_item IN (
-                   SELECT codigo_entrada_produto_item FROM entrada_produto_item WHERE codigo_entrada_produto_lancamento = @codigo_lancamento);
-            DELETE FROM entrada_produto_item WHERE codigo_entrada_produto_lancamento = @codigo_lancamento;
-            DELETE FROM entrada_produto_lancamento WHERE codigo_entrada_produto_lancamento = @codigo_lancamento;
+            SELECT tabela, count(*)::int
+              FROM homologacao.log_alteracao_cadastral
+             WHERE operacao = 'INSERT'
+               AND ((tabela = 'entrada_produto_lancamento' AND codigo_registro = @codigo_lancamento)
+                 OR (tabela = 'entrada_produto_item' AND codigo_registro = @codigo_item)
+                 OR (tabela = 'entrada_produto_pesagem' AND codigo_registro = ANY(@codigos_pesagens)))
+             GROUP BY tabela;
             """;
         await using NpgsqlConnection conexao = await _fabrica!.CriarConexaoAbertaAsync();
         await using NpgsqlCommand comando = new(sql, conexao);
         comando.Parameters.AddWithValue("@codigo_lancamento", codigoLancamento);
-        await comando.ExecuteNonQueryAsync();
-    }
+        comando.Parameters.AddWithValue("@codigo_item", codigoItem);
+        comando.Parameters.AddWithValue("@codigos_pesagens", NpgsqlDbType.Array | NpgsqlDbType.Bigint, codigosPesagens.ToArray());
+        Dictionary<string, int> auditorias = new(StringComparer.Ordinal);
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync();
+        while (await leitor.ReadAsync())
+        {
+            auditorias[leitor.GetString(0)] = leitor.GetInt32(1);
+        }
 
-    private async Task LimparPorTerminalAsync(string terminal)
-    {
-        const string sql = """
-            DELETE FROM entrada_produto_pesagem
-             WHERE codigo_entrada_produto_item IN (
-                   SELECT item.codigo_entrada_produto_item
-                     FROM entrada_produto_item item
-                     JOIN entrada_produto_lancamento lancamento
-                       ON lancamento.codigo_entrada_produto_lancamento = item.codigo_entrada_produto_lancamento
-                    WHERE lancamento.terminal = @terminal);
-            DELETE FROM entrada_produto_lote
-             WHERE codigo_entrada_produto_item IN (
-                   SELECT item.codigo_entrada_produto_item
-                     FROM entrada_produto_item item
-                     JOIN entrada_produto_lancamento lancamento
-                       ON lancamento.codigo_entrada_produto_lancamento = item.codigo_entrada_produto_lancamento
-                    WHERE lancamento.terminal = @terminal);
-            DELETE FROM entrada_produto_item
-             WHERE codigo_entrada_produto_lancamento IN (
-                   SELECT codigo_entrada_produto_lancamento FROM entrada_produto_lancamento WHERE terminal = @terminal);
-            DELETE FROM entrada_produto_lancamento WHERE terminal = @terminal;
-            """;
-        await using NpgsqlConnection conexao = await _fabrica!.CriarConexaoAbertaAsync();
-        await using NpgsqlCommand comando = new(sql, conexao);
-        comando.Parameters.AddWithValue("@terminal", terminal);
-        await comando.ExecuteNonQueryAsync();
+        Assert.True(auditorias.GetValueOrDefault("entrada_produto_lancamento") >= 1);
+        Assert.True(auditorias.GetValueOrDefault("entrada_produto_item") >= 1);
+        Assert.True(auditorias.GetValueOrDefault("entrada_produto_pesagem") >= 1);
     }
 
     private sealed record UsuarioTeste(long CodigoUsuario, string LoginUsuario);
@@ -905,20 +867,10 @@ internal class EntradaLotesIntegrationFactAttribute : FactAttribute
 {
     public EntradaLotesIntegrationFactAttribute()
     {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(BancoTesteEntradaLotesDev.VariavelConnectionString)))
+        string? motivo = BancoTesteEntradaLotesHml.ObterMotivoOptInIncompleto();
+        if (motivo is not null)
         {
-            Skip =
-                $"Teste de integracao Entrada Lotes ignorado: variavel {BancoTesteEntradaLotesDev.VariavelConnectionString} nao configurada.";
-        }
-        else if (!string.Equals(Environment.GetEnvironmentVariable(BancoTesteEntradaLotesDev.VariavelPermitirEntradaLotesReal)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            Skip =
-                $"Teste de integracao Entrada Lotes ignorado: defina {BancoTesteEntradaLotesDev.VariavelPermitirEntradaLotesReal}=true para autorizar.";
-        }
-        else if (!string.Equals(Environment.GetEnvironmentVariable(BancoTesteEntradaLotesDev.VariavelConfirmarDatabase)?.Trim(), "fuga_jales_local_desenvolvimento", StringComparison.Ordinal))
-        {
-            Skip =
-                $"Teste de integracao Entrada Lotes ignorado: confirme {BancoTesteEntradaLotesDev.VariavelConfirmarDatabase}=fuga_jales_local_desenvolvimento.";
+            Skip = $"Teste de integracao Entrada Lotes ignorado: {motivo}";
         }
     }
 }
@@ -976,17 +928,17 @@ public sealed class EntradaLotesDoisItensSkipTests
 
 /// <summary>
 /// Herda todo o gate de opt-in de <see cref="EntradaLotesIntegrationFactAttribute"/> e, quando o opt-in está
-/// autorizado, faz um skip REAL em tempo de descoberta se o banco DEV não tiver um pedido com dois itens SAP
+/// autorizado, faz um skip REAL em tempo de descoberta se o banco HML não tiver um pedido com dois itens SAP
 /// elegíveis — condição indispensável ao cenário de repetição omitindo item. Sem dados ⇒ teste IGNORADO com
 /// motivo objetivo (nunca aprovado sem executar o cenário).
 /// </summary>
 internal sealed class EntradaLotesDoisItensIntegrationFactAttribute : EntradaLotesIntegrationFactAttribute
 {
     public const string MotivoSemDados =
-        "Nenhum pedido com dois itens SAP elegiveis foi encontrado no cache DEV.";
+        "Nenhum pedido com dois itens SAP elegiveis foi encontrado no cache HML.";
 
     public const string MensagemFalhaTecnica =
-        "Falha técnica ao verificar a disponibilidade de pedido DEV com dois itens.";
+        "Falha técnica ao verificar a disponibilidade de pedido HML com dois itens.";
 
     public EntradaLotesDoisItensIntegrationFactAttribute()
     {
@@ -1025,69 +977,106 @@ internal sealed class EntradaLotesDoisItensIntegrationFactAttribute : EntradaLot
 
     private static bool VerificarExistenciaPedidoDoisItens()
     {
-        if (!BancoTesteEntradaLotesDev.TentarCriar(out FabricaConexaoEntradaLotesDev fabrica, out _, out _, out _))
+        if (!BancoTesteEntradaLotesHml.TentarCriar(out FabricaConexaoEntradaLotesHml fabrica, out _, out _, out _))
         {
             // Opt-in passou na base mas a fábrica recusou (ex.: Database divergente): falha de configuração.
-            throw new InvalidOperationException("Banco DEV indisponível para verificar pedido com dois itens.");
+            throw new InvalidOperationException("Banco HML indisponível para verificar pedido com dois itens.");
         }
 
-        return BancoTesteEntradaLotesDev.ExistePedidoComDoisItensAsync(fabrica).GetAwaiter().GetResult();
+        return BancoTesteEntradaLotesHml.ExistePedidoComDoisItensAsync(fabrica).GetAwaiter().GetResult();
     }
 }
 
-internal static class BancoTesteEntradaLotesDev
+internal static class BancoTesteEntradaLotesHml
 {
-    public const string VariavelConnectionString = "FUGAPET_DEV_TESTE_CONNECTION_STRING";
-    public const string VariavelPermitirEntradaLotesReal = "FUGAPET_DEV_PERMITIR_ENTRADA_LOTES_REAL";
-    public const string VariavelConfirmarDatabase = "FUGAPET_DEV_CONFIRMAR_DATABASE";
-    private const string DatabaseEsperado = "fuga_jales_local_desenvolvimento";
-    private const string Schema = "desenvolvimento";
+    public const string VariavelConnectionString = "FUGAPET_HML_TESTE_CONNECTION_STRING";
+    public const string VariavelPermitirEntradaLotesReal = "FUGAPET_HML_PERMITIR_ENTRADA_LOTES_REAL";
+    public const string VariavelConfirmarDatabaseDescartavel = "FUGAPET_HML_CONFIRMAR_DATABASE_DESCARTAVEL";
+    public const string VariavelConfirmarDescarteTotal = "FUGAPET_HML_CONFIRMAR_DESCARTE_TOTAL";
+    public const string PrefixoDatabaseDescartavel = "fuga_jales_local_homologacao_v1_2_teste_4g_";
+    public const string DatabaseCanonicoBloqueado = "fuga_jales_local_homologacao_v1_2";
+    public const string RoleAplicacaoObrigatoria = "fugapet_hml_app";
+    private const string Schema = "homologacao";
+    private static readonly SemaphoreSlim GatePrecheckBancoNovo = new(1, 1);
+    private static bool _precheckBancoNovoConcluido;
 
     public static bool OptInConfigurado()
-        => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(VariavelConnectionString))
-           && string.Equals(Environment.GetEnvironmentVariable(VariavelPermitirEntradaLotesReal)?.Trim(), "true", StringComparison.OrdinalIgnoreCase)
-           && string.Equals(Environment.GetEnvironmentVariable(VariavelConfirmarDatabase)?.Trim(), DatabaseEsperado, StringComparison.Ordinal);
+        => ObterMotivoOptInIncompleto() is null;
 
-    public static bool TentarCriar(out FabricaConexaoEntradaLotesDev fabrica, out string motivo, out string host, out int porta)
+    public static string? ObterMotivoOptInIncompleto()
     {
-        fabrica = null!;
-        host = string.Empty;
-        porta = 0;
-        string? connectionString = Environment.GetEnvironmentVariable(VariavelConnectionString);
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(VariavelConnectionString)))
         {
-            motivo = $"Variavel {VariavelConnectionString} nao configurada.";
-            return false;
+            return $"variavel {VariavelConnectionString} nao configurada.";
         }
 
         if (!string.Equals(Environment.GetEnvironmentVariable(VariavelPermitirEntradaLotesReal)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
         {
-            motivo = $"Defina {VariavelPermitirEntradaLotesReal}=true para autorizar o teste real de Entrada Lotes DEV.";
+            return $"defina {VariavelPermitirEntradaLotesReal}=true para autorizar.";
+        }
+
+        string databaseConfirmado = Environment.GetEnvironmentVariable(VariavelConfirmarDatabaseDescartavel)?.Trim() ?? string.Empty;
+        if (!databaseConfirmado.StartsWith(PrefixoDatabaseDescartavel, StringComparison.Ordinal))
+        {
+            return $"confirme um banco descartavel em {VariavelConfirmarDatabaseDescartavel} com prefixo {PrefixoDatabaseDescartavel}.";
+        }
+
+        if (!string.Equals(Environment.GetEnvironmentVariable(VariavelConfirmarDescarteTotal)?.Trim(), "SIM", StringComparison.Ordinal))
+        {
+            return $"defina {VariavelConfirmarDescarteTotal}=SIM para confirmar a eliminacao integral posterior do banco.";
+        }
+
+        return null;
+    }
+
+    public static bool TentarCriar(out FabricaConexaoEntradaLotesHml fabrica, out string motivo, out string host, out int porta)
+    {
+        fabrica = null!;
+        host = string.Empty;
+        porta = 0;
+        string? motivoOptIn = ObterMotivoOptInIncompleto();
+        if (motivoOptIn is not null)
+        {
+            motivo = motivoOptIn;
             return false;
         }
 
-        if (!string.Equals(Environment.GetEnvironmentVariable(VariavelConfirmarDatabase)?.Trim(), DatabaseEsperado, StringComparison.Ordinal))
+        string connectionString = Environment.GetEnvironmentVariable(VariavelConnectionString)!;
+        string databaseConfirmado = Environment.GetEnvironmentVariable(VariavelConfirmarDatabaseDescartavel)!.Trim();
+        NpgsqlConnectionStringBuilder builder;
+        try
         {
-            motivo = $"Defina {VariavelConfirmarDatabase}={DatabaseEsperado} para confirmar o banco DEV real.";
+            builder = new NpgsqlConnectionStringBuilder(connectionString);
+        }
+        catch (ArgumentException)
+        {
+            motivo = "Connection string recusada: formato invalido.";
             return false;
         }
 
-        NpgsqlConnectionStringBuilder builder = new(connectionString);
-        if (!string.Equals(builder.Database, DatabaseEsperado, StringComparison.Ordinal))
+        if (!string.Equals(builder.Database, databaseConfirmado, StringComparison.Ordinal)
+            || !databaseConfirmado.StartsWith(PrefixoDatabaseDescartavel, StringComparison.Ordinal)
+            || string.Equals(databaseConfirmado, DatabaseCanonicoBloqueado, StringComparison.Ordinal))
         {
-            motivo = $"Database recusado: '{builder.Database}' diferente de '{DatabaseEsperado}'.";
+            motivo = $"Database descartavel recusado: o nome deve coincidir exatamente com {VariavelConfirmarDatabaseDescartavel} e usar o prefixo obrigatorio.";
+            return false;
+        }
+
+        if (!string.Equals(builder.Username, RoleAplicacaoObrigatoria, StringComparison.Ordinal))
+        {
+            motivo = $"Role recusada na connection string: use exclusivamente {RoleAplicacaoObrigatoria}.";
             return false;
         }
 
         builder.SearchPath = Schema;
         host = builder.Host ?? string.Empty;
         porta = builder.Port;
-        fabrica = new FabricaConexaoEntradaLotesDev(builder.ConnectionString);
-        Console.WriteLine($"[Entrada Lotes DEV] Opt-in autorizado. Host={host}; Porta={porta}; Database={builder.Database}; Schema={Schema}.");
+        fabrica = new FabricaConexaoEntradaLotesHml(builder.ConnectionString);
+        Console.WriteLine($"[Entrada Lotes HML] Opt-in descartavel autorizado. Host={host}; Porta={porta}; Database={builder.Database}; Schema={Schema}; Role={RoleAplicacaoObrigatoria}.");
         motivo = string.Empty;
         return true;
     }
-    public static async Task<bool> ExistePedidoComDoisItensAsync(FabricaConexaoEntradaLotesDev fabrica)
+    public static async Task<bool> ExistePedidoComDoisItensAsync(FabricaConexaoEntradaLotesHml fabrica)
     {
         const string sql = """
             SELECT EXISTS (
@@ -1113,12 +1102,13 @@ internal static class BancoTesteEntradaLotesDev
         return retorno is bool existe && existe;
     }
 
-    public static async Task ValidarEstruturaObrigatoriaAsync(FabricaConexaoEntradaLotesDev fabrica)
+    public static async Task ValidarEstruturaObrigatoriaAsync(FabricaConexaoEntradaLotesHml fabrica)
     {
         await using NpgsqlConnection conexao = await fabrica.CriarConexaoAbertaAsync();
+        await ValidarIdentidadeSessaoAsync(conexao);
         if (!await ExisteSchemaAsync(conexao, Schema))
         {
-            throw new InvalidOperationException($"Schema {Schema} nao encontrado no banco DEV confirmado.");
+            throw new InvalidOperationException($"Schema {Schema} nao encontrado no banco descartavel confirmado.");
         }
 
         string[] tabelas =
@@ -1130,7 +1120,8 @@ internal static class BancoTesteEntradaLotesDev
             "entrada_produto_lancamento",
             "entrada_produto_item",
             "entrada_produto_lote",
-            "entrada_produto_pesagem"
+            "entrada_produto_pesagem",
+            "log_alteracao_cadastral"
         ];
         foreach (string tabela in tabelas)
         {
@@ -1153,6 +1144,112 @@ internal static class BancoTesteEntradaLotesDev
             {
                 throw new InvalidOperationException($"Coluna 043 obrigatoria entrada_produto_pesagem.{coluna} nao encontrada.");
             }
+        }
+
+        if (!await ExisteConstraintAsync(conexao, "entrada_produto_lote", "uq_entrada_lote_correlation_id"))
+        {
+            throw new InvalidOperationException("Constraint 043 obrigatoria uq_entrada_lote_correlation_id nao encontrada.");
+        }
+
+        await ValidarAusenciaPrivilegioDeleteAsync(conexao);
+        await ValidarBancoDescartavelNovoUmaVezAsync(conexao);
+    }
+
+    private static async Task ValidarIdentidadeSessaoAsync(NpgsqlConnection conexao)
+    {
+        const string sql = """
+            SELECT current_database(),
+                   current_user,
+                   session_user,
+                   current_setting('search_path'),
+                   rolsuper
+              FROM pg_roles
+             WHERE rolname = current_user;
+            """;
+        await using NpgsqlCommand comando = new(sql, conexao);
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync();
+        if (!await leitor.ReadAsync())
+        {
+            throw new InvalidOperationException("Nao foi possivel validar a role efetiva do banco descartavel.");
+        }
+
+        string databaseAtual = leitor.GetString(0);
+        string usuarioAtual = leitor.GetString(1);
+        string usuarioSessao = leitor.GetString(2);
+        string searchPath = leitor.GetString(3);
+        bool superuser = leitor.GetBoolean(4);
+        string databaseConfirmado = Environment.GetEnvironmentVariable(VariavelConfirmarDatabaseDescartavel)?.Trim() ?? string.Empty;
+
+        if (!databaseAtual.StartsWith(PrefixoDatabaseDescartavel, StringComparison.Ordinal)
+            || !string.Equals(databaseAtual, databaseConfirmado, StringComparison.Ordinal)
+            || string.Equals(databaseAtual, DatabaseCanonicoBloqueado, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("BANCO_DESCARTAVEL_NAO_CONFIRMADO");
+        }
+
+        if (!string.Equals(usuarioAtual, RoleAplicacaoObrigatoria, StringComparison.Ordinal)
+            || !string.Equals(usuarioSessao, RoleAplicacaoObrigatoria, StringComparison.Ordinal)
+            || superuser)
+        {
+            throw new InvalidOperationException("ROLE_HML_DESCARTAVEL_NAO_AUTORIZADA");
+        }
+
+        if (!searchPath.Split(',').Select(parte => parte.Trim().Trim('"')).Contains(Schema, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException($"Search path recusado: o schema {Schema} nao esta ativo.");
+        }
+    }
+
+    private static async Task ValidarAusenciaPrivilegioDeleteAsync(NpgsqlConnection conexao)
+    {
+        string[] tabelasFluxo =
+        [
+            "entrada_produto_lancamento",
+            "entrada_produto_item",
+            "entrada_produto_lote",
+            "entrada_produto_pesagem"
+        ];
+        const string sql = "SELECT has_table_privilege(current_user, @tabela, 'DELETE');";
+        foreach (string tabela in tabelasFluxo)
+        {
+            await using NpgsqlCommand comando = new(sql, conexao);
+            comando.Parameters.AddWithValue("@tabela", $"{Schema}.{tabela}");
+            object? retorno = await comando.ExecuteScalarAsync();
+            if (retorno is true)
+            {
+                throw new InvalidOperationException($"Role {RoleAplicacaoObrigatoria} possui DELETE indevido em {Schema}.{tabela}.");
+            }
+        }
+    }
+
+    private static async Task ValidarBancoDescartavelNovoUmaVezAsync(NpgsqlConnection conexao)
+    {
+        await GatePrecheckBancoNovo.WaitAsync();
+        try
+        {
+            if (_precheckBancoNovoConcluido)
+            {
+                return;
+            }
+
+            const string sql = """
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM homologacao.entrada_produto_lancamento
+                     WHERE terminal LIKE 'IT_LOTE_%');
+                """;
+            await using NpgsqlCommand comando = new(sql, conexao);
+            object? retorno = await comando.ExecuteScalarAsync();
+            if (retorno is true)
+            {
+                throw new InvalidOperationException("BANCO_DESCARTAVEL_NAO_ESTA_LIMPO");
+            }
+
+            _precheckBancoNovoConcluido = true;
+        }
+        finally
+        {
+            GatePrecheckBancoNovo.Release();
         }
     }
 
@@ -1193,13 +1290,33 @@ internal static class BancoTesteEntradaLotesDev
         object? retorno = await comando.ExecuteScalarAsync();
         return retorno is bool existe && existe;
     }
+
+    private static async Task<bool> ExisteConstraintAsync(NpgsqlConnection conexao, string tabela, string constraint)
+    {
+        const string sql = """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM pg_constraint c
+                  JOIN pg_class t ON t.oid = c.conrelid
+                  JOIN pg_namespace n ON n.oid = t.relnamespace
+                 WHERE n.nspname = @schema
+                   AND t.relname = @tabela
+                   AND c.conname = @constraint);
+            """;
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.AddWithValue("@schema", Schema);
+        comando.Parameters.AddWithValue("@tabela", tabela);
+        comando.Parameters.AddWithValue("@constraint", constraint);
+        object? retorno = await comando.ExecuteScalarAsync();
+        return retorno is bool existe && existe;
+    }
 }
 
-internal sealed class FabricaConexaoEntradaLotesDev : IFabricaConexaoBanco
+internal sealed class FabricaConexaoEntradaLotesHml : IFabricaConexaoBanco
 {
     private readonly string _connectionString;
 
-    public FabricaConexaoEntradaLotesDev(string connectionString)
+    public FabricaConexaoEntradaLotesHml(string connectionString)
     {
         _connectionString = connectionString;
     }
@@ -1216,4 +1333,7 @@ internal sealed class FabricaConexaoEntradaLotesDev : IFabricaConexaoBanco
 
     public string ObterConnectionString()
         => _connectionString;
+
+    public string Database
+        => new NpgsqlConnectionStringBuilder(_connectionString).Database ?? string.Empty;
 }

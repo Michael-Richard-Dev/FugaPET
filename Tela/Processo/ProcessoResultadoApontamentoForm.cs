@@ -1,7 +1,9 @@
-﻿using System.Globalization;
+using System.Globalization;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.Cadastro;
+using FugaPET_Dev.Servicos.Processo;
 using FugaPET_Dev.Tela.Comum;
 
 namespace FugaPET_Dev.Tela.Processo;
@@ -12,11 +14,16 @@ namespace FugaPET_Dev.Tela.Processo;
 public partial class ProcessoResultadoApontamentoForm : Form
 {
     private static readonly CultureInfo CulturaPtBr = CultureInfo.GetCultureInfo("pt-BR");
+    private const string MensagemNenhumResultadoAInformar =
+        "Nenhum resultado a informar para esta operação.";
 
     private readonly ContextoApontamentoProcesso _contexto;
     private readonly ResultadoApontamentoController _controller;
     private readonly List<ResultadoApontamentoItem> _itens = new();
+    private ResultadoPersistidoApontamento? _resultadoPersistido;
     private bool _gravacaoEmAndamento;
+    private bool _definicoesCarregadasComPerfilResolvido;
+    private bool ResultadoPersistidoAtivo => _resultadoPersistido is not null;
 
     internal ResultadoExecucaoProcesso ResultadoExecucaoApontamento { get; private set; }
         = ResultadoExecucaoProcesso.NaoConcluido;
@@ -47,7 +54,16 @@ public partial class ProcessoResultadoApontamentoForm : Form
         FormClosing += ProcessoResultadoApontamentoForm_FormClosing;
         closeWindowLabel.Click += (_, _) => FecharSePermitido();
         fecharButton.Click += (_, _) => FecharSePermitido();
-        gravarResultadoButton.Click += async (_, _) => await GravarResultadoAsync();
+        gravarResultadoButton.Click += async (_, _) =>
+        {
+            if (ResultadoPersistidoAtivo)
+            {
+                FinalizarResultadoPersistido();
+                return;
+            }
+
+            await GravarResultadoAsync();
+        };
         resultadosGridView.CellValidating += ResultadosGridView_CellValidating;
         resultadosGridView.CellEndEdit += ResultadosGridView_CellEndEdit;
         resultadosGridView.DataError += (_, e) => e.ThrowException = false;
@@ -102,7 +118,38 @@ public partial class ProcessoResultadoApontamentoForm : Form
 
             _itens.Clear();
             _itens.AddRange(definicoes.OrderBy(item => item.OrdemExibicao));
+            _definicoesCarregadasComPerfilResolvido = _contexto.CodigoPerfilResultado is long;
             PreencherGrid();
+
+            ResultadoApontamentoPersistidoRecovery recovery =
+                await _controller.ObterResultadoPersistidoDoApontamentoAsync(
+                    _contexto,
+                    _itens,
+                    CancellationToken.None);
+
+            if (recovery.Estado == ResultadoApontamentoPersistidoRecoveryEstado.Recuperado
+                && recovery.Resultado is not null)
+            {
+                AplicarResultadoPersistido(recovery.Resultado);
+                return;
+            }
+
+            if (recovery.Estado == ResultadoApontamentoPersistidoRecoveryEstado.Falha)
+            {
+                _resultadoPersistido = null;
+                gravarResultadoButton.Enabled = false;
+                colResultado.ReadOnly = true;
+                resultadosGridView.ReadOnly = true;
+                AtualizarVisualBotaoGravar();
+                ResultadoExecucaoApontamento = ResultadoExecucaoProcesso.NaoConcluido;
+                statusValueLabel.Text = "RECOVERY BLOQUEADO";
+                statusValueLabel.ForeColor = Color.FromArgb(217, 119, 6);
+                atalhoValueLabel.Text = "Esc fechar";
+                instrucaoLabel.Text = recovery.Mensagem;
+                statusLabel.Text = recovery.Mensagem;
+                return;
+            }
+
             AtualizarEstadoDefinicoes();
         }
         catch (Exception ex)
@@ -110,6 +157,7 @@ public partial class ProcessoResultadoApontamentoForm : Form
             System.Diagnostics.Trace.TraceError(
                 $"[ResultadoApontamento] Falha ao carregar definições: {ex.GetType().Name}");
             _itens.Clear();
+            _definicoesCarregadasComPerfilResolvido = false;
             resultadosGridView.Rows.Clear();
             gravarResultadoButton.Enabled = false;
             AtualizarVisualBotaoGravar();
@@ -143,10 +191,25 @@ public partial class ProcessoResultadoApontamentoForm : Form
 
     private void AtualizarEstadoDefinicoes()
     {
+        _resultadoPersistido = null;
+        resultadosGridView.ReadOnly = false;
+        colResultado.ReadOnly = false;
+        gravarResultadoButton.Text = "GRAVAR RESULTADO  F10";
         bool possuiDefinicoes = _itens.Count > 0;
-        gravarResultadoButton.Enabled = possuiDefinicoes;
+        bool permiteHeaderOnly = !possuiDefinicoes && _definicoesCarregadasComPerfilResolvido;
+        gravarResultadoButton.Enabled = possuiDefinicoes || permiteHeaderOnly;
         AtualizarVisualBotaoGravar();
         fecharButton.Enabled = true;
+        if (permiteHeaderOnly)
+        {
+            statusLabel.Text = MensagemNenhumResultadoAInformar;
+            statusValueLabel.Text = "SEM RESULTADO";
+            statusValueLabel.ForeColor = Color.FromArgb(217, 119, 6);
+            atalhoValueLabel.Text = "F10 gravar · Esc fechar";
+            instrucaoLabel.Text = MensagemNenhumResultadoAInformar;
+            return;
+        }
+
         if (!possuiDefinicoes)
         {
             statusLabel.Text = "Nenhum item de resultado está configurado para esta operação.";
@@ -162,6 +225,25 @@ public partial class ProcessoResultadoApontamentoForm : Form
         atalhoValueLabel.Text = "F10 gravar · Esc fechar";
         instrucaoLabel.Text = "Digite o resultado da operação e pressione F10 para gravar localmente.";
         FocarPrimeiroResultado();
+    }
+
+    private void AplicarResultadoPersistido(ResultadoPersistidoApontamento resultado)
+    {
+        _resultadoPersistido = resultado;
+        _itens.Clear();
+        _itens.AddRange(resultado.Itens.OrderBy(item => item.OrdemExibicao));
+        PreencherGrid();
+        colResultado.ReadOnly = true;
+        resultadosGridView.ReadOnly = true;
+        gravarResultadoButton.Text = "FINALIZAR";
+        gravarResultadoButton.Enabled = true;
+        fecharButton.Enabled = true;
+        AtualizarVisualBotaoGravar();
+        statusValueLabel.Text = "RESULTADO JÁ REGISTRADO";
+        statusValueLabel.ForeColor = Color.FromArgb(34, 166, 82);
+        atalhoValueLabel.Text = "Finalizar · Esc fechar";
+        instrucaoLabel.Text = "Resultado já registrado localmente; finalize para reconciliar o apontamento sem nova gravação.";
+        statusLabel.Text = "Resultado já registrado localmente. Nenhum novo resultado será gravado.";
     }
 
     private void FocarPrimeiroResultado()
@@ -180,6 +262,13 @@ public partial class ProcessoResultadoApontamentoForm : Form
 
     private async Task GravarResultadoAsync()
     {
+        if (ResultadoPersistidoAtivo)
+        {
+            statusValueLabel.Text = "RESULTADO JÁ REGISTRADO";
+            statusLabel.Text = "Use FINALIZAR para reconciliar o resultado persistido sem nova gravação.";
+            return;
+        }
+
         if (_gravacaoEmAndamento)
         {
             return;
@@ -255,7 +344,9 @@ public partial class ProcessoResultadoApontamentoForm : Form
             row.Cells[colResultado.Index].Value = valor is null ? string.Empty : FormatarDecimal(valor.Value);
         }
 
-        string? erro = Servicos.Processo.ResultadoApontamentoServico.ValidarItens(_itens);
+        string? erro = Servicos.Processo.ResultadoApontamentoServico.ValidarItens(
+            _itens,
+            _definicoesCarregadasComPerfilResolvido);
         if (erro is not null)
         {
             statusLabel.Text = erro;
@@ -295,7 +386,14 @@ public partial class ProcessoResultadoApontamentoForm : Form
         if (e.KeyCode == Keys.F10)
         {
             e.SuppressKeyPress = true;
-            if (_itens.Count == 0 || !gravarResultadoButton.Enabled || _gravacaoEmAndamento)
+            if (ResultadoPersistidoAtivo)
+            {
+                statusValueLabel.Text = "RESULTADO JÁ REGISTRADO";
+                statusLabel.Text = "Use FINALIZAR para reconciliar o resultado persistido sem nova gravação.";
+                return;
+            }
+
+            if ((!_definicoesCarregadasComPerfilResolvido && _itens.Count == 0) || !gravarResultadoButton.Enabled || _gravacaoEmAndamento)
             {
                 statusValueLabel.Text = _itens.Count == 0 ? "SEM DEFINIÇÃO" : statusValueLabel.Text;
                 statusLabel.Text = _itens.Count == 0
@@ -333,10 +431,33 @@ public partial class ProcessoResultadoApontamentoForm : Form
         Close();
     }
 
+    private void FinalizarResultadoPersistido()
+    {
+        if (_resultadoPersistido is null || _gravacaoEmAndamento)
+        {
+            return;
+        }
+
+        ResultadoExecucaoApontamento = new ResultadoExecucaoProcesso(
+            ResultadoExecucaoProcessoApontamento.ConcluidoLocalmente,
+            _resultadoPersistido.CodigoResultado,
+            string.IsNullOrWhiteSpace(_resultadoPersistido.MensagemResumo)
+                ? "Resultado já registrado localmente."
+                : _resultadoPersistido.MensagemResumo,
+            indicadorConfirmadoSap: false);
+        statusValueLabel.Text = "RESULTADO RECONCILIADO";
+        statusValueLabel.ForeColor = Color.FromArgb(34, 166, 82);
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
     private void DefinirOperacaoEmAndamento(bool emAndamento)
     {
         _gravacaoEmAndamento = emAndamento;
-        gravarResultadoButton.Enabled = !emAndamento && _itens.Count > 0;
+        bool podeGravar = ResultadoPersistidoAtivo
+            || _itens.Count > 0
+            || (_itens.Count == 0 && _definicoesCarregadasComPerfilResolvido);
+        gravarResultadoButton.Enabled = !emAndamento && podeGravar;
         fecharButton.Enabled = !emAndamento;
         resultadosGridView.Enabled = !emAndamento;
         AtualizarVisualBotaoGravar();

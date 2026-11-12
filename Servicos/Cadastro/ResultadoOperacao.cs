@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Cadastro;
+namespace FugaPET_Dev.Servicos.Cadastro;
 
 public sealed class ResultadoOperacao
 {

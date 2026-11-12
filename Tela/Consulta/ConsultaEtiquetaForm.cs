@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace FugaPET_Dev.Tela.Consulta;
 
@@ -6,7 +6,7 @@ public partial class ConsultaEtiquetaForm : Form
 {
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
+    private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
 
     private static readonly Color RowGreen = Color.FromArgb(238, 241, 245);
     private static readonly Color RowLight = Color.FromArgb(250, 251, 252);
@@ -75,7 +75,7 @@ public partial class ConsultaEtiquetaForm : Form
 
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(200, 78, 10));
     }
 
     private void VoltarParaPainelInicial()

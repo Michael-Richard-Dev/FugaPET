@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Servicos.Auditoria;

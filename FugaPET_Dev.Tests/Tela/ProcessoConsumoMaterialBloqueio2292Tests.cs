@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Tela.Processo;
 
 namespace FugaPET_Dev.Tests.Tela;

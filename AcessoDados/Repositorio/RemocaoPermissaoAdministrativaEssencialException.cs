@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.AcessoDados.Repositorio;
+namespace FugaPET_Dev.AcessoDados.Repositorio;
 
 /// <summary>
 /// Lancada quando uma sincronizacao de permissoes removeria as permissoes administrativas

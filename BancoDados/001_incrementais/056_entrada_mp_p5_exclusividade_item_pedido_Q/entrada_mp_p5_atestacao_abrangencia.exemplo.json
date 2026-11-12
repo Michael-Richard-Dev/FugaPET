@@ -1,0 +1,9 @@
+{
+  "_comentario": "Atestacao HUMANA de abrangencia do historico SAP, para UM pedido+item. Copie este arquivo para C:\\FugaPET_Q com o nome entrada_mp_p5_atestacao_abrangencia.json e ajuste os valores. Sem ele, o envio permanece bloqueado.",
+  "_antes_de_preencher": "Confirme no SAP (GUI ou Fiori) que este item do pedido NAO possui documento de material 101 em aberto. A atestacao cobre apenas a duvida sobre a COBERTURA da consulta automatica; ela nao encobre movimento existente: se o GET devolver qualquer 101 ou 102, o envio continua bloqueado.",
+  "numeroPedido": "4500000071",
+  "numeroItem": "00010",
+  "operador": "nome.do.responsavel",
+  "motivo": "conferencia manual no SAP QAS110 antes do teste assistido",
+  "validoAteUtc": "2026-11-03T23:59:00Z"
+}

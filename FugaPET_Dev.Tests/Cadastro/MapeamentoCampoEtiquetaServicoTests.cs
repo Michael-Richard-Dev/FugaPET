@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
@@ -17,7 +17,7 @@ public sealed class MapeamentoCampoEtiquetaServicoTests : IDisposable
     public MapeamentoCampoEtiquetaServicoTests()
     {
         Environment.SetEnvironmentVariable(
-            "FUGAPET_DEV_CONEXAO_POSTGRES",
+            "FUGAPET_Q_CONEXAO_POSTGRES",
             "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
 
         // Sessao com permissao para gerenciar o mapeamento (passa o gate de autorizacao).
@@ -63,9 +63,6 @@ public sealed class MapeamentoCampoEtiquetaServicoTests : IDisposable
         public override Task<MapeamentoCampoEtiquetaCadastro?> ObterAtivoPorCampoAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
             => Task.FromResult<MapeamentoCampoEtiquetaCadastro?>(null);
 
-        public override Task<bool> CampoEstaAtivoAsync(long codigoCampoEtiqueta, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
-
         public override Task<long> InserirAsync(MapeamentoCampoEtiquetaCadastro mapa, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("falha simulada");
     }
@@ -81,3 +78,4 @@ public sealed class MapeamentoCampoEtiquetaServicoTests : IDisposable
             => Task.CompletedTask;
     }
 }
+

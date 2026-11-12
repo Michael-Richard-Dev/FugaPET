@@ -16,10 +16,10 @@ public enum ClassificacaoConsumoMaterial
     /// <summary>HIBE (ou ProductGroup químico homologado) — consumível/químico operacional.</summary>
     Quimico = 2,
 
-    /// <summary>VERP — material de embalagem (não libera em MP/Químico sem regra explícita).</summary>
+    /// <summary>Classificação histórica de embalagem, preservada para compatibilidade.</summary>
     Embalagem = 3,
 
-    /// <summary>Outros tipos (FERT/HALB/…): não classificados automaticamente como componente de consumo.</summary>
+    /// <summary>Outros tipos não classificados automaticamente como componente de consumo.</summary>
     Outro = 4
 }
 
@@ -56,8 +56,8 @@ public static class ClassificadorComponenteConsumo
 
     /// <summary>
     /// Ajuste 5: classifica o componente por ProductType (+ ProductGroup quando aplicável).
-    /// ROH→MatériaPrima; HIBE (ou grupo químico homologado)→Químico; VERP→Embalagem; vazio→Indefinido;
-    /// demais (FERT/HALB/…)→Outro. Não classifica "componente" por ProductType (papel operacional vem da BOM).
+    /// ROH/VERP/HALB→MatériaPrima; HIBE (ou grupo químico homologado)→Químico; vazio→Indefinido;
+    /// demais→Outro. Os demais guards operacionais continuam fora deste classificador.
     /// </summary>
     public static ClassificacaoConsumoMaterial ClassificarComponenteParaConsumo(string? productType, string? productGroup)
     {
@@ -69,9 +69,8 @@ public static class ClassificadorComponenteConsumo
 
         return tipo switch
         {
-            "ROH" => ClassificacaoConsumoMaterial.MateriaPrima,
+            "ROH" or "VERP" or "HALB" => ClassificacaoConsumoMaterial.MateriaPrima,
             "HIBE" => ClassificacaoConsumoMaterial.Quimico,
-            "VERP" => ClassificacaoConsumoMaterial.Embalagem,
             _ when GrupoQuimicoHomologado(productGroup) => ClassificacaoConsumoMaterial.Quimico,
             _ => ClassificacaoConsumoMaterial.Outro
         };

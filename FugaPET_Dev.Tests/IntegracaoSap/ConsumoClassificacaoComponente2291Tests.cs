@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Operacao;
@@ -17,9 +17,11 @@ public sealed class ConsumoClassificacaoComponente2291Tests
     [InlineData("ROH", ClassificacaoConsumoMaterial.MateriaPrima)]
     [InlineData("roh", ClassificacaoConsumoMaterial.MateriaPrima)]
     [InlineData("HIBE", ClassificacaoConsumoMaterial.Quimico)]
-    [InlineData("VERP", ClassificacaoConsumoMaterial.Embalagem)]
+    [InlineData("VERP", ClassificacaoConsumoMaterial.MateriaPrima)]
     [InlineData("FERT", ClassificacaoConsumoMaterial.Outro)]
-    [InlineData("HALB", ClassificacaoConsumoMaterial.Outro)]
+    [InlineData("HALB", ClassificacaoConsumoMaterial.MateriaPrima)]
+    [InlineData(" verp ", ClassificacaoConsumoMaterial.MateriaPrima)]
+    [InlineData("halb", ClassificacaoConsumoMaterial.MateriaPrima)]
     public void ClassificarComponente_DeveMapearPorProductType(string productType, ClassificacaoConsumoMaterial esperado)
         => Assert.Equal(esperado, ClassificadorComponenteConsumo.ClassificarComponenteParaConsumo(productType, productGroup: null));
 
@@ -30,6 +32,14 @@ public sealed class ConsumoClassificacaoComponente2291Tests
     public void ClassificarComponente_SemProductType_DeveSerIndefinido(string? productType)
         => Assert.Equal(
             ClassificacaoConsumoMaterial.Indefinido,
+            ClassificadorComponenteConsumo.ClassificarComponenteParaConsumo(productType, productGroup: null));
+
+    [Theory]
+    [InlineData("FERT")]
+    [InlineData("ZZZ")]
+    public void ClassificarComponente_TipoNaoHomologado_ContinuaForaDaLiberacaoMateriaPrima(string productType)
+        => Assert.Equal(
+            ClassificacaoConsumoMaterial.Outro,
             ClassificadorComponenteConsumo.ClassificarComponenteParaConsumo(productType, productGroup: null));
 
     // ---- Ajuste 4: descrição amigável (mas a regra técnica usa o CÓDIGO) ----

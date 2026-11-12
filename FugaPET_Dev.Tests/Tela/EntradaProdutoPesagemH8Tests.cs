@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.Entrada;
+﻿using FugaPET_Dev.Modelo.Entrada;
 
 namespace FugaPET_Dev.Tests.Tela;
 

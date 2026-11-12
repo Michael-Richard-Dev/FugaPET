@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo;
+namespace FugaPET_Dev.Modelo;
 
 public sealed class SolicitacaoImpressao
 {

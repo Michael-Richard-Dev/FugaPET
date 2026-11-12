@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela;
 
@@ -237,7 +237,7 @@ partial class ProcessoProducaoForm
         semiAcabadoIconLabel.Cursor = Cursors.Hand;
         semiAcabadoIconLabel.Dock = DockStyle.Fill;
         semiAcabadoIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        semiAcabadoIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        semiAcabadoIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         semiAcabadoIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         semiAcabadoIconLabel.Location = new Point(0, 0);
         semiAcabadoIconLabel.Name = "semiAcabadoIconLabel";
@@ -295,7 +295,7 @@ partial class ProcessoProducaoForm
         semiAcabadoShortcutLabel.Name = "semiAcabadoShortcutLabel";
         semiAcabadoShortcutLabel.Size = new Size(38, 28);
         semiAcabadoShortcutLabel.TabIndex = 4;
-        semiAcabadoShortcutLabel.Text = "F5";
+        semiAcabadoShortcutLabel.Text = "F4";
         semiAcabadoShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // semiAcabadoArrowLabel
@@ -303,7 +303,7 @@ partial class ProcessoProducaoForm
         semiAcabadoArrowLabel.BackColor = Color.Transparent;
         semiAcabadoArrowLabel.Cursor = Cursors.Hand;
         semiAcabadoArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        semiAcabadoArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        semiAcabadoArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         semiAcabadoArrowLabel.Location = new Point(190, 207);
         semiAcabadoArrowLabel.Name = "semiAcabadoArrowLabel";
         semiAcabadoArrowLabel.Size = new Size(32, 36);
@@ -349,7 +349,7 @@ partial class ProcessoProducaoForm
         processIconLabel.Cursor = Cursors.Hand;
         processIconLabel.Dock = DockStyle.Fill;
         processIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        processIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        processIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         processIconLabel.Image = (Image)Properties.Resources.ResourceManager.GetObject("producao_24x_red");
         processIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         processIconLabel.Location = new Point(0, 0);
@@ -408,7 +408,7 @@ partial class ProcessoProducaoForm
         processShortcutLabel.Name = "processShortcutLabel";
         processShortcutLabel.Size = new Size(38, 28);
         processShortcutLabel.TabIndex = 4;
-        processShortcutLabel.Text = "F6";
+        processShortcutLabel.Text = "F5";
         processShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // processArrowLabel
@@ -416,7 +416,7 @@ partial class ProcessoProducaoForm
         processArrowLabel.BackColor = Color.Transparent;
         processArrowLabel.Cursor = Cursors.Hand;
         processArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        processArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        processArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         processArrowLabel.Location = new Point(190, 207);
         processArrowLabel.Name = "processArrowLabel";
         processArrowLabel.Size = new Size(32, 36);
@@ -521,7 +521,7 @@ partial class ProcessoProducaoForm
         pesagemShortcutLabel.Name = "pesagemShortcutLabel";
         pesagemShortcutLabel.Size = new Size(38, 28);
         pesagemShortcutLabel.TabIndex = 4;
-        pesagemShortcutLabel.Text = "F3";
+        pesagemShortcutLabel.Text = "F2";
         pesagemShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // pesagemArrowLabel
@@ -529,7 +529,7 @@ partial class ProcessoProducaoForm
         pesagemArrowLabel.BackColor = Color.Transparent;
         pesagemArrowLabel.Cursor = Cursors.Hand;
         pesagemArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        pesagemArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        pesagemArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         pesagemArrowLabel.Location = new Point(190, 207);
         pesagemArrowLabel.Name = "pesagemArrowLabel";
         pesagemArrowLabel.Size = new Size(32, 36);
@@ -575,7 +575,7 @@ partial class ProcessoProducaoForm
         quimicosIconLabel.Cursor = Cursors.Hand;
         quimicosIconLabel.Dock = DockStyle.Fill;
         quimicosIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        quimicosIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        quimicosIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         quimicosIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         quimicosIconLabel.Location = new Point(0, 0);
         quimicosIconLabel.Name = "quimicosIconLabel";
@@ -633,7 +633,7 @@ partial class ProcessoProducaoForm
         quimicosShortcutLabel.Name = "quimicosShortcutLabel";
         quimicosShortcutLabel.Size = new Size(38, 28);
         quimicosShortcutLabel.TabIndex = 4;
-        quimicosShortcutLabel.Text = "F4";
+        quimicosShortcutLabel.Text = "F3";
         quimicosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // quimicosArrowLabel
@@ -641,7 +641,7 @@ partial class ProcessoProducaoForm
         quimicosArrowLabel.BackColor = Color.Transparent;
         quimicosArrowLabel.Cursor = Cursors.Hand;
         quimicosArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        quimicosArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        quimicosArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         quimicosArrowLabel.Location = new Point(190, 207);
         quimicosArrowLabel.Name = "quimicosArrowLabel";
         quimicosArrowLabel.Size = new Size(32, 36);
@@ -687,7 +687,7 @@ partial class ProcessoProducaoForm
         ordensIconLabel.Cursor = Cursors.Hand;
         ordensIconLabel.Dock = DockStyle.Fill;
         ordensIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        ordensIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        ordensIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         ordensIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         ordensIconLabel.Location = new Point(0, 0);
         ordensIconLabel.Name = "ordensIconLabel";
@@ -745,7 +745,7 @@ partial class ProcessoProducaoForm
         ordensShortcutLabel.Name = "ordensShortcutLabel";
         ordensShortcutLabel.Size = new Size(38, 28);
         ordensShortcutLabel.TabIndex = 4;
-        ordensShortcutLabel.Text = "F7";
+        ordensShortcutLabel.Text = "F6";
         ordensShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // ordensArrowLabel
@@ -753,7 +753,7 @@ partial class ProcessoProducaoForm
         ordensArrowLabel.BackColor = Color.Transparent;
         ordensArrowLabel.Cursor = Cursors.Hand;
         ordensArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        ordensArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        ordensArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         ordensArrowLabel.Location = new Point(190, 207);
         ordensArrowLabel.Name = "ordensArrowLabel";
         ordensArrowLabel.Size = new Size(32, 36);
@@ -799,7 +799,7 @@ partial class ProcessoProducaoForm
         apontamentosIconLabel.Cursor = Cursors.Hand;
         apontamentosIconLabel.Dock = DockStyle.Fill;
         apontamentosIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        apontamentosIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        apontamentosIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         apontamentosIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         apontamentosIconLabel.Location = new Point(0, 0);
         apontamentosIconLabel.Name = "apontamentosIconLabel";
@@ -857,7 +857,7 @@ partial class ProcessoProducaoForm
         apontamentosShortcutLabel.Name = "apontamentosShortcutLabel";
         apontamentosShortcutLabel.Size = new Size(38, 28);
         apontamentosShortcutLabel.TabIndex = 4;
-        apontamentosShortcutLabel.Text = "F8";
+        apontamentosShortcutLabel.Text = "F7";
         apontamentosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // apontamentosArrowLabel
@@ -865,7 +865,7 @@ partial class ProcessoProducaoForm
         apontamentosArrowLabel.BackColor = Color.Transparent;
         apontamentosArrowLabel.Cursor = Cursors.Hand;
         apontamentosArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        apontamentosArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        apontamentosArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         apontamentosArrowLabel.Location = new Point(190, 207);
         apontamentosArrowLabel.Name = "apontamentosArrowLabel";
         apontamentosArrowLabel.Size = new Size(32, 36);
@@ -911,7 +911,7 @@ partial class ProcessoProducaoForm
         entradaIconLabel.Cursor = Cursors.Hand;
         entradaIconLabel.Dock = DockStyle.Fill;
         entradaIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        entradaIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        entradaIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         entradaIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         entradaIconLabel.Location = new Point(0, 0);
         entradaIconLabel.Name = "entradaIconLabel";
@@ -930,7 +930,7 @@ partial class ProcessoProducaoForm
         entradaTitleLabel.Name = "entradaTitleLabel";
         entradaTitleLabel.Size = new Size(202, 62);
         entradaTitleLabel.TabIndex = 1;
-        entradaTitleLabel.Text = "Entrada de\r\nMatéria-Prima";
+        entradaTitleLabel.Text = "Recebimento de\r\nMercadoria";
         entradaTitleLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // entradaDescriptionLabel
@@ -943,7 +943,7 @@ partial class ProcessoProducaoForm
         entradaDescriptionLabel.Name = "entradaDescriptionLabel";
         entradaDescriptionLabel.Size = new Size(175, 46);
         entradaDescriptionLabel.TabIndex = 2;
-        entradaDescriptionLabel.Text = "Entrada 101 de matéria-prima\r\nvia pedido de compra / SAP.";
+        entradaDescriptionLabel.Text = "Pesagem e recebimento de mercadorias\r\nvia pedido de compra / SAP.";
         entradaDescriptionLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // entradaStatusLabel
@@ -977,7 +977,7 @@ partial class ProcessoProducaoForm
         entradaArrowLabel.BackColor = Color.Transparent;
         entradaArrowLabel.Cursor = Cursors.Hand;
         entradaArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        entradaArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        entradaArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         entradaArrowLabel.Location = new Point(190, 207);
         entradaArrowLabel.Name = "entradaArrowLabel";
         entradaArrowLabel.Size = new Size(32, 36);
@@ -1002,6 +1002,9 @@ partial class ProcessoProducaoForm
         entradaQuimicosCard.ShadowOffsetY = 0;
         entradaQuimicosCard.Size = new Size(240, 250);
         entradaQuimicosCard.TabIndex = 10;
+        // GATE 073: a porta de "Entrada de Químicos" deixa de existir para o operador (Recebimento de
+        // Mercadoria absorve ROH+HIBE). Card oculto e não navegável; F3..F9 permanecem inalterados.
+        entradaQuimicosCard.Visible = false;
         //
         // entradaQuimicosIconPanel
         //
@@ -1023,7 +1026,7 @@ partial class ProcessoProducaoForm
         entradaQuimicosIconLabel.Cursor = Cursors.Hand;
         entradaQuimicosIconLabel.Dock = DockStyle.Fill;
         entradaQuimicosIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        entradaQuimicosIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        entradaQuimicosIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         entradaQuimicosIconLabel.ImageAlign = ContentAlignment.MiddleCenter;
         entradaQuimicosIconLabel.Location = new Point(0, 0);
         entradaQuimicosIconLabel.Name = "entradaQuimicosIconLabel";
@@ -1081,7 +1084,7 @@ partial class ProcessoProducaoForm
         entradaQuimicosShortcutLabel.Name = "entradaQuimicosShortcutLabel";
         entradaQuimicosShortcutLabel.Size = new Size(38, 28);
         entradaQuimicosShortcutLabel.TabIndex = 4;
-        entradaQuimicosShortcutLabel.Text = "F2";
+        entradaQuimicosShortcutLabel.Text = "";
         entradaQuimicosShortcutLabel.TextAlign = ContentAlignment.MiddleCenter;
         //
         // entradaQuimicosArrowLabel
@@ -1089,7 +1092,7 @@ partial class ProcessoProducaoForm
         entradaQuimicosArrowLabel.BackColor = Color.Transparent;
         entradaQuimicosArrowLabel.Cursor = Cursors.Hand;
         entradaQuimicosArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        entradaQuimicosArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        entradaQuimicosArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         entradaQuimicosArrowLabel.Location = new Point(190, 207);
         entradaQuimicosArrowLabel.Name = "entradaQuimicosArrowLabel";
         entradaQuimicosArrowLabel.Size = new Size(32, 36);

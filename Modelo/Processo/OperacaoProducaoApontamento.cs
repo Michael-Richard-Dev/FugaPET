@@ -55,6 +55,14 @@ public sealed class OperacaoProducaoApontamento
     public string TipoProcesso { get; init; } = string.Empty;
     public string TelaDestino { get; init; } = string.Empty;
 
+    /// <summary>
+    /// GATE 093D (snapshot): perfil de resultado resolvido para a ocorrência deste apontamento
+    /// (RESULTADO_APONTAMENTO). É SNAPSHOT/storage — a resolução autoritativa permanece em
+    /// operacao_resultado_perfil por (codigo_configuracao_rota + ordem_ocorrencia_workcenter). Null quando
+    /// não aplicável/não resolvido. Persistido em operacao_producao_apontamento.codigo_perfil_resultado (054).
+    /// </summary>
+    public long? CodigoPerfilResultado { get; set; }
+
     public string Status { get; set; } = StatusApontamentoOperacao.EmAndamento;
 
     public string UsuarioInicio { get; init; } = string.Empty;

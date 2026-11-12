@@ -17,7 +17,7 @@ public sealed class EntradaProdutoServicoSegurancaTests : IDisposable
     public EntradaProdutoServicoSegurancaTests()
     {
         Environment.SetEnvironmentVariable(
-            "FUGAPET_DEV_CONEXAO_POSTGRES",
+            "FUGAPET_Q_CONEXAO_POSTGRES",
             "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
         EstadoSessaoUsuarioAtual.Limpar();
     }
@@ -316,3 +316,4 @@ public sealed class EntradaProdutoServicoSegurancaTests : IDisposable
             IntegracaoBancoHabilitada = true
         };
 }
+

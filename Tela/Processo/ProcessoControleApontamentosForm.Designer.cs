@@ -87,7 +87,7 @@ partial class ProcessoControleApontamentosForm
     private static readonly Color CorBorda = Color.FromArgb(226, 232, 240);
     private static readonly Color CorTextoForte = Color.FromArgb(17, 24, 39);
     private static readonly Color CorTextoSuave = Color.FromArgb(75, 85, 99);
-    private static readonly Color CorAcento = Color.FromArgb(229, 27, 43);
+    private static readonly Color CorAcento = Color.FromArgb(200, 78, 10);
 
     protected override void Dispose(bool disposing)
     {
@@ -162,7 +162,7 @@ partial class ProcessoControleApontamentosForm
         //
         // customTitleBarPanel (barra de título padrão FugaPET)
         //
-        customTitleBarPanel.BackColor = Color.FromArgb(24, 31, 43);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         customTitleBarPanel.Controls.Add(logoSaLabel);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
         customTitleBarPanel.Controls.Add(companyLogoPictureBox);
@@ -265,11 +265,11 @@ partial class ProcessoControleApontamentosForm
         //
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(786, 12);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;

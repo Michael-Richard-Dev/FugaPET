@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela.Processo;
 
@@ -34,6 +34,7 @@ partial class EntradaProdutoDadosLoteForm
 
     private void InitializeComponent()
     {
+        components = new System.ComponentModel.Container();
         rootLayout = new TableLayoutPanel();
         cardPanel = new RoundedPanel();
         cardLayout = new TableLayoutPanel();
@@ -73,16 +74,15 @@ partial class EntradaProdutoDadosLoteForm
         // 
         // cardPanel
         // 
-        cardPanel.BackColor = Color.Transparent;
         cardPanel.BorderColor = Color.FromArgb(226, 232, 240);
         cardPanel.BorderRadius = 14;
+        cardPanel.BorderThickness = 1;
         cardPanel.Controls.Add(cardLayout);
         cardPanel.Dock = DockStyle.Fill;
+        cardPanel.FillColor = Color.White;
         cardPanel.Location = new Point(27, 27);
         cardPanel.Name = "cardPanel";
         cardPanel.Padding = new Padding(28, 12, 28, 12);
-        cardPanel.ShadowBlur = 0;
-        cardPanel.ShadowOffsetY = 0;
         cardPanel.Size = new Size(466, 336);
         cardPanel.TabIndex = 0;
         // 
@@ -130,7 +130,7 @@ partial class EntradaProdutoDadosLoteForm
         tituloLabel.Location = new Point(0, 0);
         tituloLabel.Margin = new Padding(0);
         tituloLabel.Name = "tituloLabel";
-        tituloLabel.Size = new Size(410, 30);
+        tituloLabel.Size = new Size(410, 34);
         tituloLabel.TabIndex = 0;
         tituloLabel.Text = "Dados do lote";
         tituloLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -142,10 +142,10 @@ partial class EntradaProdutoDadosLoteForm
         modoLabel.Dock = DockStyle.Fill;
         modoLabel.Font = new Font("Segoe UI", 9.5F);
         modoLabel.ForeColor = Color.FromArgb(71, 85, 105);
-        modoLabel.Location = new Point(0, 30);
+        modoLabel.Location = new Point(0, 34);
         modoLabel.Margin = new Padding(0);
         modoLabel.Name = "modoLabel";
-        modoLabel.Size = new Size(410, 34);
+        modoLabel.Size = new Size(410, 42);
         modoLabel.TabIndex = 1;
         modoLabel.Text = "Informe o lote antes da pesagem.";
         modoLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -157,10 +157,10 @@ partial class EntradaProdutoDadosLoteForm
         numeroLoteLabel.Dock = DockStyle.Fill;
         numeroLoteLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         numeroLoteLabel.ForeColor = Color.FromArgb(15, 23, 42);
-        numeroLoteLabel.Location = new Point(0, 64);
+        numeroLoteLabel.Location = new Point(0, 76);
         numeroLoteLabel.Margin = new Padding(0);
         numeroLoteLabel.Name = "numeroLoteLabel";
-        numeroLoteLabel.Size = new Size(410, 20);
+        numeroLoteLabel.Size = new Size(410, 24);
         numeroLoteLabel.TabIndex = 2;
         numeroLoteLabel.Text = "Número do lote";
         numeroLoteLabel.TextAlign = ContentAlignment.BottomLeft;
@@ -171,9 +171,10 @@ partial class EntradaProdutoDadosLoteForm
         numeroLoteTextBox.CharacterCasing = CharacterCasing.Upper;
         numeroLoteTextBox.Dock = DockStyle.Fill;
         numeroLoteTextBox.Font = new Font("Segoe UI", 10F);
-        numeroLoteTextBox.Location = new Point(0, 87);
+        numeroLoteTextBox.Location = new Point(0, 103);
         numeroLoteTextBox.Margin = new Padding(0, 3, 8, 3);
         numeroLoteTextBox.MaxLength = 10;
+        numeroLoteTextBox.Multiline = false;
         numeroLoteTextBox.Name = "numeroLoteTextBox";
         numeroLoteTextBox.Size = new Size(340, 25);
         numeroLoteTextBox.TabIndex = 0;
@@ -185,9 +186,9 @@ partial class EntradaProdutoDadosLoteForm
         contadorLoteLabel.Dock = DockStyle.Fill;
         contadorLoteLabel.Font = new Font("Segoe UI", 8.5F);
         contadorLoteLabel.ForeColor = Color.FromArgb(100, 116, 139);
-        contadorLoteLabel.Location = new Point(351, 84);
+        contadorLoteLabel.Location = new Point(351, 100);
         contadorLoteLabel.Name = "contadorLoteLabel";
-        contadorLoteLabel.Size = new Size(56, 32);
+        contadorLoteLabel.Size = new Size(56, 38);
         contadorLoteLabel.TabIndex = 3;
         contadorLoteLabel.Text = "0/10";
         contadorLoteLabel.TextAlign = ContentAlignment.MiddleRight;
@@ -199,10 +200,10 @@ partial class EntradaProdutoDadosLoteForm
         dataFabricacaoLabel.Dock = DockStyle.Fill;
         dataFabricacaoLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         dataFabricacaoLabel.ForeColor = Color.FromArgb(15, 23, 42);
-        dataFabricacaoLabel.Location = new Point(0, 116);
+        dataFabricacaoLabel.Location = new Point(0, 138);
         dataFabricacaoLabel.Margin = new Padding(0);
         dataFabricacaoLabel.Name = "dataFabricacaoLabel";
-        dataFabricacaoLabel.Size = new Size(410, 20);
+        dataFabricacaoLabel.Size = new Size(410, 24);
         dataFabricacaoLabel.TabIndex = 4;
         dataFabricacaoLabel.Text = "Data de fabricação";
         dataFabricacaoLabel.TextAlign = ContentAlignment.BottomLeft;
@@ -210,13 +211,13 @@ partial class EntradaProdutoDadosLoteForm
         // dataFabricacaoDateTimePicker
         // 
         dataFabricacaoDateTimePicker.AccessibleName = "Data de fabricação";
-        dataFabricacaoDateTimePicker.Checked = false;
         cardLayout.SetColumnSpan(dataFabricacaoDateTimePicker, 2);
+        dataFabricacaoDateTimePicker.Checked = false;
         dataFabricacaoDateTimePicker.CustomFormat = "dd/MM/yyyy";
         dataFabricacaoDateTimePicker.Dock = DockStyle.Fill;
         dataFabricacaoDateTimePicker.Font = new Font("Segoe UI", 10F);
         dataFabricacaoDateTimePicker.Format = DateTimePickerFormat.Custom;
-        dataFabricacaoDateTimePicker.Location = new Point(0, 139);
+        dataFabricacaoDateTimePicker.Location = new Point(0, 165);
         dataFabricacaoDateTimePicker.Margin = new Padding(0, 3, 0, 3);
         dataFabricacaoDateTimePicker.Name = "dataFabricacaoDateTimePicker";
         dataFabricacaoDateTimePicker.ShowCheckBox = true;
@@ -230,10 +231,10 @@ partial class EntradaProdutoDadosLoteForm
         dataVencimentoLabel.Dock = DockStyle.Fill;
         dataVencimentoLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         dataVencimentoLabel.ForeColor = Color.FromArgb(15, 23, 42);
-        dataVencimentoLabel.Location = new Point(0, 168);
+        dataVencimentoLabel.Location = new Point(0, 200);
         dataVencimentoLabel.Margin = new Padding(0);
         dataVencimentoLabel.Name = "dataVencimentoLabel";
-        dataVencimentoLabel.Size = new Size(410, 20);
+        dataVencimentoLabel.Size = new Size(410, 24);
         dataVencimentoLabel.TabIndex = 5;
         dataVencimentoLabel.Text = "Data de vencimento";
         dataVencimentoLabel.TextAlign = ContentAlignment.BottomLeft;
@@ -241,13 +242,13 @@ partial class EntradaProdutoDadosLoteForm
         // dataVencimentoDateTimePicker
         // 
         dataVencimentoDateTimePicker.AccessibleName = "Data de vencimento";
-        dataVencimentoDateTimePicker.Checked = false;
         cardLayout.SetColumnSpan(dataVencimentoDateTimePicker, 2);
+        dataVencimentoDateTimePicker.Checked = false;
         dataVencimentoDateTimePicker.CustomFormat = "dd/MM/yyyy";
         dataVencimentoDateTimePicker.Dock = DockStyle.Fill;
         dataVencimentoDateTimePicker.Font = new Font("Segoe UI", 10F);
         dataVencimentoDateTimePicker.Format = DateTimePickerFormat.Custom;
-        dataVencimentoDateTimePicker.Location = new Point(0, 191);
+        dataVencimentoDateTimePicker.Location = new Point(0, 227);
         dataVencimentoDateTimePicker.Margin = new Padding(0, 3, 0, 3);
         dataVencimentoDateTimePicker.Name = "dataVencimentoDateTimePicker";
         dataVencimentoDateTimePicker.ShowCheckBox = true;
@@ -261,10 +262,10 @@ partial class EntradaProdutoDadosLoteForm
         statusLabel.Dock = DockStyle.Fill;
         statusLabel.Font = new Font("Segoe UI", 8.8F, FontStyle.Bold);
         statusLabel.ForeColor = Color.FromArgb(220, 38, 38);
-        statusLabel.Location = new Point(0, 220);
+        statusLabel.Location = new Point(0, 262);
         statusLabel.Margin = new Padding(0);
         statusLabel.Name = "statusLabel";
-        statusLabel.Size = new Size(410, 42);
+        statusLabel.Size = new Size(410, 0);
         statusLabel.TabIndex = 6;
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
         statusLabel.Visible = false;
@@ -276,11 +277,11 @@ partial class EntradaProdutoDadosLoteForm
         actionsPanel.Controls.Add(confirmarButton);
         actionsPanel.Dock = DockStyle.Fill;
         actionsPanel.FlowDirection = FlowDirection.RightToLeft;
-        actionsPanel.Location = new Point(0, 262);
+        actionsPanel.Location = new Point(0, 240);
         actionsPanel.Margin = new Padding(0);
         actionsPanel.Name = "actionsPanel";
         actionsPanel.Padding = new Padding(0, 8, 0, 0);
-        actionsPanel.Size = new Size(410, 50);
+        actionsPanel.Size = new Size(410, 48);
         actionsPanel.TabIndex = 7;
         // 
         // cancelarButton

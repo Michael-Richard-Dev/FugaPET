@@ -2,6 +2,7 @@ using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Servicos.Ambiente;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Operacao;
 
@@ -17,9 +18,33 @@ public sealed class ProdutoAcabadoPaleteInt012PreClaimTests
 {
     private static ProdutoAcabadoController Controller(FakeGatewayInt012 gateway, FakeExecutor045Int012 executor)
         => new(new ProductionOrderSapFake(),
-            configuracaoSap: new ConfiguracaoSap { ProdutoAcabadoPipelineHabilitado = true },
+            configuracaoSap: new ConfiguracaoSap
+            {
+                ProdutoAcabadoPipelineHabilitado = true,
+                SapClient = MandanteTeste,
+                // GATE 126X: a tara exige IDENTIDADE QAS110 — perfil Q reconhecido na carga + destino SAP Q
+                // validado (host/porta/allowlist). Sem isso o preview bloqueia antes dos guards sob teste.
+                PerfilLocalQ = true,
+                BaseUrl = $"https://{ValidadorAmbienteQ.SapHostEsperado}:{ValidadorAmbienteQ.SapPortaEsperada}/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
+                HostsPermitidos = [ValidadorAmbienteQ.SapHostEsperado],
+                // GATE 126V: a composicao outbound exige tara fisica resolvida. Estes testes exercitam os
+                // guards de MATERIAL / claim / POST, nao a resolucao da tara — por isso o mapeamento cobre
+                // tambem os materiais NAO homologados, para que o guard sob teste seja o que dispara (e nao
+                // o bloqueio de tara ausente, que viria antes).
+                TarasFisicasEmbalagemPalete = [.. new[] { "PALLET01", "PALLET02", "PALLET03", "PALLET05" }
+                    .Select(material => new TaraFisicaEmbalagemConfigurada
+                    {
+                        SapClient = MandanteTeste,
+                        Centro = "3007",
+                        MaterialEmbalagem = material,
+                        PesoKg = 1.000m,
+                        Unidade = "KG"
+                    })]
+            },
             pipelineStore: new ProdutoAcabadoPipelinePostgresStore(executor),
             paleteInt012Gateway: gateway);
+
+    private const string MandanteTeste = "110";
 
     private static ProdutoAcabadoPalete Palete(StatusIntegracaoCaixa statusCaixa = StatusIntegracaoCaixa.ConfirmadaSap, string? packaging = "PALLET01") => new()
     {
@@ -99,7 +124,7 @@ public sealed class ProdutoAcabadoPaleteInt012PreClaimTests
         Assert.Equal(1, gw.Posts);
     }
 
-    [Theory] // B/C) PALLET02/PALLET03 (inexistentes no A_Product) → BLOQUEADO antes do claim, mensagem operacional.
+    [Theory] // B/C) PALLET02/PALLET03/PALLET05 (inexistentes no A_Product) → BLOQUEADO antes do claim, mensagem operacional.
     [InlineData("PALLET02")]
     [InlineData("PALLET03")]
     [InlineData("PALLET05")]
@@ -111,9 +136,9 @@ public sealed class ProdutoAcabadoPaleteInt012PreClaimTests
 
         Assert.Equal(EstadoPaleteInt012.NaoEnviado, r.Estado);
         Assert.Contains("Material de embalagem não autorizado", r.MensagemSanitizada, StringComparison.Ordinal);
-        Assert.Equal(0, ex.Chamadas("fn_pa_045_palete_criar"));         // não cria
-        Assert.Equal(0, ex.Chamadas("fn_pa_045_palete_claim_envio"));   // não faz claim ⇒ não incrementa tentativa
-        Assert.Equal(0, gw.Posts);                                      // não produz POST_FORMACAO/INICIADO nem POST externo
+        Assert.Equal(0, ex.Chamadas("fn_pa_045_palete_criar"));
+        Assert.Equal(0, ex.Chamadas("fn_pa_045_palete_claim_envio"));
+        Assert.Equal(0, gw.Posts);
     }
 
     [Theory] // D/E) NULL / vazio → BLOQUEADO antes do claim (sem claim, sem tentativa, sem POST).
@@ -376,8 +401,19 @@ public sealed class ProdutoAcabadoPaleteInt012PreClaimTests
             return Task.FromResult(linhas);
         }
 
+        /// <summary>
+        /// GATE 122C: o guard de recovery consulta o estado PERSISTIDO do palete antes do claim.
+        /// Um palete recém-criado localmente está em RASCUNHO — é esse o estado real de produção
+        /// nestes cenários, e é ele que autoriza o envio. View vazia significaria estado NÃO
+        /// comprovado e bloquearia o POST (fail-closed), o que não é o cenário destes testes.
+        /// </summary>
+        public string StatusPaleteNaView { get; set; } = "RASCUNHO";
+
         public Task<IReadOnlyList<Linha045>> LerViewRuntimeAsync(string view, string colunaFiltro, Parametro045 valorFiltro, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<Linha045>>([]);
+            => Task.FromResult<IReadOnlyList<Linha045>>(
+                view == "vw_pa_045_palete_estado_runtime"
+                    ? [L(("codigo_hu_palete", 900L), ("status_hu_palete", StatusPaleteNaView))]
+                    : []);
         public async Task<T> ExecutarEmTransacaoAsync<T>(Func<IExecutorFuncoes045Transacional, CancellationToken, Task<T>> operacao, CancellationToken cancellationToken = default)
             => await operacao(new Tx(this), cancellationToken);
         public Task<IReadOnlyList<Linha045>> LerComposicaoPaletesLocaisPorOrdemAsync(string numeroOrdemProducao, string? terminal, CancellationToken cancellationToken = default)
@@ -423,5 +459,6 @@ public sealed class ProdutoAcabadoPaleteInt012PreClaimTests
         return File.ReadAllText(Path.Combine(dir, Path.Combine(partes)));
     }
 }
+
 
 

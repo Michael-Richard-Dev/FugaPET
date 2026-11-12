@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.IntegracaoSap;
+﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Cabecalho do movimento de CONSUMO 261 (preview) para API_MATERIAL_DOCUMENT_SRV. Tarefa 6: apenas

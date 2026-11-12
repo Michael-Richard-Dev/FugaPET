@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tela.Consulta;
+namespace FugaPET_Dev.Tela.Consulta;
 
 partial class ConsultaOrdemProducaoForm
 {
@@ -206,7 +206,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(24, 31, 43);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
         customTitleBarPanel.Controls.Add(logoSaLabel);
         customTitleBarPanel.Controls.Add(companyLogoPictureBox);
@@ -322,11 +322,11 @@ partial class ConsultaOrdemProducaoForm
         // 
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(910, 10);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
@@ -548,7 +548,7 @@ partial class ConsultaOrdemProducaoForm
         atualizarButton.Cursor = Cursors.Hand;
         atualizarButton.FlatAppearance.BorderColor = Color.FromArgb(220, 53, 69);
         atualizarButton.FlatAppearance.BorderSize = 0;
-        atualizarButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 35, 51);
+        atualizarButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 78, 10);
         atualizarButton.FlatStyle = FlatStyle.Flat;
         atualizarButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
         atualizarButton.ForeColor = Color.White;
@@ -636,11 +636,11 @@ partial class ConsultaOrdemProducaoForm
         ordersDataGridView.BorderStyle = BorderStyle.None;
         ordersDataGridView.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
         ordersDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-        dataGridViewCellStyle1.BackColor = Color.FromArgb(31, 41, 55);
+        dataGridViewCellStyle1.BackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle1.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
         dataGridViewCellStyle1.ForeColor = Color.White;
         dataGridViewCellStyle1.Padding = new Padding(8, 0, 4, 0);
-        dataGridViewCellStyle1.SelectionBackColor = Color.FromArgb(31, 41, 55);
+        dataGridViewCellStyle1.SelectionBackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle1.SelectionForeColor = Color.White;
         ordersDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
         ordersDataGridView.ColumnHeadersHeight = 32;
@@ -860,7 +860,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Margin = new Padding(0);
         cellUserIcon.Name = "cellUserIcon";
@@ -910,7 +910,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Margin = new Padding(0);
         cellTerminalIcon.Name = "cellTerminalIcon";
@@ -960,7 +960,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Margin = new Padding(0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
@@ -1010,7 +1010,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Margin = new Padding(0);
         cellBancoIcon.Name = "cellBancoIcon";
@@ -1060,7 +1060,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Margin = new Padding(0);
         cellHoraIcon.Name = "cellHoraIcon";
@@ -1109,7 +1109,7 @@ partial class ConsultaOrdemProducaoForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Margin = new Padding(0);
         cellDataIcon.Name = "cellDataIcon";

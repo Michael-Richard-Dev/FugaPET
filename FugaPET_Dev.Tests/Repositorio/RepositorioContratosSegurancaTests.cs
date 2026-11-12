@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tests.Repositorio;
+namespace FugaPET_Dev.Tests.Repositorio;
 
 public sealed class RepositorioContratosSegurancaTests
 {

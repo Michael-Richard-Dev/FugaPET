@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.IntegracaoSap;
+﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>Cenarios da consulta (GET) da Ordem de Producao no SAP.</summary>
 public enum CenarioConsultaOrdemProducaoSap

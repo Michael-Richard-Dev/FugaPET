@@ -62,7 +62,21 @@ public sealed record MaterialDocumentSapItemRequest
     /// </summary>
     [JsonPropertyName("ShelfLifeExpirationDate")]
     public DateTime? ShelfLifeExpirationDate { get; init; }
+
+    /// <summary>
+    /// GATE R2 — ZZ1_PESO_ENTRADA_MMI (Edm.Decimal(15,3), campo customizado): peso liquido efetivamente
+    /// pesado, ja descontada a tara, da PROPRIA posicao. String em cultura invariante com 3 casas, como
+    /// o restante do contrato OData V2. Preenchido SOMENTE no caminho Materia-Prima (ROH); null nos demais.
+    /// Forma par TUDO-OU-NADA com <see cref="Zz1PesoEntradaMmiu"/>.
+    /// </summary>
+    [JsonPropertyName("ZZ1_PESO_ENTRADA_MMI")]
+    public string? Zz1PesoEntradaMmi { get; init; }
+
+    /// <summary>
+    /// GATE R2 — ZZ1_PESO_ENTRADA_MMIU (Edm.String(3), campo customizado): unidade do peso de entrada.
+    /// Sempre "KG" quando preenchido. Par tudo-ou-nada com <see cref="Zz1PesoEntradaMmi"/>.
+    /// </summary>
+    [JsonPropertyName("ZZ1_PESO_ENTRADA_MMIU")]
+    public string? Zz1PesoEntradaMmiu { get; init; }
 }
-
-
 

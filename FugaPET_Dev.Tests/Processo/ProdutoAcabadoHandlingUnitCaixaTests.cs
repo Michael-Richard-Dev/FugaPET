@@ -970,6 +970,12 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
         public SemaphoreSlim? ClaimEntrou { get; set; }
         public TaskCompletionSource? ClaimLiberar { get; set; }
 
+
+        public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorHandlingUnitsAsync(IReadOnlyList<string> husExternais, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ProdutoAcabadoCaixa>>([]);
+
+        public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorIntervaloHandlingUnitAsync(string huInicial, string huFinal, string? material, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ProdutoAcabadoCaixa>>([]);
         public Task<ProdutoAcabadoCaixa> RegistrarCaixaAsync(ProdutoAcabadoCaixa caixa, CancellationToken ct = default)
         {
             long codigo = ++_seq;
@@ -1179,27 +1185,28 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
             return Task.FromResult(lista);
         }
 
-        // INC-047: leituras por HU (fake em memória).
-        public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorHandlingUnitsAsync(IReadOnlyList<string> husExternais, CancellationToken ct = default)
+        /// <summary>
+        /// GATE 124H: espelha a consulta real do acumulado 261 — mesmo contexto funcional, SEM
+        /// terminal, e somente CONFIRMADA_SAP.
+        /// </summary>
+        public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarConfirmadasPorContextoSemTerminalAsync(string numeroOrdemProducao, string itemOrdemProducao, string material, string lote, CancellationToken ct = default)
         {
-            HashSet<string> hus = (husExternais ?? []).Select(h => (h ?? string.Empty).Trim()).Where(h => h.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            IReadOnlyList<ProdutoAcabadoCaixa> lista = _store.Values
-                .Where(c => c.HandlingUnitExternalId is { Length: > 0 } hu && hus.Contains(hu))
-                .OrderBy(c => c.NumeroCaixa).Select(Clonar).ToList();
-            return Task.FromResult(lista);
-        }
+            static string N(string? v) => (v ?? string.Empty).Trim();
+            if (N(numeroOrdemProducao).Length == 0 || N(itemOrdemProducao).Length == 0
+                || N(material).Length == 0 || N(lote).Length == 0)
+            {
+                return Task.FromResult<IReadOnlyList<ProdutoAcabadoCaixa>>([]);
+            }
 
-        public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorIntervaloHandlingUnitAsync(string huInicial, string huFinal, string? material, CancellationToken ct = default)
-        {
-            string ini = (huInicial ?? string.Empty).Trim(); string fim = (huFinal ?? string.Empty).Trim();
-            if (ini.Length == 0 || fim.Length == 0) { return Task.FromResult<IReadOnlyList<ProdutoAcabadoCaixa>>([]); }
-            if (string.CompareOrdinal(ini, fim) > 0) { (ini, fim) = (fim, ini); }
-            string mat = (material ?? string.Empty).Trim();
             IReadOnlyList<ProdutoAcabadoCaixa> lista = _store.Values
-                .Where(c => c.HandlingUnitExternalId is { Length: > 0 } hu
-                    && string.CompareOrdinal(hu, ini) >= 0 && string.CompareOrdinal(hu, fim) <= 0
-                    && (mat.Length == 0 || string.Equals((c.Material ?? string.Empty).Trim(), mat, StringComparison.OrdinalIgnoreCase)))
-                .OrderBy(c => c.NumeroCaixa).Select(Clonar).ToList();
+                .Where(c => string.Equals(N(c.NumeroOrdemProducao), N(numeroOrdemProducao), StringComparison.Ordinal)
+                    && string.Equals(N(c.ItemOrdemProducao), N(itemOrdemProducao), StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(N(c.Material), N(material), StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(N(c.Lote), N(lote), StringComparison.OrdinalIgnoreCase)
+                    && c.StatusIntegracao == StatusIntegracaoCaixa.ConfirmadaSap)
+                .OrderBy(c => c.NumeroCaixa)
+                .Select(Clonar)
+                .ToList();
             return Task.FromResult(lista);
         }
 
@@ -1268,3 +1275,4 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
         };
     }
 }
+

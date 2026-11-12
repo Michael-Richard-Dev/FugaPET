@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
+namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Resultado de um envio de apontamento ao SAP. Carrega apenas mensagem amigavel

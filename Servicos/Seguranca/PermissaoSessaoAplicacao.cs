@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Seguranca;
+namespace FugaPET_Dev.Servicos.Seguranca;
 
 public sealed class PermissaoSessaoAplicacao
 {

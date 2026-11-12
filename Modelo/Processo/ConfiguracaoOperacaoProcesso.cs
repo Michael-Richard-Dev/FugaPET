@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Processo;
+namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Tipos de processo que uma operação da OP pode ter. O roteamento para a tela é feito SEMPRE por
@@ -8,10 +8,11 @@ public static class TipoProcessoOperacao
 {
     public const string ConsumoMateriaPrima = "CONSUMO_MATERIA_PRIMA";
     public const string ConsumoQuimicos = "CONSUMO_QUIMICOS";
+    /// <summary>Consumo de semi-acabado: tipo introduzido na linha DEV, com tela propria.</summary>
     public const string ConsumoSemiAcabado = "CONSUMO_SEMI_ACABADO";
-    public const string ResultadoApontamento = "RESULTADO_APONTAMENTO";
     public const string SemiAcabado = "SEMI_ACABADO";
     public const string ProdutoAcabado = "PRODUTO_ACABADO";
+    public const string ResultadoApontamento = "RESULTADO_APONTAMENTO";
 
     /// <summary>Operação sem destino configurado: a leitura interpreta, mas o início fica bloqueado.</summary>
     public const string SemDestinoConfigurado = "SEM_DESTINO_CONFIGURADO";
@@ -32,6 +33,7 @@ public sealed class ConfiguracaoOperacaoProcesso
     public string CentroTrabalho { get; init; } = string.Empty;
     public string TipoProcesso { get; init; } = TipoProcessoOperacao.SemDestinoConfigurado;
     public string TelaDestino { get; init; } = string.Empty;
+    public long? CodigoPerfilResultado { get; init; }
 
     /// <summary>Quando true, exige que a operação anterior da sequência esteja concluída.</summary>
     public bool ExigeOperacaoAnterior { get; init; }

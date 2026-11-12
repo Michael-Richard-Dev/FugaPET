@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Entrada;
+﻿namespace FugaPET_Dev.Modelo.Entrada;
 
 public enum CenarioEnvioSapEntrada
 {

@@ -383,6 +383,51 @@ public sealed class ProcessoEntradaProdutoLotesIntegracaoTelaTests
         Assert.DoesNotContain("EntradaProdutoRepositorio", form, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Stop_AposSucessoLocal_DeveReavaliarProntidaoSapManualSemEnviar()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoEntradaProdutoForm.cs");
+        string stop = ExtrairMetodo(form, "private async void StopProduction_Click");
+        string finalizar = ExtrairMetodo(form, "internal async Task FinalizarPersistenciaEAtualizarProntidaoSapAsync");
+        string executar = ExtrairMetodo(form, "internal async Task ExecutarPersistenciaLotesAsync");
+        string sucesso = ExtrairMetodo(form, "private void AplicarSucessoPersistenciaLotes");
+
+        // §5 (refactor): o async void só delega ao método Task testável.
+        Assert.Contains("FinalizarPersistenciaEAtualizarProntidaoSapAsync()", stop, StringComparison.Ordinal);
+
+        // (1)+(2) Ordem: o método testável persiste localmente PRIMEIRO e só DEPOIS reavalia a prontidão SAP.
+        int persiste = finalizar.IndexOf("await ExecutarPersistenciaLotesAsync();", StringComparison.Ordinal);
+        int prontidao = finalizar.IndexOf("await AtualizarProntidaoEnvioSapAsync();", StringComparison.Ordinal);
+        Assert.True(persiste >= 0, "O método deve chamar ExecutarPersistenciaLotesAsync.");
+        Assert.True(prontidao > persiste, "A prontidão SAP deve ser reavaliada APÓS a persistência local.");
+
+        // (3) A reavaliação está protegida por sucesso local real (código atribuído, produção encerrada, sem retry).
+        Assert.Contains("_codigoLancamentoPersistido is not null", finalizar, StringComparison.Ordinal);
+        Assert.Contains("!_isProductionStarted", finalizar, StringComparison.Ordinal);
+        Assert.Contains("!_lotesFinalizadosAguardandoPersistencia", finalizar, StringComparison.Ordinal);
+        int guarda = finalizar.IndexOf("_codigoLancamentoPersistido is not null", StringComparison.Ordinal);
+        Assert.True(guarda > persiste && guarda < prontidao,
+            "A guarda de sucesso local deve preceder a chamada de prontidão SAP.");
+
+        // (6) O handler NÃO envia SAP diretamente (nem HML nem Material Document).
+        Assert.DoesNotContain("EnviarSapHomologacaoAsync", stop, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnviarPesoEntradaParaSapHomologacaoAsync", stop, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnviarSapHomologacaoAsync", finalizar, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnviarPesoEntradaParaSapHomologacaoAsync", finalizar, StringComparison.Ordinal);
+
+        // (4) A persistência local continua sem SAP, Material Document, impressão, Npgsql ou Repository direto.
+        foreach (string proibido in new[]
+                 { "EnviarSap", "MaterialDocument", "ImprimirEtiqueta", "Npgsql", "EntradaProdutoRepositorio" })
+        {
+            Assert.DoesNotContain(proibido, executar, StringComparison.Ordinal);
+        }
+
+        // (5) O sucesso local continua sem qualquer chamada SAP (nem envio, nem diagnóstico/prontidão).
+        Assert.DoesNotContain("EnviarSap", sucesso, StringComparison.Ordinal);
+        Assert.DoesNotContain("AtualizarProntidaoEnvioSapAsync", sucesso, StringComparison.Ordinal);
+        Assert.DoesNotContain("DiagnosticarEnvioSap", sucesso, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("private bool GarantirOperacaoLotesIniciada")]
     [InlineData("private async Task<bool> GarantirLoteAtivoParaLinhaAsync")]
@@ -736,9 +781,16 @@ public sealed class ProcessoEntradaProdutoLotesIntegracaoTelaTests
 
             AwaitTaskSta(Invocar(form, "ExecutarPersistenciaLotesAsync"));
 
+            // Protecoes preservadas: nenhuma gravacao e nenhum lancamento.
             Assert.Equal(0, chamadas);
             Assert.Null(Campo<long?>(form, "_codigoLancamentoPersistido"));
-            Assert.True(Campo<bool>(form, "_isProductionStarted"));
+
+            // GATE 106A: sem NENHUMA leitura valida, Parar passou a CANCELAR a tentativa em memoria em vez
+            // de manter a leitura ativa exigindo pesagem. O contrato anterior (_isProductionStarted == true)
+            // foi deliberadamente substituido.
+            Assert.False(Campo<bool>(form, "_isProductionStarted"));
+            Assert.False(Campo<EntradaProdutoController>(form, "_controller")
+                .ObterEstadoOperacaoComLotes().OperacaoIniciada);
         });
     }
 
@@ -1034,8 +1086,8 @@ public sealed class ProcessoEntradaProdutoLotesIntegracaoTelaTests
     }
 
     // ===================================================================================================
-    // §6 (correção DEV) — prontidão do envio SAP manual APÓS a persistência local (comportamental STA).
-    // Cobre A..E do escopo. Nunca há POST ao SAP: o envio só ocorre pelo clique manual, jamais aqui.
+    // Prontidão do envio SAP manual APÓS a persistência local (comportamental STA). Cobre A..E.
+    // Nunca há POST ao SAP: o envio só ocorre pelo clique manual, jamais aqui.
     // ===================================================================================================
 
     // A. Persistência local bem-sucedida + diagnóstico pronto ⇒ botão liberado, chip LIBERADO (LiberadoParaEnvio).
@@ -1057,15 +1109,12 @@ public sealed class ProcessoEntradaProdutoLotesIntegracaoTelaTests
 
             Control botao = Controle<Control>(form, "productionActionsButton");
             Assert.True(botao.Enabled); // BUG original: ficava desabilitado; agora a prontidão o habilita.
-            // Estado semântico = LiberadoParaEnvio (chip aprovado do DEV é "SAP HML: PENDENTE"); NÃO é "AGUARDANDO".
             Assert.Equal("LiberadoParaEnvio", Campo<object>(form, "_estadoIntegracaoSapAtual").ToString());
             Assert.DoesNotContain("AGUARDANDO", Controle<Label>(form, "sapStatusLabel").Text, StringComparison.Ordinal);
-            // Visibilidade EFETIVA depende do form estar exibido (walk pelos ancestrais). Validamos a visibilidade
-            // PRÓPRIA que a prontidão definiu (UsuarioTemPermissao=true) destacando o botão do container:
-            // com Parent=null o getter Visible reflete apenas o estado próprio do controle.
+            // Visibilidade EFETIVA depende do form exibido; validamos a visibilidade PRÓPRIA (UsuarioTemPermissao=true)
+            // destacando o botão do container: com Parent=null o getter Visible reflete só o estado próprio.
             botao.Parent!.Controls.Remove(botao);
             Assert.True(botao.Visible);
-            // Nenhum Material Document: o envio só ocorre no clique manual; a tarefa de envio segue concluída/ociosa.
             Assert.True(Campo<Task>(form, "_envioSapTask").IsCompleted);
         }));
     }
@@ -1150,16 +1199,15 @@ public sealed class ProcessoEntradaProdutoLotesIntegracaoTelaTests
             InjetarSeamDiagnosticoSap(form, (codigo, _) => { diagnosticos++; return Task.FromResult(DiagnosticoPronto(codigo ?? 0)); });
 
             Task primeira = (Task)Invocar(form, "FinalizarPersistenciaEAtualizarProntidaoSapAsync")!;
-            // 2º "clique" enquanto a 1ª persistência ainda está em andamento.
             AwaitTaskSta(Invocar(form, "FinalizarPersistenciaEAtualizarProntidaoSapAsync"));
             Assert.Equal(1, persistencias);
-            Assert.Equal(0, diagnosticos); // persistência não concluiu ⇒ sem diagnóstico ainda
+            Assert.Equal(0, diagnosticos);
 
             pendente.SetResult(ResultadoInedito(321));
             primeira.GetAwaiter().GetResult();
 
             Assert.Equal(1, persistencias);
-            Assert.Equal(1, diagnosticos); // diagnóstico UMA vez, só após o sucesso
+            Assert.Equal(1, diagnosticos);
             Assert.Equal(321L, Campo<long?>(form, "_codigoLancamentoPersistido"));
         }));
     }

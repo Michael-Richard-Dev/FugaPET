@@ -708,7 +708,7 @@ partial class CargoForm
         // summaryPerfilIconLabel
         // 
         summaryPerfilIconLabel.Font = new Font("Segoe MDL2 Assets", 18F);
-        summaryPerfilIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        summaryPerfilIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         summaryPerfilIconLabel.Location = new Point(32, 78);
         summaryPerfilIconLabel.Name = "summaryPerfilIconLabel";
         summaryPerfilIconLabel.Size = new Size(32, 32);
@@ -729,7 +729,7 @@ partial class CargoForm
         // summaryPerfilValueLabel
         // 
         summaryPerfilValueLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
-        summaryPerfilValueLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        summaryPerfilValueLabel.ForeColor = Color.FromArgb(200, 78, 10);
         summaryPerfilValueLabel.Location = new Point(74, 98);
         summaryPerfilValueLabel.Name = "summaryPerfilValueLabel";
         summaryPerfilValueLabel.Size = new Size(180, 24);
@@ -800,8 +800,8 @@ partial class CargoForm
         // 
         // salvarButton
         // 
-        salvarButton.BackColor = Color.FromArgb(229, 27, 43);
-        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(229, 27, 43);
+        salvarButton.BackColor = Color.FromArgb(200, 78, 10);
+        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(200, 78, 10);
         salvarButton.FlatStyle = FlatStyle.Flat;
         salvarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         salvarButton.ForeColor = Color.White;
@@ -832,7 +832,7 @@ partial class CargoForm
         excluirButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
         excluirButton.FlatStyle = FlatStyle.Flat;
         excluirButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+        excluirButton.ForeColor = Color.FromArgb(200, 78, 10);
         excluirButton.Location = new Point(24, 466);
         excluirButton.Name = "excluirButton";
         excluirButton.Size = new Size(280, 28);
@@ -908,7 +908,7 @@ partial class CargoForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Margin = new Padding(0);
         cellUserIcon.Name = "cellUserIcon";
@@ -959,7 +959,7 @@ partial class CargoForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Margin = new Padding(0);
         cellTerminalIcon.Name = "cellTerminalIcon";
@@ -1010,7 +1010,7 @@ partial class CargoForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Margin = new Padding(0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
@@ -1061,7 +1061,7 @@ partial class CargoForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Margin = new Padding(0);
         cellBancoIcon.Name = "cellBancoIcon";
@@ -1112,7 +1112,7 @@ partial class CargoForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Margin = new Padding(0);
         cellHoraIcon.Name = "cellHoraIcon";
@@ -1162,7 +1162,7 @@ partial class CargoForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Margin = new Padding(0);
         cellDataIcon.Name = "cellDataIcon";
@@ -1173,7 +1173,7 @@ partial class CargoForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(17, 24, 39);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
         customTitleBarPanel.Controls.Add(companyLogoPictureBox);
         customTitleBarPanel.Controls.Add(headerDividerLabel);

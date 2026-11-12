@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Servicos.Auditoria;
 
@@ -6,7 +6,7 @@ namespace FugaPET_Dev.Servicos.Seguranca;
 
 public sealed class AutenticacaoServico
 {
-    private const string VariavelSenhaAdminLocal = "FUGAPET_DEV_ADMIN_LOCAL_SENHA";
+    private const string VariavelSenhaAdminLocal = "FUGAPET_HML_ADMIN_LOCAL_SENHA";
 
     private readonly UsuarioRepositorio _usuarioRepositorio;
     private readonly UsuarioPerfilRepositorio _usuarioPerfilRepositorio;

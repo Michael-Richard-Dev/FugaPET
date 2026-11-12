@@ -1,4 +1,4 @@
-﻿using System.Drawing.Printing;
+using System.Drawing.Printing;
 using FugaPET_Dev.Modelo.Status;
 using FugaPET_Dev.Servicos;
 using FugaPET_Dev.Servicos.Terminal;

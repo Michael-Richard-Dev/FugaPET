@@ -1,7 +1,7 @@
 ﻿namespace FugaPET_Dev.Modelo.Entrada;
 
 /// <summary>
-/// Dados persistentes de desenvolvimento.entrada_produto_lote, conforme incremental 043.
+/// Dados persistentes de homologacao.entrada_produto_lote, conforme incremental 043.
 /// Não contém regra de banco; apenas normaliza dados civis do lote para uso seguro na aplicação.
 /// </summary>
 public sealed class EntradaProdutoLote

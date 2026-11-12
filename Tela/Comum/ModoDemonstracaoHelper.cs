@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.AcessoDados.Banco;
 
 namespace FugaPET_Dev.Tela.Comum;
 

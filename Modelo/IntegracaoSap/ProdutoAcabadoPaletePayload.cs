@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
@@ -38,8 +38,9 @@ public sealed class ResultadoPreviewProdutoAcabadoPalete
     public string PayloadJson { get; }
 
     public static ResultadoPreviewProdutoAcabadoPalete Ok(ProdutoAcabadoPaleteRequest payload, string payloadJson)
-        => new(true, "Preview de formação de palete gerado.", payload, payloadJson);
+        => new(true, "Preview de formaÃ§Ã£o de palete gerado.", payload, payloadJson);
 
     public static ResultadoPreviewProdutoAcabadoPalete Falha(string mensagem)
         => new(false, mensagem, null, string.Empty);
 }
+

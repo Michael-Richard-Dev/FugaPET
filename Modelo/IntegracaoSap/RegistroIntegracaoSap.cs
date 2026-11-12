@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
+namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Uma linha do historico de integracao SAP (envio/retorno/erro).

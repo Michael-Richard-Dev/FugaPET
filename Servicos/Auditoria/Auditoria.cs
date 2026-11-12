@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Auditoria;
+namespace FugaPET_Dev.Servicos.Auditoria;
 
 public static class Auditoria
 {

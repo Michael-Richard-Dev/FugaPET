@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Consumo;
+﻿namespace FugaPET_Dev.Modelo.Consumo;
 
 public sealed class ResumoConsumoMaterialLancamento
 {

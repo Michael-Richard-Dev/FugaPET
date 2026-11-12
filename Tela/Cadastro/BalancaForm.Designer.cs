@@ -394,7 +394,7 @@ partial class BalancaForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(17, 24, 39);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
         customTitleBarPanel.Controls.Add(companyLogoPictureBox);
         customTitleBarPanel.Controls.Add(headerDividerLabel);
@@ -886,7 +886,7 @@ partial class BalancaForm
         setorComboBox.FlatStyle = FlatStyle.Flat;
         setorComboBox.Font = new Font("Segoe UI", 9F);
         setorComboBox.IntegralHeight = false;
-        setorComboBox.Location = new Point(10, 7);
+        setorComboBox.Location = new Point(10, 5);
         setorComboBox.Name = "setorComboBox";
         setorComboBox.Size = new Size(242, 23);
         setorComboBox.TabIndex = 0;
@@ -1063,7 +1063,7 @@ partial class BalancaForm
         tipoConexaoComboBox.FlatStyle = FlatStyle.Flat;
         tipoConexaoComboBox.Font = new Font("Segoe UI", 9F);
         tipoConexaoComboBox.IntegralHeight = false;
-        tipoConexaoComboBox.Location = new Point(10, 7);
+        tipoConexaoComboBox.Location = new Point(10, 5);
         tipoConexaoComboBox.Name = "tipoConexaoComboBox";
         tipoConexaoComboBox.Size = new Size(512, 23);
         tipoConexaoComboBox.TabIndex = 0;
@@ -1422,7 +1422,7 @@ partial class BalancaForm
         paridadeComboBox.FlatStyle = FlatStyle.Flat;
         paridadeComboBox.Font = new Font("Segoe UI", 9F);
         paridadeComboBox.IntegralHeight = false;
-        paridadeComboBox.Location = new Point(10, 7);
+        paridadeComboBox.Location = new Point(10, 5);
         paridadeComboBox.Name = "paridadeComboBox";
         paridadeComboBox.Size = new Size(154, 23);
         paridadeComboBox.TabIndex = 0;
@@ -1730,7 +1730,7 @@ partial class BalancaForm
         // resumoNomeIconLabel
         // 
         resumoNomeIconLabel.Font = new Font("Segoe MDL2 Assets", 18F);
-        resumoNomeIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        resumoNomeIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         resumoNomeIconLabel.Location = new Point(26, 76);
         resumoNomeIconLabel.Name = "resumoNomeIconLabel";
         resumoNomeIconLabel.Size = new Size(32, 32);
@@ -1876,7 +1876,7 @@ partial class BalancaForm
         // 
         // salvarButton
         // 
-        salvarButton.BackColor = Color.FromArgb(229, 27, 43);
+        salvarButton.BackColor = Color.FromArgb(200, 78, 10);
         salvarButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
         salvarButton.FlatStyle = FlatStyle.Flat;
         salvarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
@@ -1993,7 +1993,7 @@ partial class BalancaForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Name = "cellUserIcon";
         cellUserIcon.Size = new Size(28, 40);
@@ -2042,7 +2042,7 @@ partial class BalancaForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Name = "cellTerminalIcon";
         cellTerminalIcon.Size = new Size(28, 40);
@@ -2091,7 +2091,7 @@ partial class BalancaForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
         cellEmpresaIcon.Size = new Size(28, 40);
@@ -2140,7 +2140,7 @@ partial class BalancaForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Name = "cellBancoIcon";
         cellBancoIcon.Size = new Size(28, 40);
@@ -2189,7 +2189,7 @@ partial class BalancaForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Name = "cellHoraIcon";
         cellHoraIcon.Size = new Size(28, 40);
@@ -2227,7 +2227,7 @@ partial class BalancaForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Name = "cellDataIcon";
         cellDataIcon.Size = new Size(28, 40);

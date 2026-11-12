@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Modelo.Status;
 using Npgsql;
 
@@ -163,7 +163,7 @@ public sealed class StatusCacheSapLocalServico
         const string sql = """
             SELECT COUNT(*)::integer
             FROM information_schema.tables
-            WHERE table_schema IN ('desenvolvimento', 'producao')
+            WHERE table_schema IN ('homologacao', 'producao')
               AND table_type = 'BASE TABLE'
               AND table_name LIKE 'sap_%';
             """;

@@ -48,11 +48,11 @@ public sealed class PrecisaoDataHoraH14Tests
             "024_h14_precisao_data_hora_auditoria_PROPOSTA_GAIA.sql");
 
         Assert.DoesNotContain(
-            "UPDATE desenvolvimento.entrada_produto_pesagem",
+            "UPDATE homologacao.entrada_produto_pesagem",
             script,
             StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
-            "UPDATE desenvolvimento.auditoria_acao_usuario",
+            "UPDATE homologacao.auditoria_acao_usuario",
             script,
             StringComparison.OrdinalIgnoreCase);
     }

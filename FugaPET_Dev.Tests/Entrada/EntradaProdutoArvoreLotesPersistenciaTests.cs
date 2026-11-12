@@ -1,16 +1,17 @@
-﻿using FugaPET_Dev.Modelo.Entrada;
+using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Modelo.Processo;
 
 namespace FugaPET_Dev.Tests.Entrada;
 
 public sealed class EntradaProdutoArvoreLotesPersistenciaTests
 {
+    private static readonly DateTime DataReferencia = new(2030, 1, 15);
     [Fact]
     public void TesteUnitario_Estatica_ArvoreValidaDevePassar()
     {
         EntradaProdutoLancamentoComLotesPersistencia entrada = ArvoreValida();
 
-        ValidadorEntradaProdutoArvoreLotes.Validar(entrada);
+        ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia);
     }
 
     [Fact]
@@ -18,7 +19,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
     {
         EntradaProdutoLancamentoComLotesPersistencia entrada = ArvoreValida() with { Itens = [] };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("pelo menos um item", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -31,7 +32,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("não possui lote", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -48,7 +49,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             ]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("duplicado", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -66,7 +67,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             ]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("Lote local duplicado", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -84,7 +85,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             ]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("CorrelationId duplicado", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -104,7 +105,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             ]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("Pesagem local duplicada", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -117,7 +118,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A", pesagens: [PesagemLocal(Guid.NewGuid(), 1, 1m, "CANCELADA")])])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("soma válida maior que zero", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -130,7 +131,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A", pesagens: [PesagemLocal(Guid.NewGuid(), 1, 0m)])])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("maior que zero", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -143,7 +144,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A")]) with { Item = new EntradaProdutoItem { NumeroItem = "20", Material = "3500027" } }]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("inconsistente", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -156,7 +157,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A", sequencia: 1), Lote("B", sequencia: 1)])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("Sequência duplicada", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -232,7 +233,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
         EntradaProdutoLancamentoComLotesPersistencia entrada = ArvoreValida();
         ContextoLoteEntrada contexto = new() { Modo = modo, NumeroPedido = entrada.Lancamento.NumeroPedido, NumeroItemSap = "00010" };
 
-        ValidadorEntradaProdutoArvoreLotes.Validar(entrada);
+        ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia);
 
         Assert.Equal(modo, contexto.Modo);
     }
@@ -245,7 +246,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A") with { EstadoOperacional = EstadoOperacionalLoteEntrada.Pesando }])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("finalizado", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -258,7 +259,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A") with { EstadoOperacional = (EstadoOperacionalLoteEntrada)999 }])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("finalizado", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -292,13 +293,13 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
     [Fact]
     public void TesteUnitario_Estatica_LoteFuncionalDuplicadoMesmasDatasDeveBloquear()
     {
-        DadosLoteEntrada dados = new("LOTE1", new DateTime(2026, 7, 20), new DateTime(2026, 8, 20));
+        DadosLoteEntrada dados = new("LOTE1", DataReferencia.AddDays(-7), DataReferencia.AddDays(30));
         EntradaProdutoLancamentoComLotesPersistencia entrada = ArvoreValida() with
         {
             Itens = [Item("10", "3500027", [Lote("A", sequencia: 1) with { Dados = dados }, Lote("A", sequencia: 2) with { Dados = dados }])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("duplicado", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -309,12 +310,12 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
         EntradaProdutoLancamentoComLotesPersistencia entrada = ArvoreValida() with
         {
             Itens = [Item("10", "3500027", [
-                Lote("A", sequencia: 1) with { Dados = new DadosLoteEntrada("LOTE1", new DateTime(2026, 7, 20), new DateTime(2026, 8, 20)) },
-                Lote("B", sequencia: 2) with { Dados = new DadosLoteEntrada("LOTE1", new DateTime(2026, 7, 21), new DateTime(2026, 8, 20)) }
+                Lote("A", sequencia: 1) with { Dados = new DadosLoteEntrada("LOTE1", DataReferencia.AddDays(-7), DataReferencia.AddDays(30)) },
+                Lote("B", sequencia: 2) with { Dados = new DadosLoteEntrada("LOTE1", DataReferencia.AddDays(-6), DataReferencia.AddDays(30)) }
             ])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains("datas diferentes", erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -331,7 +332,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A", pesagens: [PesagemLocal(Guid.NewGuid(), 1, 1m, status) with { Pesagem = PesagemLocal(Guid.NewGuid(), 1, 1m, status).Pesagem with { Origem = origem } }])])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains(esperado, erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -349,7 +350,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
             Itens = [Item("10", "3500027", [Lote("A", pesagens: [PesagemLocal(Guid.NewGuid(), 1, (decimal)liquido) with { Pesagem = new EntradaProdutoPesagem { Sequencia = 1, PesoBrutoKg = (decimal)bruto, PesoTaraKg = (decimal)tara, PesoLiquidoKg = (decimal)liquido, Origem = "MANUAL", StatusPesagem = "VALIDA" } }])])]
         };
 
-        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada));
+        InvalidOperationException erro = Assert.Throws<InvalidOperationException>(() => ValidadorEntradaProdutoArvoreLotes.Validar(entrada, DataReferencia));
 
         Assert.Contains(esperado, erro.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -385,7 +386,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
 
         Assert.Equal("MANUAL", snapshot.Itens[0].Lotes[0].Pesagens[0].Pesagem.Origem);
         Assert.Equal("VALIDA", snapshot.Itens[0].Lotes[0].Pesagens[0].Pesagem.StatusPesagem);
-        ValidadorEntradaProdutoArvoreLotes.Validar(snapshot);
+        ValidadorEntradaProdutoArvoreLotes.Validar(snapshot, DataReferencia);
     }
     private static EntradaProdutoLancamentoComLotesPersistencia ArvoreValida()
         => new()
@@ -428,7 +429,7 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
         => new()
         {
             CodigoLocal = codigoLocal ?? Guid.NewGuid(),
-            Dados = new DadosLoteEntrada(numero, new DateTime(2026, 7, 20), new DateTime(2026, 8, 20)),
+            Dados = new DadosLoteEntrada(numero, DataReferencia.AddDays(-7), DataReferencia.AddDays(30)),
             CorrelationId = correlationId ?? Guid.NewGuid(),
             EstadoOperacional = EstadoOperacionalLoteEntrada.FinalizadoEmMemoria,
             Pesagens = pesagens ?? [PesagemLocal(Guid.NewGuid(), sequencia, 1m)]
@@ -451,8 +452,8 @@ public sealed class EntradaProdutoArvoreLotesPersistenciaTests
                 Origem = "MANUAL",
                 StatusPesagem = status,
                 NumeroLoteSnapshot = "NAO_USAR",
-                DataFabricacaoSnapshot = new DateTime(2000, 1, 1),
-                DataVencimentoSnapshot = new DateTime(2000, 1, 2)
+                DataFabricacaoSnapshot = DataReferencia.AddDays(-7),
+                DataVencimentoSnapshot = DataReferencia.AddDays(30)
             }
         };
 }

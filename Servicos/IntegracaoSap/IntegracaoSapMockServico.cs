@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.IntegracaoSap;
+using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -6,7 +6,7 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 /// Implementacao MOCK do contrato de integracao SAP. NAO conversa com SAP real:
 /// devolve um historico simulado, resolve produto por OP a partir desse historico e
 /// "finge" um envio bem-sucedido (com protocolo simulado). Serve para destravar o
-/// desenvolvimento de telas/servicos com os tipos definitivos. <see cref="EhSimulado"/> = true.
+/// homologacao de telas/servicos com os tipos definitivos. <see cref="EhSimulado"/> = true.
 /// </summary>
 public sealed class IntegracaoSapMockServico : IIntegracaoSapServico
 {

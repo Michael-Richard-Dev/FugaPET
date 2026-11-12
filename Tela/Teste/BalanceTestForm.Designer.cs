@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tela.Teste;
+namespace FugaPET_Dev.Tela.Teste;
 
 partial class BalanceTestForm
 {
@@ -84,7 +84,7 @@ partial class BalanceTestForm
         weightValueLabel.BorderStyle = BorderStyle.FixedSingle;
         weightValueLabel.Dock = DockStyle.Fill;
         weightValueLabel.Font = new Font("Segoe UI", 34F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        weightValueLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        weightValueLabel.ForeColor = Color.FromArgb(200, 78, 10);
         weightValueLabel.Location = new Point(27, 116);
         weightValueLabel.Name = "weightValueLabel";
         weightValueLabel.Size = new Size(466, 90);
@@ -95,7 +95,7 @@ partial class BalanceTestForm
         // readWeightButton
         // 
         readWeightButton.Anchor = AnchorStyles.None;
-        readWeightButton.BackColor = Color.FromArgb(45, 49, 56);
+        readWeightButton.BackColor = Color.FromArgb(200, 78, 10);
         readWeightButton.FlatAppearance.BorderSize = 0;
         readWeightButton.FlatStyle = FlatStyle.Flat;
         readWeightButton.Font = new Font("Segoe UI", 11F, FontStyle.Bold, GraphicsUnit.Point, 0);

@@ -97,3 +97,4 @@ public sealed class ResultadoLeituraApontamento
         OrdemProducaoSap? ordem = null)
         => new() { Cenario = cenario, Mensagem = mensagem, Codigo = codigo, Ordem = ordem };
 }
+

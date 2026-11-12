@@ -73,12 +73,14 @@ public sealed class ProdutoAcabadoPaleteInt012Gateway : IProdutoAcabadoPaleteInt
                 "Envio de palete (INT012) não autorizado nesta execução (gate FUGAPET_SAP_PALLET_WRITE_ENABLED=false ou destino inválido).");
         }
 
-        // GATE 047-AN: PALLET01 é PackagingMaterial SAP real comprovado; só ausente/vazio/branco bloqueia.
+        // GATE 046-K REV2: PALLET01 e o PackagingMaterial oficial do MVP (INT012 v1.00) - ACEITO.
+        // So bloqueia ausente/vazio/branco (fail-closed); sem rejeicao literal de PALLET01.
         if (string.IsNullOrWhiteSpace(requisicao.PackagingMaterial))
         {
             return ResultadoPaleteInt012.NaoEnviado(
                 "PackagingMaterial ausente/vazio: palete nao enviado.");
         }
+
         using HttpClient http = CriarHttpClient();
         try
         {
@@ -128,4 +130,3 @@ public sealed class ProdutoAcabadoPaleteInt012Gateway : IProdutoAcabadoPaleteInt
         req.Headers.Authorization = new AuthenticationHeaderValue("Basic", token);
     }
 }
-

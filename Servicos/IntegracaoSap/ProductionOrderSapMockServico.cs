@@ -21,3 +21,4 @@ internal sealed class ProductionOrderSapMockServico : IProductionOrderSapServico
         CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<OrdemProducaoSap>>([]);
 }
+

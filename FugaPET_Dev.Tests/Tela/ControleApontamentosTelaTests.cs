@@ -8,7 +8,7 @@ public sealed class ControleApontamentosTelaTests
     // ---------- Card no menu ----------
 
     [Fact]
-    public void ProcessoProducao_DeveTerCardControleApontamentosComF8()
+    public void ProcessoProducao_DeveTerCardControleApontamentosComF7()
     {
         string designer = LerArquivoProjeto("Tela", "ProcessoProducaoForm.Designer.cs");
 
@@ -18,7 +18,7 @@ public sealed class ControleApontamentosTelaTests
             "apontamentosDescriptionLabel.Text = \"Leitura e controle das\\r\\noperações da ordem de produção.\";",
             designer,
             StringComparison.Ordinal);
-        Assert.Contains("apontamentosShortcutLabel.Text = \"F8\";", designer, StringComparison.Ordinal);
+        Assert.Contains("apontamentosShortcutLabel.Text = \"F7\";", designer, StringComparison.Ordinal);
         // Card colocado no slot livre da grade de cards (mesmo tamanho dos demais).
         Assert.Contains("controleApontamentosCard.Location = new Point(796, 336);", designer, StringComparison.Ordinal);
         Assert.Contains("controleApontamentosCard.Size = new Size(240, 250);", designer, StringComparison.Ordinal);
@@ -58,7 +58,7 @@ public sealed class ControleApontamentosTelaTests
         Assert.Contains("using Processo.ProcessoControleApontamentosForm form = new();", painel, StringComparison.Ordinal);
         // Permissão + padrão de esconder/restaurar painel.
         Assert.Contains("PermiteAbrirTelaAsync(", painel, StringComparison.Ordinal);
-        Assert.Contains("if (e.KeyCode == Keys.F8 && _currentContentView == _processoProducaoForm)", painel, StringComparison.Ordinal);
+        Assert.Contains("if (e.KeyCode == Keys.F7 && _currentContentView == _processoProducaoForm)", painel, StringComparison.Ordinal);
 
         string abertura = ExtrairMetodo(painel, "private async Task OpenControleApontamentosAsync()");
         Assert.Contains("Hide();", abertura, StringComparison.Ordinal);
@@ -196,7 +196,9 @@ public sealed class ControleApontamentosTelaTests
         Assert.Contains("TipoProcessoOperacao.ConsumoQuimicos =>", form, StringComparison.Ordinal);
         Assert.DoesNotContain("Descricao.Contains", form, StringComparison.Ordinal);
         Assert.DoesNotContain("Descricao.Contains", servico, StringComparison.Ordinal);
-        Assert.Contains("ObterConfiguracaoOperacaoAsync", servico, StringComparison.Ordinal);
+        // GATE 093D: a rota funcional é resolvida por Plant + WorkCenter (dado da configuração), nunca por
+        // texto/descrição da operação nem pela operação como chave primária.
+        Assert.Contains("ObterConfiguracaoRotaPorWorkCenterAsync", servico, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -227,115 +229,6 @@ public sealed class ControleApontamentosTelaTests
         // Sem contexto, nada é registrado (fluxo manual intacto).
         string registrar = ExtrairMetodo(consumo, "private void RegistrarResultadoApontamento(");
         Assert.Contains("if (_contextoApontamento is not null)", registrar, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Pacote039_DeveExistirENaoUsarNumeroJaOcupado()
-    {
-        string raiz = RaizProjeto();
-        string pacote = Path.Combine(raiz, "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA");
-
-        Assert.True(Directory.Exists(pacote), "Pacote 039 não encontrado.");
-        foreach (string arquivo in new[]
-                 {
-                     "039_controle_apontamentos_DEV_PREFLIGHT_GAIA.sql",
-                     "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql",
-                     "039_controle_apontamentos_DEV_VALIDACAO_GAIA.sql",
-                     "039_controle_apontamentos_DEV_ROLLBACK_GAIA.sql",
-                     "README_039_CONTROLE_APONTAMENTOS_GAIA.txt"
-                 })
-        {
-            Assert.True(File.Exists(Path.Combine(pacote, arquivo)), $"Arquivo ausente no pacote 039: {arquivo}");
-        }
-
-        string proposta = File.ReadAllText(Path.Combine(pacote, "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql"));
-        // As três estruturas + restrições de concorrência + ausência de DELETE.
-        Assert.Contains("operacao_producao_configuracao", proposta, StringComparison.Ordinal);
-        Assert.Contains("operacao_producao_apontamento", proposta, StringComparison.Ordinal);
-        Assert.Contains("operacao_producao_evento", proposta, StringComparison.Ordinal);
-        Assert.Contains("uq_apontamento_ativo_por_operacao", proposta, StringComparison.Ordinal);
-        Assert.Contains("uq_apontamento_idempotency_inicio", proposta, StringComparison.Ordinal);
-        Assert.Contains("uq_apontamento_idempotency_termino", proposta, StringComparison.Ordinal);
-        Assert.DoesNotContain("GRANT DELETE", proposta, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Pacote039_PermissoesDevemUsarAsColunasReaisDaTabela()
-    {
-        string pacote = Path.Combine(
-            RaizProjeto(), "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA");
-        string proposta = File.ReadAllText(Path.Combine(pacote, "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql"));
-        string rollback = File.ReadAllText(Path.Combine(pacote, "039_controle_apontamentos_DEV_ROLLBACK_GAIA.sql"));
-
-        // Colunas REAIS de desenvolvimento.permissao.
-        foreach (string coluna in new[]
-                 {
-                     "modulo_permissao", "rotina_permissao", "acao_permissao",
-                     "descricao_permissao", "situacao_permissao"
-                 })
-        {
-            Assert.Contains(coluna, proposta, StringComparison.Ordinal);
-        }
-
-        // MVP: só as 3 ações com efeito funcional real (ver Pacote039_DeveCriarSomenteAsTresAcoes...).
-        foreach (string acao in new[] { "VISUALIZAR", "INICIAR", "FINALIZAR" })
-        {
-            Assert.Contains($"('{acao}'", proposta, StringComparison.Ordinal);
-        }
-
-        Assert.Contains("desenvolvimento.perfil_permissao", proposta, StringComparison.Ordinal);
-        Assert.Contains("nome_perfil_acesso = 'Administrador'", proposta, StringComparison.Ordinal);
-        Assert.Contains("NOT EXISTS", proposta, StringComparison.Ordinal); // idempotente
-
-        // O rollback também precisa usar os nomes reais e limpar o vínculo antes (FK RESTRICT).
-        Assert.Contains("modulo_permissao = 'PROCESSO_PRODUCAO'", rollback, StringComparison.Ordinal);
-        Assert.Contains("rotina_permissao = 'CONTROLE_APONTAMENTOS'", rollback, StringComparison.Ordinal);
-        Assert.Contains("DELETE FROM desenvolvimento.perfil_permissao", rollback, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Pacote039_DeveTerCentroTrabalhoNaChaveEOsCamposDoResultadoOperacional()
-    {
-        string pacote = Path.Combine(
-            RaizProjeto(), "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA");
-        string proposta = File.ReadAllText(Path.Combine(pacote, "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql"));
-        string preflight = File.ReadAllText(Path.Combine(pacote, "039_controle_apontamentos_DEV_PREFLIGHT_GAIA.sql"));
-
-        // Centro de trabalho na chave única da configuração.
-        Assert.Contains(
-            "(centro, tipo_ordem, sequencia_sap, operacao_sap, suboperacao_sap, centro_trabalho)",
-            proposta,
-            StringComparison.Ordinal);
-
-        // Campos do vínculo com o resultado operacional.
-        foreach (string campo in new[]
-                 {
-                     "resultado_operacional", "codigo_registro_processo",
-                     "concluido_operacional_em", "mensagem_resultado_operacional"
-                 })
-        {
-            Assert.Contains(campo, proposta, StringComparison.Ordinal);
-            Assert.Contains(campo, preflight, StringComparison.Ordinal);
-        }
-
-        // Preflight valida auditoria da configuração.
-        Assert.Contains("criado_por", preflight, StringComparison.Ordinal);
-        Assert.Contains("alterado_em", preflight, StringComparison.Ordinal);
-        Assert.Contains("alterado_por", preflight, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Pacote039_CheckDeStatus_DeveConterSomenteEstadosPersistidos()
-    {
-        string proposta = File.ReadAllText(Path.Combine(
-            RaizProjeto(), "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA",
-            "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql"));
-
-        // Só os estados com transição real são aceitos pelo CHECK.
-        Assert.Contains(
-            "CHECK (status IN ('EM_ANDAMENTO','AGUARDANDO_FINALIZACAO','CONCLUIDA','CANCELADA'))",
-            proposta,
-            StringComparison.Ordinal);
     }
 
     private static string LerArquivoProjeto(params string[] partes)

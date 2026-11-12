@@ -122,7 +122,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         productionOrderTextBox.TextAlign = HorizontalAlignment.Left;
         productionOrderTextBox.BorderStyle = BorderStyle.None;
         productionOrderTextBox.BackColor = Color.White;
-        productionOrderTextBox.ForeColor = Color.FromArgb(229, 27, 43);
+        productionOrderTextBox.ForeColor = Color.FromArgb(200, 78, 10);
         productionOrderTextBox.TabStop = true;
         productionOrderSearchLabel.Enabled = true;
         productionOrderSearchLabel.Cursor = Cursors.Hand;
@@ -255,7 +255,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         // Mesmo efeito hover do cabeçalho das demais telas de Processo.
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(200, 78, 10));
     }
 
     private static void ConfigureTitleButtonHover(Label button, Color hoverColor)
@@ -511,7 +511,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect
         };
-        paletesDataGridView.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(17, 24, 39);
+        paletesDataGridView.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(200, 78, 10);
         paletesDataGridView.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
         paletesDataGridView.ColumnHeadersDefaultCellStyle.Font = FonteGridHeader;
         paletesDataGridView.DefaultCellStyle.Font = FonteGridCell;
@@ -689,22 +689,24 @@ public partial class ProcessoProdutoAcabadoForm : Form
     }
 
     /// <summary>
-    /// REGRA 4: SALDO PENDENTE exibido = saldo pendente da OP (fonte SAP: <c>QuantidadePendente</c>) menos a
-    /// produção que EFETIVAMENTE concluiu o fluxo (caixas CONFIRMADA_SAP). NÃO abate caixa cancelada, apenas
-    /// pesada, AguardandoAutorizacaoSap, EnviandoSap, ErroSap, IndeterminadoTimeout ou não confirmada. Regra
-    /// ÚNICA, reutilizada no carregamento da OP e após cada confirmação — sem acessar banco/OData na Form.
+    /// Saldo pendente exibido: base SAP menos reserva local elegível na mesma unidade de produção.
+    /// Campo principal e rodapé reutilizam a mesma regra, sem acessar banco/OData na Form.
     /// </summary>
     private decimal CalcularSaldoPendenteExibido()
-        => _ordemAtual is null
-            ? 0m
-            : CalculoSaldoProdutoAcabado.SaldoPendenteExibido(_ordemAtual.QuantidadePendente, _caixasPesadas);
+        // GATE 118B: QuantidadePendente agora e TRI-STATE. Pendente indeterminado exibe 0 (apenas
+        // EXIBICAO, igual ao comportamento anterior quando nao havia OP) e nunca alimenta decisao de envio.
+        => _ordemAtual?.QuantidadePendente is decimal pendente
+            ? CalculoSaldoProdutoAcabado.SaldoPendenteExibido(pendente, _caixasPesadas, UnidadeProducaoAtual)
+            : 0m;
 
     /// <summary>REGRA 4: atualiza IMEDIATAMENTE o campo SALDO PENDENTE (sem recarregar a OP), pela regra única.</summary>
     private void AtualizarSaldoPendente()
     {
         if (_ordemAtual is not null)
         {
-            classificationDateTextBox.Text = FormatarKg(CalcularSaldoPendenteExibido());
+            // GATE 121A: saldo pendente e QUANTIDADE DE PRODUCAO ⇒ unidade da OP, nao KG cravado.
+            classificationDateTextBox.Text =
+                FormatarQuantidadeProducao(CalcularSaldoPendenteExibido(), UnidadeProducaoAtual);
         }
     }
 
@@ -739,6 +741,20 @@ public partial class ProcessoProdutoAcabadoForm : Form
             || caixa.StatusIntegracao is not (StatusIntegracaoCaixa.AguardandoAutorizacaoSap or StatusIntegracaoCaixa.ProntaParaEnvio))
         {
             statusLabel.Text = "Nenhuma caixa elegível para envio ao SAP.";
+            return;
+        }
+
+        // GATE 113J (§6): o binding 045 é PERSISTENTE e IRREVERSÍVEL. Uma caixa COM etapas 045 nunca pode ser
+        // despachada como HU direta — nem após restart/erro/timeout/recovery com o runtime em modo HU_ONLY
+        // (gate do pipeline desligado). A consulta é independente do gate.
+        // GATE 113M (B2): o indeterminado tem mensagem PRÓPRIA — não afirmamos que a caixa "possui vínculo"
+        // quando apenas não foi possível consultar. Ambos bloqueiam; ZERO etapas consultadas liberam (113G).
+        EstadoVinculo045 vinculo045 = await _controller.ConsultarVinculoPipeline045Async(codigo);
+        if (ProdutoAcabadoController.BloqueiaHuDireta(vinculo045))
+        {
+            string bloqueio045 = MensagemBloqueioVinculo045(vinculo045);
+            statusLabel.Text = bloqueio045;
+            MessageBox.Show(bloqueio045, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -894,6 +910,19 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
+        // GATE 113E (§3/§4): o caminho do pipeline não validava o ESTADO da caixa (o HU-only sempre validou).
+        // Sem esta guarda, acionar o botão com uma caixa já CONFIRMADA_SAP (ex.: CX-1000210-0006/0007, criadas
+        // em HU-only) postaria 261 e 101 NOVOS antes de a idempotência da etapa HU ser sequer consultada —
+        // a ordem é estrita 261→101→HU. A proteção passa a ser do C#, ANTES de iniciar fluxo 045/claim/POST,
+        // sem depender da recusa do banco.
+        if (!CaixaElegivelParaPipeline(caixa))
+        {
+            string bloqueio = MensagemCaixaInelegivelParaPipeline(caixa);
+            statusLabel.Text = bloqueio;
+            MessageBox.Show(bloqueio, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         ResultadoBloqueioPipeline045 bloqueioPersistido = await _controller.VerificarBloqueioPipeline045Async(codigo);
         if (bloqueioPersistido.Bloqueado)
         {
@@ -916,17 +945,36 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
 
         string terminal = _contextoTerminal?.NomeTerminal ?? string.Empty;
+
+        // GATE 118B (§5 STEP 1..4): IMEDIATAMENTE antes do calculo definitivo, relê item + componentes
+        // no SAP e roda o alocador cumulativo. Bloqueio aqui => nenhum POST (261/101/HU nem comecam).
+        Resultado261Cumulativo alocacao = await _controller.CalcularAlocacao261FrescaAsync(caixa);
+        if (alocacao.Cenario != CenarioAllocator261.Ok)
+        {
+            statusLabel.Text = alocacao.Mensagem;
+            MessageBox.Show(alocacao.Mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         // Origem SEM inferência: a View só entrega dados funcionais confiáveis (OP + caixa). Identidade técnica
         // de tentativa/correlation é responsabilidade do orquestrador/store. Campos 261/101 seguem fail-closed.
-        ProdutoAcabadoPipelineOrigem origem = MontarOrigemPipelineRuntime(caixa, _ordemAtual, DateTime.UtcNow);
+        // (§5 STEP 5) As quantidades do 261 sao os DELTAS do alocador, nunca a necessidade integral da OP.
+        ProdutoAcabadoPipelineOrigem origem =
+            MontarOrigemPipelineRuntime(caixa, _ordemAtual, DateTime.UtcNow, alocacao);
 
         _envioCaixaSapEmAndamento = true;
         AtualizarEstadoEnvioCaixaSap();
+        // GATE 113E (§5): paridade de etiqueta com o HU-only. A impressão só pode ocorrer DEPOIS do bloco
+        // finally, que recarrega o snapshot persistido (autoridade), e SOMENTE com o pipeline integralmente
+        // confirmado. Estas duas variáveis carregam essa decisão para fora do try.
+        bool pipelineConcluido = false;
+        ProdutoAcabadoCaixa? caixaConfirmadaPipeline = null;
         try
         {
             ResultadoPipelineProdutoAcabado resultado = await _controller.EnviarCaixaPipelineAsync(origem, usuario, terminal);
             AtualizarEstadosPipeline(resultado);
             ExibirResultadoOperacionalPipeline(resultado);
+            pipelineConcluido = PipelineConcluidoIntegralmente(resultado);
         }
         catch (Exception ex)
         {
@@ -947,6 +995,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 {
                     SubstituirCaixaNoCache(snapshot);
                     _codigoCaixaEnvioIndeterminado = null;
+                    caixaConfirmadaPipeline = snapshot;
                     await AtualizarBloqueioPipeline045PersistidoAsync(codigo);
                 }
                 else
@@ -965,17 +1014,80 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AtualizarBotoesOperacao();
             AtualizarSaldoPendente();
         }
+
+        // GATE 113E (§5) revisto: a etiqueta desta caixa já foi emitida na pesagem, antes do pipeline.
+        // Imprimir de novo aqui colocaria duas etiquetas na mesma caixa física. A etiqueta com a HU
+        // confirmada continua disponível pela reimpressão, sob demanda.
+        _ = pipelineConcluido;
+        _ = caixaConfirmadaPipeline;
     }
+
+    /// <summary>
+    /// GATE 113E (§5): true SOMENTE quando o pipeline concluiu integralmente — sucesso declarado E etapa
+    /// final Concluido (que o orquestrador só emite com 261 confirmado, 101 confirmado e HU ConfirmadaSap).
+    /// Puro e testável: é o gatilho da etiqueta, nunca uma etapa parcial.
+    /// </summary>
+    internal static bool PipelineConcluidoIntegralmente(ResultadoPipelineProdutoAcabado? resultado)
+        => resultado is { ClaimObtido: true, UltimaEtapa: EtapaPipelineProdutoAcabado.Concluido };
+
+    /// <summary>
+    /// GATE 113E (§3): estados em que uma caixa PODE entrar no pipeline 261→101→HU — exatamente os mesmos
+    /// aceitos pelo caminho HU-only. Puro e testável, sem WinForms.
+    /// Bloqueia CONFIRMADA_SAP, CANCELADA, ERRO_SAP, INDETERMINADO_TIMEOUT, BLOQUEADA, EM_PESAGEM,
+    /// FINALIZADA_LOCAL, PREVIEW_HU_GERADO, ENVIANDO_SAP e qualquer estado futuro (allowlist, não denylist).
+    /// </summary>
+    /// <summary>GATE 113J (§6): bloqueio de HU direta em caixa COMPROVADAMENTE vinculada ao 045.</summary>
+    internal const string MensagemCaixaVinculadaAoPipeline045 =
+        "Esta caixa possui vínculo 045 (pipeline 261→101→HU) e NÃO pode ser enviada como HU direta. "
+        + "Use o fluxo/recovery 045. Nenhum POST executado.";
+
+    /// <summary>
+    /// GATE 113M (B2): bloqueio quando NÃO foi possível consultar o vínculo 045. Mensagem distinta, para não
+    /// afirmar um vínculo que não foi comprovado — o bloqueio é por impossibilidade de prova, não por vínculo.
+    /// </summary>
+    internal const string MensagemVinculo045NaoComprovavel =
+        "Não foi possível comprovar a ausência de vínculo 045; envio HU bloqueado por segurança. "
+        + "Nenhum POST executado.";
+
+    /// <summary>GATE 113M (B2): mensagem correta por estado do vínculo. Pura e testável.</summary>
+    internal static string MensagemBloqueioVinculo045(EstadoVinculo045 estado)
+        => estado == EstadoVinculo045.ConsultaIndisponivel
+            ? MensagemVinculo045NaoComprovavel
+            : MensagemCaixaVinculadaAoPipeline045;
+
+    internal static bool CaixaElegivelParaPipeline(ProdutoAcabadoCaixa? caixa)
+        => caixa?.CodigoProdutoAcabadoCaixa is long
+            && caixa.StatusIntegracao
+                is StatusIntegracaoCaixa.AguardandoAutorizacaoSap
+                or StatusIntegracaoCaixa.ProntaParaEnvio;
+
+    /// <summary>GATE 113E: motivo objetivo da inelegibilidade, nomeando o estado persistido.</summary>
+    internal static string MensagemCaixaInelegivelParaPipeline(ProdutoAcabadoCaixa? caixa)
+        => caixa is null
+            ? "Nenhuma caixa elegível para o pipeline SAP."
+            : $"Caixa {caixa.CodigoCaixaLocal} está em "
+                + $"{MapeadorStatusHuCaixa.ParaTextoBanco(caixa.StatusIntegracao)} e NÃO pode entrar no pipeline "
+                + "261→101→HU. Apenas caixas em AGUARDANDO_AUTORIZACAO_SAP ou PRONTA_PARA_ENVIO são elegíveis. "
+                + "Nenhum POST foi executado.";
 
     /// <summary>
     /// Data operacional real do pipeline PA: usa o carimbo do envio e normaliza para a data UTC,
     /// espelhando o contrato homologado do 261 (PostingDate e DocumentDate recebem a mesma data explícita).
     /// Sem data de envio, retorna MinValue para o builder bloquear fail-closed.
     /// </summary>
+    /// <remarks>
+    /// GATE 118B: os componentes do 261 NAO sao mais derivados da OP em cache. A quantidade por caixa
+    /// vem EXCLUSIVAMENTE do alocador cumulativo, alimentado por leitura FRESCA do SAP, e e o DELTA
+    /// contra o WithdrawnQuantity fresco — nunca a RequiredQuantity integral da OP (defeito do
+    /// incidente). O parametro <paramref name="alocacao"/> e obrigatorio e precisa estar em
+    /// <see cref="CenarioAllocator261.Ok"/>; qualquer outro cenario produz origem SEM componentes, que
+    /// o builder de commands bloqueia fail-closed (zero HTTP).
+    /// </remarks>
     internal static ProdutoAcabadoPipelineOrigem MontarOrigemPipelineRuntime(
         ProdutoAcabadoCaixa caixa,
         ProdutoAcabadoOrdem? ordem,
-        DateTime dataLancamentoUtc)
+        DateTime dataLancamentoUtc,
+        Resultado261Cumulativo? alocacao)
     {
         ArgumentNullException.ThrowIfNull(caixa);
 
@@ -988,7 +1100,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             NumeroOrdem = caixa.NumeroOrdemProducao ?? origemOrdem?.NumeroOrdem ?? string.Empty,
             PostingDate = dataOperacionalPipeline,
             DocumentDate = dataOperacionalPipeline,
-            Componentes = MontarComponentesPipelineRuntime(origemOrdem),
+            Componentes = MontarComponentesPipelineRuntime(alocacao),
             Material101 = caixa.Material,
             Plant101 = caixa.Centro,
             StorageLocation101 = caixa.Deposito,
@@ -999,26 +1111,29 @@ public partial class ProcessoProdutoAcabadoForm : Form
         };
     }
 
-    private static IReadOnlyList<ProdutoAcabadoComponenteOrigem> MontarComponentesPipelineRuntime(ProdutoAcabadoOrdem? ordem)
+    /// <summary>
+    /// GATE 118B: projeta os DELTAS do alocador nos componentes do 261. Alocacao ausente, bloqueada ou
+    /// com nada a enviar => lista VAZIA (o builder bloqueia). Zero fallback para a OP em cache.
+    /// </summary>
+    internal static IReadOnlyList<ProdutoAcabadoComponenteOrigem> MontarComponentesPipelineRuntime(
+        Resultado261Cumulativo? alocacao)
     {
-        if (ordem?.Componentes is null || ordem.Componentes.Count == 0)
+        if (alocacao is null || alocacao.Cenario != CenarioAllocator261.Ok || alocacao.Itens.Count == 0)
         {
             return [];
         }
 
-        return ordem.Componentes
-            .Where(componente => string.IsNullOrWhiteSpace(componente.TipoMovimento)
-                || string.Equals(componente.TipoMovimento.Trim(), "261", StringComparison.OrdinalIgnoreCase))
-            .Select(componente => new ProdutoAcabadoComponenteOrigem
+        return alocacao.Itens
+            .Select(item => new ProdutoAcabadoComponenteOrigem
             {
-                Material = componente.Material,
-                Plant = componente.Centro,
-                StorageLocation = componente.Deposito,
-                Quantidade = componente.QuantidadeNecessaria,
-                Unidade = componente.Unidade,
-                Reservation = componente.Reserva,
-                ReservationItem = componente.ItemReserva,
-                Batch = componente.Lote
+                Material = item.Material,
+                Plant = item.Plant,
+                StorageLocation = item.StorageLocation,
+                Quantidade = item.Delta261,
+                Unidade = item.Unidade,
+                Reservation = item.Reservation,
+                ReservationItem = item.ReservationItem,
+                Batch = item.Batch
             })
             .ToArray();
     }
@@ -1217,12 +1332,16 @@ public partial class ProcessoProdutoAcabadoForm : Form
             _normaEmbalagem = resultado.NormaEmbalagem;
             _caixasPesadas.Clear();
             // GATE 046-E §12: BANCO autoritativo — ao carregar a OP, recarrega os paletes locais persistidos.
-            await RecarregarPaletesPersistidosAsync();
+            bool paletesRecarregados = await RecarregarPaletesPersistidosAsync();
             _taraCaixaSelecionada = null;
 
             // §2: BANCO = fonte da verdade. Ao abrir/atualizar, recupera a caixa ATIVA do terminal e usa o
             // snapshot persistido (nunca inventa estado local). Uma caixa ativa por terminal continua obrigatória.
             string aviso = await RecuperarCaixasPersistidasAsync();
+
+            // GATE 046-H: com caixas e paletes ja carregados do banco, reflete o vinculo persistido na grade de
+            // caixas (Palete local). So aplica se a recarga dos paletes teve sucesso (fail-closed preservado).
+            if (paletesRecarregados) { AplicarVinculoPaleteDasCaixasReconstruido(); }
 
             PreencherDadosOrdem();
             PreencherNormaEmbalagem();
@@ -1275,10 +1394,16 @@ public partial class ProcessoProdutoAcabadoForm : Form
         finishedProductTextBox.Visible = descricaoUtil;
         lotTextBox.Text = _ordemAtual.Lote;
         ovenExitTextBox.Text = _ordemAtual.DepositoDestino;
-        // REGRA 4: saldo pendente exibido = regra ÚNICA (OP.QuantidadePendente − caixas CONFIRMADA_SAP).
-        classificationDateTextBox.Text = FormatarKg(CalcularSaldoPendenteExibido());
-        manufacturingDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadePlanejada);
-        expirationDateTextBox.Text = FormatarKg(_ordemAtual.QuantidadeEntregue);
+        // GATE 121A: os TRES campos de quantidade de producao usam a ProductionUnit REAL da OP.
+        classificationDateTextBox.Text =
+            FormatarQuantidadeProducao(CalcularSaldoPendenteExibido(), UnidadeProducaoAtual);
+        manufacturingDateTextBox.Text =
+            FormatarQuantidadeProducao(_ordemAtual.QuantidadePlanejada, UnidadeProducaoAtual);
+        // GATE 118B: producao recebida e TRI-STATE (MfgOrderItemGoodsReceiptQty). Indeterminado NAO
+        // vira "0,000" na tela: mostra vazio, para nao simular um valor que o SAP nao devolveu.
+        expirationDateTextBox.Text = _ordemAtual.QuantidadeRecebidaSap is decimal recebidaSap
+            ? FormatarQuantidadeProducao(recebidaSap, UnidadeProducaoAtual)
+            : string.Empty;
         readForecastBoxesTextBox.Text = _normaEmbalagem?.QuantidadeProdutosPorCaixa.ToString(CultureInfo.InvariantCulture) ?? "0";
         // NORMA EMBALAGEM: PackagingInstruction quando preenchido; "NÃO INFORMADA" quando há norma válida
         // sem código; vazio quando não há norma válida.
@@ -1611,7 +1736,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
-        await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, "BALANCA");
+        await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, "BALANCA", leitura.CodigoBalanca);
     }
 
     private async Task RegistrarPesoManualAsync()
@@ -1643,7 +1768,8 @@ public partial class ProcessoProdutoAcabadoForm : Form
         await RegistrarCaixaProdutoAcabadoAsync(pesoBrutoKg, tara.PesoKg, "MANUAL");
     }
 
-    private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem)
+    private async Task<bool> RegistrarCaixaProdutoAcabadoAsync(decimal pesoBrutoKg, decimal taraKg, string origem,
+        long? codigoBalanca = null)
     {
         if (_ordemAtual is null || _normaEmbalagem is null)
         {
@@ -1683,6 +1809,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         // §1: a finalização REAL delega ao Controller → ProdutoAcabadoHuService → Repository (banco = fonte
         // da verdade). O snapshot PERSISTIDO (com numeração/estado do banco) substitui o objeto temporário.
         ResultadoFinalizacaoCaixa resultado;
+        var etapaRegistro = Servicos.Diagnostico.EtapaRegistroCaixa120E.MONTAR_CAIXA;
         try
         {
             resultado = await _controller.FinalizarCaixaLocalAsync(
@@ -1694,11 +1821,17 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 terminal,
                 codigoUsuario: codigoUsuario,
                 materialEmbalagem: string.IsNullOrWhiteSpace(materialEmbalagem) ? null : materialEmbalagem,
-                origemMaterialEmbalagem: origemEmbalagem);
+                origemMaterialEmbalagem: origemEmbalagem,
+                codigoBalanca: codigoBalanca,
+                diagnostico: etapa =>
+                {
+                    etapaRegistro = etapa;
+                    Servicos.Diagnostico.RegistroCaixaDiag120E.Registrar(etapa);
+                });
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"[ProdutoAcabado] Falha ao registrar caixa no banco: {ex.GetType().Name}");
+            Servicos.Diagnostico.RegistroCaixaDiag120E.Registrar(etapaRegistro, ex);
             MessageBox.Show("Não foi possível registrar a caixa no banco. Tente novamente.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
@@ -1729,9 +1862,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
     }
 
     /// <summary>
-    /// Impressão no momento da pesagem. Efeito puramente local e isolado: qualquer falha é reportada
-    /// na barra de status e NUNCA propaga — a caixa persistida continua válida, e a etiqueta pode ser
-    /// emitida depois pela reimpressão. Sem caixa de diálogo, para não interromper quem está pesando.
+    /// Impressão no momento da pesagem. Efeito puramente local e isolado: qualquer falha é reportada na
+    /// barra de status e NUNCA propaga — a caixa persistida continua válida, e a etiqueta pode ser emitida
+    /// depois pela reimpressão. Sem caixa de diálogo, para não interromper o ritmo de quem está pesando.
     /// </summary>
     private async Task ImprimirEtiquetaCaixaPesadaAsync(ProdutoAcabadoCaixa caixa)
     {
@@ -2207,6 +2340,8 @@ public partial class ProcessoProdutoAcabadoForm : Form
             // memória (isso afirmaria uma reconstrução persistente que não ocorreu). O COMMIT já aconteceu: não
             // desfazer, não recriar, não duplicar estado — a próxima leitura/reabertura reconstrói pelo banco.
             bool recarregou = await RecarregarPaletesPersistidosAsync();
+            // GATE 046-H: reflete na grade de caixas o vinculo vindo da composicao PERSISTIDA recarregada.
+            if (recarregou) { AplicarVinculoPaleteDasCaixasReconstruido(); }
             AtualizarGridCaixas();
             AtualizarCamposPaletizacaoPadrao();
             AtualizarResumoOperacional();
@@ -2457,6 +2592,40 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
     }
 
+    /// <summary>
+    /// GATE 046-H: reflete na projecao das caixas o vinculo caixa->palete vindo EXCLUSIVAMENTE da composicao
+    /// PERSISTIDA recarregada do banco (autoritativa). Casa cada caixa da composicao com a caixa em
+    /// <c>_caixasPesadas</c> pelo identificador persistente (CodigoProdutoAcabadoCaixa = codigo_hu_caixa) e grava
+    /// <c>CodigoPaleteLocal</c>. NUNCA infere por intervalo/primeira-ultima nem por estado antigo em memoria.
+    /// Reseta antes de reaplicar para que o banco seja a unica fonte do estado de vinculo exibido.
+    /// </summary>
+    private void AplicarVinculoPaleteDasCaixasReconstruido()
+    {
+        foreach (ProdutoAcabadoCaixa caixa in _caixasPesadas)
+        {
+            caixa.CodigoPaleteLocal = string.Empty;
+        }
+
+        foreach (ProdutoAcabadoPalete palete in _paletesMontados)
+        {
+            foreach (ProdutoAcabadoCaixa caixaComposicao in palete.Caixas)
+            {
+                if (caixaComposicao.CodigoProdutoAcabadoCaixa is not long codigoCaixa)
+                {
+                    continue;
+                }
+
+                foreach (ProdutoAcabadoCaixa caixaGrade in _caixasPesadas)
+                {
+                    if (caixaGrade.CodigoProdutoAcabadoCaixa == codigoCaixa)
+                    {
+                        caixaGrade.CodigoPaleteLocal = palete.CodigoPaleteLocal;
+                    }
+                }
+            }
+        }
+    }
+
     private void AtualizarGridPaletes()
     {
         if (paletesDataGridView is null)
@@ -2479,6 +2648,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 palete.StatusSap);
         }
     }
+
 
     /// <summary>
     /// Reimpressão explícita da etiqueta de uma caixa (duplo clique na grid). Exige confirmação humana e
@@ -2621,7 +2791,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         iniciarLeituraButton.PrimaryText = _leituraIniciada ? "PARAR LEITURA" : "INICIAR LEITURA";
         iniciarLeituraButton.IconGlyph = _leituraIniciada ? "\uE71A" : "\uE768";
         iniciarLeituraButton.BaseBackColor = _leituraIniciada
-            ? Color.FromArgb(212, 37, 49)                        // vermelho parar
+            ? Color.FromArgb(250, 105, 26)                        // vermelho parar
             : podeAlternarLeitura ? Color.FromArgb(34, 166, 82)  // verde iniciar
                                   : Color.FromArgb(156, 163, 175); // cinza desabilitado
         iniciarLeituraButton.BaseForeColor = Color.White;
@@ -2681,16 +2851,22 @@ public partial class ProcessoProdutoAcabadoForm : Form
         boxesValueLabel.Text = qtdCaixas.ToString("000", CultureInfo.InvariantCulture);
         boxesTotalLabel.Text = "de 0";
 
-        bool temOp = _ordemAtual is not null;
-        string unidade = (_ordemAtual?.Unidade ?? "KG").Trim().ToUpperInvariant();
+        // GATE 121A: a unidade da OP NAO e mais defaultada para "KG" quando ausente — nada de
+        // inventar unidade. A escolha do bloco (peso x produtos) fica IDENTICA ao comportamento
+        // anterior, porque unidade vazia continua caindo em ehPeso (a agregacao nao muda).
+        string unidade = (_ordemAtual?.Unidade ?? string.Empty).Trim().ToUpperInvariant();
         bool ehPeso = unidade is "KG" or "KGM" or "G" or "TO" or "";
         if (ehPeso)
         {
             packagesTitleLabel.Text = "PESO REGISTRADO";
+            // Soma de PESO FISICO das caixas: KG e correto aqui.
             decimal liquido = _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg);
             packagesCounterLabel.Text = FormatarKg(liquido);
             packagesValueLabel.Text = FormatarKg(liquido);
-            packagesTotalLabel.Text = temOp ? $"de {FormatarKg(_ordemAtual!.QuantidadePendente)} KG" : "de 0";
+            // GATE 118B: pendente TRI-STATE — indeterminado nao inventa numero no rodape.
+            // GATE 121A: o pendente e QUANTIDADE DE PRODUCAO ⇒ unidade da OP. Corrige tambem o
+            // sufixo " KG" DUPLICADO que existia aqui (FormatarKg ja anexava a unidade, e a
+            // interpolacao anexava outra), e passa a respeitar G/TO em vez de rotular tudo como KG.
         }
         else
         {
@@ -2698,10 +2874,11 @@ public partial class ProcessoProdutoAcabadoForm : Form
             int produtos = _caixasPesadas.Sum(caixa => caixa.QuantidadeProdutos);
             packagesCounterLabel.Text = produtos.ToString("000", CultureInfo.InvariantCulture);
             packagesValueLabel.Text = produtos.ToString("000", CultureInfo.InvariantCulture);
-            packagesTotalLabel.Text = temOp
-                ? $"de {_ordemAtual!.QuantidadePendente.ToString("0", CultureInfo.InvariantCulture)}"
-                : "de 0";
         }
+
+        packagesTotalLabel.Text = _ordemAtual?.QuantidadePendente is not null
+            ? $"de {FormatarQuantidadeProducao(CalcularSaldoPendenteExibido(), UnidadeProducaoAtual)}"
+            : "de 0";
 
         // REV3-§10: o texto reflete o estado real do gate de escrita HU (não afirma "desativado" quando autorizado).
         string estadoEnvio = _controller.EnvioHuAutorizado
@@ -2897,8 +3074,40 @@ public partial class ProcessoProdutoAcabadoForm : Form
         return button;
     }
 
+    /// <summary>
+    /// Formata PESO FISICO. A unidade KG e correta e deliberada aqui: peso bruto, tara e peso
+    /// liquido sao medidos em KG pela balanca, independentemente da ProductionUnit da OP.
+    /// NAO usar para quantidade de producao — para isso existe
+    /// <see cref="FormatarQuantidadeProducao"/> (GATE 121A).
+    /// </summary>
     private static string FormatarKg(decimal valor)
         => $"{valor.ToString("0.000", CultureInfo.GetCultureInfo("pt-BR"))} KG";
+
+    /// <summary>
+    /// GATE 121A: formata QUANTIDADE DE PRODUCAO com a unidade REAL da Ordem de Producao
+    /// (A_ProductionOrder_2.ProductionUnit). Antes estes campos usavam FormatarKg e exibiam "KG"
+    /// cravado, mesmo quando a OP informava UN — o numero estava certo e o rotulo mentia.
+    /// <para>
+    /// FAIL-CLOSED: unidade ausente/vazia/em branco NAO vira "KG". Devolve apenas o numero, sem
+    /// sufixo, para nao afirmar uma unidade que o SAP nao informou.
+    /// </para>
+    /// <para>
+    /// Puramente apresentacional: NAO converte valor, NAO altera a escala numerica e NAO depende
+    /// da unidade para calcular nada. O formato numerico e o MESMO de FormatarKg.
+    /// </para>
+    /// </summary>
+    internal static string FormatarQuantidadeProducao(decimal valor, string? unidadeProducao)
+    {
+        string numero = valor.ToString("0.000", CultureInfo.GetCultureInfo("pt-BR"));
+        string unidade = unidadeProducao?.Trim() ?? string.Empty;
+        return unidade.Length == 0 ? numero : $"{numero} {unidade.ToUpperInvariant()}";
+    }
+
+    /// <summary>
+    /// GATE 121A: unidade de producao da OP carregada. Vazia quando nao ha OP ou quando o SAP nao
+    /// informou ProductionUnit — nunca "KG" por suposicao.
+    /// </summary>
+    private string UnidadeProducaoAtual => _ordemAtual?.Unidade?.Trim() ?? string.Empty;
 
     private static bool TryParsePesoKg(string texto, out decimal peso)
     {

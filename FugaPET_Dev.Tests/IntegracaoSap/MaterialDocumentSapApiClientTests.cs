@@ -143,6 +143,7 @@ public sealed class MaterialDocumentSapApiClientTests
 
         Assert.False(resultado.Sucesso);
         Assert.Equal(401, resultado.StatusHttp);
+        Assert.False(resultado.PostTentado);
         Assert.Equal(MaterialDocumentSapApiClient.EtapaCsrfFetch, resultado.Etapa);
         Assert.Contains("HTTP 401", resultado.MensagemSanitizada);
         Assert.Equal(1, handler.QuantidadeRequisicoes);
@@ -169,6 +170,7 @@ public sealed class MaterialDocumentSapApiClientTests
 
         Assert.False(resultado.Sucesso);
         Assert.Equal(400, resultado.StatusHttp);
+        Assert.True(resultado.PostTentado);
         Assert.Equal(MaterialDocumentSapApiClient.EtapaPost, resultado.Etapa);
         Assert.Contains("HTTP 400", resultado.MensagemSanitizada);
         Assert.Equal(2, handler.QuantidadeRequisicoes); // fetch + post
@@ -528,7 +530,8 @@ public sealed class MaterialDocumentSapApiClientTests
         Assert.DoesNotContain("AddDays(571", conteudo, StringComparison.Ordinal);
     }
     private static MaterialDocumentSapRequest Requisicao()
-        => new()
+    {
+        MaterialDocumentSapRequest request = new()
         {
             GoodsMovementCode = "01",
             PostingDate = new DateTime(2024, 1, 1),
@@ -550,6 +553,11 @@ public sealed class MaterialDocumentSapApiClientTests
                 }
             ]
         };
+        foreach (MaterialDocumentSapItemRequest item in request.Itens)
+            FugaPET_Dev.Servicos.Entrada.P5.ClassificacaoMaterialDocumentP5.Registrar(item,
+                new ProdutoSapMestre { CodigoProduto = item.Material, TipoMaterialSap = "HIBE", Consultado = true });
+        return request;
+    }
 
     private static ConfiguracaoSap CriarConfiguracao(string? materialDocumentBaseUrl = null)
         => new()

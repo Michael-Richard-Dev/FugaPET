@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
+namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Apontamento de pesagem a ser enviado ao SAP. Contrato de ENTRADA do envio.

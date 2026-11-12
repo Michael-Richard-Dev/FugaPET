@@ -24,11 +24,14 @@ public sealed class ProdutoAcabadoPaleteInt012Orquestrador
 
     private readonly IProdutoAcabadoPipeline045Operacoes _ops;
     private readonly IProdutoAcabadoPaleteInt012Gateway _gateway;
+    private readonly ProdutoAcabadoPaleteRecoveryServico _recovery;
 
     public ProdutoAcabadoPaleteInt012Orquestrador(IProdutoAcabadoPipeline045Operacoes ops, IProdutoAcabadoPaleteInt012Gateway gateway)
     {
         _ops = ops ?? throw new ArgumentNullException(nameof(ops));
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
+        // GATE 122C (TRACK B): guard de recovery sobre as MESMAS operacoes 045 (sem segunda arquitetura).
+        _recovery = new ProdutoAcabadoPaleteRecoveryServico(_ops);
     }
 
     public async Task<ResultadoPalete045> ExecutarAsync(
@@ -66,6 +69,18 @@ public sealed class ProdutoAcabadoPaleteInt012Orquestrador
         if (codigoPaleteExistente is long paleteExistente && paleteExistente > 0)
         {
             codigoPalete = paleteExistente;
+
+            // GATE 122C (TRACK B §11/§12): para palete JA persistido, o estado pendente BLOQUEIA o
+            // novo POST ANTES de qualquer claim. Era o vazio do 122A: um envio anterior
+            // indeterminado (ENVIADO_SAP) ou em ERRO_SAP permitia nova tentativa sem reconciliacao,
+            // ou seja, retry cego. Estado nao comprovavel tambem bloqueia (fail-closed).
+            (bool permitido, PendenciaPalete pendencia, string motivo) =
+                await _recovery.PodeEnviarAsync(codigoPalete, cancellationToken);
+            if (!permitido)
+            {
+                return ResultadoPalete045.Bloqueado(
+                    $"{motivo} (estado persistido: {pendencia}). Use o fluxo de reconciliacao de palete.");
+            }
         }
         else
         {
@@ -257,6 +272,7 @@ public sealed class ProdutoAcabadoPaleteInt012Orquestrador
         return s.Length <= 400 ? s : s[..400];
     }
 }
+
 
 
 

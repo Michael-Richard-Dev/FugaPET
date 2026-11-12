@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.Cadastro;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
@@ -102,6 +102,9 @@ public sealed class IntegracaoEntradaSapServico
         string chaveNegocio,
         CancellationToken cancellationToken = default)
         => _materialDocument.Value.CriarDocumentoMaterial101Async(requisicao, chaveNegocio, cancellationToken);
+
+    public string? ValidarPoliticaAntesReserva(MaterialDocumentSapRequest requisicao)
+        => _materialDocument.Value.ValidarPoliticaAntesReserva(requisicao);
 
     public Task RegistrarFalhaStatusLocalAposSapAsync(
         long codigoLancamento,

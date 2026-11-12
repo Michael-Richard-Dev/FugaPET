@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela.Cadastro;
 
@@ -421,7 +421,7 @@ partial class CadastroUsuarioForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(17, 24, 39);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
         customTitleBarPanel.Controls.Add(companyLogoPictureBox);
         customTitleBarPanel.Controls.Add(headerDividerLabel);
@@ -1786,7 +1786,7 @@ partial class CadastroUsuarioForm
         // profileValueLabel
         // 
         profileValueLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-        profileValueLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        profileValueLabel.ForeColor = Color.FromArgb(200, 78, 10);
         profileValueLabel.Location = new Point(76, 109);
         profileValueLabel.Name = "profileValueLabel";
         profileValueLabel.Size = new Size(180, 24);
@@ -1891,8 +1891,8 @@ partial class CadastroUsuarioForm
         // 
         // salvarButton
         // 
-        salvarButton.BackColor = Color.FromArgb(229, 27, 43);
-        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(229, 27, 43);
+        salvarButton.BackColor = Color.FromArgb(200, 78, 10);
+        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(200, 78, 10);
         salvarButton.FlatStyle = FlatStyle.Flat;
         salvarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         salvarButton.ForeColor = Color.White;
@@ -1923,7 +1923,7 @@ partial class CadastroUsuarioForm
         excluirButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
         excluirButton.FlatStyle = FlatStyle.Flat;
         excluirButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+        excluirButton.ForeColor = Color.FromArgb(200, 78, 10);
         excluirButton.Location = new Point(24, 538);
         excluirButton.Name = "excluirButton";
         excluirButton.Size = new Size(286, 28);
@@ -1999,7 +1999,7 @@ partial class CadastroUsuarioForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Margin = new Padding(0);
         cellUserIcon.Name = "cellUserIcon";
@@ -2049,7 +2049,7 @@ partial class CadastroUsuarioForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Margin = new Padding(0);
         cellTerminalIcon.Name = "cellTerminalIcon";
@@ -2099,7 +2099,7 @@ partial class CadastroUsuarioForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Margin = new Padding(0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
@@ -2149,7 +2149,7 @@ partial class CadastroUsuarioForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Margin = new Padding(0);
         cellBancoIcon.Name = "cellBancoIcon";
@@ -2199,7 +2199,7 @@ partial class CadastroUsuarioForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Margin = new Padding(0);
         cellHoraIcon.Name = "cellHoraIcon";
@@ -2248,7 +2248,7 @@ partial class CadastroUsuarioForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Margin = new Padding(0);
         cellDataIcon.Name = "cellDataIcon";
@@ -2661,7 +2661,7 @@ partial class CadastroUsuarioForm
         summaryTitleLabel.Size = new Size(190, 26);
         summaryTitleLabel.Text = "Resumo do Cadastro";
         ConfigureDivider(summaryDivider1, 28, 66);
-        ConfigureSummaryRow(profileIconLabel, profileCaptionLabel, profileValueLabel, "\uE77B", "Usuário selecionado", "Jéssica Silva", Color.FromArgb(229, 27, 43), 86);
+        ConfigureSummaryRow(profileIconLabel, profileCaptionLabel, profileValueLabel, "\uE77B", "Usuário selecionado", "Jéssica Silva", Color.FromArgb(200, 78, 10), 86);
         ConfigureDivider(summaryDivider2, 28, 148);
         ConfigureSummaryRow(situationIconLabel, situationCaptionLabel, situationValueLabel, "\uE715", "Login", "jessica.silva", Color.FromArgb(15, 23, 42), 168);
         ConfigureDivider(summaryDivider3, 28, 230);
@@ -2684,7 +2684,7 @@ partial class CadastroUsuarioForm
     private static void ConfigureSummaryRow(Label icon, Label caption, Label value, string iconText, string captionText, string valueText, Color valueColor, int top)
     {
         icon.Font = new Font("Segoe MDL2 Assets", 21F);
-        icon.ForeColor = valueColor == Color.FromArgb(229, 27, 43) ? Color.FromArgb(15, 23, 42) : valueColor;
+        icon.ForeColor = valueColor == Color.FromArgb(200, 78, 10) ? Color.FromArgb(15, 23, 42) : valueColor;
         icon.Location = new Point(28, top);
         icon.Size = new Size(36, 36);
         icon.Text = iconText;

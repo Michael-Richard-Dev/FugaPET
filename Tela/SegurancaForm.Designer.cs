@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela;
 
@@ -171,7 +171,7 @@ partial class SegurancaForm
         usuarioIconLabel.Cursor = Cursors.Hand;
         usuarioIconLabel.Dock = DockStyle.Fill;
         usuarioIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        usuarioIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        usuarioIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         usuarioIconLabel.Location = new Point(0, 0);
         usuarioIconLabel.Name = "usuarioIconLabel";
         usuarioIconLabel.Size = new Size(56, 56);
@@ -236,7 +236,7 @@ partial class SegurancaForm
         usuarioArrowLabel.BackColor = Color.Transparent;
         usuarioArrowLabel.Cursor = Cursors.Hand;
         usuarioArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        usuarioArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        usuarioArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         usuarioArrowLabel.Location = new Point(210, 207);
         usuarioArrowLabel.Name = "usuarioArrowLabel";
         usuarioArrowLabel.Size = new Size(32, 36);
@@ -283,7 +283,7 @@ partial class SegurancaForm
         perfilIconLabel.Cursor = Cursors.Hand;
         perfilIconLabel.Dock = DockStyle.Fill;
         perfilIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        perfilIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        perfilIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         perfilIconLabel.Location = new Point(0, 0);
         perfilIconLabel.Name = "perfilIconLabel";
         perfilIconLabel.Size = new Size(56, 56);
@@ -348,7 +348,7 @@ partial class SegurancaForm
         perfilArrowLabel.BackColor = Color.Transparent;
         perfilArrowLabel.Cursor = Cursors.Hand;
         perfilArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        perfilArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        perfilArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         perfilArrowLabel.Location = new Point(210, 207);
         perfilArrowLabel.Name = "perfilArrowLabel";
         perfilArrowLabel.Size = new Size(32, 36);
@@ -395,7 +395,7 @@ partial class SegurancaForm
         permissaoIconLabel.Cursor = Cursors.Hand;
         permissaoIconLabel.Dock = DockStyle.Fill;
         permissaoIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        permissaoIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        permissaoIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         permissaoIconLabel.Location = new Point(0, 0);
         permissaoIconLabel.Name = "permissaoIconLabel";
         permissaoIconLabel.Size = new Size(56, 56);
@@ -460,7 +460,7 @@ partial class SegurancaForm
         permissaoArrowLabel.BackColor = Color.Transparent;
         permissaoArrowLabel.Cursor = Cursors.Hand;
         permissaoArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        permissaoArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        permissaoArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         permissaoArrowLabel.Location = new Point(210, 207);
         permissaoArrowLabel.Name = "permissaoArrowLabel";
         permissaoArrowLabel.Size = new Size(32, 36);

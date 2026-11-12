@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tests.Cadastro;
+﻿namespace FugaPET_Dev.Tests.Cadastro;
 
 public sealed class EtiquetaRepositorioTests
 {

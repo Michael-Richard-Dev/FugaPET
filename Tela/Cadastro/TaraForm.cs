@@ -928,7 +928,7 @@ public partial class TaraForm : Form
             if (ativo)
             {
                 excluirButton.Text = "Inativar Tara             F8";
-                excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+                excluirButton.ForeColor = Color.FromArgb(200, 78, 10);
                 excluirButton.Visible = podeExcluir;
             }
             else

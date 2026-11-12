@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
+namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Natureza de um movimento de integracao com o SAP.

@@ -36,7 +36,7 @@ Consulta de diagnostico (somente leitura, nao corrige nada):
     SELECT upper(trim(nome_tipo_tara)) AS nome_normalizado,
            count(*) AS quantidade,
            string_agg(codigo_tipo_tara::text || ':' || nome_tipo_tara || ':' || situacao_tipo_tara::text, ', ' ORDER BY codigo_tipo_tara) AS registros
-      FROM desenvolvimento.tipo_tara
+      FROM homologacao.tipo_tara
      GROUP BY upper(trim(nome_tipo_tara))
     HAVING count(*) > 1;
 

@@ -45,6 +45,19 @@ public sealed class EntradaProdutoDadosLoteFormTests
             Assert.DoesNotContain("fornecedor", ObterTodosTextos(form), StringComparison.OrdinalIgnoreCase);
         });
 
+    // GATE 073 (TEST_10): no modo Recebimento de Mercadoria a instrução de lote usa "mercadoria".
+    [Fact]
+    public void ModoRecebimentoMercadoria_DeveUsarMensagemDeMercadoria()
+        => ExecutarEmSta(() =>
+        {
+            using EntradaProdutoDadosLoteForm form = CriarForm(ModoEntradaMaterial.RecebimentoMercadoria);
+
+            string texto = ObterControle<Label>(form, "modoLabel").Text;
+            Assert.Contains("mercadoria", texto, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("matéria-prima", texto, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("químico", texto, StringComparison.OrdinalIgnoreCase);
+        });
+
     [Fact]
     public void EnumInvalido_DeveSerBloqueado()
         => ExecutarEmSta(() =>

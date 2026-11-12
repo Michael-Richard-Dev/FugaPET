@@ -16,9 +16,9 @@ public partial class PainelInicialForm : Form
 {
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
+    private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
     private const string RotinaLeituraProducao = PermissoesSistema.Rotinas.LeituraProducao;
-    private static readonly Color SidebarActiveColor = Color.FromArgb(229, 27, 43);
+    private static readonly Color SidebarActiveColor = Color.FromArgb(250, 105, 26);
     private static readonly Color SidebarInactiveColor = Color.Transparent;
     private static readonly Color SidebarTextColor = Color.FromArgb(229, 231, 235);
 
@@ -55,6 +55,27 @@ public partial class PainelInicialForm : Form
         KeyPreview = true;
         CriarStatusPreCarregamentoPedidos();
         Shown += (_, _) => ApplyRuntimeVisuals();
+        // GATE 10 (fidelidade visual): substitui os logos FUGA COUROS embutidos (PainelInicialForm.resx) pelo
+        // novo logo FUGA PET recuperado (Resources.fuga_2026_logo → FugaPet sem fundo 1.png). Só imagem; assinado
+        // após ApplyRuntimeVisuals para prevalecer. Bytes do asset intocados.
+        Shown += (_, _) =>
+        {
+            // GATE 10-D: sidebar (fundo escuro #8F3405) usa o WORDMARK FUGA PET COMPLETO em versão branca
+            // (F laranja original + "FUGA"/"PET" em branco, transparente) — asset derivado determinístico do
+            // logo oficial. Centro/Login mantêm o wordmark charcoal sobre branco.
+            string marcaPath = Path.Combine(AppContext.BaseDirectory, "Servicos\\image\\FugaPet branco sem fundo.png");
+            if (File.Exists(marcaPath))
+            {
+                using Image marcaTmp = Image.FromFile(marcaPath);
+                sidebarLogoPictureBox.Image = new Bitmap(marcaTmp);
+            }
+            else
+            {
+                sidebarLogoPictureBox.Image = global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
+            }
+
+            contentBrandPictureBox.Image = global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
+        };
         Shown += (_, _) => AplicarPermissoesPorPerfil();
         Shown += async (_, _) => await AtualizarStatusIndustrialAsync();
         // Apos o MainForm aparecer (usuario ja autenticado), aquece o cache de pedidos da Entrada
@@ -63,6 +84,121 @@ public partial class PainelInicialForm : Form
         Shown += (_, _) => IniciarPreCarregamentoOrdensProducao();
         FormClosing += (_, _) => _fechamentoPreCarregamentoCts.Cancel();
         KeyDown += PainelInicialForm_KeyDown;
+
+        // Legibilidade: duplica (2.0x) a fonte de TODO o corpo (menu lateral + conteúdo), EXCETO cabeçalho e
+        // rodapé (que ficam no tamanho padrão). Roda uma única vez, no último Shown — após conteúdo, visuais de
+        // runtime e permissões já aplicados — e adapta as alturas ao novo tamanho.
+        bool escalaCorpoAplicada = false;
+        Shown += (_, _) =>
+        {
+            if (escalaCorpoAplicada)
+            {
+                return;
+            }
+            escalaCorpoAplicada = true;
+
+            SuspendLayout();
+            foreach (Control corpo in new Control[] { sidebarPanel, contentScrollPanel })
+            {
+                global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.AplicarEscalaFonte(
+                    corpo, global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.Escala);
+                global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(corpo);
+            }
+            ResumeLayout(true);
+            PerformLayout();
+
+            // Altura + espaçamento dos itens (o reempilhamento vertical funciona em runtime): dá altura para o
+            // item de 2 linhas ("Processo de Produção") e separa os módulos. Larguras/rotulos já vêm do Designer.
+            ReempilharSidebar();
+            AjustarRodapeSidebar();
+        };
+
+        // Sidebar 2.0x SEM cortar: os rótulos ficam em AutoSize (crescem com a fonte e nunca cortam). A largura
+        // da barra e dos itens vem do Designer (coluna 380 / itens 360), então o rótulo grande cabe dentro do
+        // item. AutoSize é setado aqui no init (fora de qualquer SuspendLayout) para valer de fato.
+        foreach (Label rotulo in new[]
+                 {
+                     menuInicioText, menuCadastroText, menuLeituraText, menuEtiquetasText, menuHistoricoText,
+                     menuRelatoriosText, menuSapText, menuConfigText, menuSegurancaText,
+                 })
+        {
+            rotulo.AutoSize = true;
+        }
+    }
+
+    // Reempilha os itens do menu com mais altura (cabe o item de 2 linhas) e mais espaço entre eles, centralizando
+    // ícone e texto verticalmente. Largura vem do Designer; aqui só mexe em altura/posição (que aplicam em runtime).
+    private void ReempilharSidebar()
+    {
+        const int altura = 62;
+        const int espaco = 16;
+        const int larguraIcone = 44;
+
+        (Control item, Control icone, Control texto)[] itens =
+        [
+            (menuItemInicio, menuInicioIcon, menuInicioText),
+            (menuItemCadastro, menuCadastroIcon, menuCadastroText),
+            (menuItemLeitura, menuLeituraIcon, menuLeituraText),
+            (menuItemEtiquetas, menuEtiquetasIcon, menuEtiquetasText),
+            (menuItemHistorico, menuHistoricoIcon, menuHistoricoText),
+            (menuItemRelatorios, menuRelatoriosIcon, menuRelatoriosText),
+            (menuItemSap, menuSapIcon, menuSapText),
+            (menuItemConfig, menuConfigIcon, menuConfigText),
+            (menuItemSeguranca, menuSegurancaIcon, menuSegurancaText),
+        ];
+
+        int larguraTextoMaxima = itens.Max(item => item.texto.GetPreferredSize(Size.Empty).Width);
+        int larguraItem = 64 + larguraTextoMaxima + 16;
+
+        // A coluna da sidebar abraça o conteúdo (item + margem) em vez de uma largura fixa folgada — barra justa,
+        // sem espaço vazio à direita e sem cortar o maior nome.
+        if (bodyLayout.ColumnStyles.Count > 0 && bodyLayout.ColumnStyles[0].SizeType == SizeType.Absolute)
+        {
+            bodyLayout.ColumnStyles[0].Width = Math.Min(420, larguraItem + 18);
+        }
+        int y = menuItemInicio.Top + 16;
+        foreach ((Control item, Control icone, Control texto) in itens)
+        {
+            item.Height = altura;
+            item.Width = larguraItem;
+            item.Top = y;
+            y += altura + espaco;
+
+            icone.SetBounds(10, 0, larguraIcone, altura);
+            texto.Left = 64;
+
+            // Medição FRESCA (GetPreferredSize) — o PreferredSize em cache pode vir de 1 linha e desalinhar o
+            // item de 2 linhas ("Processo de Produção"), fazendo a 2ª linha vazar por baixo.
+            int alturaTexto = texto.GetPreferredSize(Size.Empty).Height;
+            texto.Top = Math.Max(4, (altura - alturaTexto) / 2);
+
+            ApplyRoundedRegion(item, 6);
+        }
+    }
+
+    private void AjustarRodapeSidebar()
+    {
+        const int alturaUsuario = 84;
+        int larguraTexto = Math.Max(80, sidebarPanel.ClientSize.Width - 106);
+
+        sidebarUserPanel.Height = alturaUsuario;
+        sidebarUserPanel.Top = sidebarPanel.ClientSize.Height - alturaUsuario;
+        sidebarUserAvatarLabel.SetBounds(18, 20, 44, 44);
+        // Glyph do avatar em tamanho fixo adequado ao círculo (não a fonte 2.0x, que estourava) e círculo
+        // reaplicado JÁ no tamanho 44px (a região vinha calculada em 32px e recortava torto).
+        sidebarUserAvatarLabel.Font = new Font("Segoe MDL2 Assets", 20F);
+        sidebarUserAvatarLabel.Text = "";   // "Contact" (pessoa) — avatar de usuário
+        ApplyRoundedRegion(sidebarUserAvatarLabel, sidebarUserAvatarLabel.Width / 2);
+        sidebarUserNameLabel.SetBounds(74, 18, larguraTexto, 26);
+        sidebarUserStatusLabel.SetBounds(74, 44, larguraTexto, 22);
+        sidebarUserChevronLabel.Visible = false;   // seta ">" removida
+
+        if (_preCarregamentoStatusLabel is not null)
+        {
+            _preCarregamentoStatusLabel.Left = 18;
+            _preCarregamentoStatusLabel.Top = sidebarUserPanel.Top - 24;
+            _preCarregamentoStatusLabel.Width = Math.Max(40, sidebarPanel.ClientSize.Width - 36);
+        }
     }
 
     /// <summary>Dispara o pre-carregamento dos pedidos da Entrada sem bloquear a UI (fire-and-forget).</summary>
@@ -127,15 +263,18 @@ public partial class PainelInicialForm : Form
         _preCarregamentoStatusLabel = new Label
         {
             Name = "preCarregamentoStatusLabel",
-            AutoSize = true,
+            AutoSize = false,
+            AutoEllipsis = true,
             BackColor = Color.Transparent,
             ForeColor = Color.FromArgb(148, 163, 184),
             Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
             Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            Size = new Size(Math.Max(40, sidebarPanel.ClientSize.Width - 36), 18),
+            TextAlign = ContentAlignment.MiddleLeft,
             Visible = false
         };
-        Controls.Add(_preCarregamentoStatusLabel);
-        _preCarregamentoStatusLabel.Location = new Point(16, ClientSize.Height - 22);
+        sidebarPanel.Controls.Add(_preCarregamentoStatusLabel);
+        _preCarregamentoStatusLabel.Location = new Point(18, sidebarUserPanel.Top - 24);
         _preCarregamentoStatusLabel.BringToFront();
     }
 
@@ -166,9 +305,6 @@ public partial class PainelInicialForm : Form
 
     private async Task AtualizarStatusIndustrialAsync()
     {
-        sapStatusLabel.Text = "Verificando banco";
-        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusPanel.BorderColor = Color.FromArgb(250, 204, 21);
         cellBancoText.Text = $"{FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados()} | Verificando";
 
         StatusIndustrial statusIndustrial = await new StatusIndustrialServico().ObterStatusAsync();
@@ -186,13 +322,7 @@ public partial class PainelInicialForm : Form
             ? "N/A"
             : statusBanco.Identificador;
 
-        Color corStatus = ObterCorStatusBanco(statusBanco);
-
         cellBancoText.Text = $"Banco de Dados:  {nomeBanco} | {statusBanco.Ambiente} | {statusBanco.Situacao}";
-        sapStatusLabel.Text = $"Banco {statusBanco.Ambiente} {statusBanco.Situacao}";
-        sapStatusDotLabel.ForeColor = corStatus;
-        sapStatusPanel.BorderColor = corStatus;
-        sapStatusPanel.Invalidate();
     }
 
     private void AtualizarStatusTerminalLocal(
@@ -207,18 +337,6 @@ public partial class PainelInicialForm : Form
 
         cellTerminalText.Text =
             $"Terminal:  {nomeTerminal} | Bal.: {statusBalancaConfigurada.Situacao} | Imp.: {statusImpressoraConfigurada.Situacao} | SAP: {statusCacheSapLocal.Situacao}";
-    }
-
-    private static Color ObterCorStatusBanco(ItemStatusIndustrial status)
-    {
-        if (!status.Habilitado)
-        {
-            return Color.FromArgb(250, 204, 21);
-        }
-
-        return status.Online
-            ? Color.FromArgb(34, 197, 94)
-            : Color.FromArgb(239, 68, 68);
     }
 
     private static string? ResolveIconPath(string relativePath)
@@ -349,8 +467,8 @@ public partial class PainelInicialForm : Form
         item.BackColor = SidebarInactiveColor;
         menuItem.Icon.Cursor = Cursors.No;
         menuItem.Text.Cursor = Cursors.No;
-        menuItem.Icon.ForeColor = Color.FromArgb(107, 114, 128);
-        menuItem.Text.ForeColor = Color.FromArgb(107, 114, 128);
+        menuItem.Icon.ForeColor = Color.FromArgb(255, 255, 255);
+        menuItem.Text.ForeColor = Color.FromArgb(255, 255, 255);
         menuItem.Text.Font = new Font(menuItem.Text.Font.FontFamily, menuItem.Text.Font.Size, FontStyle.Regular);
 
         _menuRotinaDesenvolvimentoToolTip.SetToolTip(item, mensagem);
@@ -493,7 +611,18 @@ public partial class PainelInicialForm : Form
         headerTitleLabel.Text = "Leitura de Produção";
         headerSubtitleLabel.Text = "Módulos de leitura / Integração SAP";
 
+        bool primeiraExibicao = _processoProducaoForm is null;
         _processoProducaoForm ??= CreateProcessoProducaoForm();
+
+        // Reentrada: na PRIMEIRA exibição o WinForms auto-escala o form (AutoScaleMode.Font) uma única vez,
+        // porque sua fonte é ambiente e herda a 2.0x do contentScrollPanel — resultado 2x aprovado. Ao navegar
+        // para fora e voltar, o Controls.Add re-parenteia o form no painel ainda 2x e o PerformAutoScale roda de
+        // novo (2x sobre 2x → cards gigantes). Congelar a auto-escala após a primeira renderização preserva o
+        // visual aprovado e elimina a composição nas reentradas.
+        if (!primeiraExibicao)
+        {
+            _processoProducaoForm.AutoScaleMode = AutoScaleMode.None;
+        }
 
         contentScrollPanel.Controls.Clear();
         contentScrollPanel.AutoScroll = false;
@@ -846,8 +975,9 @@ public partial class PainelInicialForm : Form
             Dock = DockStyle.Fill
         };
 
-        view.EntradaMateriaPrimaRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima);
-        view.EntradaQuimicosRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico);
+        // GATE 073: porta única. O primeiro card (F1) abre o Recebimento de Mercadoria (ROH+HIBE). A antiga
+        // rota pública de "Entrada de Químicos" foi removida — o evento do card oculto não é mais assinado.
+        view.EntradaMateriaPrimaRequested += async (_, _) => await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.RecebimentoMercadoria);
         view.ProcessoProdutoAcabadoRequested += async (_, _) => await OpenProcessoProdutoAcabadoAsync();
         view.ProcessoSemiAcabadoRequested += async (_, _) => await OpenProcessoSemiAcabadoAsync();
         view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima);
@@ -865,11 +995,10 @@ public partial class PainelInicialForm : Form
     // houver permissão específica de Entrada de Químicos, ambos os módulos usam a permissão de Entrada atual.
     private async Task OpenProcessoEntradaProdutoAsync(
         global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial modo =
-            global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.MateriaPrima)
+            global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.RecebimentoMercadoria)
     {
-        string nomeTela = modo == global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico
-            ? "Entrada de Químicos"
-            : "Entrada de Matéria-Prima";
+        string nomeTela =
+            global::FugaPET_Dev.Modelo.Processo.ConfiguracaoTelaEntradaMaterialFactory.Criar(modo).NomeModulo;
 
         if (!AutorizacaoEntradaProdutoServico.PossuiPermissao(PermissoesSistema.Acoes.Consultar)
             && !await PermiteAbrirTelaAsync(
@@ -1266,19 +1395,8 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
 
+        // GATE 077: a porta removida permanece ausente e os módulos visíveis ocupam F1..F8 sem lacunas.
         if (e.KeyCode == Keys.F2 && _currentContentView == _processoProducaoForm)
-        {
-            if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
-            {
-                e.Handled = true;
-                return;
-            }
-
-            await OpenProcessoEntradaProdutoAsync(global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico);
-            e.Handled = true;
-        }
-
-        if (e.KeyCode == Keys.F3 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1290,7 +1408,7 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
 
-        if (e.KeyCode == Keys.F4 && _currentContentView == _processoProducaoForm)
+        if (e.KeyCode == Keys.F3 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1302,7 +1420,7 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
 
-        if (e.KeyCode == Keys.F5 && _currentContentView == _processoProducaoForm)
+        if (e.KeyCode == Keys.F4 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1314,7 +1432,7 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
 
-        if (e.KeyCode == Keys.F6 && _currentContentView == _processoProducaoForm)
+        if (e.KeyCode == Keys.F5 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1326,7 +1444,7 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
 
-        if (e.KeyCode == Keys.F7 && _currentContentView == _processoProducaoForm)
+        if (e.KeyCode == Keys.F6 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1338,7 +1456,7 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
 
-        if (e.KeyCode == Keys.F8 && _currentContentView == _processoProducaoForm)
+        if (e.KeyCode == Keys.F7 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1349,8 +1467,7 @@ public partial class PainelInicialForm : Form
             await OpenControleApontamentosAsync();
             e.Handled = true;
         }
-
-        if (e.KeyCode == Keys.F9 && _currentContentView == _processoProducaoForm)
+        if (e.KeyCode == Keys.F8 && _currentContentView == _processoProducaoForm)
         {
             if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.ProcessoProducao, "Leitura de Produção"))
             {
@@ -1362,6 +1479,7 @@ public partial class PainelInicialForm : Form
             e.Handled = true;
         }
     }
+
 
     // INCREMENTAL 047: abre a nova tela de Paletização (por HU de caixas). Mesmo módulo/permissão do processo de produção.
     private async Task OpenPaletizacaoAsync()
@@ -1379,7 +1497,6 @@ public partial class PainelInicialForm : Form
         Hide();
         form.Show(this);
     }
-
     private static void ApplyRoundedRegion(Control control, int radius)
     {
         if (control.Width <= 0 || control.Height <= 0)
@@ -1429,9 +1546,18 @@ public partial class PainelInicialForm : Form
         maximizeWindowLabel.Click += (_, _) => ToggleWindowState();
         closeWindowLabel.Click += (_, _) => Close();
 
-        ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        // Hover mais escuro (igual ao Recebimento de Mercadoria) — visível sobre o laranja do cabeçalho.
+        ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(160, 55, 5));
+        ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(160, 55, 5));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(160, 55, 5));
+
+        // Os botões preenchem TODA a altura do cabeçalho (antes 52px em 60px, sobrando uma faixa laranja clara
+        // embaixo). Assim o hover escuro vai de cima até encontrar o branco do conteúdo.
+        foreach (Control botao in new[] { minimizeWindowLabel, maximizeWindowLabel, closeWindowLabel })
+        {
+            botao.Top = 0;
+            botao.Height = headerBar.Height;
+        }
     }
 
     private void CustomTitleBar_MouseDown(object? sender, MouseEventArgs e)
@@ -1487,6 +1613,7 @@ public partial class PainelInicialForm : Form
         cellHoraText.Text = now.ToString("HH:mm", ptBr);
     }
 }
+
 
 
 

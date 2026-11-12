@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Pesagem LOCAL (na tela) do consumo de um componente da OP. Tarefa 4: somente memoria — sem banco,

@@ -223,7 +223,7 @@ partial class CadastroForm
         setorIconLabel.Cursor = Cursors.Hand;
         setorIconLabel.Dock = DockStyle.Fill;
         setorIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        setorIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        setorIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         setorIconLabel.Image = (Image)resources.GetObject("setorIconLabel.Image");
         setorIconLabel.Location = new Point(0, 0);
         setorIconLabel.Name = "setorIconLabel";
@@ -288,7 +288,7 @@ partial class CadastroForm
         setorArrowLabel.BackColor = Color.Transparent;
         setorArrowLabel.Cursor = Cursors.Hand;
         setorArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        setorArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        setorArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         setorArrowLabel.Location = new Point(190, 207);
         setorArrowLabel.Name = "setorArrowLabel";
         setorArrowLabel.Size = new Size(32, 36);
@@ -334,7 +334,7 @@ partial class CadastroForm
         cargoIconLabel.BackColor = Color.Transparent;
         cargoIconLabel.Cursor = Cursors.Hand;
         cargoIconLabel.Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        cargoIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        cargoIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         cargoIconLabel.Image = (Image)resources.GetObject("cargoIconLabel.Image");
         cargoIconLabel.Location = new Point(0, 0);
         cargoIconLabel.Name = "cargoIconLabel";
@@ -399,7 +399,7 @@ partial class CadastroForm
         cargoArrowLabel.BackColor = Color.Transparent;
         cargoArrowLabel.Cursor = Cursors.Hand;
         cargoArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        cargoArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        cargoArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         cargoArrowLabel.Location = new Point(190, 207);
         cargoArrowLabel.Name = "cargoArrowLabel";
         cargoArrowLabel.Size = new Size(32, 36);
@@ -509,7 +509,7 @@ partial class CadastroForm
         taraArrowLabel.BackColor = Color.Transparent;
         taraArrowLabel.Cursor = Cursors.Hand;
         taraArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        taraArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        taraArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         taraArrowLabel.Location = new Point(190, 206);
         taraArrowLabel.Name = "taraArrowLabel";
         taraArrowLabel.Size = new Size(32, 36);
@@ -619,7 +619,7 @@ partial class CadastroForm
         balancaArrowLabel.BackColor = Color.Transparent;
         balancaArrowLabel.Cursor = Cursors.Hand;
         balancaArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        balancaArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        balancaArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         balancaArrowLabel.Location = new Point(190, 206);
         balancaArrowLabel.Name = "balancaArrowLabel";
         balancaArrowLabel.Size = new Size(32, 36);
@@ -729,7 +729,7 @@ partial class CadastroForm
         etiquetaArrowLabel.BackColor = Color.Transparent;
         etiquetaArrowLabel.Cursor = Cursors.Hand;
         etiquetaArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        etiquetaArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        etiquetaArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         etiquetaArrowLabel.Location = new Point(190, 206);
         etiquetaArrowLabel.Name = "etiquetaArrowLabel";
         etiquetaArrowLabel.Size = new Size(32, 36);
@@ -776,7 +776,7 @@ partial class CadastroForm
         tipoTaraIconLabel.Cursor = Cursors.Hand;
         tipoTaraIconLabel.Dock = DockStyle.Fill;
         tipoTaraIconLabel.Font = new Font("Segoe UI", 20F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        tipoTaraIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        tipoTaraIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         tipoTaraIconLabel.Location = new Point(0, 0);
         tipoTaraIconLabel.Name = "tipoTaraIconLabel";
         tipoTaraIconLabel.Size = new Size(56, 56);
@@ -841,7 +841,7 @@ partial class CadastroForm
         tipoTaraArrowLabel.BackColor = Color.Transparent;
         tipoTaraArrowLabel.Cursor = Cursors.Hand;
         tipoTaraArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        tipoTaraArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        tipoTaraArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         tipoTaraArrowLabel.Location = new Point(190, 206);
         tipoTaraArrowLabel.Name = "tipoTaraArrowLabel";
         tipoTaraArrowLabel.Size = new Size(32, 36);
@@ -888,7 +888,7 @@ partial class CadastroForm
         modeloEtiquetaIconLabel.Cursor = Cursors.Hand;
         modeloEtiquetaIconLabel.Dock = DockStyle.Fill;
         modeloEtiquetaIconLabel.Font = new Font("Segoe UI", 20F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        modeloEtiquetaIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        modeloEtiquetaIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         modeloEtiquetaIconLabel.Location = new Point(0, 0);
         modeloEtiquetaIconLabel.Name = "modeloEtiquetaIconLabel";
         modeloEtiquetaIconLabel.Size = new Size(56, 56);
@@ -953,7 +953,7 @@ partial class CadastroForm
         modeloEtiquetaArrowLabel.BackColor = Color.Transparent;
         modeloEtiquetaArrowLabel.Cursor = Cursors.Hand;
         modeloEtiquetaArrowLabel.Font = new Font("Segoe UI", 21F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        modeloEtiquetaArrowLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        modeloEtiquetaArrowLabel.ForeColor = Color.FromArgb(200, 78, 10);
         modeloEtiquetaArrowLabel.Location = new Point(190, 206);
         modeloEtiquetaArrowLabel.Name = "modeloEtiquetaArrowLabel";
         modeloEtiquetaArrowLabel.Size = new Size(32, 36);

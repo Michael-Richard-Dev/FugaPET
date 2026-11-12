@@ -9,7 +9,7 @@ namespace FugaPET_Dev.Modelo;
     "Usar EntradaProdutoServico + EntradaProdutoRepositorio.")]
 public sealed record PesagemEntradaItem
 {
-    /// <summary>FK do item do pedido (desenvolvimento.sap_pedido_compra_item).</summary>
+    /// <summary>FK do item do pedido (homologacao.sap_pedido_compra_item).</summary>
     public long CodigoSapPedidoCompraItem { get; init; }
 
     /// <summary>Peso lido/digitado, em quilogramas.</summary>

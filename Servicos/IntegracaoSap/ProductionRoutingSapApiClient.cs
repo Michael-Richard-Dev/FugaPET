@@ -7,11 +7,13 @@ using FugaPET_Dev.Modelo.IntegracaoSap;
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
 /// <summary>
-/// GATE 048-E REV2: cliente READ-ONLY (GET, Basic Auth) do roteiro AUTORITATIVO. Resolve a partir da
-/// ProductionVersion da OP: API_PRODUCTION_VERSION (A_ProductionVersion, chave Material+Plant+ProductionVersion)
-/// → BillOfOperationsGroup/Variant → API_PRODUCTION_ROUTING (A_ProductionRoutingOperation) →
-/// OperationStandardTextCode. Nenhuma escolha por heuristica: 0 ou >1 versao/rota ⇒ null (fail-closed).
-/// Sem POST/PATCH/CSRF. Reaproveita o parser de colecao (JSON/Atom) do <see cref="ProductionOrderSapApiClient"/>.
+/// GATE 095F (contrato Ares 095D / arquitetura 095E-R1): cliente READ-ONLY (GET, Basic Auth) do roteiro
+/// autoritativo via API_PRODUCTION_ROUTING;v=3 — SEM API_PRODUCTION_VERSION. Resolve em dois passos:
+///   1) ProductionRoutingMatlAssgmt por (Product + Plant) → UMA tupla única (ProductionRoutingGroup, ProductionRouting);
+///   2) ProductionRoutingOperation por (Group + Routing) → operações do roteiro (Operation, Plant, WorkCenter,
+///      OperationStandardTextCode).
+/// Zero heurística: 0 ou &gt;1 tuplas de rota ⇒ null (fail-closed). O cliente NÃO escolhe a ocorrência corrente,
+/// NÃO aplica PP_FORM e NÃO faz routing local. Sem POST/PATCH/CSRF.
 /// </summary>
 public sealed class ProductionRoutingSapApiClient
 {
@@ -19,7 +21,6 @@ public sealed class ProductionRoutingSapApiClient
 
     private readonly ConfiguracaoSap _configuracao;
     private readonly HttpClient _httpClient;
-    private readonly Uri _baseVersao;
     private readonly Uri _baseRoteiro;
     private readonly AuthenticationHeaderValue _autorizacao;
     private readonly Action<string> _registrarDiagnostico;
@@ -31,7 +32,7 @@ public sealed class ProductionRoutingSapApiClient
     {
         _configuracao = configuracao ?? throw new ArgumentNullException(nameof(configuracao));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _baseVersao = ValidadorUrlSap.ValidarBaseUrl(configuracao.ProductionVersionBaseUrlEfetiva, configuracao.HostsPermitidos);
+        // Fonte ÚNICA V3: API_PRODUCTION_ROUTING;v=3. Nenhuma URL concorrente (ProductionVersion removida).
         _baseRoteiro = ValidadorUrlSap.ValidarBaseUrl(configuracao.ProductionRoutingBaseUrlEfetiva, configuracao.HostsPermitidos);
 
         string credenciais = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{configuracao.Usuario}:{configuracao.Senha}"));
@@ -40,54 +41,54 @@ public sealed class ProductionRoutingSapApiClient
     }
 
     /// <summary>
-    /// Resolve o roteiro autoritativo da OP. Retorna null (fail-closed) em qualquer ausencia/ambiguidade:
-    /// ProductionVersion vazia; versao nao unica; grupo/variante ausentes; ou nenhuma operacao de roteiro.
+    /// Resolve o roteiro V3 COMPLETO da OP (todas as operações válidas). null (fail-closed) em qualquer
+    /// ausência/ambiguidade: Material/Plant ausentes; 0 ou &gt;1 tuplas (Group, Routing); ou 0 operações.
+    /// A correlação da ocorrência (Operation+Plant+WorkCenter) é responsabilidade do CorrelacionadorOcorrenciaRoteiroSap.
     /// </summary>
     public async Task<RoteiroProducaoSap?> ResolverRoteiroDaOrdemAsync(
         OrdemProducaoSap ordem, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ordem);
 
-        string material = (ordem.MaterialProduzido ?? string.Empty).Trim();
+        string product = (ordem.MaterialProduzido ?? string.Empty).Trim();
         string plant = (ordem.Centro ?? string.Empty).Trim();
-        string versao = (ordem.VersaoProducao ?? string.Empty).Trim();
-
-        // ProductionVersion e a chave autoritativa: sem ela NAO ha resolucao segura (§3).
-        if (material.Length == 0 || plant.Length == 0 || versao.Length == 0)
+        if (product.Length == 0 || plant.Length == 0)
         {
-            _registrarDiagnostico("roteiro: ProductionVersion/Material/Plant ausentes na OP — fail-closed.");
+            _registrarDiagnostico("PAYLOAD_INVALIDO: Product/Plant ausentes na OP — fail-closed.");
             return null;
         }
 
-        VersaoProducaoRoteiro? versaoRoteiro = await ResolverVersaoAsync(material, plant, versao, cancellationToken);
-        if (versaoRoteiro is null || versaoRoteiro.Grupo.Length == 0 || versaoRoteiro.Variante.Length == 0)
+        RotaProdutoV3? rota = await ResolverRotaPorProdutoAsync(product, plant, cancellationToken);
+        if (rota is null)
         {
-            return null; // versao nao unica / grupo/variante nao correlacionados — fail-closed
+            return null; // ZERO_ROUTINGS / ROUTING_AMBIGUO já diagnosticados
         }
 
         IReadOnlyList<OperacaoRoteiroSap> operacoes =
-            await ListarOperacoesRoteiroAsync(versaoRoteiro.Grupo, versaoRoteiro.Variante, cancellationToken);
+            await ListarOperacoesRoteiroAsync(rota.Grupo, rota.Roteiro, cancellationToken);
         if (operacoes.Count == 0)
         {
-            _registrarDiagnostico("roteiro: nenhuma ProductionRoutingOperation para o grupo/variante — fail-closed.");
+            _registrarDiagnostico("ZERO_OPERATIONS: nenhuma ProductionRoutingOperation para o grupo/roteiro — fail-closed.");
             return null;
         }
 
         return new RoteiroProducaoSap
         {
-            BillOfOperationsGroup = versaoRoteiro.Grupo,
-            BillOfOperationsVariant = versaoRoteiro.Variante,
+            BillOfOperationsGroup = rota.Grupo,
+            BillOfOperationsVariant = rota.Roteiro,
             Operacoes = operacoes
         };
     }
 
-    private async Task<VersaoProducaoRoteiro?> ResolverVersaoAsync(
-        string material, string plant, string versao, CancellationToken cancellationToken)
+    // GET 1 — DISCOVERY: ProductionRoutingMatlAssgmt por Product + Plant. Cardinalidade sobre a tupla ÚNICA
+    // (ProductionRoutingGroup, ProductionRouting); duplicatas idênticas colapsam; 0/&gt;1 ⇒ fail-closed.
+    private async Task<RotaProdutoV3?> ResolverRotaPorProdutoAsync(
+        string product, string plant, CancellationToken cancellationToken)
     {
-        string filtro = ($"Material eq '{Escapar(material)}'"
-            + $" and Plant eq '{Escapar(plant)}'"
-            + $" and ProductionVersion eq '{Escapar(versao)}'").Replace(" ", "%20");
-        Uri url = MontarUrl(_baseVersao, "A_ProductionVersion", $"$format=json&$filter={filtro}");
+        string filtro = ($"Product eq '{Escapar(product)}'"
+            + $" and Plant eq '{Escapar(plant)}'").Replace(" ", "%20");
+        string select = "$select=Product,Plant,ProductionRoutingGroup,ProductionRouting,ProductionRoutingMatlAssgmt";
+        Uri url = MontarUrl("ProductionRoutingMatlAssgmt", $"$format=json&{select}&$filter={filtro}");
 
         string? corpo = await ObterAsync(url, cancellationToken);
         if (corpo is null)
@@ -95,30 +96,63 @@ public sealed class ProductionRoutingSapApiClient
             return null;
         }
 
-        IReadOnlyList<VersaoProducaoRoteiro> versoes =
-            ProductionOrderSapApiClient.MapearColecao(corpo, MapearVersaoJson, MapearVersaoXml);
-
-        // §3: mais de uma versao possivel ⇒ fail-closed (nunca escolher por heuristica).
-        if (versoes.Count != 1)
+        IReadOnlyList<RotaProdutoV3> tuplas;
+        try
         {
-            _registrarDiagnostico($"roteiro: API_PRODUCTION_VERSION retornou {versoes.Count} versoes — fail-closed.");
+            tuplas = ProductionOrderSapApiClient.MapearColecao(corpo, MapearRotaJson, MapearRotaXml);
+        }
+        catch (Exception ex) when (ex is JsonException or System.Xml.XmlException or FormatException)
+        {
+            _registrarDiagnostico($"PAYLOAD_INVALIDO: discovery ({ex.GetType().Name}) — fail-closed.");
             return null;
         }
 
-        return versoes[0];
+        // Descartar tuplas com Group ou Routing vazios; colapsar duplicatas IDÊNTICAS.
+        List<RotaProdutoV3> unicas = tuplas
+            .Where(t => t.Grupo.Length > 0 && t.Roteiro.Length > 0)
+            .Distinct()
+            .ToList();
+
+        if (unicas.Count == 0)
+        {
+            _registrarDiagnostico("ZERO_ROUTINGS: nenhuma tupla (Group, Routing) para o produto/planta — fail-closed.");
+            return null;
+        }
+
+        if (unicas.Count > 1)
+        {
+            _registrarDiagnostico($"ROUTING_AMBIGUO: {unicas.Count} tuplas (Group, Routing) distintas — fail-closed.");
+            return null;
+        }
+
+        return unicas[0];
     }
 
+    // GET 2 — OPERAÇÕES: ProductionRoutingOperation por Group + Routing.
     private async Task<IReadOnlyList<OperacaoRoteiroSap>> ListarOperacoesRoteiroAsync(
-        string grupo, string variante, CancellationToken cancellationToken)
+        string grupo, string roteiro, CancellationToken cancellationToken)
     {
         string filtro = ($"ProductionRoutingGroup eq '{Escapar(grupo)}'"
-            + $" and ProductionRouting eq '{Escapar(variante)}'").Replace(" ", "%20");
-        Uri url = MontarUrl(_baseRoteiro, "A_ProductionRoutingOperation", $"$format=json&$filter={filtro}");
+            + $" and ProductionRouting eq '{Escapar(roteiro)}'").Replace(" ", "%20");
+        string select = "$select=ProductionRoutingGroup,ProductionRouting,ProductionRoutingSequence,Operation,"
+            + "OperationText,OperationStandardTextCode,Plant,WorkCenter,WorkCenterInternalID,WorkCenterTypeCode";
+        Uri url = MontarUrl("ProductionRoutingOperation", $"$format=json&{select}&$filter={filtro}");
 
         string? corpo = await ObterAsync(url, cancellationToken);
-        return corpo is null
-            ? []
-            : ProductionOrderSapApiClient.MapearColecao(corpo, MapearOperacaoRoteiroJson, MapearOperacaoRoteiroXml);
+        if (corpo is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return ProductionOrderSapApiClient.MapearColecao(corpo, MapearOperacaoRoteiroJson, MapearOperacaoRoteiroXml);
+        }
+        catch (Exception ex) when (ex is JsonException or System.Xml.XmlException or FormatException)
+        {
+            _registrarDiagnostico($"PAYLOAD_INVALIDO: operações ({ex.GetType().Name}) — fail-closed.");
+            return [];
+        }
     }
 
     private async Task<string?> ObterAsync(Uri url, CancellationToken cancellationToken)
@@ -130,49 +164,45 @@ public sealed class ProductionRoutingSapApiClient
         string corpo = await resposta.Content.ReadAsStringAsync(cancellationToken);
         if (!resposta.IsSuccessStatusCode)
         {
-            _registrarDiagnostico($"roteiro: HTTP {(int)resposta.StatusCode} em {url.GetLeftPart(UriPartial.Path)} — fail-closed.");
+            _registrarDiagnostico($"HTTP_STATUS {(int)resposta.StatusCode} em {url.GetLeftPart(UriPartial.Path)} — fail-closed.");
             return null;
         }
 
         return corpo;
     }
 
-    private Uri MontarUrl(Uri baseUri, string entidade, string query)
+    private Uri MontarUrl(string entidade, string query)
     {
         if (!string.IsNullOrWhiteSpace(_configuracao.SapClient))
         {
             query = $"{query}&sap-client={Uri.EscapeDataString(_configuracao.SapClient.Trim())}";
         }
 
-        Uri destino = new($"{baseUri.AbsoluteUri.TrimEnd('/')}/{entidade}?{query}", UriKind.Absolute);
-        return ValidadorUrlSap.ValidarDestino(destino, baseUri, _configuracao.HostsPermitidos);
+        Uri destino = new($"{_baseRoteiro.AbsoluteUri.TrimEnd('/')}/{entidade}?{query}", UriKind.Absolute);
+        return ValidadorUrlSap.ValidarDestino(destino, _baseRoteiro, _configuracao.HostsPermitidos);
     }
 
     private static string Escapar(string valor) => valor.Replace("'", "''");
 
     // ----- Mapeamento (internal para teste sem HTTP) -----
 
-    /// <summary>Versao de producao com o vinculo ao roteiro (grupo/variante). So o necessario.</summary>
-    internal sealed record VersaoProducaoRoteiro(string Grupo, string Variante, string Tipo);
+    /// <summary>Tupla de rota da discovery V3 (ProductionRoutingMatlAssgmt). Só o necessário à cardinalidade.</summary>
+    internal sealed record RotaProdutoV3(string Grupo, string Roteiro);
 
-    internal static VersaoProducaoRoteiro MapearVersaoJson(JsonElement v)
-        => new(
-            LerPrimeiroTextoJson(v, "BillOfOperationsGroup", "ProductionRoutingGroup"),
-            LerPrimeiroTextoJson(v, "BillOfOperationsVariant", "ProductionRouting", "BillOfOperationsGroupCounter"),
-            LerTextoJson(v, "BillOfOperationsType"));
+    internal static RotaProdutoV3 MapearRotaJson(JsonElement v)
+        => new(LerTextoJson(v, "ProductionRoutingGroup"), LerTextoJson(v, "ProductionRouting"));
 
-    internal static VersaoProducaoRoteiro MapearVersaoXml(XElement v)
-        => new(
-            LerPrimeiroTextoXml(v, "BillOfOperationsGroup", "ProductionRoutingGroup"),
-            LerPrimeiroTextoXml(v, "BillOfOperationsVariant", "ProductionRouting", "BillOfOperationsGroupCounter"),
-            LerTextoXml(v, "BillOfOperationsType"));
+    internal static RotaProdutoV3 MapearRotaXml(XElement v)
+        => new(LerTextoXml(v, "ProductionRoutingGroup"), LerTextoXml(v, "ProductionRouting"));
 
     internal static OperacaoRoteiroSap MapearOperacaoRoteiroJson(JsonElement o)
     {
         bool obtido = o.TryGetProperty("OperationStandardTextCode", out JsonElement codigo);
         return new OperacaoRoteiroSap
         {
-            Operacao = LerPrimeiroTextoJson(o, "OperationNumber", "ProductionRoutingOperation", "Operation"),
+            Operacao = LerTextoJson(o, "Operation"),
+            Plant = LerTextoJson(o, "Plant"),
+            WorkCenter = LerTextoJson(o, "WorkCenter"),
             CodigoTextoPadrao = obtido && codigo.ValueKind == JsonValueKind.String
                 ? (codigo.GetString() ?? string.Empty).Trim()
                 : string.Empty,
@@ -185,7 +215,9 @@ public sealed class ProductionRoutingSapApiClient
         XElement? codigo = o.Element(DadosOData + "OperationStandardTextCode");
         return new OperacaoRoteiroSap
         {
-            Operacao = LerPrimeiroTextoXml(o, "OperationNumber", "ProductionRoutingOperation", "Operation"),
+            Operacao = LerTextoXml(o, "Operation"),
+            Plant = LerTextoXml(o, "Plant"),
+            WorkCenter = LerTextoXml(o, "WorkCenter"),
             CodigoTextoPadrao = (codigo?.Value ?? string.Empty).Trim(),
             TextoPadraoObtido = codigo is not null
         };
@@ -196,14 +228,6 @@ public sealed class ProductionRoutingSapApiClient
             ? valor.GetString()?.Trim() ?? string.Empty
             : string.Empty;
 
-    private static string LerPrimeiroTextoJson(JsonElement elemento, params string[] propriedades)
-        => propriedades.Select(p => LerTextoJson(elemento, p))
-            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
-
     private static string LerTextoXml(XElement props, string propriedade)
         => props.Element(DadosOData + propriedade)?.Value?.Trim() ?? string.Empty;
-
-    private static string LerPrimeiroTextoXml(XElement props, params string[] propriedades)
-        => propriedades.Select(p => LerTextoXml(props, p))
-            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
 }

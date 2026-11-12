@@ -35,6 +35,20 @@ internal sealed class ProductionOrderSapGovernadoServico : IProductionOrderSapSe
             ? await _servicoInterno.ConsultarOrdemAsync(numeroOrdem, cancellationToken)
             : ResultadoConsultaOrdemProducaoSap.Indisponivel(validacao.Mensagem);
     }
+    /// <summary>GATE 118B: a leitura fresca tambem passa pela governanca de CONSULTA.</summary>
+    public async Task<LeituraFrescaOrdem261> ConsultarEstadoFresco261Async(
+        string numeroOrdem,
+        CancellationToken cancellationToken = default)
+    {
+        ResultadoOperacao validacao = await _estadoIntegracaoSapServico.ValidarAsync(
+            OperacaoIntegracaoSap.Consulta,
+            cancellationToken);
+
+        return validacao.Sucesso
+            ? await _servicoInterno.ConsultarEstadoFresco261Async(numeroOrdem, cancellationToken)
+            : LeituraFrescaOrdem261.Indisponivel(numeroOrdem ?? string.Empty, validacao.Mensagem);
+    }
+
     public async Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
         CancellationToken cancellationToken = default)
     {
@@ -47,3 +61,4 @@ internal sealed class ProductionOrderSapGovernadoServico : IProductionOrderSapSe
             : [];
     }
 }
+

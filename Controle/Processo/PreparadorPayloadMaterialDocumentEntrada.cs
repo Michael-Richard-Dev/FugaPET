@@ -27,12 +27,18 @@ internal static class PreparadorPayloadMaterialDocumentEntrada
         string numeroPedido,
         IReadOnlyList<EntradaProdutoItemEnvioSap> lotes,
         Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>> consultarProdutoCentro,
+        Func<string, CancellationToken, Task<ProdutoSapMestre?>> consultarProdutoMestre,
         CancellationToken cancellationToken)
     {
         DateTime hoje = DateTime.Today;
         int total = lotes.Count;
         List<EntradaProdutoPosicaoMaterialDocument> posicoes = [];
         Dictionary<string, ProdutoCentroSapMestre?> cachePorMaterialCentro = new(StringComparer.Ordinal);
+        // GATE R2: classificacao por ITEM via ProductType (A_Product), consultada UMA vez por material por
+        // envio — mesmo padrao de cache ja usado para A_ProductPlant. Sem DDL e sem persistencia nova.
+        Dictionary<string, ProdutoSapMestre?> produtosPorMaterial = new(StringComparer.Ordinal);
+        Dictionary<string, Modelo.Processo.ClassificacaoEntradaMaterial> cacheClassificacaoPorMaterial =
+            new(StringComparer.Ordinal);
 
         // A administração de lote é POR material × centro: agrupa por essa combinação.
         IEnumerable<IGrouping<(string Material, string Centro), EntradaProdutoItemEnvioSap>> grupos = lotes
@@ -67,6 +73,21 @@ internal static class PreparadorPayloadMaterialDocumentEntrada
                     + "Envio ao SAP bloqueado."));
             }
 
+            // GATE R2: classificacao do material (ProductType) — uma consulta por material, com cache.
+            // Indeterminada BLOQUEIA (nunca presume o tipo). Decide se a posicao usa a quantidade do
+            // pedido + campos ZZ1 (ROH) ou o comportamento legado (HIBE e demais).
+            if (!cacheClassificacaoPorMaterial.TryGetValue(material,
+                    out Modelo.Processo.ClassificacaoEntradaMaterial classificacao))
+            {
+                ProdutoSapMestre? produtoMestre = await consultarProdutoMestre(material, cancellationToken);
+                produtosPorMaterial[material] = produtoMestre;
+                classificacao = produtoMestre is { Consultado: true }
+                    ? Modelo.Processo.ClassificadorItemEntradaMaterial.ClassificarPorProductType(
+                        produtoMestre.TipoMaterialSap)
+                    : Modelo.Processo.ClassificacaoEntradaMaterial.Indefinido;
+                cacheClassificacaoPorMaterial[material] = classificacao;
+            }
+
             if (mestre.IsBatchManagementRequired == true)
             {
                 // CASO A: uma posição por LOTE, com Batch/datas.
@@ -78,8 +99,16 @@ internal static class PreparadorPayloadMaterialDocumentEntrada
                         return new ResultadoPreparacaoPayloadEntrada(null, bloqueioLote);
                     }
 
+                    ResultadoAlocacao101 alocacao = DecidirAlocacao(classificacao, lote);
+                    if (!alocacao.Aplicavel)
+                    {
+                        return new ResultadoPreparacaoPayloadEntrada(null, Bloqueio(total, alocacao.Motivo));
+                    }
+
                     posicoes.Add(new EntradaProdutoPosicaoMaterialDocument(
-                        EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, lote, comLote: true),
+                        Servicos.Entrada.P5.ClassificacaoMaterialDocumentP5.Registrar(
+                            EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, lote, comLote: true, alocacao),
+                            produtosPorMaterial[material]),
                         [lote.CodigoEntradaProdutoLote]));
                 }
             }
@@ -101,14 +130,75 @@ internal static class PreparadorPayloadMaterialDocumentEntrada
                     };
                     IReadOnlyList<long> codigosLotes = sub.Select(l => l.CodigoEntradaProdutoLote).ToList();
 
+                    ResultadoAlocacao101 alocacao = DecidirAlocacao(classificacao, representante);
+                    if (!alocacao.Aplicavel)
+                    {
+                        return new ResultadoPreparacaoPayloadEntrada(null, Bloqueio(total, alocacao.Motivo));
+                    }
+
                     posicoes.Add(new EntradaProdutoPosicaoMaterialDocument(
-                        EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, representante, comLote: false),
+                        Servicos.Entrada.P5.ClassificacaoMaterialDocumentP5.Registrar(
+                            EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, representante, comLote: false, alocacao),
+                            produtosPorMaterial[material]),
                         codigosLotes));
                 }
             }
         }
 
+        // GATE R2 (P1/P2/P3): a quantidade INTEGRAL do pedido NUNCA pode ser repetida em mais de uma
+        // posicao do MESMO PurchaseOrderItem, e nao existe criterio funcional aprovado para distribui-la
+        // entre posicoes (nem rateio proporcional ao peso). Logo, item ROH com 2+ posicoes BLOQUEIA.
+        ResultadoEnvioSapEntrada? bloqueioMultiPosicao = ValidarPosicaoUnicaPorItemComQuantidadeDoPedido(
+            codigoLancamento, posicoes, total);
+        if (bloqueioMultiPosicao is not null)
+        {
+            return new ResultadoPreparacaoPayloadEntrada(null, bloqueioMultiPosicao);
+        }
+
         return new ResultadoPreparacaoPayloadEntrada(posicoes, null);
+    }
+
+    /// <summary>
+    /// GATE R2: aplica as regras puras de alocacao a UMA posicao. O peso vem SEMPRE da propria posicao
+    /// (no CASO B, o representante ja traz o liquido CONSOLIDADO do subgrupo), nunca de um total do item.
+    /// </summary>
+    private static ResultadoAlocacao101 DecidirAlocacao(
+        Modelo.Processo.ClassificacaoEntradaMaterial classificacao,
+        EntradaProdutoItemEnvioSap posicao)
+        => EntradaProdutoAlocacao101.Decidir(
+            classificacao,
+            posicao.QuantidadePedidoItem,
+            posicao.Unidade,
+            posicao.PesoLiquidoKg,
+            string.IsNullOrWhiteSpace(posicao.NumeroItem) ? "(sem número)" : posicao.NumeroItem.Trim());
+
+    /// <summary>
+    /// GATE R2 (P1/P2): bloqueia quando um mesmo PurchaseOrderItem gera 2+ posicoes que carregam a
+    /// quantidade integral do pedido (varios lotes ou varios depositos). Sem criterio de distribuicao
+    /// aprovado, enviar seria contabilizar a quantidade N vezes.
+    /// </summary>
+    private static ResultadoEnvioSapEntrada? ValidarPosicaoUnicaPorItemComQuantidadeDoPedido(
+        long codigoLancamento,
+        IReadOnlyList<EntradaProdutoPosicaoMaterialDocument> posicoes,
+        int total)
+    {
+        IEnumerable<IGrouping<string, EntradaProdutoPosicaoMaterialDocument>> porItem = posicoes
+            .Where(p => !string.IsNullOrWhiteSpace(p.Item.Zz1PesoEntradaMmi))
+            .GroupBy(p => (p.Item.PurchaseOrderItem ?? string.Empty).Trim(), StringComparer.Ordinal);
+
+        foreach (IGrouping<string, EntradaProdutoPosicaoMaterialDocument> grupoItem in porItem)
+        {
+            if (grupoItem.Count() > 1)
+            {
+                return Bloqueio(total,
+                    $"Lançamento {codigoLancamento}, item {grupoItem.Key}: o recebimento gerou "
+                    + $"{grupoItem.Count()} posições (lotes e/ou depósitos distintos) para o mesmo item do "
+                    + "Pedido de Compra. A quantidade integral do pedido não pode ser repetida em várias "
+                    + "posições e não há critério aprovado para distribuí-la entre elas. Envio bloqueado.");
+            }
+        }
+
+        return null;
     }
 
     // Dados obrigatórios do movimento 101 (independem de administração de lote).

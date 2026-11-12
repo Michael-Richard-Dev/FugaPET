@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 034_etiqueta_regras_banco_ROLLBACK_GAIA.sql
 -- PROPOSTA - NAO EXECUTAR
 -- Rollback da proposta 034 - Cadastro de Etiqueta

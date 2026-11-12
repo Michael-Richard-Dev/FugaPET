@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using FugaPET_Dev.Servicos;
 
 namespace FugaPET_Dev.Tests.Operacao;

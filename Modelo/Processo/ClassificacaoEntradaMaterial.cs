@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Tarefa Entrada 24.1 (Ajuste 8): classificação de um ITEM do Pedido de Compra para a Entrada,
@@ -58,9 +58,20 @@ public static class ClassificadorItemEntradaMaterial
         };
     }
 
-    /// <summary>True quando a classificação do item corresponde ao modo atual da tela de Entrada.</summary>
+    /// <summary>
+    /// True quando a classificação do item corresponde ao modo atual da tela de Entrada.
+    /// GATE 097A: RecebimentoMercadoria aceita somente ROH, HIBE, VERP e HALB.
+    /// ProdutoAcabado/Outro/Indefinido permanecem fail-closed.
+    /// </summary>
     public static bool ItemPertenceAoModo(ClassificacaoEntradaMaterial classificacao, ModoEntradaMaterial modo)
-        => modo == ModoEntradaMaterial.Quimico
-            ? classificacao == ClassificacaoEntradaMaterial.Quimico
-            : classificacao == ClassificacaoEntradaMaterial.MateriaPrima;
+        => modo switch
+        {
+            ModoEntradaMaterial.RecebimentoMercadoria =>
+                classificacao is ClassificacaoEntradaMaterial.MateriaPrima
+                    or ClassificacaoEntradaMaterial.Quimico
+                    or ClassificacaoEntradaMaterial.Embalagem
+                    or ClassificacaoEntradaMaterial.Semiacabado,
+            ModoEntradaMaterial.Quimico => classificacao == ClassificacaoEntradaMaterial.Quimico,
+            _ => classificacao == ClassificacaoEntradaMaterial.MateriaPrima
+        };
 }

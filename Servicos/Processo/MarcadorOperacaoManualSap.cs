@@ -106,3 +106,4 @@ public static class MarcadorOperacaoManualSap
         return manuais;
     }
 }
+

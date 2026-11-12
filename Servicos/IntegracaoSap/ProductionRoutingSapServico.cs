@@ -33,7 +33,8 @@ internal sealed class ProductionRoutingSapServico : IProductionRoutingSapServico
     {
         if (_resolverOverride is null && !_configuracao.ProductionRoutingConfigurado)
         {
-            RegistrarDiagnostico("Roteiro nao configurado (versao/roteiro/credenciais/allowlist) — fail-closed.");
+            // GATE 095F-R1: código técnico sanitizado exigido pela observabilidade (095E). Sem secret.
+            RegistrarDiagnostico("CONFIG_NAO_DISPONIVEL: roteiro V3 nao configurado (routing/credenciais/allowlist) — fail-closed.");
             return null;
         }
 
@@ -93,3 +94,4 @@ internal sealed class ProductionRoutingSapFailClosedServico : IProductionRouting
         OrdemProducaoSap ordem, CancellationToken cancellationToken = default)
         => Task.FromResult<RoteiroProducaoSap?>(null);
 }
+

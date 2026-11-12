@@ -1,5 +1,7 @@
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
+using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Modelo.Consumo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -12,6 +14,7 @@ public sealed class ProcessoConsumoMaterialController
 {
     private readonly ConsumoMaterialServico _consumoMaterialServico;
     private readonly TaraController _taraController;
+    private readonly ConsumoMaterialConsultaServico _consultaServico;
 
     public ProcessoConsumoMaterialController()
         : this(new ConsumoMaterialServico(), FabricaControladoresCadastro.CriarTaraController())
@@ -29,7 +32,18 @@ public sealed class ProcessoConsumoMaterialController
     {
         _consumoMaterialServico = consumoMaterialServico;
         _taraController = taraController;
+        _consultaServico = new ConsumoMaterialConsultaServico();
     }
+
+    /// <summary>
+    /// GATE 101J: resolução READ-ONLY do consumo persistido correspondente à ocorrência do apontamento.
+    /// Sem POST/claim/save. Delega ao serviço de consulta (mesmo repositório governado da tela).
+    /// </summary>
+    public Task<ResultadoRecuperacaoConsumoContexto> ResolverRecuperacaoPendenteAsync(
+        ContextoApontamentoProcesso contexto,
+        IReadOnlyList<ComponenteConsumoMaterial> componentes,
+        CancellationToken cancellationToken = default)
+        => _consultaServico.ResolverRecuperacaoPendenteAsync(contexto, componentes, cancellationToken);
 
     /// <summary>Taras ATIVAS do setor (mesma fonte da Entrada). Para a selecao de tara por componente.</summary>
     public Task<IReadOnlyList<TaraCadastro>> ListarTarasAtivasPorSetorAsync(
@@ -149,4 +163,20 @@ public sealed class ProcessoConsumoMaterialController
         int sequencia)
         => _consumoMaterialServico.RegistrarPesagemLocal(
             componente, numeroOrdem, pesoBrutoKg, pesoTaraKg, origem, totalJaPesadoLocalKg, sequencia);
+
+    public Task<IReadOnlyList<ComponenteConsumoDecisaoOperacional>> ListarDecisoesZeroIntencionalAsync(
+        long codigoApontamento,
+        CancellationToken cancellationToken = default)
+        => CriarControleApontamentosRepositorio()
+            .ListarDecisoesZeroIntencionalAsync(codigoApontamento, cancellationToken);
+
+    public Task<ResultadoDecisaoOperacionalConsumo> RegistrarZeroIntencionalAsync(
+        ComponenteConsumoDecisaoOperacional decisao,
+        CancellationToken cancellationToken = default)
+        => CriarControleApontamentosRepositorio()
+            .RegistrarZeroIntencionalAsync(decisao, cancellationToken);
+
+    private static IControleApontamentosRepositorio CriarControleApontamentosRepositorio()
+        => new ControleApontamentosRepositorio(
+            new FabricaConexaoPostgreSql(LeitorConfiguracaoBancoPostgreSql.Carregar()));
 }

@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Cadastro;
+namespace FugaPET_Dev.Modelo.Cadastro;
 
 public sealed class UsuarioSetorCadastro
 {

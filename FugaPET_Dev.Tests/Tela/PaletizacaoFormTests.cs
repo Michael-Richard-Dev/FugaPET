@@ -44,11 +44,9 @@ public sealed class PaletizacaoFormTests
         {
             Assert.Contains($"\"{coluna}\"", f, StringComparison.Ordinal);
         }
-        // colunas legadas removidas
         Assert.DoesNotContain("\"Qtde\"", f, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Peso Total\"", f, StringComparison.Ordinal);
         Assert.DoesNotContain("\"HU / Embalagem\"", f, StringComparison.Ordinal);
-        // hidratação pela própria HU (material real + peso pesado persistido)
         Assert.Contains("c.HandlingUnitExternalId", f, StringComparison.Ordinal);
         Assert.Contains("c.Material", f, StringComparison.Ordinal);
         Assert.Contains("FormatarKg(c.PesoBrutoKg)", f, StringComparison.Ordinal);
@@ -66,7 +64,6 @@ public sealed class PaletizacaoFormTests
             Assert.Contains($"\"{rotulo}\"", f, StringComparison.Ordinal);
         }
         Assert.Contains("_resumoPesoPesadoValor.Text", f, StringComparison.Ordinal);
-        // rótulos de pesos teóricos removidos do resumo
         Assert.DoesNotContain("\"Peso bruto\"", f, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Peso líquido\"", f, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Tara\"", f, StringComparison.Ordinal);
@@ -116,14 +113,11 @@ public sealed class PaletizacaoFormTests
         string f = Fonte();
         Assert.Contains("ENVIAR AO SAP", f, StringComparison.Ordinal);
         Assert.Contains("_controller.EnviarPaleteInt012Async(palete)", f, StringComparison.Ordinal);
-        // P0 reentrância: flag + desabilita o botão durante a operação.
         Assert.Contains("if (_enviandoPalete) { return; }", f, StringComparison.Ordinal);
         Assert.Contains("_enviandoPalete = true;", f, StringComparison.Ordinal);
         Assert.Contains("enviarSapButton.Enabled = false;", f, StringComparison.Ordinal);
-        // RASCUNHO ingressa; demais estados não produzem novo POST normal.
         Assert.Contains("\"RASCUNHO\"", f, StringComparison.Ordinal);
         Assert.Contains("não elegível para novo envio normal", f, StringComparison.Ordinal);
-        // Confirmado recarrega; presenter apresenta o desfecho (nunca inventar sucesso).
         Assert.Contains("EstadoPaleteInt012.Confirmado", f, StringComparison.Ordinal);
         Assert.Contains("RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe())", f, StringComparison.Ordinal);
         Assert.Contains("ProdutoAcabadoPaleteEnvioPresenter.Construir(palete.CodigoPaleteLocal, resultado)", f, StringComparison.Ordinal);
@@ -137,13 +131,11 @@ public sealed class PaletizacaoFormTests
         Assert.Contains("await CarregarPaletesFormadosDoTerminalAsync();", f, StringComparison.Ordinal);
         Assert.Contains("_controller.RecarregarPaletesLocaisPorTerminalAsync(", f, StringComparison.Ordinal);
 
-        // o reload ao abrir NÃO cria palete nem dispara INT012 (somente leitura via Controller).
         string reload = Bloco(f, "private async Task CarregarPaletesFormadosDoTerminalAsync()", "private void AtualizarGridPaletesFormados");
         Assert.DoesNotContain("MontarPaletePorSelecao", reload, StringComparison.Ordinal);
         Assert.DoesNotContain("CriarPaleteLocalPersistenteAsync", reload, StringComparison.Ordinal);
         Assert.DoesNotContain("EnviarPaleteInt012Async", reload, StringComparison.Ordinal);
 
-        // APÓS ENVIO o reload continua previsto (047-Z preservado).
         Assert.Contains("RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe())", f, StringComparison.Ordinal);
     }
 
@@ -151,16 +143,13 @@ public sealed class PaletizacaoFormTests
     public void Form_LayoutDoisBlocos_BR()
     {
         string f = Fonte();
-        // BLOCO ESQUERDO: RESUMO no topo + PALETES FORMADOS abaixo.
         string esquerdo = Bloco(f, "private Control ConstruirBlocoEsquerdo()", "private Control ConstruirBlocoResumoSelecao()");
         Assert.Contains("ConstruirBlocoResumoSelecao(), 0, 0", esquerdo, StringComparison.Ordinal);
         Assert.Contains("ConstruirPaletesFormados(), 0, 1", esquerdo, StringComparison.Ordinal);
-        // BLOCO DIREITO: 3 cards alinhados (grid HUs, entrada, material/gravar).
         string direito = Bloco(f, "private Control ConstruirColunaOperacionalDireita()", "private Control ConstruirGridEmbalagem()");
         Assert.Contains("ConstruirGridEmbalagem(), 0, 0", direito, StringComparison.Ordinal);
         Assert.Contains("ConstruirEntradaOperacional(), 0, 1", direito, StringComparison.Ordinal);
         Assert.Contains("ConstruirBarraGravar(), 0, 2", direito, StringComparison.Ordinal);
-        // PALETES FORMADOS deixou de ser faixa inferior full-width (sem span de coluna).
         Assert.DoesNotContain("SetColumnSpan(paletesFormados", f, StringComparison.Ordinal);
     }
 
@@ -168,10 +157,9 @@ public sealed class PaletizacaoFormTests
     public void Form_MaterialEmbalagem_PALLET01_Fixo_NaoEditavel()
     {
         string f = Fonte();
-        Assert.Contains("Material embalagem", f, StringComparison.Ordinal); // campo preservado
-        // auto-preenchido pela regra central + read-only (sem magic string "PALLET01" na Form)
+        Assert.Contains("Material embalagem", f, StringComparison.Ordinal);
         Assert.Contains("Text = PackagingMaterialMvp.Permitido, ReadOnly = true, TabStop = false", f, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"PALLET01\"", f, StringComparison.Ordinal); // regra centralizada, sem literal duplicado
+        Assert.DoesNotContain("\"PALLET01\"", f, StringComparison.Ordinal);
     }
 
     private static string Bloco(string fonte, string inicio, string fim)
@@ -205,9 +193,7 @@ public sealed class PaletizacaoFormTests
         Assert.Contains("\"PostgresException\"", f, StringComparison.Ordinal);
         Assert.Contains("\"SqlState\"", f, StringComparison.Ordinal);
         Assert.Contains("\"MessageText\"", f, StringComparison.Ordinal);
-        // a mensagem exibida traz [SQLSTATE]: <texto>
         Assert.Contains("$\"{prefixo} [{sqlState}]: {mensagem}\"", f, StringComparison.Ordinal);
-        // sanitização mascara segredos e dados de conexão
         foreach (string segredo in new[] { "authorization", "password", "senha", "host=", "connection string" })
         {
             Assert.Contains($"\"{segredo}\"", f, StringComparison.Ordinal);

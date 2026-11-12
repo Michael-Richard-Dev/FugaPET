@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tests.Cadastro;
+﻿namespace FugaPET_Dev.Tests.Cadastro;
 
 /// <summary>
 /// Tarefa Modelo de Etiqueta: garante por source-scan as regras de banco do repositório — atualização cadastral

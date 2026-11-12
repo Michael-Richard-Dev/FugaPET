@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.IntegracaoSap;
+﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Resultado da criacao de um documento de material (movimento 101) no SAP. Mensagem sempre
@@ -8,6 +8,7 @@ namespace FugaPET_Dev.Modelo.IntegracaoSap;
 public sealed record ResultadoMaterialDocumentSap
 {
     public bool Sucesso { get; init; }
+    public bool? PostTentado { get; init; }
 
     /// <summary>Status HTTP da resposta SAP (null quando nao houve resposta HTTP: rede/TLS/timeout).</summary>
     public int? StatusHttp { get; init; }

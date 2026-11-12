@@ -61,3 +61,4 @@ public interface ISemiAcabadoRepositorio
         CancellationToken cancellationToken = default);
 }
 
+

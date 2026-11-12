@@ -86,6 +86,9 @@ public sealed class ProdutoAcabadoRepositorioIndisponivel : IProdutoAcabadoRepos
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorContextoAsync(string numeroOrdemProducao, string itemOrdemProducao, string material, string lote, string terminal, CancellationToken cancellationToken = default)
         => throw Falha();
 
+    // GATE 124H: persistencia indisponivel ⇒ acumulado real do 261 NAO comprovavel (fail-closed).
+    public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarConfirmadasPorContextoSemTerminalAsync(string numeroOrdemProducao, string itemOrdemProducao, string material, string lote, CancellationToken cancellationToken = default)
+        => throw Falha();
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorHandlingUnitsAsync(IReadOnlyList<string> husExternais, CancellationToken cancellationToken = default)
         => throw Falha();
 
@@ -95,3 +98,4 @@ public sealed class ProdutoAcabadoRepositorioIndisponivel : IProdutoAcabadoRepos
 
 /// <summary>Persistência de Produto Acabado indisponível (banco não configurado). Não é erro técnico da operação.</summary>
 public sealed class PersistenciaProdutoAcabadoIndisponivelException(string mensagem) : Exception(mensagem);
+

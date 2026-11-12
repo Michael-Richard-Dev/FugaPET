@@ -10,6 +10,7 @@
 
 [CmdletBinding()]
 param(
+    # Diretorio-raiz de saida. Se vazio, usa <projeto>\pacotes_limpos (dentro do projeto, como a DEV).
     [string]$DestinoRaiz,
     [switch]$NaoGerarZip,
     [string]$ValidarCaminhoPacote
@@ -29,6 +30,31 @@ $DataPacote = Get-Date -Format 'yyyyMMdd_HHmmss'
 $NomePacote = "FugaPET_Dev_limpo_$DataPacote"
 $DestinoPacote = Join-Path $DestinoRaiz $NomePacote
 $ZipDestino = "$DestinoPacote.zip"
+
+$script:TotalCopiados = 0
+$script:TotalIgnorados = 0
+$script:MaiorCaminhoDestino = 0
+
+# Prefixa um caminho com o formato estendido (\\?\) para operar ACIMA do MAX_PATH (260) do Windows.
+# Necessario porque o pacote fica DENTRO do projeto (pacotes_limpos) e alguns caminhos passam de 260.
+# Assim mantemos o arquivamento no projeto, sem "subst", sem mover o projeto e sem renomear artefatos.
+function ConvertTo-CaminhoLongo {
+    param([Parameter(Mandatory)] [string]$Caminho)
+
+    $full = [System.IO.Path]::GetFullPath($Caminho)
+    if ($full.StartsWith('\\?\')) { return $full }
+    if ($full.StartsWith('\\'))   { return '\\?\UNC\' + $full.Substring(2) }
+    return '\\?\' + $full
+}
+
+# Remove o prefixo \\?\ para exibicao/calculo de caminho relativo (nomes de entrada do ZIP etc.).
+function Remove-PrefixoCaminhoLongo {
+    param([Parameter(Mandatory)] [string]$Caminho)
+
+    if ($Caminho.StartsWith('\\?\UNC\')) { return '\\' + $Caminho.Substring(8) }
+    if ($Caminho.StartsWith('\\?\'))     { return $Caminho.Substring(4) }
+    return $Caminho
+}
 
 $DiretoriosBloqueados = @(
     '.git',
@@ -80,6 +106,69 @@ function Testar-DiretorioBloqueado {
     return $DiretorioCompleto.StartsWith(
         $DestinoRaizCompleto,
         [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+# Mede, SEM copiar, o maior caminho relativo (em caracteres) entre os diretorios NAO bloqueados.
+# Serve ao preflight de comprimento: projeta se o destino excederia o MAX_PATH do Windows.
+function Medir-MaiorCaminhoRelativo {
+    param(
+        [Parameter(Mandatory)] [string]$Origem,
+        [string]$Prefixo = ''
+    )
+
+    $maior = 0
+    foreach ($Item in Get-ChildItem -LiteralPath $Origem -Force) {
+        $relativo = if ([string]::IsNullOrEmpty($Prefixo)) { $Item.Name } else { "$Prefixo\$($Item.Name)" }
+
+        if ($Item.PSIsContainer) {
+            if (Testar-DiretorioBloqueado -Diretorio $Item) {
+                continue
+            }
+
+            $sub = Medir-MaiorCaminhoRelativo -Origem $Item.FullName -Prefixo $relativo
+            if ($sub -gt $maior) {
+                $maior = $sub
+            }
+
+            continue
+        }
+
+        if ($relativo.Length -gt $maior) {
+            $maior = $relativo.Length
+        }
+    }
+
+    return $maior
+}
+
+# Enumera (achatado) os arquivos que SERAO copiados, com o mesmo filtro do copiador.
+# Usado apenas para a verificacao pos-copia (contagem + SHA-256), sem alterar o fluxo de copia.
+function Obter-ArquivosCopiaveis {
+    param(
+        [Parameter(Mandatory)] [string]$Origem,
+        [string]$Prefixo = ''
+    )
+
+    $lista = New-Object System.Collections.Generic.List[object]
+    foreach ($Item in Get-ChildItem -LiteralPath $Origem -Force) {
+        $relativo = if ([string]::IsNullOrEmpty($Prefixo)) { $Item.Name } else { "$Prefixo\$($Item.Name)" }
+
+        if ($Item.PSIsContainer) {
+            if (-not (Testar-DiretorioBloqueado -Diretorio $Item)) {
+                foreach ($sub in Obter-ArquivosCopiaveis -Origem $Item.FullName -Prefixo $relativo) {
+                    $lista.Add($sub)
+                }
+            }
+
+            continue
+        }
+
+        if (-not (Testar-ArquivoBloqueado -Arquivo $Item)) {
+            $lista.Add([pscustomobject]@{ Relativo = $relativo; Origem = $Item.FullName })
+        }
+    }
+
+    return $lista
 }
 
 function Testar-ScriptHabilitaEscritaSap {
@@ -149,7 +238,7 @@ function Copiar-ConteudoLimpo {
         [Parameter(Mandatory)] [string]$Destino
     )
 
-    New-Item -ItemType Directory -Path $Destino -Force | Out-Null
+    [System.IO.Directory]::CreateDirectory((ConvertTo-CaminhoLongo $Destino)) | Out-Null
 
     foreach ($Item in Get-ChildItem -LiteralPath $Origem -Force) {
         if ($Item.PSIsContainer) {
@@ -160,9 +249,63 @@ function Copiar-ConteudoLimpo {
             continue
         }
 
-        if (-not (Testar-ArquivoBloqueado -Arquivo $Item)) {
-            Copy-Item -LiteralPath $Item.FullName -Destination (Join-Path $Destino $Item.Name) -Force
+        if (Testar-ArquivoBloqueado -Arquivo $Item) {
+            $script:TotalIgnorados++
+            continue
         }
+
+        $DestinoArquivo = Join-Path $Destino $Item.Name
+
+        # Garante o diretorio-pai antes de cada copia (formato \\?\ suporta caminhos > 260).
+        $DiretorioPai = Split-Path -Parent $DestinoArquivo
+        if (-not [string]::IsNullOrEmpty($DiretorioPai)) {
+            [System.IO.Directory]::CreateDirectory((ConvertTo-CaminhoLongo $DiretorioPai)) | Out-Null
+        }
+
+        [System.IO.File]::Copy(
+            (ConvertTo-CaminhoLongo $Item.FullName),
+            (ConvertTo-CaminhoLongo $DestinoArquivo),
+            $true)
+        $script:TotalCopiados++
+
+        if ($DestinoArquivo.Length -gt $script:MaiorCaminhoDestino) {
+            $script:MaiorCaminhoDestino = $DestinoArquivo.Length
+        }
+    }
+}
+
+# Verificacao pos-copia: confirma que cada arquivo de origem existe no pacote com SHA-256 identico
+# e que o pacote nao tem arquivos a mais/a menos. Nao altera nada; apenas valida integridade.
+function Verificar-IntegridadeCopia {
+    param(
+        [Parameter(Mandatory)] [string]$Origem,
+        [Parameter(Mandatory)] [string]$Pacote
+    )
+
+    $arquivos = Obter-ArquivosCopiaveis -Origem $Origem
+    $divergencias = New-Object System.Collections.Generic.List[string]
+
+    foreach ($arquivo in $arquivos) {
+        $destinoLongo = ConvertTo-CaminhoLongo (Join-Path $Pacote $arquivo.Relativo)
+        if (-not [System.IO.File]::Exists($destinoLongo)) {
+            $divergencias.Add("AUSENTE no pacote: $($arquivo.Relativo)")
+            continue
+        }
+
+        $hashOrigem = (Get-FileHash -LiteralPath (ConvertTo-CaminhoLongo $arquivo.Origem) -Algorithm SHA256).Hash
+        $hashDestino = (Get-FileHash -LiteralPath $destinoLongo -Algorithm SHA256).Hash
+        if ($hashOrigem -ne $hashDestino) {
+            $divergencias.Add("SHA-256 divergente: $($arquivo.Relativo)")
+        }
+    }
+
+    $totalPacote = @([System.IO.Directory]::EnumerateFiles(
+        (ConvertTo-CaminhoLongo $Pacote), '*', [System.IO.SearchOption]::AllDirectories)).Count
+
+    return [pscustomobject]@{
+        TotalOrigem  = $arquivos.Count
+        TotalPacote  = $totalPacote
+        Divergencias = $divergencias
     }
 }
 
@@ -251,20 +394,27 @@ function Validar-NomeArquivoPacote {
 function Validar-PastaPacote {
     param([Parameter(Mandatory)] [string]$Pasta)
 
-    foreach ($Diretorio in Get-ChildItem -LiteralPath $Pasta -Directory -Recurse -Force) {
-        if ($DiretoriosBloqueados -contains $Diretorio.Name) {
-            throw "Pacote bloqueado: diretorio local encontrado em $($Diretorio.FullName)."
+    $PastaLonga = ConvertTo-CaminhoLongo $Pasta
+
+    foreach ($Diretorio in [System.IO.Directory]::EnumerateDirectories(
+            $PastaLonga, '*', [System.IO.SearchOption]::AllDirectories)) {
+        $NomeDir = [System.IO.Path]::GetFileName($Diretorio.TrimEnd('\'))
+        if ($DiretoriosBloqueados -contains $NomeDir) {
+            throw "Pacote bloqueado: diretorio local encontrado em $(Remove-PrefixoCaminhoLongo $Diretorio)."
         }
     }
 
-    foreach ($Arquivo in Get-ChildItem -LiteralPath $Pasta -File -Recurse -Force) {
-        Validar-NomeArquivoPacote -NomeArquivo $Arquivo.Name -Origem $Arquivo.FullName
+    foreach ($Arquivo in [System.IO.Directory]::EnumerateFiles(
+            $PastaLonga, '*', [System.IO.SearchOption]::AllDirectories)) {
+        $NomeArquivo = [System.IO.Path]::GetFileName($Arquivo)
+        $OrigemExibicao = Remove-PrefixoCaminhoLongo $Arquivo
+        Validar-NomeArquivoPacote -NomeArquivo $NomeArquivo -Origem $OrigemExibicao
 
-        if ($Arquivo.Extension -ieq '.json') {
+        if ([System.IO.Path]::GetExtension($NomeArquivo) -ieq '.json') {
             Validar-ArquivoConfiguracao `
-                -Conteudo (Get-Content -LiteralPath $Arquivo.FullName -Raw) `
-                -Origem $Arquivo.FullName `
-                -ValidarCredenciais ($Arquivo.Name -notmatch '\.exemplo\.json$')
+                -Conteudo ([System.IO.File]::ReadAllText($Arquivo)) `
+                -Origem $OrigemExibicao `
+                -ValidarCredenciais ($NomeArquivo -notmatch '\.exemplo\.json$')
         }
     }
 }
@@ -330,12 +480,15 @@ function Compactar-PastaComBarrasNormais {
         $CaminhoZip,
         [System.IO.Compression.ZipArchiveMode]::Create)
     try {
-        foreach ($Arquivo in Get-ChildItem -LiteralPath $PastaOrigem -File -Recurse -Force) {
-            $CaminhoRelativo = $Arquivo.FullName.Substring($BaseRelativa.Length + 1)
+        foreach ($Arquivo in [System.IO.Directory]::EnumerateFiles(
+                (ConvertTo-CaminhoLongo $PastaOrigem), '*', [System.IO.SearchOption]::AllDirectories)) {
+            $ArquivoNormal = Remove-PrefixoCaminhoLongo $Arquivo
+            $CaminhoRelativo = $ArquivoNormal.Substring($BaseRelativa.Length + 1)
             $NomeEntrada = $CaminhoRelativo -replace '\\', '/'
+            # Le a origem via \\?\ (suporta > 260); a entrada do ZIP usa nome relativo com "/".
             [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                 $Zip,
-                $Arquivo.FullName,
+                $Arquivo,
                 $NomeEntrada,
                 [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
         }
@@ -343,6 +496,22 @@ function Compactar-PastaComBarrasNormais {
     finally {
         $Zip.Dispose()
     }
+}
+
+# ------------------------------------------------------------------------------------------------
+# O pacote fica DENTRO do projeto (pacotes_limpos). Como alguns caminhos passam de 260 caracteres,
+# todas as operacoes do lado do destino usam o formato estendido \\?\ (ver ConvertTo-CaminhoLongo),
+# eliminando a necessidade de "subst" e mantendo o arquivamento no projeto.
+# ------------------------------------------------------------------------------------------------
+$MaiorRelativo = Medir-MaiorCaminhoRelativo -Origem $ProjetoRaiz
+$ComprimentoProjetado = $DestinoPacote.Length + 1 + $MaiorRelativo
+
+Write-Host '--- Gerar Pacote Limpo (FugaPET_Dev) ---'
+Write-Host "Diretorio-fonte       : $ProjetoRaiz"
+Write-Host "Diretorio de saida    : $DestinoRaiz"
+Write-Host "Maior caminho relativo: $MaiorRelativo caracteres (projetado no destino: $ComprimentoProjetado)"
+if ($ComprimentoProjetado -gt 260) {
+    Write-Host "Alguns caminhos passam de 260 caracteres; usando formato estendido \\?\ para copiar/validar/compactar." -ForegroundColor Yellow
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ValidarCaminhoPacote)) {
@@ -354,14 +523,28 @@ if (-not [string]::IsNullOrWhiteSpace($ValidarCaminhoPacote)) {
     Write-Host 'Pacote limpo validado com sucesso; nenhum ZIP foi gerado.' -ForegroundColor Green
     return
 }
-New-Item -ItemType Directory -Path $DestinoRaiz -Force | Out-Null
+[System.IO.Directory]::CreateDirectory((ConvertTo-CaminhoLongo $DestinoRaiz)) | Out-Null
 
-if (Test-Path -LiteralPath $DestinoPacote) {
+if ([System.IO.Directory]::Exists((ConvertTo-CaminhoLongo $DestinoPacote))) {
     throw "A pasta de destino ja existe: $DestinoPacote"
 }
 
 try {
     Copiar-ConteudoLimpo -Origem $ProjetoRaiz -Destino $DestinoPacote
+
+    # Verificacao de integridade: contagem + SHA-256 origem x pacote (garante que nada foi alterado).
+    $Verificacao = Verificar-IntegridadeCopia -Origem $ProjetoRaiz -Pacote $DestinoPacote
+    if ($Verificacao.Divergencias.Count -gt 0 -or $Verificacao.TotalOrigem -ne $Verificacao.TotalPacote) {
+        $detalhe = ($Verificacao.Divergencias | Select-Object -First 10) -join "`n  "
+        throw @"
+Verificacao de integridade FALHOU (pacote nao confere com a origem).
+  Arquivos na origem: $($Verificacao.TotalOrigem)
+  Arquivos no pacote: $($Verificacao.TotalPacote)
+  Divergencias:
+  $detalhe
+"@
+    }
+
     Validar-PastaPacote -Pasta $DestinoPacote
 
     if (-not $NaoGerarZip) {
@@ -378,24 +561,28 @@ catch {
     $DestinoPacoteCompleto = [System.IO.Path]::GetFullPath($DestinoPacote)
     $ZipDestinoCompleto = [System.IO.Path]::GetFullPath($ZipDestino)
 
+    # Remove SOMENTE os artefatos desta execucao (guarda StartsWith); nunca fontes nem pacotes anteriores.
     if ($ZipDestinoCompleto.StartsWith(
         $DestinoRaizCompleto + [System.IO.Path]::DirectorySeparatorChar,
         [System.StringComparison]::OrdinalIgnoreCase) -and
-        (Test-Path -LiteralPath $ZipDestinoCompleto)) {
-        Remove-Item -LiteralPath $ZipDestinoCompleto -Force
+        [System.IO.File]::Exists((ConvertTo-CaminhoLongo $ZipDestinoCompleto))) {
+        [System.IO.File]::Delete((ConvertTo-CaminhoLongo $ZipDestinoCompleto))
     }
 
     if ($DestinoPacoteCompleto.StartsWith(
         $DestinoRaizCompleto + [System.IO.Path]::DirectorySeparatorChar,
         [System.StringComparison]::OrdinalIgnoreCase) -and
-        (Test-Path -LiteralPath $DestinoPacoteCompleto)) {
-        Remove-Item -LiteralPath $DestinoPacoteCompleto -Recurse -Force
+        [System.IO.Directory]::Exists((ConvertTo-CaminhoLongo $DestinoPacoteCompleto))) {
+        [System.IO.Directory]::Delete((ConvertTo-CaminhoLongo $DestinoPacoteCompleto), $true)
     }
 
     throw
 }
 
 Write-Host 'Pacote limpo gerado e validado com sucesso.' -ForegroundColor Green
+Write-Host "Arquivos copiados : $script:TotalCopiados"
+Write-Host "Arquivos ignorados: $script:TotalIgnorados"
+Write-Host "Maior caminho no destino: $script:MaiorCaminhoDestino caracteres"
 Write-Host "Pasta: $DestinoPacote"
 
 if (-not $NaoGerarZip) {

@@ -583,11 +583,31 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
     }
 
     [Fact]
+    public void RegistrarZeroIntencional_UsaColunaDecididoEmDoSchemaQ()
+    {
+        // GATE 100M: a coluna do schema Q é decidido_em (timestamptz NOT NULL DEFAULT now()); o INSERT usava
+        // criado_em (inexistente) e quebrava "Não Consumido" com "Não foi possível registrar a decisão operacional".
+        // Regressão: FALHA com criado_em, PASSA com decidido_em — sem mudar a semântica funcional.
+        string repo = LerArquivoProjeto("AcessoDados", "Repositorio", "ControleApontamentosRepositorio.cs");
+        string metodo = ExtrairMetodo(
+            repo, "public async Task<ResultadoDecisaoOperacionalConsumo> RegistrarZeroIntencionalAsync");
+
+        Assert.Contains("decidido_em", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("criado_em", metodo, StringComparison.Ordinal);
+
+        // Semântica preservada: ZERO_INTENCIONAL, quantidade 0, carimbo now(), idempotência por ON CONFLICT.
+        Assert.Contains("'ZERO_INTENCIONAL', 0, @unidade, @usuario, @estacao, now()", metodo, StringComparison.Ordinal);
+        Assert.Contains(
+            "ON CONFLICT (codigo_apontamento, numero_reserva, item_reserva) DO NOTHING",
+            metodo, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Pacote039_ExigeResultadoValidoTambemEmConcluida()
     {
         string proposta = LerArquivoProjeto(
             "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA",
-            "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql");
+            "039_controle_apontamentos_HML_PROPOSTA_GAIA.sql");
 
         Assert.Contains("status NOT IN ('AGUARDANDO_FINALIZACAO', 'CONCLUIDA')", proposta, StringComparison.Ordinal);
         Assert.Contains(
@@ -602,10 +622,10 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
     {
         string proposta = LerArquivoProjeto(
             "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA",
-            "039_controle_apontamentos_DEV_PROPOSTA_GAIA.sql");
+            "039_controle_apontamentos_HML_PROPOSTA_GAIA.sql");
         string validacao = LerArquivoProjeto(
             "BancoDados", "001_incrementais", "039_controle_apontamentos_producao_GAIA",
-            "039_controle_apontamentos_DEV_VALIDACAO_GAIA.sql");
+            "039_controle_apontamentos_HML_VALIDACAO_GAIA.sql");
 
         Assert.Contains("('VISUALIZAR'", proposta, StringComparison.Ordinal);
         Assert.Contains("('INICIAR'", proposta, StringComparison.Ordinal);
@@ -708,7 +728,34 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
         };
 
     private static string LerArquivoProjeto(params string[] partes)
-        => File.ReadAllText(Path.Combine(RaizProjeto(), Path.Combine(partes)));
+            {
+        string caminho = Path.Combine(RaizProjeto(), Path.Combine(partes));
+        if (File.Exists(caminho))
+        {
+            return File.ReadAllText(caminho);
+        }
+
+        if (partes.Length >= 4
+            && partes[0] == "BancoDados"
+            && partes[1] == "001_incrementais"
+            && partes[2] == "039_controle_apontamentos_producao_GAIA")
+        {
+            string zip = Path.Combine(
+                RaizProjeto(),
+                "BancoDados",
+                "001_incrementais",
+                "039_controle_apontamentos_producao_HML_GAIA_CORRIGIDO_FINAL.zip");
+            using System.IO.Compression.ZipArchive arquivo = System.IO.Compression.ZipFile.OpenRead(zip);
+            System.IO.Compression.ZipArchiveEntry? entrada = arquivo.GetEntry(partes[3]);
+            if (entrada is not null)
+            {
+                using StreamReader leitor = new(entrada.Open());
+                return leitor.ReadToEnd();
+            }
+        }
+
+        return File.ReadAllText(caminho);
+    }
 
     private static string ExtrairMetodo(string fonte, string assinatura)
     {
@@ -778,6 +825,9 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
                     .Select(o => new OperacaoRoteiroSap
                     {
                         Operacao = o.Operacao,
+                        // GATE 095F: rota V3 carrega Plant/WorkCenter da ocorrência (correlação Op+Plant+WC).
+                        Plant = string.IsNullOrWhiteSpace(o.Centro) ? ordem.Centro : o.Centro,
+                        WorkCenter = o.CentroTrabalho,
                         CodigoTextoPadrao = "PP_FORM",
                         TextoPadraoObtido = true
                     })
@@ -817,7 +867,19 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
         public Task<ResultadoConfiguracaoOperacao> ObterConfiguracaoOperacaoAsync(
             string centro, string tipoOrdem, string sequencia, string operacao, string suboperacao,
             string centroTrabalho, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ResultadoConfiguracaoOperacao(
+            => Task.FromResult(RotaPreset());
+
+        // GATE 093D — rota por Plant+WorkCenter + perfil normalizado.
+        public Task<ResultadoConfiguracaoOperacao> ObterConfiguracaoRotaPorWorkCenterAsync(
+            string centro, string centroTrabalho, CancellationToken cancellationToken = default)
+            => Task.FromResult(RotaPreset());
+
+        public Task<ResultadoPerfilResultado> ObterPerfilResultadoAsync(
+            long codigoConfiguracaoRota, int ordemOcorrenciaWorkCenter, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ResultadoPerfilResultado(10, false, 1));
+
+        private static ResultadoConfiguracaoOperacao RotaPreset()
+            => new(
                 new ConfiguracaoOperacaoProcesso
                 {
                     CodigoConfiguracao = 1,
@@ -827,7 +889,7 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
                     Ativo = true
                 },
                 false,
-                1));
+                1);
 
         public Task<IReadOnlyList<ConfiguracaoOperacaoProcesso>> ListarConfiguracoesAtivasAsync(
             string centro, string tipoOrdem, CancellationToken cancellationToken = default)
@@ -864,6 +926,23 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
             CodigoBarrasOperacao codigo, CancellationToken cancellationToken = default)
             => Task.FromResult(true);
 
+        public Task RegistrarVinculoProcessoAsync(
+            long codigoApontamento, string tipoProcesso, long codigoRegistroProcesso,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ApontamentoProcesso>> ListarProcessosVinculadosAsync(
+            long codigoApontamento, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ApontamentoProcesso>>([]);
+
+        public Task<ResultadoDecisaoOperacionalConsumo> RegistrarZeroIntencionalAsync(
+            ComponenteConsumoDecisaoOperacional decisao, CancellationToken cancellationToken = default)
+            => Task.FromResult(ResultadoDecisaoOperacionalConsumo.Registrada());
+
+        public Task<IReadOnlyList<ComponenteConsumoDecisaoOperacional>> ListarDecisoesZeroIntencionalAsync(
+            long codigoApontamento, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ComponenteConsumoDecisaoOperacional>>([]);
+
         public Task<DateTimeOffset?> TentarConcluirApontamentoAsync(
             long codigoApontamento, string usuarioTermino, string estacaoTermino,
             CodigoBarrasOperacao codigoTermino, string idempotencyKeyTermino,
@@ -888,4 +967,6 @@ public sealed class ControleApontamentosCorrecoesFinaisTests
         }
     }
 }
+
+
 

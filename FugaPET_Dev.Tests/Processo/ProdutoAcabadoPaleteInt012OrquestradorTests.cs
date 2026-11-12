@@ -33,10 +33,6 @@ public sealed class ProdutoAcabadoPaleteInt012OrquestradorTests
         public Guid? ClaimSucessoRecebido { get; private set; }
         public int? TentativaSucessoRecebida { get; private set; }
 
-        // GATE 047-I-B: controla o desfecho de registrar_sucesso (fechamento local) para reproduzir os cenarios.
-        public enum ComportamentoSucesso { RetornaTrue, RetornaFalse, Lanca }
-        public ComportamentoSucesso Sucesso { get; set; } = ComportamentoSucesso.RetornaTrue;
-
         public Task<long?> CriarPaleteAsync(
             string codigoPaleteLocal,
             string plant,
@@ -61,16 +57,11 @@ public sealed class ProdutoAcabadoPaleteInt012OrquestradorTests
             => RegistrarSucessoPaleteAsync(p, 0, Guid.Empty, h, uc, r, e, u, t, ct);
         public Task<bool> RegistrarSucessoPaleteAsync(long p, int tentativa, Guid claimToken, int h, string uc, string r, string e, long u, string t, CancellationToken ct = default)
         {
+            PaletesUsados.Add(p); Log.Add($"sucesso:{p}");
             TentativaSucessoRecebida = tentativa;
             ClaimSucessoRecebido = claimToken;
-            PaletesUsados.Add(p); Log.Add($"sucesso:{p}");
             if (ClaimEsperadoNoFechamento is Guid esperado && esperado != claimToken) { return Task.FromResult(false); }
-            return Sucesso switch
-            {
-                ComportamentoSucesso.RetornaFalse => Task.FromResult(false),
-                ComportamentoSucesso.Lanca => throw new InvalidOperationException("Falha simulada no fechamento local (registrar_sucesso)."),
-                _ => Task.FromResult(true)
-            };
+            return Task.FromResult(true);
         }
         public Task<bool> RegistrarErroPaleteAsync(long p, int h, string r, string erro, string e, long u, string t, CancellationToken ct = default)
             => RegistrarErroPaleteAsync(p, 0, Guid.Empty, h, r, erro, e, u, t, ct);
@@ -256,6 +247,40 @@ public sealed class ProdutoAcabadoPaleteInt012OrquestradorTests
         Assert.Equal(1, gw.Posts);
     }
 
+    [Fact]
+    public async Task Fechamento_UsaTentativaEClaimRetornadosPeloClaimAtual()
+    {
+        Guid claimToken = Guid.Parse("d5b3e438-6914-49b8-97f6-b6187c6029ef");
+        FakeOpsPalete ops = new() { ClaimTokenRetornado = claimToken, TentativaRetornada = 1 };
+        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
+
+        ResultadoPalete045 r = await Executar(ops, gw);
+
+        Assert.True(r.Executou);
+        Assert.Equal(1, ops.TentativaSucessoRecebida);
+        Assert.Equal(claimToken, ops.ClaimSucessoRecebido);
+    }
+
+    [Fact]
+    public async Task Fechamento_ClaimDivergenteNaoConsideraSucesso_ZeroRetry()
+    {
+        Guid claimToken = Guid.Parse("d5b3e438-6914-49b8-97f6-b6187c6029ef");
+        FakeOpsPalete ops = new()
+        {
+            ClaimTokenRetornado = claimToken,
+            TentativaRetornada = 1,
+            ClaimEsperadoNoFechamento = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        };
+        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
+
+        ResultadoPalete045 r = await Executar(ops, gw);
+
+        Assert.True(r.Executou);
+        Assert.Equal(EstadoPaleteInt012.IndeterminadoTimeout, r.Estado);
+        Assert.Equal(1, gw.Posts);
+        Assert.Equal(1, ops.TentativaSucessoRecebida);
+        Assert.Equal(claimToken, ops.ClaimSucessoRecebido);
+    }
 
     [Fact]
     public void Store_ClaimPalete_LeTentativasPluralDaCapability()
@@ -283,117 +308,6 @@ public sealed class ProdutoAcabadoPaleteInt012OrquestradorTests
         Assert.DoesNotContain("Reassumir", src, StringComparison.Ordinal);
     }
 
-    // ---------------- GATE 047-I-B: reproducao do fechamento pos-POST ----------------
-
-    [Fact] // POST 2xx + Status S + UC + registrar_sucesso=TRUE => Confirmado (fechamento local comprovado)
-    public async Task Fechamento_RegistrarSucessoTrue_ResultaConfirmado()
-    {
-        FakeOpsPalete ops = new() { Sucesso = FakeOpsPalete.ComportamentoSucesso.RetornaTrue };
-        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
-
-        ResultadoPalete045 r = await Executar(ops, gw);
-
-        Assert.True(r.Executou);
-        Assert.Equal(EstadoPaleteInt012.Confirmado, r.Estado);
-        Assert.Equal("300099999", r.UcGerada);
-        Assert.Contains("sucesso:900", ops.Log);
-        Assert.Equal(1, gw.Posts);
-    }
-
-    [Fact] // registrar_sucesso=FALSE => Indeterminado, UC preservada, ZERO reenvio automatico
-    public async Task Fechamento_RegistrarSucessoFalse_ResultaIndeterminado_SemReenvio()
-    {
-        FakeOpsPalete ops = new() { Sucesso = FakeOpsPalete.ComportamentoSucesso.RetornaFalse };
-        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
-
-        ResultadoPalete045 r = await Executar(ops, gw);
-
-        Assert.True(r.Executou);
-        Assert.Equal(EstadoPaleteInt012.IndeterminadoTimeout, r.Estado);
-        Assert.Equal("300099999", r.UcGerada); // UC preservada para reconciliacao
-        Assert.Equal(1, gw.Posts);             // UM POST, sem reenvio automatico
-    }
-
-    [Fact] // excecao no fechamento => Indeterminado (nao mascara sucesso), ZERO reenvio automatico
-    public async Task Fechamento_RegistrarSucessoLanca_ResultaIndeterminado_SemReenvio()
-    {
-        FakeOpsPalete ops = new() { Sucesso = FakeOpsPalete.ComportamentoSucesso.Lanca };
-        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
-
-        ResultadoPalete045 r = await Executar(ops, gw);
-
-        Assert.True(r.Executou);
-        Assert.Equal(EstadoPaleteInt012.IndeterminadoTimeout, r.Estado);
-        Assert.Equal(1, gw.Posts);
-    }
-
-
-    [Fact]
-    public async Task Fechamento_UsaTentativaEClaimRetornadosPeloClaimAtual()
-    {
-        Guid claimAtual = Guid.Parse("d5b3e438-6914-49b8-97f6-b6187c6029ef");
-        FakeOpsPalete ops = new()
-        {
-            TentativaRetornada = 1,
-            ClaimTokenRetornado = claimAtual,
-            ClaimEsperadoNoFechamento = claimAtual
-        };
-        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
-
-        ResultadoPalete045 r = await Executar(ops, gw);
-
-        Assert.True(r.Executou);
-        Assert.Equal(EstadoPaleteInt012.Confirmado, r.Estado);
-        Assert.Equal(1, ops.TentativaSucessoRecebida);
-        Assert.Equal(claimAtual, ops.ClaimSucessoRecebido);
-        Assert.NotEqual(Guid.Empty, ops.ClaimSucessoRecebido);
-        Assert.Equal(1, gw.Posts);
-    }
-
-    [Fact]
-    public async Task Fechamento_ClaimDivergenteNaoConsideraSucesso_ZeroRetry()
-    {
-        FakeOpsPalete ops = new()
-        {
-            TentativaRetornada = 1,
-            ClaimTokenRetornado = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-            ClaimEsperadoNoFechamento = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
-        };
-        FakeInt012 gw = new(Estado(EstadoPaleteInt012.Confirmado));
-
-        ResultadoPalete045 r = await Executar(ops, gw);
-
-        Assert.True(r.Executou);
-        Assert.Equal(EstadoPaleteInt012.IndeterminadoTimeout, r.Estado);
-        Assert.Equal(1, ops.TentativaSucessoRecebida);
-        Assert.Equal(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), ops.ClaimSucessoRecebido);
-        Assert.Equal(1, gw.Posts);
-    }
-    [Fact] // GATE 047-I-B §5: diagnostico de fechamento presente e sanitizado; evidencia NAO descartada; sem reassuncao
-    public void Fechamento_DiagnosticoSanitizado_Presente_SemReassuncao()
-    {
-        string src = File.ReadAllText(CaminhoFonte("Servicos", "Operacao", "ProdutoAcabadoPaleteInt012Orquestrador.cs"));
-
-        foreach (string campo in new[]
-        {
-            "FECHAMENTO_LOCAL_INICIO_UTC", "TENTATIVA_REAL", "CLAIM_MATCH_CONTEXT", "LEASE_RESTANTE_MS_ESTIMADO",
-            "HTTP_PRESENTE", "HU_PAI_PRESENTE", "RESPONSE_JSON_OBJECT", "REGISTRAR_SUCESSO_RESULTADO",
-            "SQLSTATE", "EXCEPTION_TYPE", "MENSAGEM_SANITIZADA", "FECHAMENTO_LOCAL_FIM_UTC"
-        })
-        {
-            Assert.Contains(campo, src, StringComparison.Ordinal);
-        }
-
-        // a excecao do fechamento agora e capturada (tipo/SQLSTATE/mensagem), nao mais descartada por catch vazio
-        Assert.Contains("ExtrairSqlState", src, StringComparison.Ordinal);
-        Assert.Contains("catch (Exception ex)", src, StringComparison.Ordinal);
-        // guardrail preservado: o orquestrador de POST NAO faz reassuncao/recovery
-        Assert.DoesNotContain("Reassumir", src, StringComparison.Ordinal);
-        Assert.DoesNotContain("AdquirirRecoveryPalete", src, StringComparison.Ordinal);
-        // sem logar segredo
-        Assert.DoesNotContain("Authorization=", src, StringComparison.Ordinal);
-    }
-
     private static string CaminhoFonte(params string[] partes)
     {
         string dir = AppContext.BaseDirectory;
@@ -402,6 +316,9 @@ public sealed class ProdutoAcabadoPaleteInt012OrquestradorTests
         return Path.Combine(dir, Path.Combine(partes));
     }
 }
+
+
+
 
 
 

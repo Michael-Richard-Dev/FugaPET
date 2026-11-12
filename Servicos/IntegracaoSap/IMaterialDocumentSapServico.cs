@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -14,6 +14,8 @@ public interface IMaterialDocumentSapServico
 
     /// <summary>True quando ha URL de Material Document + credenciais + allowlist para o POST real.</summary>
     bool MaterialDocumentConfigurado { get; }
+    string? ValidarPoliticaAntesReserva(MaterialDocumentSapRequest requisicao)
+        => Entrada.P5.BloqueioP5R7.ExigeP5(requisicao) ? Entrada.P5.BloqueioP5R7.Mensagem : null;
 
     /// <summary>
     /// Cria um documento de material (movimento 101) no SAP. Aplica as travas de config/escrita e

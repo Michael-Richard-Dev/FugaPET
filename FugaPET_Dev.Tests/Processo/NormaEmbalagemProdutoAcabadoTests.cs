@@ -51,6 +51,7 @@ public sealed class NormaEmbalagemProdutoAcabadoTests
             Senha = "std-pass",
             HostsPermitidos = ["standard.sap.local"],
             PackagingBaseUrl = baseUrl,
+            PackagingHabilitado = true,
             PackagingUsuario = packagingUsuario,
             PackagingSenha = packagingSenha,
             PackagingHostsPermitidos = hostPermitido is null ? [] : [hostPermitido],

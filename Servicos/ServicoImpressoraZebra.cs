@@ -1,4 +1,4 @@
-﻿    using System.ComponentModel;
+    using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Drawing.Printing;
 using System.Drawing.Drawing2D;

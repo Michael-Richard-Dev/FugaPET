@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.IntegracaoSap;
+using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 
 namespace FugaPET_Dev.Tests.IntegracaoSap;

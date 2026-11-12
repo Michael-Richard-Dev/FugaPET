@@ -405,6 +405,59 @@ public sealed class ProdutoAcabadoRepositorio : IProdutoAcabadoRepositorio
         return caixas;
     }
 
+
+    /// <summary>
+    /// GATE 124H: acumulado real do 261 (KG/PP05) por contexto funcional, SEM TERMINAL e somente
+    /// CONFIRMADA_SAP. Consulta FOCAL — nao reaproveita ListarPorContextoAsync para nao alterar o
+    /// reload da grid nem os demais fluxos que dependem do filtro por terminal.
+    /// O status e filtrado no SQL pelo texto canonico do banco (MapeadorStatusHuCaixa), nunca por
+    /// string solta. FAIL-CLOSED: contexto incompleto ⇒ lista vazia.
+    /// </summary>
+    public async Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarConfirmadasPorContextoSemTerminalAsync(
+        string numeroOrdemProducao, string itemOrdemProducao, string material, string lote,
+        CancellationToken cancellationToken = default)
+    {
+        string op = (numeroOrdemProducao ?? string.Empty).Trim();
+        string item = (itemOrdemProducao ?? string.Empty).Trim();
+        string mat = (material ?? string.Empty).Trim();
+        string lt = (lote ?? string.Empty).Trim();
+        if (op.Length == 0 || item.Length == 0 || mat.Length == 0 || lt.Length == 0)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "[ProdutoAcabado] Acumulado real 261 bloqueado: contexto incompleto (OP/item/material/lote obrigatorios).");
+            return [];
+        }
+
+        string sql = $"""
+            SELECT {ColunasCaixa}
+              FROM hu_caixa
+             WHERE numero_ordem_producao=@op
+               AND btrim(item_ordem_producao)=btrim(@item)
+               AND btrim(material)=btrim(@material)
+               AND btrim(lote)=btrim(@lote)
+               AND status_hu_caixa=@status
+             ORDER BY numero_caixa
+            """;
+        await using NpgsqlConnection con = await _fabricaConexao.CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand cmd = new(sql, con);
+        cmd.Parameters.AddWithValue("op", NpgsqlDbType.Varchar, op);
+        cmd.Parameters.AddWithValue("item", NpgsqlDbType.Text, item);
+        cmd.Parameters.AddWithValue("material", NpgsqlDbType.Text, mat);
+        cmd.Parameters.AddWithValue("lote", NpgsqlDbType.Text, lt);
+        cmd.Parameters.AddWithValue(
+            "status", NpgsqlDbType.Varchar,
+            MapeadorStatusHuCaixa.ParaTextoBanco(StatusIntegracaoCaixa.ConfirmadaSap));
+
+        await using NpgsqlDataReader leitor = await cmd.ExecuteReaderAsync(cancellationToken);
+        List<ProdutoAcabadoCaixa> caixas = [];
+        while (await leitor.ReadAsync(cancellationToken))
+        {
+            caixas.Add(Hidratar(leitor));
+        }
+
+        return caixas;
+    }
+
     // INC-047: leitura por HU externo (seleção manual). Usa capability Gaia 047-B; sem POST/SAP.
     public async Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorHandlingUnitsAsync(
         IReadOnlyList<string> husExternais, CancellationToken cancellationToken = default)
@@ -469,7 +522,6 @@ public sealed class ProdutoAcabadoRepositorio : IProdutoAcabadoRepositorio
 
         return caixas;
     }
-
     public async Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default)
     {
         string sql = $"""

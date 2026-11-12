@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo;
+using FugaPET_Dev.Modelo;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Consumo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -19,12 +19,12 @@ public partial class ProcessoConsumoMaterialForm : Form
 {
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
+    private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
     private static readonly Color RowGreen = Color.FromArgb(238, 241, 245);
     private static readonly Color RowLight = Color.FromArgb(250, 251, 252);
     private static readonly Color StartActionHoverBorder = Color.FromArgb(34, 197, 94);
     private static readonly Color ReadWeightHoverBorder = Color.FromArgb(59, 130, 246);
-    private static readonly Color DangerActionHoverBorder = Color.FromArgb(229, 27, 43);
+    private static readonly Color DangerActionHoverBorder = Color.FromArgb(200, 78, 10);
     private static readonly Color EnabledLegendTextColor = Color.FromArgb(229, 231, 235);
     private static readonly Color DisabledLegendTextColor = Color.FromArgb(120, 126, 136);
     private static readonly Color SidePanelDefaultColor = Color.FromArgb(45, 49, 56);
@@ -58,7 +58,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     private bool _atualizandoComponentes;
     private bool _restaurandoSelecaoLinhaComponentes;
 
-    // Pesagens LOCAIS de consumo por componente (chave composta). Apenas memoria ate o salvar.
+    // Pesagens LOCAIS de consumo por componente (chave composta). Apenas memória ate o salvar.
     private readonly Dictionary<string, List<PesagemConsumoMaterial>> _pesagensPorComponente = new();
     private int _proximaSequenciaPesagem = 1;
 
@@ -66,24 +66,40 @@ public partial class ProcessoConsumoMaterialForm : Form
     private bool _salvandoConsumo;
     private bool _consumoSalvoNaSessao;
     private Button? _confirmarConsumoButton;
+    private Button? _naoConsumidoButton;
 
-    // Preview SAP 261 (Tarefa 6): so montagem/visualizacao do payload — NAO envia SAP.
+    // Preview SAP 261 (Tarefa 6): só montagem/visualização do payload — NÃO envia SAP.
     private long? _ultimoCodigoLancamentoSalvo;
+
+    // GATE 101E-P2 §8/§9: cerimônia de habilitação da escrita SAP 261 (capability bound ao lançamento). Sem env
+    // write=true, SÓ esta cerimônia (confirmação humana + auditoria durável) arma o envio de PK específico.
+    private readonly global::FugaPET_Dev.Servicos.IntegracaoSap.HabilitacaoEscritaSap261Servico _habilitacao261 = new();
     private Button? _previewSap261Button;
 
     // Envio controlado SAP 261 (Tarefa 7): governado por WRITE_ENABLED; trava clique duplo.
     private bool _enviandoSap;
     private Button? _enviarSap261Button;
+
+    // GATE 101J: RECOVERY do consumo PERSISTIDO por contexto (fecha o gap do 101I). Estado DEDICADO
+    // (nunca reaproveita _ultimoCodigoLancamentoSalvo, que é só o save da sessão) + snapshot mínimo do
+    // contexto para invalidação. A autoridade vem do banco (PENDENTE/ENVIANDO), então sobrevive a restart.
+    private long? _codigoLancamentoRecuperado;
+    private RecuperacaoContextoSnapshot? _snapshotRecuperacao;
+    private global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo _modalidadeRecuperacao =
+        global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.Nenhum;
+
+    /// <summary>Snapshot mínimo do contexto do apontamento (§14): OP + operação + sequência.</summary>
+    private readonly record struct RecuperacaoContextoSnapshot(string NumeroOrdem, string Operacao, string Sequencia);
     private ToolTip? _envioSap261ToolTip;
     private ToolTip? _apontamentoInfoToolTip;
     private ToolTip? _sapStatusToolTip;
     private bool _enviandoConfirmacao;
     private Button? _enviarConfirmacaoButton;
 
-    // Preview Confirmacao de Producao (Tarefa 12): so para componente Backflush — diagnostico, NAO envia SAP.
+    // Preview Confirmacao de Producao (Tarefa 12): só para componente Backflush — diagnostico, NÃO envia SAP.
     private Button? _previewConfirmacaoButton;
 
-    // Saldo Restante no card lateral (layout): label menor abaixo de "Peso Utilizado". So exibicao.
+    // Saldo Restante no card lateral (layout): label menor abaixo de "Peso Utilizado". So exibição.
     private Label? saldoRestanteCounterLabel;
 
     // Ajuste 5: suprime o "limpar OP" durante o preenchimento programatico do campo de Ordem.
@@ -102,16 +118,16 @@ public partial class ProcessoConsumoMaterialForm : Form
     private IReadOnlyDictionary<string, ProdutoSapMestre> _mestresProdutoPorCodigo =
         new Dictionary<string, ProdutoSapMestre>(StringComparer.OrdinalIgnoreCase);
 
-    // Tarefa 15.1: enquanto true, o Validated do campo OP NAO reconsulta (acao operacional em andamento).
+    // Tarefa 15.1: enquanto true, o Validated do campo OP NÃO reconsulta (acao operacional em andamento).
     private bool _acaoOperacionalEmAndamento;
 
-    // Tarefa 18.3: enquanto true, fechar/voltar a tela NAO dispara validacao/consulta de OP (evita alerta indevido).
+    // Tarefa 18.3: enquanto true, fechar/voltar a tela NÃO dispara validacao/consulta de OP (evita alerta indevido).
     private bool _fechandoTela;
 
-    // Tarefa 16: rota do consumo SALVO (261 direto / Backflush-confirmacao / Misto / Bloqueado) — so habilita botoes.
+    // Tarefa 16: rota do consumo SALVO (261 direto / Backflush-confirmacao / Misto / Bloqueado) — só habilita botões.
     private RotaEnvioConsumo _rotaEnvioSalva = RotaEnvioConsumo.Bloqueado;
 
-    // Tarefa 17.6: true apos uma falha SAP (HTTP) no lancamento salvo — bloqueia reenvio automatico (FALHA_SAP).
+    // Tarefa 17.6: true após uma falha SAP (HTTP) no lançamento salvo — bloqueia reenvio automático (FALHA_SAP).
     private bool _lancamentoComFalhaSap;
 
     // Ajuste 3 (Tarefa 14): mensagem de peso decimal invalido (KG).
@@ -257,7 +273,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     /// <summary>
     /// Correcao 1 (Tarefa 15.1): controles OPERACIONAIS nao causam validacao do campo OP. Assim, clicar
-    /// em Confirmar/Enviar/Preview/Iniciar Leitura/F9/F12/acoes laterais NAO dispara o Validated do ComboBox
+    /// em Confirmar/Enviar/Preview/Iniciar Leitura/F9/F12/acoes laterais NÃO dispara o Validated do ComboBox
     /// (que reconsultava a OP e limpava as pesagens). O Validated segue valendo p/ navegacao normal (Tab).
     /// </summary>
     private void ConfigurarCausesValidacaoOperacional()
@@ -269,7 +285,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             startActionPanel, startActionIconLabel, startActionTextLabel,
             readWeightLegendPanel, readWeightLegendIconLabel, readWeightLegendTextLabel,
             deleteLastLegendPanel, deleteByCodeLegendPanel,
-            // Tarefa 18.3: controles de navegacao/titulo NAO devem forcar o Validated do ComboBox de OP.
+            // Tarefa 18.3: controles de navegacao/titulo NÃO devem forcar o Validated do ComboBox de OP.
             closeWindowLabel, minimizeWindowLabel, maximizeWindowLabel, menuHeaderLabel,
             customTitleBarPanel, companyLogoPictureBox, headerTitleLabel, headerSubtitleLabel
         };
@@ -400,7 +416,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(200, 78, 10));
     }
 
     private void ReturnToLeituraProducao()
@@ -416,8 +432,8 @@ public partial class ProcessoConsumoMaterialForm : Form
         _acaoOperacionalEmAndamento = true;
         AutoValidate = AutoValidate.Disable;
 
-        // Padrao da Entrada (evita quebrar o menu): com Owner vivo, apenas fecha — o painel ja esta atras.
-        // NAO reativar a navegacao do owner aqui: re-navegar o painel enquanto a tela fecha quebra o menu.
+        // Padrão da Entrada (evita quebrar o menu): com Owner vivo, apenas fecha — o painel já está atrás.
+        // NÃO reativar a navegacao do owner aqui: re-navegar o painel enquanto a tela fecha quebra o menu.
         if (Owner is PainelInicialForm)
         {
             Close();
@@ -719,14 +735,14 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     /// <summary>
-    /// Tarefa 13.1: campo de OP no mesmo padrao do pedidoComboBox da Entrada — ComboBox editavel,
+    /// Tarefa 13.1: campo de OP no mesmo padrão do pedidoComboBox da Entrada — ComboBox editável,
     /// sem autocomplete nativo, com lista de OPs recentes (consultadas com sucesso). Eventos: TextUpdate
     /// (digitacao) limpa a OP anterior; SelectedIndexChanged (escolha na lista) consulta; Enter consulta.
     /// </summary>
     private void ConfigurarComboOrdem()
     {
         // Igual a Entrada (ConfigurarComboPedidos): esconde o icone e deixa o ComboBox ocupar toda a
-        // largura do cartao (AjustarLarguraComboOrdem no Resize).
+        // largura do cartão (AjustarLarguraComboOrdem no Resize).
         productionOrderIconPanel.Visible = false;
         productionOrderComboBox.DropDownStyle = ComboBoxStyle.DropDown;
         productionOrderComboBox.AutoCompleteMode = AutoCompleteMode.None;
@@ -739,7 +755,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         AjustarLarguraComboOrdem();
     }
 
-    /// <summary>Estica o ComboBox de OP para ocupar a largura do cartao (mesmo padrao da Entrada).</summary>
+    /// <summary>Estica o ComboBox de OP para ocupar a largura do cartão (mesmo padrao da Entrada).</summary>
     private void AjustarLarguraComboOrdem()
     {
         const int margemDireita = 16;
@@ -760,7 +776,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     /// <summary>
-    /// Padrao da Entrada (PedidoComboBox_TextUpdate): ao DIGITAR, limpa os dados da OP carregada
+    /// Padrão da Entrada (PedidoComboBox_TextUpdate): ao DIGITAR, limpa os dados da OP carregada
     /// anteriormente (o valor digitado permanece visivel). A consulta continua por Enter/selecao.
     /// </summary>
     private bool PossuiPesagensLocaisNaoSalvas()
@@ -774,7 +790,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Correcao 1.3: alterar a OP com pesagens NAO salvas exige confirmacao antes de descartar.
+        // Correcao 1.3: alterar a OP com pesagens NÃO salvas exige confirmacao antes de descartar.
         if (PossuiPesagensLocaisNaoSalvas())
         {
             DialogResult resposta = MessageBox.Show(
@@ -796,7 +812,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
     }
 
-    /// <summary>Padrao da Entrada (PedidoComboBox_SelectedIndexChanged): selecionar OP da lista consulta.</summary>
+    /// <summary>Padrão da Entrada (PedidoComboBox_SelectedIndexChanged): selecionar OP da lista consulta.</summary>
     private async void ProductionOrderComboBox_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_suprimirEventoOrdem)
@@ -808,9 +824,9 @@ public partial class ProcessoConsumoMaterialForm : Form
         await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: true);
     }
 
-    /// <summary>Padrao da Entrada (PedidoComboBox_Validated): ao sair do campo (foco), consulta a OP.</summary>
+    /// <summary>Padrão da Entrada (PedidoComboBox_Validated): ao sair do campo (foco), consulta a OP.</summary>
     /// <summary>
-    /// Tarefa 15.1: condicoes em que o campo OP NAO deve reconsultar por perda de foco (acao operacional,
+    /// Tarefa 15.1: condicoes em que o campo OP NÃO deve reconsultar por perda de foco (acao operacional,
     /// leitura iniciada ou pesagens locais nao salvas). Troca de OP com pesagens passa pelo TextUpdate.
     /// </summary>
     private bool DeveIgnorarValidacaoOrdem()
@@ -832,7 +848,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Validacao passiva (perda de foco): OP vazia NAO deve exibir aviso — o usuario pode estar so saindo da tela.
+        // Validação passiva (perda de foco): OP vazia NÃO deve exibir aviso — o usuário pode estar só saindo da tela.
         await ConsultarOrdemProducaoAsync(exibirAvisoOrdemObrigatoria: false);
     }
 
@@ -845,7 +861,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     /// <summary>
     /// Parte 3: lista de OPs RECENTES (consultadas com sucesso). Sem consulta SAP em massa — apenas
-    /// memoriza as OPs ja consultadas. Mantem a digitacao manual (ComboBox editavel).
+    /// memoriza as OPs ja consultadas. Mantem a digitacao manual (ComboBox editável).
     /// </summary>
     private void RegistrarOrdemRecente(string numeroOrdem)
     {
@@ -914,7 +930,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         string numeroOrdem = NormalizarNumeroOrdem(productionOrderComboBox.Text);
 
-        // Tarefa 18.3: OP vazia — consulta explicita avisa; validacao passiva/fechamento NAO exibe MessageBox.
+        // Tarefa 18.3: OP vazia — consulta explicita avisa; validacao passiva/fechamento NÃO exibe MessageBox.
         if (string.IsNullOrWhiteSpace(numeroOrdem))
         {
             LimparDadosOrdem(limparNumeroOrdem: false);
@@ -932,7 +948,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Mesma OP ja carregada: NAO reconsulta nem limpa pesagens (protege _pesagensPorComponente).
+        // Mesma OP ja carregada: NÃO reconsulta nem limpa pesagens (protege _pesagensPorComponente).
         if (_ordemConsumoAtual is not null
             && string.Equals(
                 NormalizarNumeroOrdem(_ordemConsumoAtual.NumeroOrdem),
@@ -947,7 +963,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         {
             ResultadoConsultaOrdemConsumo resultado = await _controller.ConsultarOrdemProducaoAsync(numeroOrdem);
 
-            // OP obrigatoria / nao encontrada / SAP indisponivel: limpa dados e avisa.
+            // OP obrigatoria / nao encontrada / SAP indisponível: limpa dados e avisa.
             if (resultado.Cenario is CenarioConsultaOrdemConsumo.OrdemObrigatoria
                 or CenarioConsultaOrdemConsumo.NaoEncontrada
                 or CenarioConsultaOrdemConsumo.Indisponivel
@@ -1017,6 +1033,13 @@ public partial class ProcessoConsumoMaterialForm : Form
             if (resultado.Cenario is CenarioConsultaOrdemConsumo.NaoLiberada)
             {
                 MessageBox.Show(resultado.Mensagem, "Ordem de Produção", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+
+            // GATE 101J §12 passo 5: SOMENTE após materializar OP + componentes exatos da ocorrência,
+            // resolve READ-ONLY o estado persistido de consumo. Fora de apontamento, no-op.
+            if (_contextoApontamento is not null)
+            {
+                await ResolverRecuperacaoPersistidaDoContextoAsync(componentesOperacionais);
             }
         }
         finally
@@ -1544,7 +1567,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     private static string ObterLoteComponenteGrid(ComponenteConsumoMaterial componente)
         => string.IsNullOrWhiteSpace(componente.Lote) ? "Sem lote" : componente.Lote.Trim();
 
-    // Texto completo (motivo) para tooltip/status — fora da coluna para nao poluir a grid.
+    // Texto completo (motivo) para tooltip/status — fora da coluna para não poluir a grid.
     private static string ObterTooltipComponente(ComponenteConsumoMaterial componente)
     {
         if (string.IsNullOrWhiteSpace(componente.DepositoConsumo))
@@ -1625,7 +1648,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             || componente.BackflushSap
             || componente.ClassificacaoEnvio == ClassificacaoEnvioConsumo261.RequerConfirmacaoProducao)
         {
-            motivoBloqueio = "Componente Backflush n?o pode ser operado por 261 direto nesta tela.";
+            motivoBloqueio = "Componente Backflush não pode ser operado por 261 direto nesta tela.";
             return false;
         }
 
@@ -1634,14 +1657,19 @@ public partial class ProcessoConsumoMaterialForm : Form
             || !componente.ElegivelMaterialDocument261Direto)
         {
             motivoBloqueio = string.IsNullOrWhiteSpace(componente.MotivoInelegibilidadeMaterialDocument261)
-                ? "Componente n?o classificado como 261 Direto."
+                ? "Componente não classificado como 261 Direto."
                 : componente.MotivoInelegibilidadeMaterialDocument261;
             return false;
         }
 
-        if (!ComponentePertenceAoModoAtual(componente))
+        // GATE 103D: no fluxo de APONTAMENTO (_contextoApontamento != null) a operação configurada já é
+        // autoridade para a tela — os componentes foram filtrados por ManufacturingOrderOperation/Sequence e
+        // ProductType/ProductGroup entram apenas como enriquecimento/diagnóstico, NÃO podem re-bloquear a
+        // operação depois disso. O filtro de modo por ClassificacaoConsumo permanece obrigatório SOMENTE no
+        // fluxo MANUAL (_contextoApontamento == null), onde não há rota de operação autoritativa.
+        if (_contextoApontamento is null && !ComponentePertenceAoModoAtual(componente))
         {
-            motivoBloqueio = $"Componente n?o pertence ao modo {NomeOperacionalConsumo}.";
+            motivoBloqueio = $"Componente não pertence ao modo {NomeOperacionalConsumo}.";
             return false;
         }
 
@@ -1671,8 +1699,8 @@ public partial class ProcessoConsumoMaterialForm : Form
     private void BloquearComponenteOperacional(ComponenteConsumoMaterial? componente, string motivoBloqueio)
     {
         string mensagem = string.IsNullOrWhiteSpace(motivoBloqueio)
-            ? "Opera??o bloqueada para este componente."
-            : $"Opera??o bloqueada para este componente. Motivo: {motivoBloqueio}";
+            ? "Operação bloqueada para este componente."
+            : $"Operação bloqueada para este componente. Motivo: {motivoBloqueio}";
 
         statusLabel.Text = mensagem;
         AtualizarApontamentoVisual(componente, mensagem);
@@ -1706,8 +1734,8 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private string MontarMensagemOperacaoBloqueada(string motivoBloqueio)
         => string.IsNullOrWhiteSpace(motivoBloqueio)
-            ? "Opera??o bloqueada para este componente."
-            : $"Opera??o bloqueada para este componente.\r\nMotivo: {motivoBloqueio}";
+            ? "Operação bloqueada para este componente."
+            : $"Operação bloqueada para este componente.\r\nMotivo: {motivoBloqueio}";
 
     private bool ValidarComponentesComPesagemPendentesOperaveis(out string mensagem)
     {
@@ -1803,7 +1831,38 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
+        // GATE 101U §10: o RECOVERY BLOCKER é a autoridade FINAL. Um refresh genérico de seleção do grid
+        // (inclusive os disparados de forma deferida após a materialização do recovery, pós-retomada) NÃO pode
+        // reabilitar/apresentar fresh-flow ("inicie a leitura") por cima do estado de recovery. Enquanto a
+        // modalidade efetiva bloquear novo consumo, reaplica o estado de recovery e NÃO segue o caminho normal.
+        if (RecuperacaoBloqueiaNovoConsumo())
+        {
+            ReaplicarEstadoRecuperacao();
+            return;
+        }
+
         CapturarComponenteSelecionadoDoGridPrincipal();
+    }
+
+    /// <summary>
+    /// GATE 101U: reaplica o estado visual/controle do recovery vigente SEM reconsultar o banco (idempotente).
+    /// UmPendente ⇒ materializa PENDENTE + "Enviar SAP 261" (PK recuperado) e bloqueia leitura/pesagem/confirmar;
+    /// qualquer outra modalidade bloqueante (Ambíguo/Enviando/Falha/desconhecida) ⇒ bloqueio de reconciliação.
+    /// Garante que refreshes genéricos posteriores nunca degradem o bloqueio (§10/§12).
+    /// </summary>
+    private void ReaplicarEstadoRecuperacao()
+    {
+        if (global::FugaPET_Dev.Modelo.Consumo.RecuperacaoConsumoPolitica.PermiteEnvioRecuperado(
+                _modalidadeRecuperacao, _codigoLancamentoRecuperado)
+            && _codigoLancamentoRecuperado is long codigoRecuperado)
+        {
+            AplicarMaterializacaoRecuperacaoPendente(codigoRecuperado);
+            return;
+        }
+
+        // Ambíguo / ENVIANDO / Falha / desconhecido: bloqueio total, sem materializar envio.
+        AplicarBloqueioReconciliacao(
+            "Estado persistido deste consumo requer reconciliação/ação de suporte. Novo consumo bloqueado.");
     }
 
     private bool CapturarComponenteSelecionadoDoGridPrincipal()
@@ -1858,7 +1917,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         if (_ordemConsumoAtual is null)
         {
-            mensagem = "Carregue uma ordem de produ??o v?lida para pesar.";
+            mensagem = "Carregue uma ordem de produção válida para pesar.";
             return false;
         }
 
@@ -1936,7 +1995,9 @@ public partial class ProcessoConsumoMaterialForm : Form
     /// <summary>Tarefa 18.2 (padrao Entrada): pode iniciar leitura = permissao EXECUTAR + OP valida carregada.</summary>
     private bool PodeIniciarLeituraConsumo()
         => PossuiPermissaoLeituraProducao(AutorizacaoServico.AcaoExecutar)
-           && OrdemConsumoSelecionadaValida();
+           && OrdemConsumoSelecionadaValida()
+           // GATE 101J §13: recovery de PENDENTE/ENVIANDO/ambíguo bloqueia iniciar nova leitura (concorrência).
+           && !RecuperacaoBloqueiaNovoConsumo();
 
     private bool OrdemConsumoSelecionadaValida()
     {
@@ -1986,6 +2047,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         _proximaSequenciaPesagem = 1;
         _consumoSalvoNaSessao = false;
         _ultimoCodigoLancamentoSalvo = null;
+        LimparEstadoRecuperacao(); // GATE 101J: PK recuperado não sobrevive à troca/limpeza de OP (§14).
         UpdateProductionState(false);
         BloquearAcoesSemOrdemCarregada();
         AtualizarBotaoConfirmar();
@@ -2332,7 +2394,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         if (_ordemConsumoAtual is null)
         {
-            statusLabel.Text = "Carregue uma ordem de produ??o v?lida para iniciar a leitura de consumo.";
+            statusLabel.Text = "Carregue uma ordem de produção válida para iniciar a leitura de consumo.";
             return;
         }
 
@@ -2386,7 +2448,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private async Task WarmUpProductionDevicesAsync()
     {
-        // Tarefa 4: Consumo aquece SOMENTE a balanca — nao toca a Zebra/impressora.
+        // Tarefa 4: Consumo aquece SOMENTE a balanca — não toca a Zebra/impressora.
         await WarmUpSaldoSafelyAsync();
     }
 
@@ -2515,7 +2577,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         try
         {
-            // Tarefa 4: pesagem LOCAL de consumo — sem impressao de etiqueta.
+            // Tarefa 4: pesagem LOCAL de consumo — sem impressão de etiqueta.
             ResultadoLeituraPeso leitura = await LerPesoBalancaOperacionalAsync();
             if (!leitura.Sucesso)
             {
@@ -2555,7 +2617,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     /// <summary>
     /// Valida (via controller→service) e registra LOCALMENTE a pesagem de consumo do componente
-    /// selecionado, aplicando a tara selecionada. Sem banco, sem SAP, sem impressao.
+    /// selecionado, aplicando a tara selecionada. Sem banco, sem SAP, sem impressão.
     /// </summary>
     private async Task RegistrarPesagemConsumoAsync(decimal pesoBruto, string origem)
     {
@@ -2825,7 +2887,7 @@ public partial class ProcessoConsumoMaterialForm : Form
                 decimal totalUtilizado = ObterQuantidadeUtilizadaComponente(componente, chave);
                 decimal saldo = Math.Max(0m, previstoInicial - totalUtilizado);
                 string unidade = string.IsNullOrWhiteSpace(componente.UnidadeMedida) ? "KG" : componente.UnidadeMedida;
-                // Ajuste 7: a coluna de Peso Previsto NAO e reescrita durante a pesagem local (fica fixa).
+                // Ajuste 7: a coluna de Peso Previsto NÃO e reescrita durante a pesagem local (fica fixa).
                 linha.Cells["productionTipoSapColumn"].Value = ObterTipoSapGrid(componente);
                 linha.Cells["productionWeightColumn"].Value = FormatarPesoGrid(totalUtilizado, unidade);
                 linha.Cells["productionSaldoColumn"].Value = FormatarPesoGrid(saldo, unidade);
@@ -2865,10 +2927,87 @@ public partial class ProcessoConsumoMaterialForm : Form
         _confirmarConsumoButton.Click += async (_, _) => await ConfirmarConsumoAsync();
         sidePanel.Controls.Add(_confirmarConsumoButton);
         _confirmarConsumoButton.BringToFront();
+
+        _naoConsumidoButton = CriarBotaoNaoConsumido();
+        sidePanel.Controls.Add(_naoConsumidoButton);
+        _naoConsumidoButton.BringToFront();
+    }
+
+    private Button CriarBotaoNaoConsumido()
+    {
+        Button botao = new()
+        {
+            Name = "naoConsumidoButton",
+            Text = "Não Consumido",
+            Size = new Size(190, 32),
+            Location = new Point(12, 528),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(100, 116, 139),
+            ForeColor = Color.White,
+            Font = new Font("Cascadia Code", 6.5F, FontStyle.Bold),
+            Enabled = false,
+            Visible = false,
+            Cursor = Cursors.Hand
+        };
+        botao.FlatAppearance.BorderSize = 0;
+        botao.Click += async (_, _) => await RegistrarNaoConsumidoAsync();
+        return botao;
     }
 
     private bool PossuiPesagemPendenteParaNovoApontamento()
         => _pesagensPorComponente.Values.Any(lista => lista.Count > 0);
+
+    private bool PossuiPesagemLocal(ComponenteConsumoMaterial componente)
+        => _pesagensPorComponente.TryGetValue(
+            ProcessoConsumoMaterialController.ChaveComponente(componente),
+            out List<PesagemConsumoMaterial>? pesagens)
+           && pesagens.Count > 0;
+
+    private async Task RegistrarNaoConsumidoAsync()
+    {
+        ComponenteConsumoMaterial? componente = _componenteConsumoSelecionado;
+        long codigoApontamento = _contextoApontamento?.CodigoApontamento ?? 0;
+
+        if (componente is null || codigoApontamento <= 0)
+        {
+            statusLabel.Text = "Selecione um componente de um apontamento ativo para registrar não consumido.";
+            return;
+        }
+
+        if (PossuiPesagemLocal(componente))
+        {
+            statusLabel.Text = "Componente já possui pesagem local. Exclua a pesagem antes de registrar não consumido.";
+            return;
+        }
+
+        if (MessageBox.Show(
+                "Confirmar que este componente será registrado como NÃO CONSUMIDO para esta ocorrência?",
+                "Não Consumido",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _ = await _controller.ListarDecisoesZeroIntencionalAsync(codigoApontamento, CancellationToken.None);
+        ResultadoDecisaoOperacionalConsumo resultado = await _controller.RegistrarZeroIntencionalAsync(
+            new ComponenteConsumoDecisaoOperacional
+            {
+                CodigoApontamento = codigoApontamento,
+                NumeroReserva = componente.NumeroReserva,
+                ItemReserva = componente.ItemReserva,
+                CodigoMaterial = componente.CodigoMaterial,
+                Quantidade = 0m,
+                Unidade = componente.UnidadeMedida,
+                Usuario = _contextoApontamento?.Usuario ?? Environment.UserName,
+                Estacao = _contextoApontamento?.Estacao ?? Environment.MachineName
+            },
+            CancellationToken.None);
+
+        statusLabel.Text = resultado.Mensagem;
+        MessageBox.Show(resultado.Mensagem, "Não Consumido", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        AtualizarBotaoConfirmar();
+    }
 
     private string FinalizarApontamentoEnviadoSapELiberarNovaPesagem(string mensagemSucesso)
     {
@@ -2938,6 +3077,15 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     private void AtualizarBotaoConfirmar()
     {
+        // GATE 101J: em recovery de PENDENTE persistido, a ação primária é ENVIAR SAP 261 do PK recuperado —
+        // nunca uma nova pesagem/Confirmar Consumo (evita criar PK concorrente). Blocker ENVIANDO/AMBÍGUO
+        // não materializa envio; apenas bloqueia novo consumo.
+        if (_modalidadeRecuperacao != global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.Nenhum)
+        {
+            AtualizarBotoesRecuperacao();
+            return;
+        }
+
         if (_confirmarConsumoButton is not null)
         {
             // Ajuste 5 (Tarefa 18.2): CONFIRMAR CONSUMO visivel so FORA da leitura, com pesagem local e
@@ -2951,12 +3099,253 @@ public partial class ProcessoConsumoMaterialForm : Form
             _confirmarConsumoButton.Enabled = _confirmarConsumoButton.Visible && !_salvandoConsumo;
         }
 
+        if (_naoConsumidoButton is not null)
+        {
+            ComponenteConsumoMaterial? componente = _componenteConsumoSelecionado;
+            _naoConsumidoButton.Visible = !_isProductionStarted
+                && !_lancamentoComFalhaSap
+                && _ordemConsumoAtual is not null
+                && componente is not null
+                && !PossuiPesagemLocal(componente)
+                && !_consumoSalvoNaSessao;
+            _naoConsumidoButton.Enabled = _naoConsumidoButton.Visible && !_salvandoConsumo;
+        }
+
         // Ajuste 2 (Tarefa 18.2): botoes tecnicos NUNCA visiveis ao operador (fluxo unico = Confirmar Consumo).
         // As instancias/metodos permanecem para testes/diagnostico interno.
         if (_previewSap261Button is not null) { _previewSap261Button.Visible = false; }
         if (_enviarSap261Button is not null) { _enviarSap261Button.Visible = false; }
         if (_previewConfirmacaoButton is not null) { _previewConfirmacaoButton.Visible = false; }
         if (_enviarConfirmacaoButton is not null) { _enviarConfirmacaoButton.Visible = false; }
+    }
+
+    // ==========================================================================================
+    // GATE 101J — RECOVERY de consumo PENDENTE_SAP persistido por contexto.
+    // ==========================================================================================
+
+    /// <summary>True quando existe estado persistido correspondente que BLOQUEIA novo consumo/pesagem/PK
+    /// (qualquer modalidade ≠ Nenhum: PENDENTE recuperado, ambíguo ou ENVIANDO/reconciliação).</summary>
+    private bool RecuperacaoBloqueiaNovoConsumo()
+        => global::FugaPET_Dev.Modelo.Consumo.RecuperacaoConsumoPolitica.BloqueiaNovoConsumo(_modalidadeRecuperacao);
+
+    /// <summary>
+    /// GATE 101W: PK que o envio de recovery usaria AGORA (mesma seleção fail-closed executada por
+    /// <see cref="EnviarSap261Async"/> em runtime): retorna o codigo_lancamento RECUPERADO somente quando a
+    /// política autoriza (UmPendente + PK), senão null. Sem efeito colateral — nunca usa o save de sessão
+    /// (<see cref="_ultimoCodigoLancamentoSalvo"/>). É a MESMA lógica de runtime, apenas nomeada para ser
+    /// verificável sem disparar a cerimônia/MessageBox.
+    /// </summary>
+    internal long? PkEnvioRecuperadoAtual()
+        => global::FugaPET_Dev.Modelo.Consumo.RecuperacaoConsumoPolitica.PermiteEnvioRecuperado(
+               _modalidadeRecuperacao, _codigoLancamentoRecuperado)
+           ? _codigoLancamentoRecuperado
+           : null;
+
+    private RecuperacaoContextoSnapshot? SnapshotContextoRecuperacaoAtual()
+        => _contextoApontamento is null
+            ? null
+            : new RecuperacaoContextoSnapshot(
+                NormalizarNumeroOrdem(_contextoApontamento.NumeroOrdem),
+                _contextoApontamento.Operacao ?? string.Empty,
+                _contextoApontamento.Sequencia ?? string.Empty);
+
+    private void LimparEstadoRecuperacao()
+    {
+        _codigoLancamentoRecuperado = null;
+        _snapshotRecuperacao = null;
+        _modalidadeRecuperacao = global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.Nenhum;
+    }
+
+    /// <summary>
+    /// §12 passo 5/6: resolve READ-ONLY o consumo persistido da ocorrência e aplica a modalidade. NUNCA cria
+    /// lançamento/pesagem, NUNCA faz POST/claim. Falha ⇒ fail-closed: limpa recovery e segue fluxo novo.
+    /// </summary>
+    private async Task ResolverRecuperacaoPersistidaDoContextoAsync(
+        IReadOnlyList<ComponenteConsumoMaterial> componentes)
+    {
+        if (_contextoApontamento is null)
+        {
+            return;
+        }
+
+        global::FugaPET_Dev.Modelo.Consumo.ResultadoRecuperacaoConsumoContexto resultado;
+        try
+        {
+            resultado = await _controller.ResolverRecuperacaoPendenteAsync(_contextoApontamento, componentes);
+        }
+        catch (Exception ex)
+        {
+            // GATE 101L: FAIL-CLOSED. Uma exceção/falha técnica NÃO pode virar "Nenhum" (isso liberaria o
+            // fluxo novo). Materializa FalhaResolucaoPersistida (bloqueia tudo) com diagnóstico SANITIZADO:
+            // apenas o nome do TIPO da exceção — nunca o texto bruto/stack, que poderia carregar dados sensíveis.
+            // Uma nova resolução READ-ONLY bem-sucedida pode substituir este estado depois (§9).
+            System.Diagnostics.Trace.TraceWarning(
+                $"[Consumo][Recovery] EVENTO=FALHA_RESOLUCAO_PERSISTIDA; EXCEPTION_TYPE={ex.GetType().Name}");
+            AplicarFalhaResolucaoPersistida();
+            return;
+        }
+
+        // GATE 101N — DEFAULT-DENY: mapeia a modalidade resolvida para a EFETIVA por RecuperacaoConsumoPolitica
+        // (qualquer valor fora do domínio → FalhaResolucaoPersistida; SOMENTE Nenhum explícito libera fluxo novo).
+        // A tela decide o wiring por ESTA modalidade efetiva. NUNCA um valor desconhecido vira Nenhum.
+        global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo modalidadeEfetiva =
+            global::FugaPET_Dev.Modelo.Consumo.RecuperacaoConsumoPolitica.ModalidadeEfetiva(resultado.Modalidade);
+        switch (modalidadeEfetiva)
+        {
+            case global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.Nenhum:
+                // Resolução bem-sucedida e sem estado persistido relevante: único caminho que libera fresh flow.
+                LimparEstadoRecuperacao();
+                break;
+
+            case global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.UmPendente:
+                _modalidadeRecuperacao = global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.UmPendente;
+                _codigoLancamentoRecuperado = resultado.CodigoLancamento;
+                _snapshotRecuperacao = SnapshotContextoRecuperacaoAtual();
+                AplicarMaterializacaoRecuperacaoPendente(resultado.CodigoLancamento!.Value);
+                break;
+
+            case global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.AmbiguoPendente:
+                _modalidadeRecuperacao = global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.AmbiguoPendente;
+                _codigoLancamentoRecuperado = null;
+                _snapshotRecuperacao = null;
+                AplicarBloqueioReconciliacao(
+                    "Mais de um consumo PENDENTE_SAP corresponde a esta ocorrência. Envio bloqueado até "
+                    + "reconciliação/ação de suporte. Nenhum novo consumo será criado.");
+                break;
+
+            case global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.EnviandoReconciliacao:
+                _modalidadeRecuperacao = global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.EnviandoReconciliacao;
+                _codigoLancamentoRecuperado = null;
+                _snapshotRecuperacao = null;
+                AplicarBloqueioReconciliacao(
+                    "Consumo em ENVIANDO_SAP para esta ocorrência: reconciliação SAP pendente. Novo consumo "
+                    + "bloqueado; nenhum novo envio é habilitado até a reconciliação.");
+                break;
+
+            case global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.FalhaResolucaoPersistida:
+            default:
+                // Falha explícita OU valor fora do domínio conhecido ⇒ fail-closed idêntico à falha técnica.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[Consumo][Recovery] EVENTO=MODALIDADE_NAO_RECONHECIDA; VALOR={(int)resultado.Modalidade}");
+                AplicarFalhaResolucaoPersistida();
+                break;
+        }
+    }
+
+    /// <summary>§13: materializa PENDENTE_SAP + PK recuperado + ação "Enviar SAP 261"; bloqueia ações que
+    /// poderiam criar concorrência (iniciar leitura / ler / digitar peso / Confirmar Consumo).</summary>
+    private void AplicarMaterializacaoRecuperacaoPendente(long codigoLancamentoRecuperado)
+    {
+        BloquearAcoesConcorrentesRecuperacao();
+
+        if (_enviarSap261Button is not null)
+        {
+            _enviarSap261Button.Text = "Enviar SAP 261";
+            _enviarSap261Button.Visible = true;
+            _enviarSap261Button.Enabled = !_enviandoSap;
+        }
+
+        statusLabel.Text =
+            $"PENDENTE_SAP — Lançamento {codigoLancamentoRecuperado} recuperado. "
+            + "Autorize o envio SAP 261 (não é necessária nova pesagem).";
+
+        // GATE 102K-A: a SUPERFÍCIE VISUAL (status card + apontamento) também deve representar PENDENTE SAP —
+        // sem isso o card ficava "INATIVA/Leitura aguardando" e a orientação "Selecione um componente" (fresh-flow),
+        // embora o estado interno de recovery estivesse correto. Idempotente (reaplicado por ReaplicarEstadoRecuperacao).
+        AplicarSuperficieVisualRecuperacaoPendente();
+    }
+
+    /// <summary>GATE 102K-A: representação visual EXPLÍCITA de RECOVERY PENDENTE SAP no status card e no bloco de
+    /// apontamento. Não altera regra dos controles; só a superfície visual, para o recovery ser autoridade final.</summary>
+    private void AplicarSuperficieVisualRecuperacaoPendente()
+    {
+        Color pendenteTexto = Color.FromArgb(181, 106, 8);
+
+        statusCard.BackColor = Color.Transparent;
+        statusCard.FillColor = Color.FromArgb(255, 246, 224);
+        statusCard.BorderColor = Color.FromArgb(250, 224, 160);
+        statusCardIcon.Text = "!";
+        statusCardIcon.ForeColor = pendenteTexto;
+        statusValueLabel.Text = "PENDENTE SAP";
+        statusValueLabel.ForeColor = pendenteTexto;
+        // GATE 102K-J: a mensagem completa tem duas frases. Em uma única linha o Label (AutoSize) crescia
+        // horizontalmente e era CLIPADO pela borda do card (só "Consumo já pesado e salvo." ficava visível).
+        // Config determinística de 2 linhas dentro do card (183px): AutoSize off, sem ellipse, altura p/ 2 linhas.
+        statusHintLabel.AutoSize = false;
+        statusHintLabel.AutoEllipsis = false;
+        statusHintLabel.Size = new Size(165, 28);
+        statusHintLabel.TextAlign = ContentAlignment.TopLeft;
+        statusHintLabel.Text = "Consumo já pesado e salvo." + Environment.NewLine + "Aguardando envio ao SAP.";
+        statusHintLabel.ForeColor = Color.FromArgb(98, 108, 124);
+        statusCard.Invalidate(true);
+        statusCardIcon.Invalidate();
+        statusValueLabel.Invalidate();
+        statusHintLabel.Invalidate();
+
+        apontamentoChipCaptionLabel.Text = "ROTA SAP";
+        apontamentoChipValueLabel.Text = "261 Direto";
+        apontamentoInfoCaptionLabel.Text = "ORIENTAÇÃO";
+        AtualizarApontamentoInfo("Consumo salvo.\nPendente de envio SAP.", statusLabel.Text);
+    }
+
+    /// <summary>§10/§11: blocker de reconciliação/ambíguo — nenhuma ação de envio materializada; novo consumo
+    /// bloqueado. ZERO capability, ZERO claim, ZERO POST.</summary>
+    private void AplicarBloqueioReconciliacao(string mensagem)
+    {
+        BloquearAcoesConcorrentesRecuperacao();
+        if (_enviarSap261Button is not null)
+        {
+            _enviarSap261Button.Visible = false;
+            _enviarSap261Button.Enabled = false;
+        }
+
+        statusLabel.Text = mensagem;
+    }
+
+    /// <summary>
+    /// GATE 101L/101N: materializa o estado FAIL-CLOSED de "estado persistido indisponível" — modalidade
+    /// FalhaResolucaoPersistida, PK/snapshot nulos, bloqueio total de novas operações e mensagem sanitizada.
+    /// Compartilhado pelo catch do resolvedor (exceção) e pelo case default do switch (modalidade desconhecida),
+    /// garantindo que NENHUM caminho de falha/indeterminação libere fluxo novo.
+    /// </summary>
+    private void AplicarFalhaResolucaoPersistida()
+    {
+        _codigoLancamentoRecuperado = null;
+        _snapshotRecuperacao = null;
+        _modalidadeRecuperacao = global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.FalhaResolucaoPersistida;
+        AplicarBloqueioReconciliacao(
+            "Não foi possível validar o estado persistido deste consumo. Novas operações estão "
+            + "bloqueadas até que a consulta seja executada com sucesso.");
+    }
+
+    private void AtualizarBotoesRecuperacao()
+    {
+        if (global::FugaPET_Dev.Modelo.Consumo.RecuperacaoConsumoPolitica.PermiteEnvioRecuperado(
+                _modalidadeRecuperacao, _codigoLancamentoRecuperado))
+        {
+            if (_confirmarConsumoButton is not null) { _confirmarConsumoButton.Visible = false; _confirmarConsumoButton.Enabled = false; }
+            if (_naoConsumidoButton is not null) { _naoConsumidoButton.Visible = false; _naoConsumidoButton.Enabled = false; }
+            if (_enviarSap261Button is not null)
+            {
+                _enviarSap261Button.Visible = true;
+                _enviarSap261Button.Enabled = !_enviandoSap;
+            }
+            return;
+        }
+
+        // Ambíguo / ENVIANDO: nada de envio nem de novo consumo.
+        if (_confirmarConsumoButton is not null) { _confirmarConsumoButton.Visible = false; _confirmarConsumoButton.Enabled = false; }
+        if (_naoConsumidoButton is not null) { _naoConsumidoButton.Visible = false; _naoConsumidoButton.Enabled = false; }
+        if (_enviarSap261Button is not null) { _enviarSap261Button.Visible = false; _enviarSap261Button.Enabled = false; }
+    }
+
+    private void BloquearAcoesConcorrentesRecuperacao()
+    {
+        iniciarLeituraButton.Enabled = false;
+        iniciarLeituraButton.Cursor = Cursors.Default;
+        SetReadWeightEnabled(false);
+        if (_confirmarConsumoButton is not null) { _confirmarConsumoButton.Visible = false; _confirmarConsumoButton.Enabled = false; }
+        if (_naoConsumidoButton is not null) { _naoConsumidoButton.Visible = false; _naoConsumidoButton.Enabled = false; }
     }
 
     /// <summary>
@@ -2975,6 +3364,12 @@ public partial class ProcessoConsumoMaterialForm : Form
         if (_modoConsumo == ModoConsumoMaterial.Quimico)
         {
             ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
+            if (envio is null)
+            {
+                // GATE 101E-P3 §5: cerimônia 261 recusada/habilitação falhou ⇒ zero envio; PENDENTE preservado; atividade NÃO concluída.
+                return ResultadoOrquestracaoConsumoApontamento.NaoConcluido(codigoLancamento,
+                    "Envio SAP 261 não autorizado. O consumo de químicos foi salvo localmente e permanece pendente de envio.");
+            }
             return ResultadoOrquestracaoConsumoApontamento.DoEnvio261(
                 codigoLancamento,
                 envio,
@@ -2985,6 +3380,12 @@ public partial class ProcessoConsumoMaterialForm : Form
         if (_rotaEnvioSalva == RotaEnvioConsumo.Direto261)
         {
             ResultadoEnvioConsumoSap261? envio = await ExecutarEnvioSap261AposConfirmarAsync(codigoLancamento, usuario);
+            if (envio is null)
+            {
+                // GATE 101E-P3 §5: cerimônia 261 recusada/habilitação falhou ⇒ zero envio; PENDENTE preservado; atividade NÃO concluída.
+                return ResultadoOrquestracaoConsumoApontamento.NaoConcluido(codigoLancamento,
+                    "Envio SAP 261 não autorizado. O consumo foi salvo localmente e permanece pendente de envio.");
+            }
             return ResultadoOrquestracaoConsumoApontamento.DoEnvio261(
                 codigoLancamento,
                 envio,
@@ -3003,16 +3404,27 @@ public partial class ProcessoConsumoMaterialForm : Form
                 + "real de produção ou validação SAP para consumo manual via 261.");
         }
 
-        // Misto / Bloqueado: salva local, mas NAO tenta envio automatico — e não libera término.
+        // Misto / Bloqueado: salva local, mas NÃO tenta envio automático — e não libera término.
         return ResultadoOrquestracaoConsumoApontamento.NaoConcluido(
             codigoLancamento,
             "Consumo salvo localmente, mas o envio automático foi bloqueado (rota mista ou inconsistente). "
             + "Verifique depósito, lote e componentes antes de enviar ao SAP.");
     }
 
-    /// <summary>Refatoração: envio 261 direto SEM depender de botão visual (reaproveita o método existente).</summary>
-    private async Task<ResultadoEnvioConsumoSap261?> ExecutarEnvioSap261AposConfirmarAsync(long codigoLancamento, string usuario)
+    /// <summary>
+    /// GATE 101E-P3: SEAM ÚNICO de autorização+envio 261, compartilhado pelo fluxo normal (pós-Confirmar Consumo),
+    /// pelo envio manual e pelo recovery. (1) confirmação humana + habilitação da capability BOUND ao
+    /// codigo_lancamento (auditoria durável fail-closed); recusa/habilitação falha ⇒ retorna null: ZERO capability
+    /// efetiva, ZERO claim, ZERO HTTP, PENDENTE_SAP preservado. (2) SÓ após armar, invoca o envio controlado
+    /// (claim → writer → TryAdquirir261 → POST). No máximo UMA confirmação humana, UM armamento, UM envio.
+    /// </summary>
+    private async Task<ResultadoEnvioConsumoSap261?> AutorizarEEnviarSap261Async(long codigoLancamento, string usuario)
     {
+        if (!await ConfirmarEHabilitarEnvio261Async(codigoLancamento))
+        {
+            return null;
+        }
+
         ResultadoEnvioConsumoSap261 resultado = await _controller.EnviarConsumoSap261Async(codigoLancamento, usuario);
         if (!resultado.Sucesso && resultado.StatusHttp.HasValue)
         {
@@ -3021,6 +3433,10 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         return resultado;
     }
+
+    /// <summary>Fluxo normal pós-confirmar: delega ao SEAM único (mesma cerimônia do envio manual/recovery).</summary>
+    private Task<ResultadoEnvioConsumoSap261?> ExecutarEnvioSap261AposConfirmarAsync(long codigoLancamento, string usuario)
+        => AutorizarEEnviarSap261Async(codigoLancamento, usuario);
 
     private string ObterTooltipEnvio261(bool salvo)
     {
@@ -3041,7 +3457,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     private void CriarBotaoEnviarSap261()
     {
         // Correcao 4 (Tarefa 15): reaproveita o productionActionsButton (mesmo ponto da Entrada — topo da
-        // grid), SEM criar botao duplicado. Mesmo fluxo EnviarSap261Async e mesma habilitacao.
+        // grid), SEM criar botão duplicado. Mesmo fluxo EnviarSap261Async e mesma habilitacao.
         // Correcao 6 (Tarefa 15.1): mesmo estilo visual do productionActionsButton da Entrada
         // (fundo branco, borda cinza clara, texto escuro, fonte Cascadia 6.75). Mesmo fluxo de envio.
         productionActionsButton.Text = "Enviar SAP 261";
@@ -3059,14 +3475,57 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     /// <summary>
-    /// Envia o consumo salvo ao SAP (movimento 261). NUNCA automatico apos salvar: so por acao do usuario.
+    /// Envia o consumo salvo ao SAP (movimento 261). NUNCA automático apos salvar: so por acao do usuario.
     /// Trava clique duplo (<see cref="_enviandoSap"/>); bloqueio/sucesso/erro vem do service (WRITE_ENABLED,
     /// CSRF, parse rigoroso). Mensagens sanitizadas.
     /// </summary>
+    /// <summary>
+    /// GATE 101E-P2 §8/§9: cerimônia HUMANA explícita de autorização do envio SAP 261, bound ao
+    /// <paramref name="codigoLancamento"/>. NÃO ⇒ retorna false (nada armado, nada enviado, PENDENTE preservado).
+    /// SIM ⇒ arma a capability 261 via <see cref="HabilitacaoEscritaSap261Servico"/> (auditoria durável fail-closed);
+    /// falha de habilitação ⇒ false. A mesma cerimônia é usada no fluxo normal e no recovery (mesmo botão/PK).
+    /// </summary>
+    private async Task<bool> ConfirmarEHabilitarEnvio261Async(long codigoLancamento)
+    {
+        string op = _ordemConsumoAtual?.NumeroOrdem
+            ?? _contextoApontamento?.NumeroOrdem
+            ?? "-";
+
+        if (MessageBox.Show(
+                $"Autorizar um envio SAP 261 para este consumo?{Environment.NewLine}OP: {op}{Environment.NewLine}Lançamento: {codigoLancamento}",
+                "Autorizar envio SAP 261",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            statusLabel.Text = "Envio SAP 261 não autorizado pelo operador. O consumo permanece pendente.";
+            return false;
+        }
+
+        global::FugaPET_Dev.Servicos.Cadastro.ResultadoOperacao habilitacao =
+            await _habilitacao261.HabilitarParaEnvioAsync(codigoLancamento);
+        if (!habilitacao.Sucesso)
+        {
+            statusLabel.Text = habilitacao.Mensagem;
+            MessageBox.Show(habilitacao.Mensagem, "Autorizar envio SAP 261", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
     private async Task EnviarSap261Async()
     {
         if (_enviandoSap)
         {
+            return;
+        }
+
+        // GATE 101J §14/§15 + 101L: recovery de PENDENTE persistido → envia o PK RECUPERADO (estado dedicado),
+        // revalidando o snapshot, pela MESMA cerimônia/seam do 101E. O gate de envio passa pela política
+        // fail-closed: SÓ UmPendente+PK habilita (Falha/ambíguo/enviando ⇒ zero capability/claim/HTTP).
+        if (PkEnvioRecuperadoAtual() is long codigoRecuperado)
+        {
+            await EnviarSap261RecuperadoAsync(codigoRecuperado);
             return;
         }
 
@@ -3084,7 +3543,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Tarefa 16: defesa extra (alem do botao desabilitado) — Backflush NAO vai por 261 direto.
+        // Tarefa 16: defesa extra (além do botão desabilitado) — Backflush NÃO vai por 261 direto.
         if (_rotaEnvioSalva == RotaEnvioConsumo.BackflushConfirmacao)
         {
             statusLabel.Text =
@@ -3095,26 +3554,17 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        if (MessageBox.Show(
-                "Deseja enviar este consumo ao SAP agora?",
-                "Enviar SAP 261",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question) != DialogResult.Yes)
-        {
-            return;
-        }
-
         _enviandoSap = true;
         AtualizarBotaoConfirmar();
         try
         {
             string usuario = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterLogin();
-            ResultadoEnvioConsumoSap261 resultado = await _controller.EnviarConsumoSap261Async(codigoLancamento, usuario);
-
-            // Correcao 4: falha de nivel SAP (HTTP) marca FALHA_SAP local — bloqueia reenvio automatico.
-            if (!resultado.Sucesso && resultado.StatusHttp.HasValue)
+            // GATE 101E-P3: SEAM ÚNICO (cerimônia humana + habilitação da capability bound + envio). Recusa/
+            // habilitação falha ⇒ null: nada armado, nada enviado, PENDENTE_SAP preservado (§5).
+            ResultadoEnvioConsumoSap261? resultado = await AutorizarEEnviarSap261Async(codigoLancamento, usuario);
+            if (resultado is null)
             {
-                _lancamentoComFalhaSap = true;
+                return; // ConfirmarEHabilitarEnvio261Async já publicou a mensagem ao operador.
             }
 
             statusLabel.Text = resultado.Mensagem;
@@ -3123,6 +3573,67 @@ public partial class ProcessoConsumoMaterialForm : Form
                 "Enviar SAP 261",
                 MessageBoxButtons.OK,
                 resultado.Sucesso ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _enviandoSap = false;
+            AtualizarBotaoConfirmar();
+        }
+    }
+
+    /// <summary>
+    /// GATE 101J §14–§18: envio do consumo RECUPERADO (PENDENTE persistido). Revalida o snapshot de contexto
+    /// (§14: PK não sobrevive a troca de contexto ⇒ zero claim/POST); usa o SEAM ÚNICO 101E bound ao MESMO PK
+    /// (§15); recusa/auditoria falha ⇒ PENDENTE preservado, claim 0, HTTP 0, recovery segue disponível (§16);
+    /// sucesso inequívoco ⇒ ConfirmadoSap com vínculo = MESMO PK (§17). Não cria lançamento/pesagem, não
+    /// implementa segundo writer, não contorna a capability.
+    /// </summary>
+    private async Task EnviarSap261RecuperadoAsync(long codigoLancamento)
+    {
+        // §14: PK recuperado NÃO pode sobreviver a mudança de contexto — revalida OP/operação/sequência.
+        if (_snapshotRecuperacao is not { } snapshot || !snapshot.Equals(SnapshotContextoRecuperacaoAtual()))
+        {
+            LimparEstadoRecuperacao();
+            statusLabel.Text = "Contexto do apontamento mudou. Recuperação invalidada; nenhum envio realizado.";
+            AtualizarBotaoConfirmar();
+            return; // ZERO claim, ZERO POST.
+        }
+
+        _enviandoSap = true;
+        AtualizarBotaoConfirmar();
+        try
+        {
+            string usuario = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterLogin();
+            // SEAM ÚNICO 101E: confirmação humana + capability BOUND ao MESMO PK + envio controlado.
+            ResultadoEnvioConsumoSap261? resultado = await AutorizarEEnviarSap261Async(codigoLancamento, usuario);
+            if (resultado is null)
+            {
+                // §16: recusa/auditoria falha ⇒ nada armado, nada enviado; PENDENTE preservado; recovery segue.
+                return;
+            }
+
+            if (resultado.Sucesso
+                && !string.IsNullOrWhiteSpace(resultado.DocumentoMaterialSap)
+                && !string.IsNullOrWhiteSpace(resultado.ExercicioDocumentoMaterialSap))
+            {
+                // §17: sucesso inequívoco ⇒ ConfirmadoSap; vínculo = MESMO PK recuperado; libera término.
+                string mensagemFinal = FinalizarApontamentoEnviadoSapELiberarNovaPesagem(resultado.Mensagem);
+                RegistrarResultadoApontamento(
+                    ResultadoExecucaoProcessoApontamento.ConfirmadoSap, codigoLancamento, mensagemFinal, confirmadoSap: true);
+                LimparEstadoRecuperacao();
+                statusLabel.Text = mensagemFinal;
+                MessageBox.Show(mensagemFinal, "Enviar SAP 261", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // §18: indeterminado / rejeição comprovada ⇒ o contrato 101E já ajustou o estado persistido
+            // (ENVIANDO_SAP + reconciliação, ou PENDENTE_SAP reenviável). Não conclui a atividade aqui.
+            statusLabel.Text = resultado.Mensagem;
+            MessageBox.Show(
+                resultado.Mensagem,
+                "Enviar SAP 261",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
         }
         finally
         {
@@ -3173,7 +3684,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             ResultadoEnvioConfirmacaoProducao resultado =
                 await _controller.EnviarConfirmacaoProducaoAsync(codigoLancamento, usuario);
 
-            // Correcao 4: falha de nivel SAP (HTTP) marca FALHA_SAP local — bloqueia reenvio automatico.
+            // Correcao 4: falha de nível SAP (HTTP) marca FALHA_SAP local — bloqueia reenvio automático.
             if (!resultado.Sucesso && resultado.StatusHttp.HasValue)
             {
                 _lancamentoComFalhaSap = true;
@@ -3234,8 +3745,8 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     /// <summary>
-    /// Gera e EXIBE o preview do payload de consumo 261 (somente montagem). NAO envia SAP, NAO faz POST,
-    /// NAO busca CSRF. O JSON nao contem credenciais/URL/token.
+    /// Gera e EXIBE o preview do payload de consumo 261 (somente montagem). NÃO envia SAP, NÃO faz POST,
+    /// NÃO busca CSRF. O JSON nao contem credenciais/URL/token.
     /// </summary>
     private async Task VisualizarPayloadSap261Async()
     {
@@ -3312,7 +3823,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     /// <summary>
     /// Cria, em CODIGO (sem redesenhar o Designer), um label menor de "Saldo Restante" no card de
-    /// Peso Utilizado. Apenas exibicao — nao altera regra/calculo. Ajuste 8 (sem terceiro cartao).
+    /// Peso Utilizado. Apenas exibição — nao altera regra/calculo. Ajuste 8 (sem terceiro cartão).
     /// </summary>
     private void CriarLabelSaldoRestante()
     {
@@ -3332,7 +3843,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     /// <summary>
-    /// Ajuste 9: texto do indicador SAP no topo (somente layout/exibicao — NAO altera integracao).
+    /// Ajuste 9: texto do indicador SAP no topo (somente layout/exibição — NÃO altera integração).
     /// Le a configuracao em modo defensivo e evita a mensagem enganosa fixa "SAP: não configurado".
     /// </summary>
     // Ajuste 2: estados visuais do indicador SAP (mesmo padrao da Entrada). Apenas EXIBICAO — nao integra.
@@ -3452,7 +3963,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         }
         catch
         {
-            // Sem acoplar a integracao.
+            // Sem acoplar a integração.
         }
 
         if (configuracao is null
@@ -3678,7 +4189,7 @@ public partial class ProcessoConsumoMaterialForm : Form
 
     /// <summary>
     /// Gera e EXIBE o preview tecnico do caminho de Confirmacao de Producao (componente Backflush).
-    /// NAO envia SAP, NAO faz POST, NAO busca CSRF, NAO usa PATCH. O lancamento permanece PENDENTE_SAP.
+    /// NÃO envia SAP, NÃO faz POST, NÃO busca CSRF, NÃO usa PATCH. O lancamento permanece PENDENTE_SAP.
     /// </summary>
     private async Task VisualizarPreviewConfirmacao()
     {
@@ -3736,7 +4247,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     /// <summary>
     /// Salva LOCALMENTE o consumo (PENDENTE_SAP) via controller. Idempotente: trava clique duplo
     /// (<see cref="_salvandoConsumo"/>) e bloqueia regravacao na sessao (<see cref="_consumoSalvoNaSessao"/>).
-    /// NAO envia SAP.
+    /// NÃO envia SAP.
     /// </summary>
     private async Task ConfirmarConsumoAsync()
     {
@@ -3745,8 +4256,19 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
+        // GATE 101J §10/§11/§13: enquanto houver PENDENTE recuperado/ambíguo/ENVIANDO para a ocorrência,
+        // NÃO criar novo lançamento (evita PK concorrente / segundo POST). Fail-closed antes de qualquer save.
+        if (RecuperacaoBloqueiaNovoConsumo())
+        {
+            statusLabel.Text = _modalidadeRecuperacao == global::FugaPET_Dev.Modelo.Consumo.ModalidadeRecuperacaoConsumo.UmPendente
+                ? "Há um consumo PENDENTE_SAP recuperado para esta ocorrência. Use Enviar SAP 261; não é criado novo lançamento."
+                : "Consumo bloqueado: reconciliação SAP pendente para esta ocorrência. Nenhum novo lançamento será criado.";
+            AtualizarBotaoConfirmar();
+            return;
+        }
+
         // Correcao 3 (Tarefa 15.1): trava a validacao do campo OP DESDE O INICIO (antes das validacoes),
-        // para que o Validated do ComboBox nao reconsulte/limpe pesagens ao perder foco para o botao.
+        // para que o Validated do ComboBox nao reconsulte/limpe pesagens ao perder foco para o botão.
         _acaoOperacionalEmAndamento = true;
         _salvandoConsumo = true;
         AtualizarBotaoConfirmar();
@@ -3768,7 +4290,7 @@ public partial class ProcessoConsumoMaterialForm : Form
                 $"salvando={_salvandoConsumo}, consultando={_consultandoOrdem}");
 
             // Correcao 1.5: a fonte oficial e _pesagensPorComponente. Se o GRID mostra peso utilizado mas a
-            // memoria esta vazia, e dessincronizacao — NAO salvar com base no grid.
+            // memória esta vazia, e dessincronização — NÃO salvar com base no grid.
             if (totalPesagens == 0 && GridMostraPesoUtilizado())
             {
                 statusLabel.Text =
@@ -3825,7 +4347,7 @@ public partial class ProcessoConsumoMaterialForm : Form
                 _pesagensPorComponente,
                 usuario);
 
-            // Correcao 6: SemPesagem com pesagens na memoria = falha de vinculacao (lote/reserva/item/deposito).
+            // Correcao 6: SemPesagem com pesagens na memória = falha de vinculacao (lote/reserva/item/deposito).
             if (resultado.Cenario == CenarioPersistenciaConsumo.SemPesagem && totalPesagens > 0)
             {
                 statusLabel.Text =
@@ -3854,7 +4376,7 @@ public partial class ProcessoConsumoMaterialForm : Form
                 }
 
                 // Ajuste 3/6 (Tarefa 18.2): CONFIRMAR CONSUMO e o fluxo UNICO — apos salvar, orquestra o envio
-                // pela rota (261 direto reaproveita o envio existente; Backflush/Misto/Bloqueado NAO enviam).
+                // pela rota (261 direto reaproveita o envio existente; Backflush/Misto/Bloqueado NÃO enviam).
                 // O resultado é TIPADO: o ícone é apenas apresentação, nunca regra.
                 ResultadoOrquestracaoConsumoApontamento orquestracao =
                     await OrquestrarEnvioAposConfirmarAsync(resultado.CodigoLancamento.GetValueOrDefault(), usuario);
@@ -3979,7 +4501,7 @@ public partial class ProcessoConsumoMaterialForm : Form
     }
 
     /// <summary>
-    /// Exclusao LOCAL de pesagem: remove a pesagem da memoria, recalcula totais no componente e
+    /// Exclusao LOCAL de pesagem: remove a pesagem da memória, recalcula totais no componente e
     /// reabre o componente quando o total local cair abaixo do pendente. Sem banco/SAP.
     /// </summary>
     private void RemoverPesagemLocal(PesagemConsumoMaterial pesagem)
@@ -4065,7 +4587,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         };
 
         Button cancelButton = CreateDialogButton("Cancelar", Color.FromArgb(55, 60, 69), DialogResult.Cancel);
-        Button deleteButton = CreateDialogButton("Excluir", Color.FromArgb(184, 18, 32), DialogResult.OK);
+        Button deleteButton = CreateDialogButton("Excluir", Color.FromArgb(200, 78, 10), DialogResult.OK);
         cancelButton.Margin = new Padding(0, 0, 10, 0);
 
         buttonsPanel.Controls.Add(cancelButton);
@@ -4121,7 +4643,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         };
 
         Button noButton = CreateDialogButton("Nao", Color.FromArgb(55, 60, 69), DialogResult.No);
-        Button yesButton = CreateDialogButton("Sim", Color.FromArgb(184, 18, 32), DialogResult.Yes);
+        Button yesButton = CreateDialogButton("Sim", Color.FromArgb(200, 78, 10), DialogResult.Yes);
         noButton.Margin = new Padding(0, 0, 10, 0);
 
         buttonsPanel.Controls.Add(noButton);
@@ -4309,11 +4831,11 @@ public partial class ProcessoConsumoMaterialForm : Form
         UpdateStatusCardState(started);
         UpdateTitleBarLockState(started);
         iniciarLeituraButton.BaseBackColor = started
-            ? Color.FromArgb(212, 37, 49)
+            ? Color.FromArgb(250, 105, 26)
             : podeAlternarLeitura ? ReadingStatusActiveColor : ActionDisabledColor;
         iniciarLeituraButton.BaseForeColor = Color.White;
-        iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
-        iniciarLeituraButton.IconGlyph = started ? "\uE71A" : "\uE768";
+        iniciarLeituraButton.IconFontFamily = "Segoe UI Symbol";
+        iniciarLeituraButton.IconGlyph = started ? "■" : "▶";
         iniciarLeituraButton.PrimaryText = started ? "PARAR LEITURA" : "INICIAR LEITURA";
         iniciarLeituraButton.Enabled = podeAlternarLeitura;
         iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
@@ -4427,7 +4949,7 @@ public partial class ProcessoConsumoMaterialForm : Form
             return;
         }
 
-        // Ajuste 1 (Tarefa 18): clicar no grid APENAS seleciona a linha — NAO abre a tela de tara. A tara
+        // Ajuste 1 (Tarefa 18): clicar no grid APENAS seleciona a linha — NÃO abre a tela de tara. A tara
         // e escolhida somente ao pesar (F12/LER PESO em ReadWeightLegend_Click e F9/DIGITAR PESO em LeituraManual_Click).
         SelecionarLinhaInteiraGridComponentes(e.RowIndex, e.ColumnIndex);
 
@@ -4514,7 +5036,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         hoveredPanel?.Invalidate();
     }
 
-    // Tarefa 4.1: a Tela de Consumo NAO imprime etiqueta — o duplo clique de impressao foi removido.
+    // Tarefa 4.1: a Tela de Consumo NÃO imprime etiqueta — o duplo clique de impressão foi removido.
 
     private DataGridViewRow? GetSelectedProductionRow()
         => ObterLinhaSelecionadaNoGridPrincipal();
@@ -4562,7 +5084,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         };
 
         Button cancelButton = CreateDialogButton("Cancelar", Color.FromArgb(55, 60, 69), DialogResult.Cancel);
-        Button okButton = CreateDialogButton("OK", Color.FromArgb(184, 18, 32), DialogResult.OK);
+        Button okButton = CreateDialogButton("OK", Color.FromArgb(200, 78, 10), DialogResult.OK);
         cancelButton.Margin = new Padding(0, 0, 10, 0);
 
         buttonsPanel.Controls.Add(cancelButton);
@@ -4584,7 +5106,7 @@ public partial class ProcessoConsumoMaterialForm : Form
         return Convert.ToString(row.Cells[columnName].Value) ?? string.Empty;
     }
 
-    /// <summary>Correcao 1.5: true se ALGUMA linha do grid exibe Peso Utilizado &gt; 0 (deteccao de dessincronizacao).</summary>
+    /// <summary>Correcao 1.5: true se ALGUMA linha do grid exibe Peso Utilizado &gt; 0 (deteccao de dessincronização).</summary>
     private bool GridMostraPesoUtilizado()
         => productionDataGridView.Rows
             .Cast<DataGridViewRow>()
@@ -4654,6 +5176,11 @@ public partial class ProcessoConsumoMaterialForm : Form
         grid.CurrentCell = null;
     }
 }
+
+
+
+
+
 
 
 

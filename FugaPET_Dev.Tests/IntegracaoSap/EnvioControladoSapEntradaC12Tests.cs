@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Controle;
+using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -442,9 +442,14 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         EntradaProdutoItemEnvioSap loteA = Item("10", numeroLote: "L-A", pesoLiquido: 3m) with { CodigoEntradaProdutoLote = 101 };
         EntradaProdutoItemEnvioSap loteB = Item("10", numeroLote: "L-B", pesoLiquido: 5m) with { CodigoEntradaProdutoLote = 202 };
 
+        // GATE R2: material HIBE (Químico) ⇒ caminho LEGADO preservado (quantidade = peso consolidado,
+        // sem campos ZZ1). O teste continua provando a consolidação do CASO B, agora com a classificação
+        // explícita — a classificação indeterminada passou a bloquear por contrato.
         ResultadoPreparacaoPayloadEntrada preparo = await PreparadorPayloadMaterialDocumentEntrada.PrepararAsync(
             99, "4500000010", [loteA, loteB],
             (mat, ce, ct) => Task.FromResult<ProdutoCentroSapMestre?>(Mestre(mat, ce, false)),
+            (mat, ct) => Task.FromResult<ProdutoSapMestre?>(
+                new ProdutoSapMestre { CodigoProduto = mat, TipoMaterialSap = "HIBE", Consultado = true }),
             CancellationToken.None);
 
         Assert.Null(preparo.Bloqueio);
@@ -476,8 +481,8 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         MaterialDocumentSapItemRequest posNaoBatch = itens.Single(i => i.Material == "MAT-NOBATCH");
         Assert.Equal("L-BM", posBatch.Batch);
         Assert.NotNull(posBatch.ShelfLifeExpirationDate);
-        Assert.Null(posNaoBatch.Batch);          // nao administrado: sem Batch mesmo com lote local
-        Assert.Null(posNaoBatch.ShelfLifeExpirationDate); // e sem validade (nem exigida)
+        Assert.Null(posNaoBatch.Batch);
+        Assert.Null(posNaoBatch.ShelfLifeExpirationDate);
     }
 
     // F. Consulta A_ProductPlant indeterminada (null) ⇒ POST NAO executado, mensagem com material e centro.
@@ -495,8 +500,8 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
 
         Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, resultado.Cenario);
         Assert.Equal(0, materialDoc.Chamadas);
-        Assert.Contains("3500027", resultado.Mensagem); // material
-        Assert.Contains("3007", resultado.Mensagem);    // centro
+        Assert.Contains("3500027", resultado.Mensagem);
+        Assert.Contains("3007", resultado.Mensagem);
     }
 
     // G. Material 1000395 / centro 3007 simulado como NON-batch ⇒ payload sem as tres propriedades proibidas.
@@ -539,8 +544,8 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
 
         await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
 
-        Assert.Equal(1, consultas); // um unico GET por material+centro
-        Assert.Equal(3, materialDoc.UltimaRequisicao!.Itens.Count); // administrado: 3 posicoes (uma por lote)
+        Assert.Equal(1, consultas);
+        Assert.Equal(3, materialDoc.UltimaRequisicao!.Itens.Count);
     }
 
     // J. Nenhuma chamada SAP automatica (ProductPlant nem Material Document) na finalizacao local.
@@ -716,13 +721,13 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     // Regex que cobre as formas de habilitar a escrita SAP em .cmd/.bat/.ps1 (com/sem aspas, $env:,
     // SetEnvironmentVariable), preservando a varredura de scripts locais perigosos.
     private const string PadraoHabilitaEscritaSap =
-        @"(FUGAPET_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true)"
-        + @"|(SetEnvironmentVariable\s*\(\s*[""']FUGAPET_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true)";
+        @"(FUGAPET_Q_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true)"
+        + @"|(SetEnvironmentVariable\s*\(\s*[""']FUGAPET_Q_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true)";
 
     // Detecta somente comandos efetivos. Literais de regex, comentarios e mensagens do gerador nao contam.
     private const string PadraoExecucaoEfetivaEscritaSap =
-        @"^\s*(?:set\s+|\$env:)?FUGAPET_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true"
-        + @"|^\s*\[Environment\]::SetEnvironmentVariable\s*\(\s*[""']FUGAPET_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true";
+        @"^\s*(?:set\s+|\$env:)?FUGAPET_Q_SAP_WRITE_ENABLED\s*=\s*[""']?\s*true"
+        + @"|^\s*\[Environment\]::SetEnvironmentVariable\s*\(\s*[""']FUGAPET_Q_SAP_WRITE_ENABLED[""']\s*,\s*[""']?\s*true";
 
     [Fact]
     public void Projeto_NaoDeveConterScriptQueHabilitaEscritaSap()
@@ -751,7 +756,6 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             System.Text.RegularExpressions.RegexOptions.IgnoreCase
                 | System.Text.RegularExpressions.RegexOptions.Multiline));
         Assert.Contains("function Testar-ScriptHabilitaEscritaSap", conteudoGerador, StringComparison.Ordinal);
-        Assert.Contains("FUGAPET_SAP_WRITE_ENABLED", conteudoGerador, StringComparison.Ordinal);
         Assert.Contains("SetEnvironmentVariable", conteudoGerador, StringComparison.Ordinal);
         Assert.Contains("'.cmd', '.bat', '.ps1'", conteudoGerador, StringComparison.Ordinal);
 
@@ -768,9 +772,9 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
 
             File.WriteAllText(
                 Path.Combine(diretorioCanonico, "GerarPacoteLimpo.ps1"),
-                "$env:FUGAPET_SAP_WRITE_ENABLED = 'true'");
+                "$env:FUGAPET_Q_SAP_WRITE_ENABLED = 'true'");
             string scriptMalicioso = Path.Combine(diretorioMalicioso, "GerarPacoteLimpo.ps1");
-            File.WriteAllText(scriptMalicioso, "$env:FUGAPET_SAP_WRITE_ENABLED = 'true'");
+            File.WriteAllText(scriptMalicioso, "$env:FUGAPET_Q_SAP_WRITE_ENABLED = 'true'");
 
             List<string> scriptsPerigosos = ObterScriptsPerigosos(raizTemporaria);
 
@@ -1058,9 +1062,281 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         Assert.Contains("Material Document", diagnostico.MotivoBloqueio);
     }
 
+    // 054/§15: provider que devolve `original` nas 2 primeiras leituras (diagnóstico + payload) e `mudado`
+    // a partir da 3ª (recarga pós-reserva), simulando EXCLUIR PESAGEM concorrente entre o claim e o POST.
+    private static Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>> ProviderMudaApos2(
+        IReadOnlyList<EntradaProdutoItemEnvioSap> original,
+        IReadOnlyList<EntradaProdutoItemEnvioSap> mudado)
+    {
+        int chamadas = 0;
+        return (_, _) => Task.FromResult(chamadas++ < 2 ? original : mudado);
+    }
+
+    [Fact] // 054/§15: itens mudaram entre reserva e POST → ABORTA sem POST (payload stale nunca despacha).
+    public async Task PostClaimReload_ItensMudaram_AbortaSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item("10", pesoLiquido: 8m)],
+            carregarItensProvider: ProviderMudaApos2([Item("10", pesoLiquido: 8m)], [Item("10", pesoLiquido: 9m)]));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Null(materialDoc.UltimaRequisicao);              // ZERO POST
+        Assert.Equal(CenarioEnvioSapEntrada.Falha, r.Cenario);
+    }
+
+    [Fact] // 054/§15: nada elegível restou na recarga (todas pesagens excluídas) → ABORTA sem POST.
+    public async Task PostClaimReload_SemItensElegiveis_AbortaSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item("10", pesoLiquido: 8m)],
+            carregarItensProvider: ProviderMudaApos2([Item("10", pesoLiquido: 8m)], []));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Null(materialDoc.UltimaRequisicao);
+        Assert.Equal(CenarioEnvioSapEntrada.Falha, r.Cenario);
+    }
+
+    [Fact] // 054/§15: estado inalterado entre reserva e POST → o envio prossegue normalmente (1 documento).
+    public async Task PostClaimReload_SemMudanca_Despacha()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item("10", pesoLiquido: 8m)]); // provider default = mesma lista sempre
+
+        await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.NotNull(materialDoc.UltimaRequisicao);          // POST ocorreu (estado consistente)
+    }
+
+    [Fact] // 12G-D (reidratação): reconhece lançamento local elegível por pedido; inexistente → null.
+    public async Task Reidratacao_ReconheceLancamentoLocalPorPedido()
+    {
+        DefinirSessao(comEnviarSap: true);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = false },
+            new FakeMaterialDocumentSapServico(),
+            ehHomologacao: true,
+            itens: [Item("10")],
+            recuperarLancamento: (pedido, _) =>
+                Task.FromResult<long?>(pedido == "4500000005" ? 1L : null));
+
+        Assert.Equal(1L, await controller.RecuperarCodigoLancamentoLocalPorPedidoAsync("4500000005"));
+        Assert.Null(await controller.RecuperarCodigoLancamentoLocalPorPedidoAsync("4500000099"));
+    }
+
+    [Fact] // 12G-D: botão habilitado com lançamento FINALIZADO_LOCAL, mesmo com env write FALSE e capability DESABILITADA.
+    public async Task BotaoHabilitado_ComLancamentoFinalizado_SemCapability()
+    {
+        DefinirSessao(comEnviarSap: true);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = false }, // env write FALSE (bootstrap Q)
+            new FakeMaterialDocumentSapServico(),
+            ehHomologacao: true,
+            itens: [Item("10")]); // capability ambiente DESABILITADA (DefinirSessao reseta)
+
+        DiagnosticoEnvioSapEntrada diag = await controller.DiagnosticarEnvioSapEntradaAsync(1);
+
+        Assert.True(diag.PodeEnviar); // botão ORIGINAL habilitado — habilitação da escrita ocorre no clique
+        Assert.Null(diag.MotivoBloqueio);
+    }
+
+    [Fact] // 12G-D: lançamento inexistente continua BLOQUEADO (aguardando gravação local).
+    public async Task LancamentoInexistente_ContinuaBloqueado()
+    {
+        DefinirSessao(comEnviarSap: true);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = false },
+            new FakeMaterialDocumentSapServico(),
+            ehHomologacao: true,
+            itens: [Item("10")]);
+
+        DiagnosticoEnvioSapEntrada diag = await controller.DiagnosticarEnvioSapEntradaAsync(null);
+
+        Assert.False(diag.PodeEnviar);
+        Assert.Contains("Finalize e grave", diag.MotivoBloqueio!, StringComparison.Ordinal);
+    }
+
+    // ===================================================================================================
+    // GATE 096D — revalidação PÓS-RESERVA com loader dedicado (status ENVIADO_SAP) + restore no abort.
+    // ===================================================================================================
+
+    private EntradaProdutoController CriarController096D(
+        FakeMaterialDocumentSapServico materialDoc,
+        IReadOnlyList<EntradaProdutoItemEnvioSap> itensPre,
+        IReadOnlyList<EntradaProdutoItemEnvioSap> itensPos,
+        string statusAnterior = "FINALIZADO_LOCAL",
+        bool reservado = true,
+        List<(long Codigo, string Status)>? restauracoes = null)
+        => new(
+            new IntegracaoEntradaSapServico(new FakePedidoCompraSapServico { EscritaHabilitada = true }, materialDoc),
+            new EntradaProdutoServico(null!, null!, null!, null, new AutorizacaoCentroDepositoEntrada([], []), null),
+            new BalancaLeituraServico(),
+            new ImpressoraEtiquetaServico(),
+            new AutorizacaoCentroDepositoEntrada([], []),
+            FabricaControladoresCadastro.CriarTaraController(),
+            ehAmbienteHomologacao: () => true,
+            carregarItensParaEnvio: (_, _) => Task.FromResult(itensPre),
+            carregarItensReservadosParaRevalidacao: (_, _) => Task.FromResult(itensPos),
+            liberarReservaAposAbort: (id, st, _) => { restauracoes?.Add((id, st)); return Task.FromResult(true); },
+            consultarProdutoCentroSap: ProdutoCentroBatchManaged,
+            obterStatusLancamento: (_, _) => Task.FromResult<string?>("FINALIZADO_LOCAL"),
+            reservarLancamentoParaEnvio: (_, _) => Task.FromResult(
+                new ResultadoReservaEnvioSap(reservado, reservado ? statusAnterior : null)),
+            diagnosticarIntegracaoSap: _ => Task.FromResult(new DiagnosticoProntidaoIntegracaoSap(
+                AmbienteOperacional: true, IntegracaoAtiva: true, SapConfigurado: true,
+                EscritaSapHabilitada: true, MaterialDocumentConfigurado: true, MotivoBloqueio: null)),
+            atualizarStatusAposEnvioSap: (_, _, _, _, _) => Task.FromResult(ResultadoOperacao.Ok()),
+            // GATE R2: HIBE ⇒ caminho LEGADO preservado nestes testes de reserva/snapshot (096D/§15).
+            consultarProdutoMestreSap: (material, _) => Task.FromResult<ProdutoSapMestre?>(
+                new ProdutoSapMestre { CodigoProduto = material, TipoMaterialSap = "HIBE", Consultado = true }),
+            existeRecebimentoConfirmadoItemPedido: (_, _, _, _) => Task.FromResult<bool?>(false));
+
+    [Fact] // T01 — FINALIZADO_LOCAL, snapshot estável ⇒ writer 1, sem "estado mudou".
+    public async Task T01_FinalizadoLocal_SnapshotEstavel_Despacha()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController c = CriarController096D(materialDoc, [Item("10", pesoLiquido: 2m)], [Item("10", pesoLiquido: 2m)]);
+
+        ResultadoEnvioSapEntrada r = await c.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, r.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        Assert.DoesNotContain("estado do lançamento mudou", r.Mensagem ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // T02 — ERRO_SAP como StatusAnterior ⇒ writer 1.
+    public async Task T02_ErroSap_SnapshotEstavel_Despacha()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController c = CriarController096D(
+            materialDoc, [Item("10", pesoLiquido: 2m)], [Item("10", pesoLiquido: 2m)], statusAnterior: "ERRO_SAP");
+
+        await c.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(1, materialDoc.Chamadas);
+    }
+
+    [Fact] // T04 — peso muda (2 → 1.5) ⇒ writer 0 + restore StatusAnterior.
+    public async Task T04_SnapshotDiverge_Peso_AbortaERestaura()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        List<(long, string)> restauracoes = [];
+        EntradaProdutoController c = CriarController096D(
+            materialDoc, [Item("10", pesoLiquido: 2m)], [Item("10", pesoLiquido: 1.5m)], restauracoes: restauracoes);
+
+        ResultadoEnvioSapEntrada r = await c.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Equal(CenarioEnvioSapEntrada.Falha, r.Cenario);
+        Assert.Equal((99L, "FINALIZADO_LOCAL"), Assert.Single(restauracoes));
+    }
+
+    [Fact] // T05 — nada elegível restou (pós vazio) ⇒ writer 0 + restore.
+    public async Task T05_SnapshotVazio_AbortaERestaura()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        List<(long, string)> restauracoes = [];
+        EntradaProdutoController c = CriarController096D(
+            materialDoc, [Item("10", pesoLiquido: 2m)], [], restauracoes: restauracoes);
+
+        await c.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Single(restauracoes);
+    }
+
+    [Fact] // T06 — segunda reserva perde (Reservado=false) ⇒ writer 0.
+    public async Task T06_ReservaNaoObtida_NaoDespacha()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController c = CriarController096D(
+            materialDoc, [Item("10", pesoLiquido: 2m)], [Item("10", pesoLiquido: 2m)], reservado: false);
+
+        ResultadoEnvioSapEntrada r = await c.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.EnvioEmProcessamento, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact] // T07/T09 — CASO REAL: pedido 1000 KG, snapshot 2 KG estável ⇒ 2 != 1000 NÃO bloqueia; writer 1.
+    public async Task T07_RecebimentoParcial2De1000_Despacha()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoItemEnvioSap dois = Item("10", pesoLiquido: 2m) with { NumeroPedido = "4500000005", Material = "1000111" };
+        EntradaProdutoController c = CriarController096D(materialDoc, [dois], [dois]);
+
+        ResultadoEnvioSapEntrada r = await c.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, r.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+    }
+
+    [Fact] // T08/T20 — loader PÓS-RESERVA exige ENVIADO_SAP e NÃO depende de FINALIZADO_LOCAL/ERRO_SAP no lançamento.
+    public void T08_PostLoader_ExigeEnviadoSap()
+    {
+        string repo = File.ReadAllText(Path.Combine(RaizProjeto(), "AcessoDados", "Repositorio", "EntradaProdutoRepositorio.cs"));
+        string metodo = ExtrairMetodoEntrada(repo, "ListarItensReservadosParaRevalidacaoSapAsync");
+        Assert.Contains("lancamento.status_lancamento = 'ENVIADO_SAP'", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("lancamento.status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact] // T11 — restore é CONDICIONAL a ENVIADO_SAP e destino restrito (fail-closed contra estado concorrente).
+    public void T11_Restore_CondicionalEnviadoSap_FailClosed()
+    {
+        string repo = File.ReadAllText(Path.Combine(RaizProjeto(), "AcessoDados", "Repositorio", "EntradaProdutoRepositorio.cs"));
+        string metodo = ExtrairMetodoEntrada(repo, "LiberarReservaEnvioSapAposAbortPrePostAsync");
+        Assert.Contains("AND status_lancamento = 'ENVIADO_SAP'", metodo, StringComparison.Ordinal);
+        Assert.Contains("statusAnterior is not (\"FINALIZADO_LOCAL\" or \"ERRO_SAP\")", metodo, StringComparison.Ordinal);
+    }
+
+    [Fact] // T12 — reserva ATÔMICA devolve o StatusAnterior efetivamente consumido (CTE FOR UPDATE + RETURNING).
+    public void T12_ReservaAtomica_DevolveStatusAnterior()
+    {
+        string repo = File.ReadAllText(Path.Combine(RaizProjeto(), "AcessoDados", "Repositorio", "EntradaProdutoRepositorio.cs"));
+        string metodo = ExtrairMetodoEntrada(repo, "TentarReservarLancamentoParaEnvioSapAsync");
+        Assert.Contains("FOR UPDATE", metodo, StringComparison.Ordinal);
+        Assert.Contains("RETURNING elegivel.status_lancamento AS status_anterior", metodo, StringComparison.Ordinal);
+    }
+
+    private static string ExtrairMetodoEntrada(string fonte, string nomeMetodo)
+    {
+        int i = fonte.IndexOf(nomeMetodo, StringComparison.Ordinal);
+        Assert.True(i >= 0, $"metodo nao encontrado: {nomeMetodo}");
+        int abre = fonte.IndexOf('{', i);
+        int prof = 0;
+        for (int j = abre; j < fonte.Length; j++)
+        {
+            if (fonte[j] == '{') prof++;
+            else if (fonte[j] == '}' && --prof == 0) return fonte[i..(j + 1)];
+        }
+        return fonte[i..];
+    }
+
     private static EntradaProdutoController CriarController(
         FakePedidoCompraSapServico pedido,
-        FakeMaterialDocumentSapServico materialDoc,
+        IMaterialDocumentSapServico materialDoc,
         bool ehHomologacao,
         IReadOnlyList<EntradaProdutoItemEnvioSap> itens,
         bool integracaoAtiva = true,
@@ -1074,7 +1350,17 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             RastreabilidadeDocumentoMaterialSap?,
             CancellationToken,
             Task<ResultadoOperacao>>? atualizarStatus = null,
-        Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>>? consultarProdutoCentro = null)
+        Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>>? consultarProdutoCentro = null,
+        Func<string, CancellationToken, Task<long?>>? recuperarLancamento = null,
+        Func<long, CancellationToken, Task<IReadOnlyList<EntradaProdutoItemEnvioSap>>>? carregarItensProvider = null,
+        // GATE R2: por padrão os testes existentes usam material HIBE (Químico) ⇒ caminho LEGADO
+        // preservado (QuantityInEntryUnit = peso líquido, sem campos ZZ1). Os testes do novo contrato
+        // injetam ROH explicitamente. Classificação indeterminada passou a BLOQUEAR por contrato.
+        string tipoMaterialSap = "HIBE",
+        Func<string, string, long, CancellationToken, Task<bool?>>? existeRecebimentoConfirmado = null,
+        // GATE R3: permite observar a compensação da reserva nos bloqueios pós-reserva.
+        Func<long, string, CancellationToken, Task<bool>>? liberarReserva = null,
+        Action? aoReservar = null)
         => new(
             new IntegracaoEntradaSapServico(pedido, materialDoc),
             new EntradaProdutoServico(null!, null!, null!, null, new AutorizacaoCentroDepositoEntrada([], []), null),
@@ -1083,11 +1369,21 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             new AutorizacaoCentroDepositoEntrada([], []),
             FabricaControladoresCadastro.CriarTaraController(),
             ehAmbienteHomologacao: () => ehHomologacao,
-            carregarItensParaEnvio: (_, _) => Task.FromResult(itens),
+            carregarItensParaEnvio: carregarItensProvider ?? ((_, _) => Task.FromResult(itens)),
+            // GATE 096D: o loader PÓS-RESERVA compartilha o MESMO provider (contador único) para preservar a
+            // semântica dos testes §15 (ProviderMudaApos2 conta pré + pós); default = mesma lista.
+            carregarItensReservadosParaRevalidacao: carregarItensProvider ?? ((_, _) => Task.FromResult(itens)),
+            liberarReservaAposAbort: liberarReserva ?? ((_, _, _) => Task.FromResult(true)),
             // Por padrão, material ADMINISTRADO por lote (mantém o envio de Batch/datas dos testes existentes).
             consultarProdutoCentroSap: consultarProdutoCentro ?? ProdutoCentroBatchManaged,
             obterStatusLancamento: (_, _) => Task.FromResult<string?>(statusLancamento),
-            reservarLancamentoParaEnvio: (_, _) => Task.FromResult(reservaObtida),
+            recuperarLancamentoLocalPorPedido: recuperarLancamento,
+            reservarLancamentoParaEnvio: (_, _) =>
+            {
+                aoReservar?.Invoke();
+                return Task.FromResult(new ResultadoReservaEnvioSap(
+                    reservaObtida, reservaObtida ? statusLancamento : null));
+            },
             diagnosticarIntegracaoSap: _ => Task.FromResult(
                 new DiagnosticoProntidaoIntegracaoSap(
                     AmbienteOperacional: true,
@@ -1099,7 +1395,16 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
                         ? null
                         : "Integração SAP inativa.")),
             atualizarStatusAposEnvioSap: atualizarStatus
-                ?? ((_, _, _, _, _) => Task.FromResult(ResultadoOperacao.Ok())));
+                ?? ((_, _, _, _, _) => Task.FromResult(ResultadoOperacao.Ok())),
+            consultarProdutoMestreSap: (material, _) => Task.FromResult<ProdutoSapMestre?>(
+                new ProdutoSapMestre
+                {
+                    CodigoProduto = material,
+                    TipoMaterialSap = tipoMaterialSap,
+                    Consultado = true
+                }),
+            existeRecebimentoConfirmadoItemPedido: existeRecebimentoConfirmado
+                ?? ((_, _, _, _) => Task.FromResult<bool?>(false)));
 
     private static void DefinirSessao(bool comEnviarSap)
     {
@@ -1130,7 +1435,10 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         DateTime? dataFabricacao = null,
         DateTime? dataValidade = null,
         decimal pesoLiquido = 8m,
-        decimal pesoBruto = 10m)
+        decimal pesoBruto = 10m,
+        // GATE R2: quantidade INTEGRAL do item do pedido. Default preenchido para que os cenarios ROH
+        // possam ser montados; os testes legados (HIBE) nao a utilizam.
+        decimal? quantidadePedido = 1000m)
         => new()
         {
             NumeroPedido = "4500000010",
@@ -1141,6 +1449,7 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             Centro = "3007",
             Deposito = "PP01",
             Unidade = unidade,
+            QuantidadePedidoItem = quantidadePedido,
             NumeroLote = numeroLote,
             CodigoEntradaProdutoLote = 0L,
             // Datas civis validas por padrao (fabricacao no passado, validade no futuro), como um lote real.
@@ -1152,6 +1461,431 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
     private static Task<ProdutoCentroSapMestre?> ProdutoCentroBatchManaged(string material, string centro, CancellationToken ct)
         => Task.FromResult<ProdutoCentroSapMestre?>(
             new ProdutoCentroSapMestre { Material = material, Centro = centro, IsBatchManagementRequired = true, Consultado = true });
+
+    // ======================================================================
+    // GATE R2 — duplicidade de recebimento (P5) e idempotencia (T10), nivel Controller.
+    // ======================================================================
+
+    [Fact] // T10/P5: sem evidencia de ausencia de recebimento anterior ⇒ BLOQUEIA, ZERO POST.
+    public async Task R2_ItemRoh_SemEvidenciaDeDuplicidade_BloqueiaSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(null));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("recebimento confirmado", r.Mensagem ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // T10/P5: item do pedido JA recebido ⇒ BLOQUEIA, ZERO POST (nao lanca a quantidade de novo).
+    public async Task R2_ItemRoh_JaRecebido_BloqueiaSemPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(true));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("duplicidade", r.Mensagem ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // T1 ponta a ponta: sem recebimento anterior ⇒ POST com 1000.000 no padrao e 296.500 no ZZ1.
+    public async Task R2_ItemRoh_SemRecebimentoAnterior_EnviaQuantidadeDoPedidoComZz1()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        EntradaProdutoController controller = CriarController(
+            // GATE R3: a quantidade do pedido passou a ser revalidada no SAP antes do POST — o pedido
+            // fresco precisa confirmar os mesmos 1000.000 KG, senão o envio é (corretamente) bloqueado.
+            new FakePedidoCompraSapServico
+            {
+                EscritaHabilitada = true,
+                ItensFrescos = [ItemFresco("10", 1000.000m, "KG")]
+            },
+            materialDoc,
+            ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, r.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        MaterialDocumentSapItemRequest item = Assert.Single(materialDoc.UltimaRequisicao!.Itens);
+        Assert.Equal("1000.000", item.QuantityInEntryUnit);
+        Assert.Equal("KG", item.EntryUnit);
+        Assert.Equal("296.500", item.Zz1PesoEntradaMmi);
+        Assert.Equal("KG", item.Zz1PesoEntradaMmiu);
+    }
+
+    // ======================================================================
+    // GATE R3 — frescor da quantidade do Pedido de Compra (defeito do QA R2).
+    // ======================================================================
+
+    [Fact] // R3 central: preparação 1000.000 KG, revalidação 900.000 KG ⇒ BLOCK, ZERO POST, reserva liberada.
+    public async Task R3_QuantidadeDoPedidoMudouNoSap_BloqueiaSemPostELiberaReserva()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        List<(long Codigo, string Status)> restauracoes = [];
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            // SAP ATUAL: 900.000 — diferente dos 1000.000 que compuseram o payload.
+            ItensFrescos = [ItemFresco("10", 900.000m, "KG")]
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false),
+            liberarReserva: (id, st, _) => { restauracoes.Add((id, st)); return Task.FromResult(true); });
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);                 // SAP_POST=0
+        Assert.Equal(1, pedido.ReconsultasCabecalho);           // houve releitura fresca
+        Assert.Contains("900.000", r.Mensagem ?? string.Empty, StringComparison.Ordinal);
+        Assert.Single(restauracoes);                            // compensação da reserva preservada
+        Assert.Equal((99L, "FINALIZADO_LOCAL"), restauracoes[0]);
+    }
+
+    [Fact] // R3: quantidade fresca IGUAL ⇒ segue e POSTa com a quantidade do pedido.
+    public async Task R3_QuantidadeDoPedidoInalterada_EnviaNormalmente()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            ItensFrescos = [ItemFresco("10", 1000.000m, "KG")]
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, r.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        MaterialDocumentSapItemRequest item = Assert.Single(materialDoc.UltimaRequisicao!.Itens);
+        Assert.Equal("1000.000", item.QuantityInEntryUnit);
+        Assert.Equal("296.500", item.Zz1PesoEntradaMmi);
+    }
+
+    [Theory] // R3 fail-closed: indisponibilidade, item ausente, ambiguidade, unidade e falha de consulta.
+    [InlineData("sem_pedido")]
+    [InlineData("falha")]
+    [InlineData("item_ausente")]
+    [InlineData("ambiguo")]
+    [InlineData("unidade_divergente")]
+    [InlineData("quantidade_ausente")]
+    public async Task R3_CenariosDeIndisponibilidadeEAmbiguidade_BloqueiamSemPost(string cenario)
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        FakePedidoCompraSapServico pedido = cenario switch
+        {
+            "sem_pedido" => new() { EscritaHabilitada = true, ReconsultaSemPedido = true },
+            "falha" => new() { EscritaHabilitada = true, FalharReconsulta = true },
+            "item_ausente" => new() { EscritaHabilitada = true, ItensFrescos = [ItemFresco("20", 1000m, "KG")] },
+            "ambiguo" => new()
+            {
+                EscritaHabilitada = true,
+                ItensFrescos = [ItemFresco("10", 1000m, "KG"), ItemFresco("10", 1000m, "KG")]
+            },
+            "unidade_divergente" => new() { EscritaHabilitada = true, ItensFrescos = [ItemFresco("10", 1000m, "TO")] },
+            _ => new() { EscritaHabilitada = true, ItensFrescos = [ItemFresco("10", null, "KG")] }
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    [Fact] // R3 requisito 7: fluxo HIBE NÃO dispara reconsulta SAP adicional.
+    public async Task R3_FluxoHibe_NaoReconsultaPedido()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        FakePedidoCompraSapServico pedido = new() { EscritaHabilitada = true };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 8m, pesoBruto: 10m)],
+            tipoMaterialSap: "HIBE");
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, r.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        Assert.Equal(0, pedido.ReconsultasCabecalho); // nenhuma consulta extra no caminho legado
+        Assert.Null(Assert.Single(materialDoc.UltimaRequisicao!.Itens).Zz1PesoEntradaMmi);
+    }
+
+    [Fact] // R3: o snapshot pós-reserva passou a comparar também os dados DOCUMENTAIS e a identidade.
+    public void R3_ItensElegiveisIguais_ComparaPedidoItemMaterialQuantidadeEUnidade()
+    {
+        string controller = File.ReadAllText(Path.Combine(
+            RaizProjeto(), "Controle", "Processo", "EntradaProdutoController.cs"));
+
+        // A assinatura comparada declara os cinco campos exigidos pelo QA R2.
+        Assert.Contains("private sealed record AssinaturaItemElegivel(", controller, StringComparison.Ordinal);
+        foreach (string campo in new[]
+        {
+            "string Pedido,", "string Material,", "string Unidade,",
+            "decimal? QuantidadePedido,", "decimal SomaPesoLiquido)"
+        })
+        {
+            Assert.Contains(campo, controller, StringComparison.Ordinal);
+        }
+
+        // E ela é efetivamente alimentada pelos campos do item elegível.
+        Assert.Contains("Pedido: Normalizar(g.Select(x => x.NumeroPedido))", controller, StringComparison.Ordinal);
+        Assert.Contains("Material: Normalizar(g.Select(x => x.Material))", controller, StringComparison.Ordinal);
+        Assert.Contains("Normalizar(g.Select(x => x.Unidade))", controller, StringComparison.Ordinal);
+        Assert.Contains("QuantidadePedido: Unica(g.Select(x => x.QuantidadePedidoItem))", controller, StringComparison.Ordinal);
+        Assert.Contains("SomaPesoLiquido: g.Sum(x => x.PesoLiquidoKg)", controller, StringComparison.Ordinal);
+    }
+
+    // ======================================================================
+    // GATE R3B — fronteira de CANCELAMENTO/TIMEOUT da reconsulta fresca, apos a
+    // reserva e antes do POST. Antes, a excecao escapava e deixava o lancamento
+    // preso em ENVIADO_SAP sem compensacao.
+    // ======================================================================
+
+    [Fact] // R3B central: cancelamento SOLICITADO durante a reconsulta ⇒ compensa, ZERO POST, e o
+           // cancelamento continua sendo cancelamento (semantica original preservada).
+    public async Task R3B_FreshSapReadCancelled_CompensatesReservationWithoutPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        List<(long Codigo, string Status)> restauracoes = [];
+        using CancellationTokenSource cts = new();
+
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            ItensFrescos = [ItemFresco("10", 1000.000m, "KG")],
+            // O cancelamento acontece EXATAMENTE durante a reconsulta: a reserva ja foi adquirida e a
+            // recarga pos-reserva ja passou.
+            AcaoNaReconsulta = () =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            }
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false),
+            liberarReserva: (id, st, token) =>
+            {
+                // A compensacao NUNCA reutiliza o token cancelado.
+                Assert.False(token.IsCancellationRequested);
+                restauracoes.Add((id, st));
+                return Task.FromResult(true);
+            });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => controller.EnviarPesoEntradaParaSapHomologacaoAsync(99, cts.Token));
+
+        Assert.Equal(0, materialDoc.Chamadas);                  // SAP_POST = 0
+        Assert.Equal(1, pedido.ReconsultasCabecalho);
+        Assert.Single(restauracoes);                            // compensacao EXECUTADA, uma unica vez
+        Assert.Equal((99L, "FINALIZADO_LOCAL"), restauracoes[0]); // StatusAnterior preservado
+    }
+
+    [Fact] // R3B: TIMEOUT da consulta (TaskCanceledException sem cancelamento do chamador) ⇒ abort LOCAL
+           // pre-POST com compensacao, sem virar cancelamento nem erro remoto.
+    public async Task R3B_FreshSapReadTimeout_CompensatesAndBlocksWithoutPost()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        List<(long Codigo, string Status)> restauracoes = [];
+
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            ItensFrescos = [ItemFresco("10", 1000.000m, "KG")],
+            AcaoNaReconsulta = () => throw new TaskCanceledException(
+                "timeout simulado", new TimeoutException("tempo esgotado"))
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false),
+            liberarReserva: (id, st, _) => { restauracoes.Add((id, st)); return Task.FromResult(true); });
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("timeout", r.Mensagem ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(restauracoes);
+        Assert.Equal((99L, "FINALIZADO_LOCAL"), restauracoes[0]);
+    }
+
+    [Fact] // R3B (H): compensacao NAO comprovada ⇒ declara estado INCERTO; nunca liberacao ficticia.
+    public async Task R3B_CompensacaoNaoComprovada_DeclaraReservaIncerta()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            ItensFrescos = [ItemFresco("10", 1000.000m, "KG")],
+            AcaoNaReconsulta = () => throw new TaskCanceledException(
+                "timeout simulado", new TimeoutException("tempo esgotado"))
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false),
+            // Transicao concorrente legitima OU reserva presa: o contrato nao distingue, logo declara incerteza.
+            liberarReserva: (_, _, _) => Task.FromResult(false));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("não foi possível confirmar a liberação da reserva",
+            r.Mensagem ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // R3B (H): compensacao que LANCA tambem resulta em estado INCERTO, sem mascarar o abort.
+    public async Task R3B_CompensacaoQueFalha_DeclaraReservaIncerta()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            ItensFrescos = [ItemFresco("10", 1000.000m, "KG")],
+            AcaoNaReconsulta = () => throw new TaskCanceledException(
+                "timeout simulado", new TimeoutException("tempo esgotado"))
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 296.5m, pesoBruto: 300m, quantidadePedido: 1000.000m)],
+            tipoMaterialSap: "ROH",
+            existeRecebimentoConfirmado: (_, _, _, _) => Task.FromResult<bool?>(false),
+            liberarReserva: (_, _, _) => throw new InvalidOperationException("falha na compensacao"));
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, r.Cenario);
+        Assert.Equal(0, materialDoc.Chamadas);
+        Assert.Contains("falhou", r.Mensagem ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // R3B: fluxo HIBE nao reconsulta, logo nao existe essa fronteira de cancelamento para ele.
+    public async Task R3B_FluxoHibe_NaoAtravessaFronteiraDeCancelamento()
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        FakePedidoCompraSapServico pedido = new()
+        {
+            EscritaHabilitada = true,
+            AcaoNaReconsulta = () => throw new OperationCanceledException("nao deve ser invocado")
+        };
+
+        EntradaProdutoController controller = CriarController(
+            pedido, materialDoc, ehHomologacao: true,
+            itens: [Item(pesoLiquido: 8m, pesoBruto: 10m)],
+            tipoMaterialSap: "HIBE");
+
+        ResultadoEnvioSapEntrada r = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+
+        Assert.Equal(CenarioEnvioSapEntrada.Enviado, r.Cenario);
+        Assert.Equal(1, materialDoc.Chamadas);
+        Assert.Equal(0, pedido.ReconsultasCabecalho);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RevalidacaoCanceladaCompensaSemMascararCancelamento(bool falhaCompensacao)
+    {
+        DefinirSessao(comEnviarSap: true);
+        FakeMaterialDocumentSapServico materialDoc = new();
+        using CancellationTokenSource cts = new();
+        int cargas = 0;
+        int compensacoes = 0;
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true }, materialDoc, true, [Item()],
+            carregarItensProvider: (_, _) =>
+            {
+                if (++cargas == 3)
+                {
+                    cts.Cancel();
+                    throw new OperationCanceledException(cts.Token);
+                }
+                return Task.FromResult<IReadOnlyList<EntradaProdutoItemEnvioSap>>([Item()]);
+            },
+            liberarReserva: (_, status, token) =>
+            {
+                Assert.Equal("FINALIZADO_LOCAL", status);
+                Assert.False(token.IsCancellationRequested);
+                compensacoes++;
+                if (falhaCompensacao) throw new InvalidOperationException("OFFLINE");
+                return Task.FromResult(true);
+            });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            controller.EnviarPesoEntradaParaSapHomologacaoAsync(99, cts.Token));
+        Assert.Equal(1, compensacoes);
+        Assert.Equal(0, materialDoc.Chamadas);
+    }
+
+    private static PedidoCompraSapItem ItemFresco(string numeroItem, decimal? quantidade, string unidade)
+        => new()
+        {
+            NumeroItem = numeroItem,
+            CodigoMaterial = "3500027",
+            Quantidade = quantidade,
+            UnidadeMedida = unidade,
+            Centro = "3007",
+            Deposito = "PP01"
+        };
 
     private static ProdutoCentroSapMestre Mestre(string material, string centro, bool? batch, bool consultado = true)
         => new() { Material = material, Centro = centro, IsBatchManagementRequired = batch, Consultado = consultado };
@@ -1186,8 +1920,111 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
     }
 
+    [Theory]
+    [InlineData("ROH", false)]
+    [InlineData("HIBE", true)]
+    [InlineData("", false)]
+    [InlineData("DESCONHECIDO", false)]
+    public async Task R7B_PoliticaRealPrecedeReservaESomenteHibeSegue(string tipo, bool permite)
+    {
+        DefinirSessao(comEnviarSap: true);
+        int reservas = 0, dispatches = 0, atualizacoes = 0, compensacoes = 0;
+        MaterialDocumentSapServico writer = new(EntradaMpP5R7Tests.Config(), null, null,
+            dispatchHttp: (_, _) =>
+            {
+                dispatches++;
+                return Task.FromResult(new ResultadoMaterialDocumentSap
+                {
+                    Sucesso = true, StatusHttp = 201, MaterialDocument = "5000000001",
+                    MaterialDocumentYear = "2026"
+                });
+            });
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true }, writer, true, [Item()],
+            statusLancamento: "ERRO_SAP", tipoMaterialSap: tipo,
+            aoReservar: () => reservas++,
+            atualizarStatus: (_, _, _, _, _) =>
+            {
+                atualizacoes++;
+                return Task.FromResult(ResultadoOperacao.Ok());
+            },
+            liberarReserva: (_, _, _) =>
+            {
+                compensacoes++;
+                return Task.FromResult(true);
+            });
+        ResultadoEnvioSapEntrada resultado = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        Assert.Equal(permite ? 1 : 0, reservas);
+        Assert.Equal(permite ? 1 : 0, dispatches);
+        Assert.Equal(permite ? 1 : 0, atualizacoes);
+        Assert.Equal(0, compensacoes);
+        Assert.Equal(permite ? CenarioEnvioSapEntrada.Enviado : CenarioEnvioSapEntrada.DadosIncompletos,
+            resultado.Cenario);
+    }
+
+    [Fact]
+    public async Task R7B_WriterBloqueadoAntesHttpCompensaSemErroSap()
+    {
+        DefinirSessao(comEnviarSap: true);
+        int atualizacoes = 0, compensacoes = 0;
+        MaterialDocumentSapServico writer = new(new ConfiguracaoSap(), null, null);
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true }, writer, true, [Item()],
+            statusLancamento: "ERRO_SAP",
+            atualizarStatus: (_, _, _, _, _) =>
+            {
+                atualizacoes++;
+                return Task.FromResult(ResultadoOperacao.Ok());
+            },
+            liberarReserva: (_, statusAnterior, _) =>
+            {
+                Assert.Equal("ERRO_SAP", statusAnterior);
+                compensacoes++;
+                return Task.FromResult(true);
+            });
+        ResultadoEnvioSapEntrada result = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        Assert.Equal(0, atualizacoes);
+        Assert.Equal(1, compensacoes);
+        Assert.Equal(CenarioEnvioSapEntrada.DadosIncompletos, result.Cenario);
+    }
+
+    [Fact]
+    public async Task R7B_ResultadoRemotoDesconhecidoPreservaReservaSemAtualizarErro()
+    {
+        DefinirSessao(comEnviarSap: true);
+        int dispatches = 0, atualizacoes = 0, compensacoes = 0;
+        MaterialDocumentSapServico writer = new(EntradaMpP5R7Tests.Config(), null, null,
+            dispatchHttp: (_, _) =>
+            {
+                dispatches++;
+                throw new TimeoutException("OFFLINE");
+            });
+        EntradaProdutoController controller = CriarController(
+            new FakePedidoCompraSapServico { EscritaHabilitada = true }, writer, true, [Item()],
+            atualizarStatus: (_, _, _, _, _) =>
+            {
+                atualizacoes++;
+                return Task.FromResult(ResultadoOperacao.Ok());
+            },
+            liberarReserva: (_, _, _) =>
+            {
+                compensacoes++;
+                return Task.FromResult(true);
+            });
+        ResultadoEnvioSapEntrada result = await controller.EnviarPesoEntradaParaSapHomologacaoAsync(99);
+        Assert.Equal(1, dispatches);
+        Assert.Equal(0, atualizacoes);
+        Assert.Equal(0, compensacoes);
+        Assert.False(result.StatusLocalAtualizado);
+        Assert.Equal(CenarioEnvioSapEntrada.FalhaPersistenciaLocal, result.Cenario);
+    }
+
     private sealed class FakeMaterialDocumentSapServico : IMaterialDocumentSapServico
     {
+        public bool AplicarPoliticaReal { get; init; }
+        public string? ValidarPoliticaAntesReserva(MaterialDocumentSapRequest requisicao)
+            => AplicarPoliticaReal && FugaPET_Dev.Servicos.Entrada.P5.BloqueioP5R7.ExigeP5(requisicao)
+                ? FugaPET_Dev.Servicos.Entrada.P5.BloqueioP5R7.Mensagem : null;
         public bool Sucesso { get; init; } = true;
         public string MensagemFalha { get; init; } = "O SAP recusou a criacao do documento de material.";
 
@@ -1240,6 +2077,21 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         public bool EscritaHabilitada { get; init; }
         public int PatchChamadas { get; private set; }
 
+        // GATE R3: itens FRESCOS devolvidos na reconsulta do pedido (ObterCabecalhoSapParaValidacaoAsync).
+        // Vazio = comportamento dos testes legados (nenhuma posição ROH os consulta).
+        public IReadOnlyList<PedidoCompraSapItem> ItensFrescos { get; init; } = [];
+
+        /// <summary>Quando true, a reconsulta FALHA (prova o fail-closed por falha de consulta).</summary>
+        public bool FalharReconsulta { get; init; }
+
+        /// <summary>Quando true, a reconsulta devolve null (pedido indisponível).</summary>
+        public bool ReconsultaSemPedido { get; init; }
+
+        public int ReconsultasCabecalho { get; private set; }
+
+        /// <summary>GATE R3B: hook executado no inicio da reconsulta (permite cancelar/estourar timeout).</summary>
+        public Action? AcaoNaReconsulta { get; init; }
+
         public bool EhSimulado => false;
         public bool SapConfigurado => Configurado;
         public bool EscritaSapHabilitada => EscritaHabilitada;
@@ -1256,7 +2108,23 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
         public Task<PedidoCompraSapAgregado?> ObterPedidoAgregadoAsync(string numeroPedido, CancellationToken cancellationToken = default)
             => Task.FromResult<PedidoCompraSapAgregado?>(null);
         public Task<PedidoCompraSap?> ObterCabecalhoSapParaValidacaoAsync(string numeroPedido, CancellationToken cancellationToken = default)
-            => Task.FromResult<PedidoCompraSap?>(new PedidoCompraSap { Numero = numeroPedido, StatusProcessamentoCompraSap = "05" });
+        {
+            ReconsultasCabecalho++;
+            AcaoNaReconsulta?.Invoke();
+            if (FalharReconsulta)
+            {
+                throw new InvalidOperationException("falha simulada na reconsulta do pedido");
+            }
+
+            return Task.FromResult<PedidoCompraSap?>(ReconsultaSemPedido
+                ? null
+                : new PedidoCompraSap
+                {
+                    Numero = numeroPedido,
+                    StatusProcessamentoCompraSap = "05",
+                    Itens = ItensFrescos
+                });
+        }
         public Task<IReadOnlyList<string>> ListarNumerosAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<string>>([]);
         public Task<string> ObterFornecedorPorPedidoAsync(string numeroPedido, CancellationToken cancellationToken = default)
@@ -1269,5 +2137,6 @@ public sealed class EnvioControladoSapEntradaC12Tests : IDisposable
             => Task.FromResult<IReadOnlyList<PedidoCompraSapItem>>([]);
     }
 }
+
 
 

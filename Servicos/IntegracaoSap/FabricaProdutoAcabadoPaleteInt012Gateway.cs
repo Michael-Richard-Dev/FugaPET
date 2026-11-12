@@ -9,7 +9,7 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 public static class FabricaProdutoAcabadoPaleteInt012Gateway
 {
     /// <summary>Path confirmado do INT012 (CPI) — anexado à base configurada.</summary>
-    public const string EndpointPath = "/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
+    public const string EndpointPath = "/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
 
     public static IProdutoAcabadoPaleteInt012Gateway Criar(
         ConfiguracaoSap configuracao,
@@ -23,14 +23,17 @@ public static class FabricaProdutoAcabadoPaleteInt012Gateway
         // um vazio ⇒ gateway fail-closed (zero HTTP), independentemente do gate. Separação preservada.
         bool autorizado = configuracao.PalletWriteHabilitado
             && !string.IsNullOrWhiteSpace(configuracao.PalletInt012BaseUrl)
-            && configuracao.PalletInt012HostsPermitidos.Count > 0;
+            && configuracao.PalletInt012HostsPermitidos.Count > 0
+            // GATE 046-K: credencial CPI DEDICADA obrigatoria (sem fallback SAP). Ausente => nao autorizado.
+            && !string.IsNullOrWhiteSpace(configuracao.PalletInt012Usuario)
+            && !string.IsNullOrWhiteSpace(configuracao.PalletInt012Senha);
         string endpoint = MontarEndpoint(configuracao.PalletInt012BaseUrl);
 
         return new ProdutoAcabadoPaleteInt012Gateway(
             baseUrl: endpoint,
             hostsPermitidos: configuracao.PalletInt012HostsPermitidos,
-            usuario: configuracao.Usuario,
-            senha: configuracao.Senha,
+            usuario: configuracao.PalletInt012Usuario,
+            senha: configuracao.PalletInt012Senha,
             envioAutorizado: autorizado,
             fabricaHandler: fabricaHandler ?? FabricaHttpClientSap.CriarHandler,
             timeout: TimeSpan.FromSeconds(configuracao.TimeoutSegundos));

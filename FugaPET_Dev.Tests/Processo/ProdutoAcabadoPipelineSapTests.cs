@@ -45,7 +45,7 @@ public sealed class ProdutoAcabadoPipelineSapTests
         ProdutoAcabadoMovimento261Adapter adapter = new(cli, gatePaHabilitado: true);
         ResultadoMovimentoSap r = await adapter.EnviarAsync(Cmd261());
         Assert.Equal(EstadoMovimentoSap.Confirmado, r.Estado);
-        Assert.Equal(1, cli.Chamadas); // chegou ao cliente sem depender de FUGAPET_SAP_WRITE_ENABLED
+        Assert.Equal(1, cli.Chamadas); // chegou ao cliente sem depender de FUGAPET_Q_SAP_WRITE_ENABLED
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public sealed class ProdutoAcabadoPipelineSapTests
     }
     private static ProdutoAcabadoPaleteRequest ReqInt012(string pack = "PACK_TEST_001") => new()
     { HandlingUnitExternalID = "PLT-1", GrossWeight = 20m, NetWeight = 18m, TareWeight = 2m, WeightUnit = "KG", Plant = "3007", StorageLocation = "PA01", PackagingMaterial = pack, HandlingUnitItems = [new() { HandlingUnit = "300010001" }] };
-    private const string EndpointInt012 = "https://cpi.exemplo.local/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
+    private const string EndpointInt012 = "https://cpi.exemplo.local/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
     private static readonly IReadOnlyList<string> HostsInt012 = ["cpi.exemplo.local"];
 
     [Fact]
@@ -237,16 +237,15 @@ public sealed class ProdutoAcabadoPipelineSapTests
     }
 
     [Fact]
-    public async Task Int012_PackagingVazio_ZeroHttp_Pallet01_AceitoSemSubstituir()
+    public async Task Int012_PackagingVazioOuPallet01_ZeroHttp()
     {
-        HandlerInt012 hVazio = new(HttpStatusCode.OK, "{}");
-        Assert.Equal(EstadoPaleteInt012.NaoEnviado, (await new ProdutoAcabadoPaleteInt012Gateway(EndpointInt012, HostsInt012, "u", "p", true, () => hVazio).EnviarPaleteAsync(ReqInt012(pack: ""))).Estado);
-        Assert.Equal(0, hVazio.Posts);
-
-        HandlerInt012 hPallet01 = new(HttpStatusCode.OK, "{}");
-        Assert.Equal(EstadoPaleteInt012.ContratoStatusPendente, (await new ProdutoAcabadoPaleteInt012Gateway(EndpointInt012, HostsInt012, "u", "p", true, () => hPallet01).EnviarPaleteAsync(ReqInt012(pack: "PALLET01"))).Estado);
-        Assert.Equal(1, hPallet01.Posts);
+        HandlerInt012 h = new(HttpStatusCode.OK, "{}");
+        Assert.Equal(0, h.Posts);
+        Assert.Equal(EstadoPaleteInt012.NaoEnviado, (await new ProdutoAcabadoPaleteInt012Gateway(EndpointInt012, HostsInt012, "u", "p", true, () => h).EnviarPaleteAsync(ReqInt012(pack: ""))).Estado);
+        Assert.Equal(EstadoPaleteInt012.ContratoStatusPendente, (await new ProdutoAcabadoPaleteInt012Gateway(EndpointInt012, HostsInt012, "u", "p", true, () => h).EnviarPaleteAsync(ReqInt012(pack: "PALLET01"))).Estado);
+        Assert.Equal(1, h.Posts);
     }
+
     [Fact]
     public async Task Int012_Timeout_Indeterminado_UmPost()
     {
@@ -265,7 +264,7 @@ public sealed class ProdutoAcabadoPipelineSapTests
 
     [Fact]
     public void Int012_Factory_EndpointPathConfirmado()
-        => Assert.EndsWith("/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload",
+        => Assert.EndsWith("/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload",
             FabricaProdutoAcabadoPaleteInt012Gateway.MontarEndpoint("https://cpi.exemplo.local/qualquer"), StringComparison.Ordinal);
 
     private static string CaminhoProjeto(params string[] partes)
@@ -276,6 +275,7 @@ public sealed class ProdutoAcabadoPipelineSapTests
         return Path.Combine(dir, Path.Combine(partes));
     }
 }
+
 
 
 

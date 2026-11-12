@@ -79,6 +79,39 @@ internal sealed class ProductionOrderSapServico : IProductionOrderSapServico
         }
     }
 
+    /// <summary>
+    /// GATE 118B: leitura FRESCA (item + componentes) delegada ao cliente. Qualquer falha vira
+    /// INDISPONIVEL sanitizado — nunca lista vazia tratada como estado real.
+    /// </summary>
+    public async Task<LeituraFrescaOrdem261> ConsultarEstadoFresco261Async(
+        string numeroOrdem,
+        CancellationToken cancellationToken = default)
+    {
+        string ordem = numeroOrdem?.Trim() ?? string.Empty;
+        if (!_configuracao.ProductionOrderConfigurado)
+        {
+            return LeituraFrescaOrdem261.Indisponivel(
+                ordem, _configuracao.MensagemProductionOrderAusente());
+        }
+
+        try
+        {
+            using HttpClient httpClient = FabricaHttpClientSap.Criar(_configuracao);
+            ProductionOrderSapApiClient cliente = new(_configuracao, httpClient, RegistrarDiagnostico);
+            return await cliente.ConsultarEstadoFresco261Async(ordem, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RegistrarDiagnostico($"Leitura fresca 261 falhou ({ex.GetType().Name}).");
+            return LeituraFrescaOrdem261.Indisponivel(
+                ordem, "Nao foi possivel reler a Ordem de Producao no SAP: bloqueado (nenhum POST).");
+        }
+    }
+
     public async Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
         CancellationToken cancellationToken = default)
     {

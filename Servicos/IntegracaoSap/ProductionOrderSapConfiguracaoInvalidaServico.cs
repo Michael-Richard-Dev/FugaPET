@@ -21,3 +21,4 @@ internal sealed class ProductionOrderSapConfiguracaoInvalidaServico : IProductio
         CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<OrdemProducaoSap>>([]);
 }
+

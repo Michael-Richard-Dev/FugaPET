@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Modelo.Processo;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
@@ -12,6 +12,19 @@ public interface IResultadoApontamentoRepositorio
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<ResultadoApontamentoItem>> ListarDefinicoesAsync(
-        ContextoApontamentoProcesso contexto,
+        long codigoPerfilResultado,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ResultadoPersistidoApontamento>> ListarResultadosPersistidosDoApontamentoAsync(
+        long codigoApontamento,
         CancellationToken cancellationToken);
 }
+
+public sealed class ResultadoPersistidoApontamento
+{
+    public long CodigoResultado { get; init; }
+    public long CodigoApontamento { get; init; }
+    public string MensagemResumo { get; init; } = string.Empty;
+    public IReadOnlyList<ResultadoApontamentoItem> Itens { get; init; } = Array.Empty<ResultadoApontamentoItem>();
+}
+

@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
@@ -77,3 +77,4 @@ public sealed class ResultadoEnvioSemiAcabado101
     public static ResultadoEnvioSemiAcabado101 Falha(string mensagem)
         => new(false, mensagem, null, null);
 }
+

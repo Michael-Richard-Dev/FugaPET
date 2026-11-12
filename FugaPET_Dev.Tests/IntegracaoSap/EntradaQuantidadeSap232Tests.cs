@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.IntegracaoSap;
@@ -156,18 +156,22 @@ public sealed class EntradaQuantidadeSap232Tests
     {
         string controller = File.ReadAllText(Path.Combine(RaizProjeto(), "Controle", "Processo", "EntradaProdutoController.cs"));
 
-        // Ajuste 3: QuantityInEntryUnit a partir do peso líquido (não label/texto de tela).
-        Assert.Contains("QuantityInEntryUnit = FormatarQuantidade(item.PesoLiquidoKg)", controller, StringComparison.Ordinal);
+        // GATE R2: o campo padrão deixou de receber o peso líquido — passou a receber a QUANTIDADE do
+        // item do Pedido de Compra, decidida pela alocação. O peso líquido migrou para os campos ZZ1.
+        Assert.Contains("QuantityInEntryUnit = alocacao.QuantidadePadrao", controller, StringComparison.Ordinal);
+        Assert.Contains("Zz1PesoEntradaMmi = alocacao.PesoLiquidoCustomizado", controller, StringComparison.Ordinal);
+        Assert.DoesNotContain("QuantityInEntryUnit = FormatarQuantidade(item.PesoLiquidoKg)", controller, StringComparison.Ordinal);
         Assert.Contains("EntradaProdutoQuantidadeSap.FormatarQuantidadeSap", controller, StringComparison.Ordinal);
-        // Ajuste 5: guarda de coerência antes da reserva/POST.
+        // Ajuste 5 PRESERVADO: a guarda de formatação do peso líquido continua antes da reserva/POST.
         Assert.Contains("ValidarCoerenciaQuantidadeSap(codigoLancamento, itens)", controller, StringComparison.Ordinal);
         Assert.Contains("Quantidade SAP divergente do peso líquido calculado", controller, StringComparison.Ordinal);
+        // GATE R2: guarda NOVA de coerência do payload (semânticas distintas) também antes da reserva/POST.
+        Assert.Contains("ValidarCoerenciaPayload101(codigoLancamento, posicoes, itens", controller, StringComparison.Ordinal);
         // Ajuste 6: diagnóstico com bruto/tara/líquido/quantity/entryunit.
         Assert.Contains("Peso bruto", controller, StringComparison.Ordinal);
         Assert.Contains("Tara convertida", controller, StringComparison.Ordinal);
         Assert.Contains("QuantityInEntryUnit", controller, StringComparison.Ordinal);
         // payload constants preservadas.
-        Assert.Contains("EntryUnit = \"KG\"", controller, StringComparison.Ordinal);
         Assert.Contains("GoodsMovementType = \"101\"", controller, StringComparison.Ordinal);
         Assert.Contains("GoodsMovementRefDocType = \"B\"", controller, StringComparison.Ordinal);
         Assert.Contains("GoodsMovementCode = \"01\"", controller, StringComparison.Ordinal);

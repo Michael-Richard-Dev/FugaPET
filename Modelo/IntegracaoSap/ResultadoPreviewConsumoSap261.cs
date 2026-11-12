@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.IntegracaoSap;
+﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Resultado do PREVIEW do movimento de consumo 261 (Tarefa 6). Sem POST/SAP. Quando a validacao

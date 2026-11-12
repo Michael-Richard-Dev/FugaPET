@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo;
 using FugaPET_Dev.Modelo.Entrada;
@@ -169,4 +169,3 @@ public sealed class PesagemEntradaServico
         }
     }
 }
-

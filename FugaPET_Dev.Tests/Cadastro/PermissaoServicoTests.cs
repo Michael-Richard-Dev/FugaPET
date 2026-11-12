@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.Seguranca;
 
@@ -8,7 +8,7 @@ public sealed class PermissaoServicoTests : IDisposable
 {
     public PermissaoServicoTests()
     {
-        Environment.SetEnvironmentVariable("FUGAPET_DEV_CONEXAO_POSTGRES", "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
+        Environment.SetEnvironmentVariable("FUGAPET_Q_CONEXAO_POSTGRES", "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
         EstadoSessaoUsuarioAtual.Definir(new SessaoUsuarioAplicacao
         {
             IdUsuario = 1,
@@ -88,3 +88,4 @@ public sealed class PermissaoServicoTests : IDisposable
         EstadoSessaoUsuarioAtual.Limpar();
     }
 }
+

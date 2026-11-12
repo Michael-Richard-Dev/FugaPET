@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.AcessoDados.Banco;
+namespace FugaPET_Dev.AcessoDados.Banco;
 
 public sealed class ConfiguracaoBancoPostgreSql
 {
@@ -17,13 +17,14 @@ public sealed class ConfiguracaoBancoPostgreSql
     /// Nao inferir pelo nome do banco ou schema. Padrao false para falhar fechado.
     /// </summary>
     public bool AmbienteDemonstrativo { get; init; } = false;
-    public string Servidor { get; init; } = "127.0.0.1";
+    public string Servidor { get; init; } = string.Empty;
     public int Porta { get; init; } = 5432;
-    public string NomeBanco { get; init; } = "api_balanca";
-    public string Schema { get; init; } = "desenvolvimento";
-    public string Usuario { get; init; } = "postgres";
+    public string NomeBanco { get; init; } = string.Empty;
+    public string Schema { get; init; } = string.Empty;
+    public string Usuario { get; init; } = string.Empty;
     public string Senha { get; init; } = string.Empty;
     public int TimeoutSegundos { get; init; } = 15;
     public bool Pooling { get; init; } = true;
     public string SslMode { get; init; } = "Prefer";
 }
+

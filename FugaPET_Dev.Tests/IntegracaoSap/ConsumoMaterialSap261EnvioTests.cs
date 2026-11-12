@@ -195,28 +195,31 @@ public sealed class ConsumoMaterialSap261EnvioTests
         HandlerSap261 handler = new();
         using HttpClient http = new(handler);
         ConsumoMaterialSap261ApiClient cliente = new(Config(escrita: false), http);
-        ConsumoMaterialSap261Servico servico = new(Config(escrita: false), null, cliente);
+        // GATE 101E-P2: env=false + capability 261 DESABILITADA ⇒ FINAL WRITE GATE nega ⇒ ZERO HTTP.
+        ConsumoMaterialSap261Servico servico = new(Config(escrita: false), null, cliente, new RuntimeSapWriteCapability261Service());
 
-        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), "chave");
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), 8, "chave");
 
         Assert.False(r.Sucesso);
-        Assert.Equal(ConsumoMaterialSap261Servico.MensagemEscritaBloqueada, r.Mensagem);
+        Assert.False(r.EnvioAutorizado); // determinado: nenhum POST
+        Assert.Equal(ConsumoMaterialSap261Servico.MensagemCapabilityAusente, r.Mensagem);
         Assert.Empty(handler.Requests); // nem CSRF nem POST
     }
 
     [Fact]
-    public void Servico_ValidarProntoParaEnvio_WriteDesabilitado_NaoChamaHttp()
+    public void Servico_ValidarProntoParaEnvio_Estrutural_NaoBloqueiaPorEscrita()
     {
         HandlerSap261 handler = new();
         using HttpClient http = new(handler);
         ConsumoMaterialSap261ApiClient cliente = new(Config(escrita: false), http);
-        ConsumoMaterialSap261Servico servico = new(Config(escrita: false), null, cliente);
+        ConsumoMaterialSap261Servico servico = new(Config(escrita: false), null, cliente, new RuntimeSapWriteCapability261Service());
 
+        // GATE 101E-P2: ValidarProntoParaEnvio é ESTRUTURAL — com MaterialDocument configurado, retorna Sucesso
+        // mesmo com escrita desabilitada (o gate de escrita é do writer). Não faz HTTP.
         ResultadoEnvioConsumoSap261 r = servico.ValidarProntoParaEnvio();
 
-        Assert.False(r.Sucesso);
-        Assert.Equal(ConsumoMaterialSap261Servico.MensagemEscritaBloqueada, r.Mensagem);
-        Assert.Empty(handler.Requests); // nem CSRF nem POST
+        Assert.True(r.Sucesso);
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]
@@ -238,7 +241,7 @@ public sealed class ConsumoMaterialSap261EnvioTests
         ConsumoMaterialSap261ApiClient cliente = new(Config(escrita: true), http);
         ConsumoMaterialSap261Servico servico = new(Config(escrita: true), null, cliente);
 
-        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), "chave");
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), 1, "chave");
 
         Assert.True(r.Sucesso);
         Assert.Equal(2, handler.Requests.Count); // CSRF + POST
@@ -253,7 +256,7 @@ public sealed class ConsumoMaterialSap261EnvioTests
         FakeLogIntegracaoSap log = new();
         ConsumoMaterialSap261Servico servico = new(Config(escrita: true), log, cliente);
 
-        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), "chave");
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumo261Async(Request(), 1, "chave");
 
         Assert.True(r.Sucesso);
         RegistroLogIntegracaoSap payload = Assert.Single(
@@ -365,10 +368,13 @@ public sealed class ConsumoMaterialSap261EnvioTests
             };
         }
 
+        public long? UltimoCodigoLancamento { get; private set; }
+
         public Task<ResultadoEnvioConsumoSap261> EnviarConsumo261Async(
-            ConsumoMaterialSap261Request requisicao, string chaveNegocio, CancellationToken cancellationToken = default)
+            ConsumoMaterialSap261Request requisicao, long codigoLancamento, string chaveNegocio, CancellationToken cancellationToken = default)
         {
             Chamadas++;
+            UltimoCodigoLancamento = codigoLancamento;
             return Task.FromResult(Resultado);
         }
     }
@@ -421,13 +427,37 @@ public sealed class ConsumoMaterialSap261EnvioTests
             return Task.CompletedTask;
         }
 
+        public bool ConfirmarThrows { get; init; }
+
         public Task MarcarConsumoConfirmadoSapAsync(long c, string? doc, string? ex, DateTime enviado, CancellationToken ct = default)
         {
             Confirmacoes++;
+            if (ConfirmarThrows)
+            {
+                throw new InvalidOperationException("Falha ao persistir confirmação local (teste).");
+            }
+
             DocumentoConfirmado = doc;
             ExercicioConfirmado = ex;
             return Task.CompletedTask;
         }
+    }
+
+    // GATE 101E-P2: capability fake que registra MarcarReconciliacao (para os casos indeterminados/§14).
+    private sealed class FakeCapability261 : FugaPET_Dev.Servicos.IntegracaoSap.IRuntimeSapWriteCapability261Service
+    {
+        public int Reconciliacoes { get; private set; }
+        public long? UltimaReconciliacao { get; private set; }
+
+        public FugaPET_Dev.Servicos.IntegracaoSap.SnapshotCapabilitySap261 ObterEstado()
+            => new(FugaPET_Dev.Servicos.IntegracaoSap.EstadoCapabilitySap261.Desabilitada, null, null, null);
+        public bool EstaArmado261(long codigoLancamento) => false;
+        public Task<FugaPET_Dev.Servicos.Cadastro.ResultadoOperacao> SolicitarHabilitacao261Async(
+            long codigoLancamento, bool autorizado, Func<CancellationToken, Task> auditar, CancellationToken ct = default)
+            => Task.FromResult(FugaPET_Dev.Servicos.Cadastro.ResultadoOperacao.Ok("noop"));
+        public bool TryAdquirir261(long codigoLancamento) => false;
+        public void MarcarReconciliacao(long codigoLancamento) { Reconciliacoes++; UltimaReconciliacao = codigoLancamento; }
+        public void Desabilitar() { }
     }
 
     private static ConsumoMaterialServico Servico(
@@ -651,6 +681,106 @@ public sealed class ConsumoMaterialSap261EnvioTests
         Assert.Equal(1, repo.Falhas);       // libera para PENDENTE_SAP
         Assert.Equal("PENDENTE_SAP", repo.Lancamento!.StatusLancamento);
         Assert.Contains("pendente de envio SAP", r.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ===================== GATE 101E-P2: classificação do resultado (serviço) =====================
+
+    [Theory]
+    [InlineData(408)]                 // M — HTTP 408
+    [InlineData(500)]                 // N — HTTP 5xx
+    [InlineData(null)]                // O — sem status (transport/no-status)
+    public async Task P2_Indeterminado_MantemEnviandoSapEReconcilia(int? statusHttp)
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
+        FakeSap261 sap = new()
+        {
+            Resultado = ResultadoEnvioConsumoSap261.Falha("Etapa POST_CONSUMO_261 indeterminada.", statusHttp, "corr")
+        };
+        FakeCapability261 cap = new();
+        ConsumoMaterialServico servico = Servico(repo, sap);
+        servico.Capability261Teste = cap;
+
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(1, repo.Reservas);
+        Assert.Equal(0, repo.Falhas);                                  // NÃO volta PENDENTE
+        Assert.Equal(0, repo.Confirmacoes);
+        Assert.Equal("ENVIANDO_SAP", repo.Lancamento!.StatusLancamento); // permanece ENVIANDO
+        Assert.Equal(1, cap.Reconciliacoes);                            // RECONCILIACAO_REQUERIDA
+        Assert.Equal(55, cap.UltimaReconciliacao);
+    }
+
+    [Fact]
+    public async Task P2_Sucesso2xxSemDocumento_Indeterminado_ReconciliaEMantemEnviando()   // P
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
+        FakeSap261 sap = new()
+        {
+            Resultado = new ResultadoEnvioConsumoSap261 { Sucesso = true, StatusHttp = 200, DocumentoMaterialSap = "", ExercicioDocumentoMaterialSap = "" }
+        };
+        FakeCapability261 cap = new();
+        ConsumoMaterialServico servico = Servico(repo, sap);
+        servico.Capability261Teste = cap;
+
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(0, repo.Falhas);
+        Assert.Equal("ENVIANDO_SAP", repo.Lancamento!.StatusLancamento);
+        Assert.Equal(1, cap.Reconciliacoes);
+    }
+
+    [Fact]
+    public async Task P2_SapSucessoMasPersistenciaLocalFalha_ReconciliaEMantemEnviando()      // Q / §14
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido(), ConfirmarThrows = true };
+        FakeSap261 sap = new(); // Ok(doc, ano)
+        FakeCapability261 cap = new();
+        ConsumoMaterialServico servico = Servico(repo, sap);
+        servico.Capability261Teste = cap;
+
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.Equal(1, repo.Confirmacoes);                             // tentou persistir
+        Assert.Equal(0, repo.Falhas);                                  // NÃO volta PENDENTE
+        Assert.Equal("ENVIANDO_SAP", repo.Lancamento!.StatusLancamento); // permanece ENVIANDO
+        Assert.Equal(1, cap.Reconciliacoes);                            // RECONCILIACAO_REQUERIDA
+        Assert.Equal(ConsumoMaterialServico.MensagemConfirmacaoCritica, r.Mensagem);
+    }
+
+    [Fact]
+    public async Task P2_EnvioNaoAutorizado_ZeroPost_VoltaPendenteSemReconciliacao()          // H (serviço)
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
+        FakeSap261 sap = new()
+        {
+            Resultado = ResultadoEnvioConsumoSap261.NaoAutorizado(ConsumoMaterialSap261Servico.MensagemCapabilityAusente)
+        };
+        FakeCapability261 cap = new();
+        ConsumoMaterialServico servico = Servico(repo, sap);
+        servico.Capability261Teste = cap;
+
+        ResultadoEnvioConsumoSap261 r = await servico.EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.False(r.Sucesso);
+        Assert.False(r.EnvioAutorizado);
+        Assert.Equal(1, repo.Reservas);                                 // claim ocorreu (§7)
+        Assert.Equal(1, repo.Falhas);                                  // determinado (zero POST) ⇒ PENDENTE
+        Assert.Equal(0, cap.Reconciliacoes);                            // sem reconciliação
+        Assert.Equal("PENDENTE_SAP", repo.Lancamento!.StatusLancamento);
+    }
+
+    [Fact]
+    public async Task P2_WriterRecebeCodigoLancamentoExplicito()                               // §4
+    {
+        FakeRepo repo = new() { Lancamento = LancamentoPersistido() };
+        FakeSap261 sap = new();
+
+        await Servico(repo, sap).EnviarConsumoSap261Async(55, "op", default);
+
+        Assert.Equal(55, sap.UltimoCodigoLancamento);                   // PK explícita, não extraída de string
     }
 
     [Theory]

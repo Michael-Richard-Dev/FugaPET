@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.Processo;
 
@@ -27,6 +27,12 @@ public sealed class ResultadoApontamentoController
         ContextoApontamentoProcesso contexto,
         CancellationToken cancellationToken = default)
         => _servico.ListarDefinicoesAsync(contexto, cancellationToken);
+
+    public Task<ResultadoApontamentoPersistidoRecovery> ObterResultadoPersistidoDoApontamentoAsync(
+        ContextoApontamentoProcesso contexto,
+        IReadOnlyList<ResultadoApontamentoItem> definicoes,
+        CancellationToken cancellationToken = default)
+        => _servico.ObterResultadoPersistidoDoApontamentoAsync(contexto, definicoes, cancellationToken);
 
     public Task<ResultadoOperacao> RegistrarAsync(
         ContextoApontamentoProcesso contexto,

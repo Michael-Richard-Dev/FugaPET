@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Processo;
+namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Registro local do resultado de apontamento devolvido pela tela operacional ao controle de apontamentos.

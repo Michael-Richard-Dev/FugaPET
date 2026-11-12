@@ -28,55 +28,52 @@ public sealed class ProdutoAcabadoUxHuSaldoTests
         CodigoProdutoAcabadoCaixa = 1,
         Centro = "3007",
         PesoLiquidoKg = liquido,
+        QuantidadeProdutos = (int)liquido,
+        UnidadeQuantidade = "KG",
         StatusIntegracao = status
     };
 
     // ===================== REGRA 4: saldo pendente =====================
 
-    // 9. saldo inicial 300, confirmação de caixa 60 -> 240.
     [Fact]
-    public void Saldo_UmaCaixaConfirmada_Abate()
+    public void Saldo_UmaCaixaLocalElegivel_Abate()
         => Assert.Equal(240m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(
-            300m, [Caixa(StatusIntegracaoCaixa.ConfirmadaSap)]));
+            300m, [Caixa(StatusIntegracaoCaixa.FinalizadaLocal)], "KG"));
 
-    // 10. duas caixas confirmadas de 60 -> 180.
     [Fact]
-    public void Saldo_DuasCaixasConfirmadas_Abate()
+    public void Saldo_DuasCaixasLocaisElegiveis_Abate()
         => Assert.Equal(180m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(
-            300m, [Caixa(StatusIntegracaoCaixa.ConfirmadaSap), Caixa(StatusIntegracaoCaixa.ConfirmadaSap)]));
+            300m, [Caixa(StatusIntegracaoCaixa.FinalizadaLocal), Caixa(StatusIntegracaoCaixa.PreviewHuGerado)], "KG"));
 
-    // 11-14: estados não confirmados NÃO reduzem o saldo.
     [Theory]
     [InlineData(StatusIntegracaoCaixa.Cancelada)]
-    [InlineData(StatusIntegracaoCaixa.FinalizadaLocal)]
-    [InlineData(StatusIntegracaoCaixa.AguardandoAutorizacaoSap)]
-    [InlineData(StatusIntegracaoCaixa.ProntaParaEnvio)]
+    [InlineData(StatusIntegracaoCaixa.ConfirmadaSap)]
+    [InlineData(StatusIntegracaoCaixa.Bloqueada)]
     [InlineData(StatusIntegracaoCaixa.EnviandoSap)]
     [InlineData(StatusIntegracaoCaixa.ErroSap)]
     [InlineData(StatusIntegracaoCaixa.IndeterminadoTimeout)]
     [InlineData(StatusIntegracaoCaixa.EmPesagem)]
-    public void Saldo_EstadoNaoConfirmado_NaoAbate(StatusIntegracaoCaixa status)
-        => Assert.Equal(300m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(300m, [Caixa(status)]));
+    public void Saldo_EstadoNaoElegivel_NaoAbate(StatusIntegracaoCaixa status)
+        => Assert.Equal(300m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(300m, [Caixa(status)], "KG"));
 
-    // Mistura: só a CONFIRMADA_SAP abate (60), cancelada/aguardando não participam.
     [Fact]
-    public void Saldo_Mistura_SoConfirmadaAbate()
+    public void Saldo_Mistura_SoLocalElegivelAbate()
     {
         ProdutoAcabadoCaixa[] caixas =
         [
             Caixa(StatusIntegracaoCaixa.ConfirmadaSap),
             Caixa(StatusIntegracaoCaixa.Cancelada),
-            Caixa(StatusIntegracaoCaixa.AguardandoAutorizacaoSap),
+            Caixa(StatusIntegracaoCaixa.FinalizadaLocal),
             Caixa(StatusIntegracaoCaixa.IndeterminadoTimeout),
         ];
-        Assert.Equal(240m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(300m, caixas));
+        Assert.Equal(240m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(300m, caixas, "KG"));
     }
 
     // Nunca fica negativo.
     [Fact]
     public void Saldo_NuncaNegativo()
         => Assert.Equal(0m, CalculoSaldoProdutoAcabado.SaldoPendenteExibido(
-            50m, [Caixa(StatusIntegracaoCaixa.ConfirmadaSap)]));
+            50m, [Caixa(StatusIntegracaoCaixa.FinalizadaLocal)], "KG"));
 
     // 15: a Form recalcula o saldo pela regra única após o envio (finally) e no carregamento — sem recarregar OP.
     [Fact]
@@ -84,9 +81,19 @@ public sealed class ProdutoAcabadoUxHuSaldoTests
     {
         string form = LerFonte("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
         // Regra única (não duplica aritmética na View): delega ao cálculo central.
-        Assert.Contains("CalculoSaldoProdutoAcabado.SaldoPendenteExibido(_ordemAtual.QuantidadePendente, _caixasPesadas)", form, StringComparison.Ordinal);
+        // GATE 118B: QuantidadePendente passou a ser TRI-STATE (decimal?), porque deriva de
+        // MfgOrderItemGoodsReceiptQty. A View faz o pattern match e SEGUE delegando ao cálculo
+        // central — a regra única permanece, só o acesso ao valor deixou de assumir não-nulo.
+        Assert.Contains("_ordemAtual?.QuantidadePendente is decimal pendente", form, StringComparison.Ordinal);
+        Assert.Contains("CalculoSaldoProdutoAcabado.SaldoPendenteExibido(pendente, _caixasPesadas, UnidadeProducaoAtual)", form, StringComparison.Ordinal);
+        // E a View continua sem aritmética própria de saldo.
+        Assert.DoesNotContain("QuantidadePendente -", form, StringComparison.Ordinal);
         // Usada no carregamento da OP e chamada de refresh após o resultado definitivo do envio.
-        Assert.Contains("classificationDateTextBox.Text = FormatarKg(CalcularSaldoPendenteExibido());", form, StringComparison.Ordinal);
+        // GATE 121A: o saldo pendente é QUANTIDADE DE PRODUÇÃO, então passou a ser formatado com a
+        // ProductionUnit real da OP em vez de "KG" cravado. A regra única e a fonte do número não
+        // mudaram — só o sufixo de unidade exibido.
+        Assert.Contains("FormatarQuantidadeProducao(CalcularSaldoPendenteExibido(), UnidadeProducaoAtual)", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("FormatarKg(CalcularSaldoPendenteExibido())", form, StringComparison.Ordinal);
         Assert.Contains("AtualizarSaldoPendente();", form, StringComparison.Ordinal);
         // A Form não acessa banco/OData diretamente para isso.
         Assert.DoesNotContain("NpgsqlConnection", form, StringComparison.Ordinal);

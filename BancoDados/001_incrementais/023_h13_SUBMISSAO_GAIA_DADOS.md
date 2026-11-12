@@ -2,7 +2,7 @@
 
 ## Status
 
-Aprovado pelo Gaia Dados para desenvolvimento como estrutura preparatoria de outbox SAP.
+Aprovado pelo Gaia Dados para homologacao como estrutura preparatoria de outbox SAP.
 O script nao foi executado e nao deve ser aplicado automaticamente.
 
 ## Artefato

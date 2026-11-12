@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Diagnostico;
 

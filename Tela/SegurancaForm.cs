@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tela;
+namespace FugaPET_Dev.Tela;
 
 public partial class SegurancaForm : UserControl
 {

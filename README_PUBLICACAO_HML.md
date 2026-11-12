@@ -29,18 +29,6 @@ PROPRIAS (nunca as SAP standard) e allowlist propria.
 - [ ] a resposta do GET de validacao contem `PkgInstructionItems` (ou `_PkgInstructionItems`) com um item `P` e um item `I`/`M`
 - [ ] nunca imprimir usuario/senha/Authorization/cookie/token em log ou tela
 
-## POST de Handling Unit (Produto Acabado - modo HML repetitivo controlado)
-
-O POST /HandlingUnit e autorizado por uma flag PROPRIA e ISOLADA, independente da escrita SAP generica.
-
-- [ ] `FUGAPET_SAP_WRITE_ENABLED` permanece `false` (nao habilita HU)
-- [ ] `hu_write_habilitado` / `FUGAPET_SAP_HU_WRITE_ENABLED` = `false` por padrao; `true` SOMENTE no ambiente HML autorizado
-- [ ] `handling_unit_base_url` (env `FUGAPET_SAP_HANDLING_UNIT_BASE_URL`) aponta para o servico API_HANDLINGUNIT
-- [ ] host do servico de HU presente em `hosts_permitidos`
-- [ ] a autorizacao HU permite EXCLUSIVAMENTE `POST /HandlingUnit` (nunca outro endpoint, PATCH ou DELETE)
-- [ ] cada caixa gera correlation_id/claim_token/tentativa proprios e no maximo 1 POST
-- [ ] gate excepcional single-post `HML2-044-...` NAO e reutilizado pelo modo repetitivo
-
 Observa??es:
 
 - N?o commitar `configuracao.sap.json` com senha real.

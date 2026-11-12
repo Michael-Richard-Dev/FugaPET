@@ -9,7 +9,7 @@ public sealed class PermissoesEntradaProdutoH1Tests : IDisposable
     public PermissoesEntradaProdutoH1Tests()
     {
         Environment.SetEnvironmentVariable(
-            "FUGAPET_DEV_CONEXAO_POSTGRES",
+            "FUGAPET_Q_CONEXAO_POSTGRES",
             "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
         EstadoSessaoUsuarioAtual.Limpar();
     }
@@ -141,8 +141,8 @@ public sealed class PermissoesEntradaProdutoH1Tests : IDisposable
             : LocalizarArquivo(
                 "BancoDados",
                 "000_baseline",
-                "Banco_Desenvolvimento_V1_1_Geral",
-                "000_execucao_completa_desenvolvimento_v1_1.sql");
+                "Banco_Homologacao_V1_1_Geral",
+                "000_execucao_completa_homologacao_v1_1.sql");
         string conteudoCompleto = File.ReadAllText(caminho);
         string conteudo = ExtrairSecao(
             conteudoCompleto,
@@ -231,3 +231,4 @@ public sealed class PermissoesEntradaProdutoH1Tests : IDisposable
             : conteudo[indiceInicio..];
     }
 }
+

@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.Diagnostico;
+﻿using FugaPET_Dev.Modelo.Diagnostico;
 using FugaPET_Dev.Servicos.Diagnostico;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 

@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
@@ -18,7 +18,7 @@ public sealed class UsuarioAtualizacaoVinculosTests : IDisposable
     public UsuarioAtualizacaoVinculosTests()
     {
         Environment.SetEnvironmentVariable(
-            "FUGAPET_DEV_CONEXAO_POSTGRES",
+            "FUGAPET_Q_CONEXAO_POSTGRES",
             "Host=localhost;Port=5432;Database=teste;Username=teste;Password=teste");
 
         EstadoSessaoUsuarioAtual.Definir(new SessaoUsuarioAplicacao
@@ -101,3 +101,4 @@ public sealed class UsuarioAtualizacaoVinculosTests : IDisposable
             => Task.CompletedTask;
     }
 }
+

@@ -73,9 +73,8 @@ public partial class EntradaProdutoDadosLoteForm : Form
 
     private void ConfigurarModo(ModoEntradaMaterial modoEntrada)
     {
-        modoLabel.Text = modoEntrada == ModoEntradaMaterial.Quimico
-            ? "Informe o lote do produto químico antes da pesagem."
-            : "Informe o lote da matéria-prima antes da pesagem.";
+        // GATE 073: a instrução de lote vem da configuração do modo (RecebimentoMercadoria usa "mercadoria").
+        modoLabel.Text = ConfiguracaoTelaEntradaMaterialFactory.Criar(modoEntrada).MensagemLote;
     }
 
     private void NumeroLoteTextBox_TextChanged(object? sender, EventArgs e)

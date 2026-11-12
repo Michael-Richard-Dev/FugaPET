@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Processo;
+namespace FugaPET_Dev.Modelo.Processo;
 
 public sealed class LancamentoSemiAcabado
 {

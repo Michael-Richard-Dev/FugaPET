@@ -17,15 +17,59 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
     private readonly IProdutoAcabadoHandlingUnitSapServico _gateway;
     private readonly ProdutoAcabadoHandlingUnitCaixaRequestBuilder _requestBuilder;
 
+    // GATE 113J (§2/§3): EARLY BINDING do fluxo 045. Fornecido SOMENTE no modo PIPELINE_045; null ⇒ HU_ONLY
+    // e ZERO linhas 045 (comportamento histórico preservado byte a byte).
+    private readonly Func<long, long, string, CancellationToken, Task<bool>>? _estabelecerBindingPipeline045;
+
+    /// <summary>Mensagem única do bloqueio de binding 045 (contrato de UI e de teste).</summary>
+    public const string MensagemBindingPipeline045NaoEstabelecido =
+        "Fluxo 045 não pôde ser estabelecido para esta caixa; nenhum POST SAP executado.";
+
+    /// <summary>
+    /// GATE 113M (B1): bloqueio quando o estado PERSISTIDO da caixa não comprova FINALIZADA_LOCAL antes do
+    /// early binding. Deliberadamente NÃO menciona reconciliação SAP: nada foi enviado ao SAP aqui.
+    /// </summary>
+    public const string MensagemFinalizacaoLocalNaoComprovada =
+        "Finalização local não pôde ser comprovada no estado persistido; fluxo 045 não iniciado.";
+
+    /// <summary>
+    /// GATE 113M (B1): prova explícita, sobre o snapshot FRESCO, de que a caixa está persistida em
+    /// FINALIZADA_LOCAL e é a MESMA caixa (código confere). Pura e testável; ausente ⇒ false (fail-closed).
+    /// </summary>
+    internal static bool FinalizacaoLocalComprovada(ProdutoAcabadoCaixa? snapshot, long codigoEsperado)
+        => snapshot is not null
+            && snapshot.CodigoProdutoAcabadoCaixa == codigoEsperado
+            && snapshot.StatusIntegracao == StatusIntegracaoCaixa.FinalizadaLocal;
+
+    /// <summary>Releitura que nunca propaga exceção (usada apenas para enriquecer o retorno de bloqueio).</summary>
+    private async Task<ProdutoAcabadoCaixa?> ObterSnapshotSeguroAsync(long codigo, CancellationToken ct)
+    {
+        try
+        {
+            return await _repositorio.ObterPorCodigoAsync(codigo, ct);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] 113M: releitura auxiliar da caixa {codigo} falhou ({ex.GetType().Name}).");
+            return null;
+        }
+    }
+
     public ProdutoAcabadoHuService(
         IProdutoAcabadoRepositorio repositorio,
         IProdutoAcabadoHandlingUnitSapServico gateway,
-        ProdutoAcabadoHandlingUnitCaixaRequestBuilder? requestBuilder = null)
+        ProdutoAcabadoHandlingUnitCaixaRequestBuilder? requestBuilder = null,
+        Func<long, long, string, CancellationToken, Task<bool>>? estabelecerBindingPipeline045 = null)
     {
         _repositorio = repositorio ?? throw new ArgumentNullException(nameof(repositorio));
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _requestBuilder = requestBuilder ?? new ProdutoAcabadoHandlingUnitCaixaRequestBuilder();
+        _estabelecerBindingPipeline045 = estabelecerBindingPipeline045;
     }
+
+    /// <summary>GATE 113J: true quando este serviço opera no modo PIPELINE_045 (binding fornecido).</summary>
+    public bool ModoPipeline045 => _estabelecerBindingPipeline045 is not null;
 
     public bool EnvioAutorizado => _gateway.EnvioAutorizado;
 
@@ -35,10 +79,12 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
     /// registrar. Retorna o snapshot persistido final.
     /// </summary>
     public async Task<ResultadoFinalizacaoHu> RegistrarEFinalizarCaixaAsync(
-        ProdutoAcabadoCaixa caixa, long usuario, string terminal, CancellationToken cancellationToken = default)
+        ProdutoAcabadoCaixa caixa, long usuario, string terminal, CancellationToken cancellationToken = default,
+        Action<Servicos.Diagnostico.EtapaRegistroCaixa120E>? diagnostico = null)
     {
         ArgumentNullException.ThrowIfNull(caixa);
 
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.CONSULTAR_CAIXA_ATIVA);
         ProdutoAcabadoCaixa? ativa = await _repositorio.ObterAtivaPorTerminalAsync(terminal, cancellationToken);
         if (ativa is not null)
         {
@@ -47,16 +93,19 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
                 + "Conclua ou cancele antes de registrar outra.", ativa);
         }
 
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.MONTAR_PREVIEW);
         ResultadoRequestHandlingUnitCaixa request = _requestBuilder.Montar(caixa);
         if (!request.Sucesso || request.Request is null)
         {
             return ResultadoFinalizacaoHu.Bloqueado(request.Mensagem, null);
         }
 
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.INSERIR_CAIXA);
         ProdutoAcabadoCaixa persistida = await _repositorio.RegistrarCaixaAsync(caixa, cancellationToken);
         long codigo = persistida.CodigoProdutoAcabadoCaixa
             ?? throw new InvalidOperationException("Caixa persistida sem código.");
 
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.INSERIR_PESAGEM);
         await _repositorio.RegistrarPesagemAsync(new RegistroPesagemHuCaixa
         {
             CodigoHuCaixa = codigo,
@@ -72,6 +121,7 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
 
         // REV4-§5/§10: TODA póscondição bool do contrato 044 é verificada; false ⇒ BLOQUEADO (nunca vira
         // sucesso lógico da camada Service). A finalização só é OK depois de comprovar o snapshot persistido.
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.FINALIZAR_LOCAL);
         if (!await _repositorio.FinalizarLocalAsync(codigo, usuario, terminal, cancellationToken))
         {
             return ResultadoFinalizacaoHu.Bloqueado(
@@ -79,6 +129,47 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
                 await _repositorio.ObterPorCodigoAsync(codigo, cancellationToken) ?? persistida);
         }
 
+        // GATE 113J (§2/§3): EARLY BINDING do fluxo 045 — DEPOIS de FinalizarLocalAsync e ANTES de
+        // SalvarPreviewAsync (que move para PREVIEW_HU_GERADO e inicia o lifecycle HU, fechando a janela).
+        // Antes do 113J o binding só era tentado no botão ENVIAR, quando a caixa já estava em
+        // AGUARDANDO_AUTORIZACAO_SAP — estado recusado pela função — tornando o pipeline inalcançável (113I).
+        //
+        // GATE 113M (B1): o bool de FinalizarLocalAsync NÃO é prova do estado PERSISTIDO. Antes do binding,
+        // relemos a caixa do repositório e comprovamos EXPLICITAMENTE código + FINALIZADA_LOCAL — a janela
+        // que fn_pa_045_iniciar_fluxo aceita. Snapshot ausente, leitura com falha, código divergente ou
+        // status diferente ⇒ FAIL-CLOSED sem binding, sem preview, sem aguardar, sem SAP.
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.VERIFICAR_FINALIZACAO_E_BINDING);
+        if (_estabelecerBindingPipeline045 is not null)
+        {
+            ProdutoAcabadoCaixa? snapshotFinalizado;
+            try
+            {
+                snapshotFinalizado = await _repositorio.ObterPorCodigoAsync(codigo, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[ProdutoAcabado] 113M: releitura da caixa {codigo} apos finalizar_local falhou "
+                    + $"({ex.GetType().Name}); binding 045 NAO executado (fail-closed).");
+                return ResultadoFinalizacaoHu.Bloqueado(MensagemFinalizacaoLocalNaoComprovada, persistida);
+            }
+
+            if (!FinalizacaoLocalComprovada(snapshotFinalizado, codigo))
+            {
+                return ResultadoFinalizacaoHu.Bloqueado(
+                    MensagemFinalizacaoLocalNaoComprovada, snapshotFinalizado ?? persistida);
+            }
+
+            // O resultado do binding é VERIFICADO: sem binding comprovado, não seguimos para preview/aguardar.
+            if (!await _estabelecerBindingPipeline045(codigo, usuario, terminal, cancellationToken))
+            {
+                return ResultadoFinalizacaoHu.Bloqueado(
+                    MensagemBindingPipeline045NaoEstabelecido,
+                    await ObterSnapshotSeguroAsync(codigo, cancellationToken) ?? snapshotFinalizado);
+            }
+        }
+
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.SALVAR_PREVIEW);
         if (!await _repositorio.SalvarPreviewAsync(codigo, request.JsonSanitizado, request.Endpoint, cancellationToken))
         {
             return ResultadoFinalizacaoHu.Bloqueado(
@@ -86,6 +177,7 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
                 await _repositorio.ObterPorCodigoAsync(codigo, cancellationToken) ?? persistida);
         }
 
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.AGUARDAR_AUTORIZACAO);
         if (!await _repositorio.AguardarAutorizacaoAsync(codigo, cancellationToken))
         {
             return ResultadoFinalizacaoHu.Bloqueado(
@@ -95,6 +187,7 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
 
         // Recarrega o snapshot e só declara OK se o estado persistido for o esperado (AGUARDANDO_AUTORIZACAO_SAP)
         // ou um estado comprovadamente posterior permitido pelo contrato sob concorrência controlada (PRONTA).
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.RELER_SNAPSHOT);
         ProdutoAcabadoCaixa? snapshot = await _repositorio.ObterPorCodigoAsync(codigo, cancellationToken);
         if (snapshot is null
             || snapshot.StatusIntegracao is not (StatusIntegracaoCaixa.AguardandoAutorizacaoSap or StatusIntegracaoCaixa.ProntaParaEnvio))
@@ -367,12 +460,23 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
         CancellationToken cancellationToken = default)
         => _repositorio.ListarPorContextoAsync(numeroOrdemProducao, itemOrdemProducao, material, lote, terminal, cancellationToken);
 
-    /// <summary>INC-047: caixas por HU externo (seleção manual da Paletização). Read-only.</summary>
+    /// <summary>
+    /// GATE 124H: acumulado real do 261 (componente KG/PP05) — caixas CONFIRMADA_SAP do mesmo
+    /// contexto funcional (OP+item+material+lote), SEM particionar por terminal. O WithdrawnQuantity
+    /// do SAP e cumulativo por componente e nao conhece terminal; comparar com um ledger por terminal
+    /// subconsumia em silencio quando a OP era produzida em mais de um terminal.
+    /// </summary>
+    public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarConfirmadasPorContextoSemTerminalAsync(
+        string numeroOrdemProducao, string itemOrdemProducao, string material, string lote,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ListarConfirmadasPorContextoSemTerminalAsync(
+            numeroOrdemProducao, itemOrdemProducao, material, lote, cancellationToken);
+    /// <summary>INC-047: caixas por HU externo (Paletização — seleção MANUAL). Read-only, sem SAP/POST.</summary>
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarCaixasPorHandlingUnitsAsync(
         IReadOnlyList<string> husExternais, CancellationToken cancellationToken = default)
         => _repositorio.ListarPorHandlingUnitsAsync(husExternais, cancellationToken);
 
-    /// <summary>INC-047: caixas por intervalo de HU externo (sequência da Paletização). Read-only.</summary>
+    /// <summary>INC-047: caixas por intervalo de HU externo (Paletização — SEQUÊNCIA). Read-only, sem SAP/POST.</summary>
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarCaixasPorIntervaloHandlingUnitAsync(
         string huInicial, string huFinal, string? material, CancellationToken cancellationToken = default)
         => _repositorio.ListarPorIntervaloHandlingUnitAsync(huInicial, huFinal, material, cancellationToken);

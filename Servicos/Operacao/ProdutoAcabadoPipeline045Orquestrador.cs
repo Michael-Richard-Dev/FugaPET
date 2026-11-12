@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
@@ -87,7 +88,26 @@ public sealed class ProdutoAcabadoPipeline045Orquestrador
         ProdutoAcabadoPipelineSnapshot snapshot = new() { CodigoProdutoAcabadoCaixa = codigoCaixa };
         try
         {
-            await _ops.IniciarFluxoAsync(codigoCaixa, usuario, terminal, origem: null, cancellationToken);
+            // GATE 113J (§4): o fluxo 045 é estabelecido no EARLY BINDING (finalização local, estado
+            // FINALIZADA_LOCAL). Aqui apenas PROVAMOS que ele já existe e é estruturalmente válido —
+            // NUNCA criamos o fluxo neste ponto (a caixa já está em AGUARDANDO/PRONTA, estado que
+            // fn_pa_045_iniciar_fluxo recusa; tentar criar aqui era a causa da inalcançabilidade do 113I).
+            // Zero/parcial/inconsistente ⇒ FAIL-CLOSED com ZERO POST.
+            IReadOnlyList<Linha045> etapasExistentes;
+            try
+            {
+                etapasExistentes = await _ops.LerEstadoEtapasAsync(codigoCaixa, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return Parar(snapshot, EtapaPipelineProdutoAcabado.Bloqueada,
+                    $"Não foi possível consultar o vínculo 045 da caixa ({ex.GetType().Name}). Nenhum POST executado.");
+            }
+
+            if (!Vinculo045Valido(etapasExistentes, out string motivoVinculo))
+            {
+                return Parar(snapshot, EtapaPipelineProdutoAcabado.Bloqueada, motivoVinculo);
+            }
 
             // ---------------- 261 ----------------
             ResultadoEtapa etapa261 = await ExecutarEtapaAsync(
@@ -140,7 +160,18 @@ public sealed class ProdutoAcabadoPipeline045Orquestrador
     {
         Guid traceId = Guid.NewGuid();
         Pa045RuntimeTrace.Registrar(traceId, codigo, etapa, "M01", $"antes_preparar;ct_cancelado={ct.IsCancellationRequested}");
-        await _ops.PrepararEtapaAsync(codigo, etapa, requestJson, usuario, terminal, ct);
+
+        // GATE 113J (§5): o retorno de PrepararEtapaAsync era DESCARTADO e o controle de fluxo dependia da
+        // negativa posterior do claim. Agora false ⇒ STOP objetivo ANTES do claim: zero claim, zero POST.
+        bool preparada = await _ops.PrepararEtapaAsync(codigo, etapa, requestJson, usuario, terminal, ct);
+        if (!preparada)
+        {
+            Pa045RuntimeTrace.Registrar(traceId, codigo, etapa, "M01B", "preparar_etapa=false;claim_nao_tentado");
+            Pa045RuntimeTrace.Registrar(traceId, codigo, etapa, "M11", "saida_etapa;estado=Erro;avancavel=false");
+            return new ResultadoEtapa(EstadoMovimentoSap.Erro, false, null, null, null,
+                $"Etapa {etapa}: preparação 045 não comprovada (preparar_etapa=false). "
+                + "Nenhum claim adquirido e nenhum POST executado.");
+        }
 
         // Â§6: sem claim â‡’ NÃƒO POSTAR. A capability vem sÃ³ do retorno de claim_etapa (nunca SELECT).
         ResultadoClaim045 claim = await _ops.AdquirirClaimEtapaAsync(codigo, etapa, usuario, terminal, ct);
@@ -300,12 +331,68 @@ public sealed class ProdutoAcabadoPipeline045Orquestrador
         }
     }
 
+    /// <summary>
+    /// GATE 113J (§4): prova que o vínculo 045 JÁ EXISTE e é estruturalmente válido para o envio —
+    /// exatamente as etapas 261 e 101 presentes (cardinalidade 2). Zero ⇒ a caixa é HU_ONLY (nunca promover
+    /// retroativamente); parcial/duplicada ⇒ inconsistente. Em ambos os casos FAIL-CLOSED, zero POST.
+    /// Puro e testável; lê o nome da etapa pelas MESMAS colunas defensivas já usadas no Controller.
+    /// </summary>
+    internal static bool Vinculo045Valido(IReadOnlyList<Linha045>? etapas, out string motivo)
+    {
+        int total = etapas?.Count ?? 0;
+        if (total == 0)
+        {
+            motivo = "Caixa sem vínculo 045 (zero etapas): é HU-only e NÃO pode ser processada pelo pipeline "
+                + "261→101→HU. Nenhum POST executado.";
+            return false;
+        }
+
+        HashSet<string> nomes = [];
+        foreach (Linha045 linha in etapas!)
+        {
+            string nome = (NomeEtapa045(linha) ?? string.Empty).Trim().ToUpperInvariant();
+            if (nome.Length > 0)
+            {
+                nomes.Add(nome);
+            }
+        }
+
+        bool tem261 = nomes.Contains(ProdutoAcabadoPipelinePostgresStore.Etapa261);
+        bool tem101 = nomes.Contains(ProdutoAcabadoPipelinePostgresStore.Etapa101);
+        if (total != 2 || !tem261 || !tem101)
+        {
+            motivo = $"Vínculo 045 inconsistente (etapas={total}; 261={(tem261 ? "sim" : "nao")}; "
+                + $"101={(tem101 ? "sim" : "nao")}). Esperado exatamente 261 + 101. "
+                + "Envio bloqueado; nenhum POST executado.";
+            return false;
+        }
+
+        motivo = string.Empty;
+        return true;
+    }
+
+    /// <summary>Nome da etapa 045 tolerando as variações de coluna já toleradas no Controller.</summary>
+    private static string? NomeEtapa045(Linha045 linha)
+    {
+        foreach (string coluna in new[] { "etapa", "codigo_etapa", "tipo_etapa" })
+        {
+            string? valor = linha.ObterTexto(coluna);
+            if (!string.IsNullOrWhiteSpace(valor))
+            {
+                return valor;
+            }
+        }
+
+        return null;
+    }
+
     private static ResultadoPipelineProdutoAcabado Parar(ProdutoAcabadoPipelineSnapshot s, EtapaPipelineProdutoAcabado etapa, string mensagem)
         => new(true, etapa, mensagem, s);
 
     // Avancavel: sÃ³ true quando o POST foi Confirmado NO SAP E a persistÃªncia 045 foi comprovada (registrar_sucesso=true).
     private sealed record ResultadoEtapa(EstadoMovimentoSap Estado, bool Avancavel, string? MaterialDocument, string? MaterialDocumentYear, int? Http, string Mensagem);
 }
+
 
 
 

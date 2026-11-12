@@ -1,4 +1,4 @@
-============================================================
+﻿============================================================
 033_modelo_etiqueta_regras_banco_GAIA
 Cadastro de Modelo de Etiqueta - regras de banco (PROPOSTA)
 ============================================================
@@ -50,7 +50,7 @@ PASSOS DE APLICAÇÃO (quando/se aprovado)
 DIAGNÓSTICO (duplicados existentes)
 ------------------------------------------------------------
 SELECT upper(trim(nome_modelo_etiqueta)) AS nome, versao, count(*)
-  FROM desenvolvimento.modelo_etiqueta
+  FROM homologacao.modelo_etiqueta
  GROUP BY upper(trim(nome_modelo_etiqueta)), versao
 HAVING count(*) > 1;
 

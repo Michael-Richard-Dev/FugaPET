@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -16,7 +16,7 @@ public partial class PermissaoForm : Form
 private readonly bool _integracaoBancoHabilitada = EstadoIntegracaoBanco.Habilitado;
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
+    private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
     private System.Windows.Forms.Timer? _footerClockTimer;
     private readonly List<ProfileRowSelection> _profileRowSelections = new();
     private readonly List<ProfileSearchRow> _profileSearchRows = new();
@@ -661,7 +661,7 @@ summaryTipTextLabel.AutoEllipsis = true;
 
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(200, 78, 10));
         //voltarButton.Click += (_, _) => Close();
         AlignHeaderRightControls();
     }
@@ -1926,11 +1926,11 @@ summaryTipTextLabel.AutoEllipsis = true;
         headerSubtitleLabel.Size = new Size(560, 17);
         headerSubtitleLabel.Text = "Permissões e níveis de acesso / Administração do sistema";
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(910, 10);
         sapStatusPanel.Size = new Size(190, 27);
         sapStatusDotLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);

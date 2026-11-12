@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.IntegracaoSap;
+﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Tarefa Entrada 23.1: resultado da validação de aprovação/liberação do Pedido de Compra no SAP.
@@ -10,6 +10,13 @@ public sealed record ResultadoValidacaoPedidoCompra
     public string CodigoStatus { get; init; } = string.Empty;
     public string DescricaoStatus { get; init; } = string.Empty;
     public bool LiberacaoNaoConcluida { get; init; }
+
+    /// <summary>
+    /// GATE 105D: resposta SAP tecnicamente válida, mas com status de liberação INDETERMINADO (vazio ou
+    /// não mapeado). Bloqueia por segurança, porém NÃO é "pedido não liberado/aprovado" — a UI usa
+    /// mensagem própria (STATUS_NEGOCIO_DESCONHECIDO) para não atribuir causa errada.
+    /// </summary>
+    public bool StatusDesconhecido { get; init; }
 
     /// <summary>Motivo do bloqueio (vazio quando <see cref="Liberado"/>).</summary>
     public string MotivoBloqueio { get; init; } = string.Empty;
@@ -49,7 +56,10 @@ public static class ValidadorLiberacaoPedidoCompra
     {
         if (pedido is null)
         {
-            return Bloquear(string.Empty, string.Empty, liberacaoNaoConcluida: false, MotivoNaoValidado);
+            // GATE 105D: defensivo. O fluxo produtivo só chama o validador após SUCESSO TÉCNICO da consulta
+            // e com pedido SAP válido — falha técnica/404 são tratados antes, com cenário próprio.
+            return Bloquear(
+                string.Empty, string.Empty, liberacaoNaoConcluida: false, MotivoNaoValidado, statusDesconhecido: true);
         }
 
         string status = (pedido.StatusProcessamentoCompraSap ?? string.Empty).Trim();
@@ -73,9 +83,11 @@ public static class ValidadorLiberacaoPedidoCompra
             return Bloquear(numero, status, liberacaoNaoConcluida: true, MotivoLiberacaoNaoConcluida);
         }
 
+        // GATE 105D: status VAZIO em resposta válida é INDETERMINAÇÃO, não "não liberado".
         if (string.IsNullOrWhiteSpace(status))
         {
-            return Bloquear(numero, status, liberacaoNaoConcluida: false, MotivoNaoValidado);
+            return Bloquear(
+                numero, status, liberacaoNaoConcluida: false, MotivoNaoValidado, statusDesconhecido: true);
         }
 
         return status switch
@@ -92,7 +104,8 @@ public static class ValidadorLiberacaoPedidoCompra
             StatusEmAprovacao => Bloquear(numero, status, false, MotivoEmAprovacao),
             StatusAguardandoLiberacao => Bloquear(numero, status, false, MotivoAguardandoLiberacao),
             StatusRejeitado => Bloquear(numero, status, false, MotivoRejeitado),
-            _ => Bloquear(numero, status, false, MotivoStatusNaoLiberado)
+            // GATE 105D: status NÃO MAPEADO também é indeterminação — não afirmar "não liberado/aprovado".
+            _ => Bloquear(numero, status, false, MotivoStatusNaoLiberado, statusDesconhecido: true)
         };
     }
 
@@ -100,7 +113,8 @@ public static class ValidadorLiberacaoPedidoCompra
         string numero,
         string status,
         bool liberacaoNaoConcluida,
-        string motivo)
+        string motivo,
+        bool statusDesconhecido = false)
         => new()
         {
             Liberado = false,
@@ -108,6 +122,7 @@ public static class ValidadorLiberacaoPedidoCompra
             CodigoStatus = status,
             DescricaoStatus = DescreverPurchasingProcessingStatus(status),
             LiberacaoNaoConcluida = liberacaoNaoConcluida,
+            StatusDesconhecido = statusDesconhecido,
             MotivoBloqueio = motivo
         };
 

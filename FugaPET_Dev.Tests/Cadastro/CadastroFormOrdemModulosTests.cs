@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Windows.Forms;
 using FugaPET_Dev.Tela;
 

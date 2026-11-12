@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using FugaPET_Dev.Servicos.Seguranca;
 
@@ -32,10 +32,11 @@ public sealed class PermissoesSistemaTests
 
     // Valores seedados no SQL que NAO devem (ainda) virar constante. Mantido vazio de proposito:
     // qualquer permissao nova no SQL precisa de constante OU de uma entrada documentada aqui.
-    // Falso positivo do extrator: tupla de configuracao do ambiente na baseline de desenvolvimento.
+    // Falso positivo do extrator: tupla de configuracao do ambiente na baseline de homologacao.
     private static readonly HashSet<string> ModulosLegado = new(["AMBIENTE_BANCO"], StringComparer.Ordinal);
-    private static readonly HashSet<string> RotinasLegado = new(["DESENVOLVIMENTO"], StringComparer.Ordinal);
+    private static readonly HashSet<string> RotinasLegado = new(["HOMOLOGACAO"], StringComparer.Ordinal);
     private static readonly HashSet<string> AcoesLegado = new(["TEXTO"], StringComparer.Ordinal);
+    private static readonly HashSet<string> TuplasLegado = new(["AMBIENTE_BANCO|Q|TEXTO"], StringComparer.Ordinal);
 
     // Tupla de permissao: 3 tokens MAIUSCULOS + uma descricao que termina em ponto.
     // O ".'" final evita falsos positivos como listas IN ('BALANCA','TARA','TIPO_TARA','PRODUTO_REFERENCIA').
@@ -59,6 +60,9 @@ public sealed class PermissoesSistemaTests
         List<string> faltando = new();
         foreach ((string modulo, string rotina, string acao, string arquivo) in seed)
         {
+            if (TuplasLegado.Contains($"{modulo}|{rotina}|{acao}"))
+                continue;
+
             if (!modulos.Contains(modulo) && !ModulosLegado.Contains(modulo))
                 faltando.Add($"Modulo '{modulo}' (em {arquivo})");
 

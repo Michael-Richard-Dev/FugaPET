@@ -33,7 +33,27 @@ public sealed class SemiAcabadoServico
         _criarMaterialDocumentSapServico = criarMaterialDocumentSapServico;
     }
 
+    // GATE 104C-D: wrapper legado (compatibilidade/testes). O fluxo do Semi-Acabado NÃO usa este wrapper para
+    // armar a capability — PREPARA (identidade durável) e só então arma e ENVIA (Preparar/EnviarPreparado).
     public async Task<ResultadoEnvioSemiAcabadoSap> SalvarEEnviarSap101Async(
+        LancamentoSemiAcabado lancamento,
+        CancellationToken cancellationToken = default)
+    {
+        PreparacaoEnvioSemiAcabado preparo = await PrepararEnvio101Async(lancamento, cancellationToken);
+        if (!preparo.Sucesso)
+        {
+            return preparo.Falha!;
+        }
+
+        return await EnviarPreparado101Async(preparo, cancellationToken);
+    }
+
+    /// <summary>
+    /// GATE 104C-D — Etapa 1: garante a IDENTIDADE DURÁVEL do lançamento (persiste no 1º envio; recupera a PK
+    /// no reenvio/ERRO_SAP, sem novo cabeçalho nem novas pesagens), valida OP/item/status e monta a requisição
+    /// 101. NÃO arma capability, NÃO faz claim, NÃO faz HTTP. Falha aqui ⇒ capability permanece DESABILITADA.
+    /// </summary>
+    public async Task<PreparacaoEnvioSemiAcabado> PrepararEnvio101Async(
         LancamentoSemiAcabado lancamento,
         CancellationToken cancellationToken = default)
     {
@@ -41,7 +61,7 @@ public sealed class SemiAcabadoServico
 
         if (!await _repositorio.EstruturaDisponivelAsync(cancellationToken))
         {
-            return ResultadoEnvioSemiAcabadoSap.EstruturaNaoAplicada();
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.EstruturaNaoAplicada());
         }
 
         long codigoLancamento;
@@ -56,7 +76,7 @@ public sealed class SemiAcabadoServico
                 ResultadoPreviewSemiAcabado101 previewTela = _payloadBuilder.MontarPreview101(lancamento, DateTime.UtcNow);
                 if (!previewTela.Sucesso)
                 {
-                    return ResultadoEnvioSemiAcabadoSap.Falha(previewTela.Mensagem);
+                    return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.Falha(previewTela.Mensagem));
                 }
 
                 codigoLancamento = await _repositorio.SalvarLancamentoLocalAsync(lancamento, previewTela.PayloadJson, cancellationToken);
@@ -64,7 +84,7 @@ public sealed class SemiAcabadoServico
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
         {
-            return ResultadoEnvioSemiAcabadoSap.EstruturaNaoAplicada();
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.EstruturaNaoAplicada());
         }
 
         LancamentoSemiAcabado? lancamentoPersistido;
@@ -74,38 +94,60 @@ public sealed class SemiAcabadoServico
         }
         catch (InconsistenciaLancamentoSemiAcabadoException)
         {
-            return ResultadoEnvioSemiAcabadoSap.FalhaInconsistenciaLocal(MensagemInconsistenciaLegado, codigoLancamento);
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.FalhaInconsistenciaLocal(MensagemInconsistenciaLegado, codigoLancamento));
         }
         if (lancamentoPersistido is null)
         {
-            return ResultadoEnvioSemiAcabadoSap.Falha("LanÃ§amento persistido do semi-acabado nÃ£o encontrado.", codigoLancamento);
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.Falha("LanÃ§amento persistido do semi-acabado nÃ£o encontrado.", codigoLancamento));
         }
 
         if (!ContextoCorresponde(lancamento, lancamentoPersistido))
         {
-            return ResultadoEnvioSemiAcabadoSap.Falha("Reenvio bloqueado: lanÃ§amento persistido nÃ£o corresponde Ã  OP/item selecionado.", codigoLancamento);
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.Falha("Reenvio bloqueado: lanÃ§amento persistido nÃ£o corresponde Ã  OP/item selecionado.", codigoLancamento));
         }
 
         ResultadoEnvioSemiAcabadoSap validacaoLegado = ValidarLancamentoPersistidoParaEnvio(lancamentoPersistido, codigoLancamento);
         if (validacaoLegado.InconsistenciaLocal)
         {
-            return validacaoLegado;
+            return PreparacaoEnvioSemiAcabado.ComFalha(validacaoLegado);
         }
 
         if (lancamentoPersistido.StatusLancamento is not "FINALIZADO_LOCAL" and not "ERRO_SAP")
         {
-            return ResultadoEnvioSemiAcabadoSap.BloqueadoDuplicidade(
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.BloqueadoDuplicidade(
                 $"Envio SAP 101 bloqueado: lanÃ§amento estÃ¡ em status {lancamentoPersistido.StatusLancamento}.",
-                codigoLancamento);
+                codigoLancamento));
         }
 
         ResultadoMaterialDocumentSemiAcabadoRequest request = _payloadBuilder.MontarRequisicao101(lancamentoPersistido, DateTime.UtcNow);
         if (!request.Sucesso || request.Requisicao is null)
         {
-            return ResultadoEnvioSemiAcabadoSap.Falha(request.Mensagem, codigoLancamento);
+            return PreparacaoEnvioSemiAcabado.ComFalha(ResultadoEnvioSemiAcabadoSap.Falha(request.Mensagem, codigoLancamento));
         }
 
+        return PreparacaoEnvioSemiAcabado.Ok(codigoLancamento, lancamentoPersistido, request.Requisicao);
+    }
+
+    /// <summary>
+    /// GATE 104C-D - Etapa 2: sobre um lancamento JA preparado (identidade duravel), faz o claim
+    /// (FINALIZADO_LOCAL/ERRO_SAP -> ENVIANDO_SAP) e o POST 101 (o writer consome a capability one-shot antes
+    /// do HTTP). Deve ser chamado SOMENTE apos a capability ter sido armada. Claim rejeitado => ZERO POST.
+    /// </summary>
+    public async Task<ResultadoEnvioSemiAcabadoSap> EnviarPreparado101Async(
+        PreparacaoEnvioSemiAcabado preparo,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(preparo);
+        if (!preparo.Sucesso || preparo.LancamentoPersistido is null || preparo.Requisicao is null)
+        {
+            return preparo.Falha ?? ResultadoEnvioSemiAcabadoSap.Falha("Preparacao de envio invalida.", preparo.CodigoLancamento);
+        }
+
+        long codigoLancamento = preparo.CodigoLancamento;
+        LancamentoSemiAcabado lancamentoPersistido = preparo.LancamentoPersistido;
+
         bool reservado = await _repositorio.TentarReservarEnvioSapAsync(codigoLancamento, cancellationToken);
+
         if (!reservado)
         {
             return ResultadoEnvioSemiAcabadoSap.BloqueadoDuplicidade(
@@ -115,7 +157,7 @@ public sealed class SemiAcabadoServico
 
         IMaterialDocumentSapServico sapServico = _criarMaterialDocumentSapServico();
         ResultadoMaterialDocumentSap resultadoSap = await sapServico.CriarDocumentoMaterial101Async(
-            request.Requisicao,
+            preparo.Requisicao,
             $"SEMI_ACABADO:{lancamentoPersistido.Ordem.NumeroOrdem}:{codigoLancamento}",
             cancellationToken);
 
@@ -350,3 +392,4 @@ internal sealed class InconsistenciaLancamentoSemiAcabadoException : Exception
     {
     }
 }
+

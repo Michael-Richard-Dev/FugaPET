@@ -9,7 +9,7 @@ internal static class ShellProcessoPadraoHelper
     private static readonly Color CorHeaderEscuro = Color.FromArgb(24, 31, 43);
     private static readonly Color CorFooter = Color.FromArgb(248, 250, 253);
     private static readonly Color CorBordaFooter = Color.FromArgb(229, 231, 235);
-    private static readonly Color CorFugaVermelho = Color.FromArgb(229, 27, 43);
+    private static readonly Color CorFugaVermelho = Color.FromArgb(200, 78, 10);
 
     public static TableLayoutPanel Criar(Form form, string titulo, string subtitulo, Control conteudo)
     {
@@ -282,3 +282,4 @@ internal static class ShellProcessoPadraoHelper
         return cell;
     }
 }
+

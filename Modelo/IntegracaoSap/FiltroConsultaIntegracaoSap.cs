@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
+namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Filtros da consulta de integracao SAP. Todos opcionais (nulo/vazio = sem filtro).

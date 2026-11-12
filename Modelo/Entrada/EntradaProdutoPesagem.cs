@@ -1,12 +1,12 @@
-namespace FugaPET_Dev.Modelo.Entrada;
+﻿namespace FugaPET_Dev.Modelo.Entrada;
 
 /// <summary>
-/// Uma leitura/pesagem de um item do lançamento (desenvolvimento.entrada_produto_pesagem).
-/// Cada leitura é preservada; pesos em quilogramas.
+/// Uma leitura/pesagem de um item do lancamento (homologacao.entrada_produto_pesagem).
+/// Cada leitura e preservada; pesos em quilogramas.
 /// </summary>
 public sealed record EntradaProdutoPesagem
 {
-    /// <summary>PK persistida (desenvolvimento.entrada_produto_pesagem); null quando ainda não gravada.</summary>
+    /// <summary>PK persistida (homologacao.entrada_produto_pesagem); null quando ainda não gravada.</summary>
     public long? CodigoEntradaProdutoPesagem { get; init; }
 
     public int Sequencia { get; init; }

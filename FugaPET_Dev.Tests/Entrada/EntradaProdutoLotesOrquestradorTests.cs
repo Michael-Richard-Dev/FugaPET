@@ -13,7 +13,7 @@ namespace FugaPET_Dev.Tests.Entrada;
 
 public sealed class EntradaProdutoLotesOrquestradorTests
 {
-    private static readonly DateTime Hoje = new(2026, 7, 24);
+    private static readonly DateTime Hoje = DateTime.Today;
 
     [Fact]
     public void IniciarOperacao_DeveCriarSnapshotSemReferenciarListaOriginal()

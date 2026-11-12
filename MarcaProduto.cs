@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev;
+namespace FugaPET_Dev;
 
 /// <summary>
 /// Identidade OFICIAL do produto — fonte unica para titulos, mensagens e documentacao.

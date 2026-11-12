@@ -1,4 +1,4 @@
-﻿# FugaPET — Sistema de Produção e Rastreabilidade PET
+# FugaPET — Sistema de Produção e Rastreabilidade PET
 
 > **Nome oficial do produto:** FugaPET — Sistema de Produção e Rastreabilidade PET.
 > Use este nome em titulos, mensagens internas e documentacao. O nome tecnico do projeto/solution

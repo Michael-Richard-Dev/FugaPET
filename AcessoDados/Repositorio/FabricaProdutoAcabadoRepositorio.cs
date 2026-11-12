@@ -1,4 +1,4 @@
-using FugaPET_Dev.AcessoDados.Banco;
+﻿using FugaPET_Dev.AcessoDados.Banco;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
@@ -17,7 +17,7 @@ public static class FabricaProdutoAcabadoRepositorio
         }
 
         ConfiguracaoBancoPostgreSql configuracao = LeitorConfiguracaoBancoPostgreSql.Carregar();
-        // §6: reporta (não resolve) quando o runtime não usa a role da aplicação fugapet_dev_app.
+        // §6: reporta (não resolve) quando o runtime não usa a role da aplicação fugapet_hml_app.
         // NUNCA aplica SET ROLE em código produtivo — isso é exclusivo dos testes funcionais.
         DiagnosticoRuntimeBanco.AvisarSeRuntimeNaoAprovado(configuracao);
         return new ProdutoAcabadoRepositorio(new FabricaConexaoPostgreSql(configuracao));

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>Servicos\icone\fuga.ico</ApplicationIcon>
+    <ApplicationIcon>Servicos\icone\fugapet.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -76,6 +76,9 @@
     <Content Include="Servicos\image\Fuga-2026-sem-fundo.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Servicos\image\FugaPet branco sem fundo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Servicos\image\Fuga-2026-sem-fundo-cortado.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -97,26 +100,31 @@
     <Content Include="Servicos\icone\ATTRIBUTION.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Configuracoes REAIS: copiadas para o bin (execucao local no dev), porem NUNCA para o publish.
+         Assim o pacote de atualizacao NAO sobrescreve os configuracao.*.json da maquina do usuario. -->
     <Content Include="configuracao.banco.json" Condition="Exists('configuracao.banco.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <None Include="configuracao.banco.exemplo.json">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-    </None>
+    </Content>
     <Content Include="configuracao.terminal.json" Condition="Exists('configuracao.terminal.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <None Include="configuracao.terminal.exemplo.json">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-    </None>
+    </Content>
     <None Update="configuracao.sap.json" Condition="Exists('configuracao.sap.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
+
+    <!-- MODELOS (.exemplo.json): vao para o publish como referencia para a 1a configuracao da maquina.
+         Nunca contem segredo; o operador copia para configuracao.*.json e preenche uma unica vez. -->
+    <Content Include="configuracao.banco.exemplo.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="configuracao.terminal.exemplo.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <None Include="configuracao.sap.exemplo.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -126,6 +134,7 @@
   <ItemGroup>
     <!-- Permite que o projeto de testes exercite tipos internal (ex.: helpers de Tela.Comum). -->
     <InternalsVisibleTo Include="FugaPET_Dev.Tests" />
+    <EmbeddedResource Include="Servicos\Entrada\P5\Contratos\*.sql" />
   </ItemGroup>
 
   <ItemGroup>
@@ -137,12 +146,13 @@
 
   <ItemGroup>
     <Folder Include="Servicos\Auditoria\" />
-    <Folder Include="Servicos\IntegracaoSap\" />
     <Folder Include="Servicos\Balanca\" />
+    <Folder Include="Servicos\IntegracaoSap\NovaPasta\" />
     <Folder Include="Servicos\Zebra\" />
     <Folder Include="Servicos\Status\" />
   </ItemGroup>
 
 </Project>
+
 
 

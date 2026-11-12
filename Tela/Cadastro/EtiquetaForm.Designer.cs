@@ -1282,7 +1282,7 @@ partial class EtiquetaForm
         // summaryPerfilIconLabel
         // 
         summaryPerfilIconLabel.Font = new Font("Segoe MDL2 Assets", 18F);
-        summaryPerfilIconLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        summaryPerfilIconLabel.ForeColor = Color.FromArgb(200, 78, 10);
         summaryPerfilIconLabel.Location = new Point(32, 78);
         summaryPerfilIconLabel.Name = "summaryPerfilIconLabel";
         summaryPerfilIconLabel.Size = new Size(32, 32);
@@ -1303,7 +1303,7 @@ partial class EtiquetaForm
         // summaryPerfilValueLabel
         // 
         summaryPerfilValueLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
-        summaryPerfilValueLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        summaryPerfilValueLabel.ForeColor = Color.FromArgb(200, 78, 10);
         summaryPerfilValueLabel.Location = new Point(74, 98);
         summaryPerfilValueLabel.Name = "summaryPerfilValueLabel";
         summaryPerfilValueLabel.Size = new Size(180, 24);
@@ -1374,8 +1374,8 @@ partial class EtiquetaForm
         // 
         // salvarButton
         // 
-        salvarButton.BackColor = Color.FromArgb(229, 27, 43);
-        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(229, 27, 43);
+        salvarButton.BackColor = Color.FromArgb(200, 78, 10);
+        salvarButton.FlatAppearance.BorderColor = Color.FromArgb(200, 78, 10);
         salvarButton.FlatStyle = FlatStyle.Flat;
         salvarButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
         salvarButton.ForeColor = Color.White;
@@ -1406,7 +1406,7 @@ partial class EtiquetaForm
         situacaoButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
         situacaoButton.FlatStyle = FlatStyle.Flat;
         situacaoButton.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
-        situacaoButton.ForeColor = Color.FromArgb(229, 27, 43);
+        situacaoButton.ForeColor = Color.FromArgb(200, 78, 10);
         situacaoButton.Location = new Point(24, 466);
         situacaoButton.Name = "situacaoButton";
         situacaoButton.Size = new Size(280, 28);
@@ -1482,7 +1482,7 @@ partial class EtiquetaForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Margin = new Padding(0);
         cellUserIcon.Name = "cellUserIcon";
@@ -1533,7 +1533,7 @@ partial class EtiquetaForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Margin = new Padding(0);
         cellTerminalIcon.Name = "cellTerminalIcon";
@@ -1584,7 +1584,7 @@ partial class EtiquetaForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Margin = new Padding(0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
@@ -1635,7 +1635,7 @@ partial class EtiquetaForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Margin = new Padding(0);
         cellBancoIcon.Name = "cellBancoIcon";
@@ -1686,7 +1686,7 @@ partial class EtiquetaForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Margin = new Padding(0);
         cellHoraIcon.Name = "cellHoraIcon";
@@ -1736,7 +1736,7 @@ partial class EtiquetaForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Margin = new Padding(0);
         cellDataIcon.Name = "cellDataIcon";
@@ -1747,7 +1747,7 @@ partial class EtiquetaForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(17, 24, 39);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
         customTitleBarPanel.Controls.Add(companyLogoPictureBox);
         customTitleBarPanel.Controls.Add(headerDividerLabel);
@@ -1844,11 +1844,11 @@ partial class EtiquetaForm
         // 
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(910, 10);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
@@ -2115,7 +2115,7 @@ partial class EtiquetaForm
         // 
         heroLockPanel.BackColor = Color.Transparent;
         heroLockPanel.Controls.Add(heroLockLabel);
-        heroLockPanel.FillColor = Color.FromArgb(229, 27, 43);
+        heroLockPanel.FillColor = Color.FromArgb(200, 78, 10);
         heroLockPanel.Location = new Point(386, 58);
         heroLockPanel.Name = "heroLockPanel";
         heroLockPanel.Size = new Size(42, 38);
@@ -2240,11 +2240,11 @@ partial class EtiquetaForm
         headerSubtitleLabel.Size = new Size(560, 17);
         headerSubtitleLabel.Text = "Cadastro e manutenção de etiqueta";
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(910, 10);
         sapStatusPanel.Size = new Size(190, 27);
         sapStatusDotLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);

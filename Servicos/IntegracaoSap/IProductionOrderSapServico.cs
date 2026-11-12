@@ -19,4 +19,17 @@ public interface IProductionOrderSapServico
     Task<IReadOnlyList<OrdemProducaoSap>> ListarOrdensRelevantesAsync(
         CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<OrdemProducaoSap>>([]);
+
+    /// <summary>
+    /// GATE 118B: leitura FRESCA de item + componentes da OP, exigida IMEDIATAMENTE antes do calculo
+    /// definitivo do 261. Implementacao DEFAULT e fail-closed: quem nao implementa declara
+    /// INDISPONIVEL, e o alocador bloqueia. Nunca devolve estado vazio como se fosse valido.
+    /// </summary>
+    Task<LeituraFrescaOrdem261> ConsultarEstadoFresco261Async(
+        string numeroOrdem,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(LeituraFrescaOrdem261.Indisponivel(
+            numeroOrdem ?? string.Empty,
+            "Leitura fresca da OP nao suportada por este servico SAP: bloqueado (nenhum POST)."));
 }
+

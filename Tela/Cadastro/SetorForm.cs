@@ -1049,7 +1049,7 @@ public partial class SetorForm : Form
             if (ativo)
             {
                 excluirButton.Text = "Inativar Setor            F8";
-                excluirButton.ForeColor = Color.FromArgb(229, 27, 43);
+                excluirButton.ForeColor = Color.FromArgb(200, 78, 10);
                 excluirButton.Visible = podeExcluir;
             }
             else

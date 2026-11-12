@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Consumo;
+﻿namespace FugaPET_Dev.Modelo.Consumo;
 
 /// <summary>Componente consumido dentro da OP (tabela consumo_material_item).</summary>
 public sealed class ConsumoMaterialItem

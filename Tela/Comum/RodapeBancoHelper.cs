@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tela.Comum;
+namespace FugaPET_Dev.Tela.Comum;
 
 public static class RodapeBancoHelper
 {

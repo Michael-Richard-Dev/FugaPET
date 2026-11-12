@@ -11,6 +11,25 @@ namespace FugaPET_Dev.Tests.Tela;
 
 public sealed class ProcessoResultadoApontamentoFormTests
 {
+    /// <summary>
+    /// Item de teste. O servico do Q carrega as definicoes do banco por perfil e NAO tem mais um
+    /// CriarDefinicoesPadrao: a fixture passa a construir o item aqui, sem reintroduzir fallback fixo.
+    /// </summary>
+    private static ResultadoApontamentoItem ItemFixture()
+        => new()
+        {
+            CodigoDefinicao = 1,
+            CodigoItem = "TEMPO",
+            Tipo = "TEMPO",
+            Medida = "MINUTO",
+            Referencia = 5m,
+            OrdemExibicao = 1,
+            Obrigatorio = true
+        };
+
+    private static IReadOnlyList<ResultadoApontamentoItem> DefinicoesFixture()
+        => new[] { ItemFixture() };
+
     [Fact]
     public void ResultadoApontamento_TipoProcesso_DeveDeclararConstante()
         => Assert.Equal("RESULTADO_APONTAMENTO", TipoProcessoOperacao.ResultadoApontamento);
@@ -276,22 +295,15 @@ public sealed class ProcessoResultadoApontamentoFormTests
         Assert.Equal("0030", anterior.Operacao);
     }
 
-    [Fact]
-    public void ResultadoApontamento_DefinicaoInicial_DeveSerTempoMinutoReferencia5()
-    {
-        ResultadoApontamentoItem item = Assert.Single(ResultadoApontamentoServico.CriarDefinicoesPadrao());
-
-        Assert.Equal("TEMPO", item.Tipo);
-        Assert.Equal("MINUTO", item.Medida);
-        Assert.Equal(5m, item.Referencia);
-        Assert.Null(item.Resultado);
-    }
+    // REMOVIDO na promocao da linha Q: ResultadoApontamento_DefinicaoInicial_DeveSerTempoMinutoReferencia5
+    // exigia a definicao fixa TEMPO/MINUTO/5 vinda de CriarDefinicoesPadrao. No desenho do Q as definicoes
+    // vem do banco por perfil (GAIA 041 / pacote 054) e nao existe mais definicao embutida no codigo.
 
     [Fact]
     public async Task ResultadoApontamento_SemRepositorio_NaoPodeSimularGravacaoSilenciosa()
     {
         ResultadoApontamentoServico servico = new();
-        ResultadoApontamentoItem item = ResultadoApontamentoServico.CriarDefinicoesPadrao().Single();
+        ResultadoApontamentoItem item = ItemFixture();
         item.Resultado = 5m;
 
         var resultado = await servico.RegistrarAsync(ContextoPadrao(), new[] { item });
@@ -538,15 +550,10 @@ public sealed class ProcessoResultadoApontamentoFormTests
         Assert.Contains("Não há itens", resultado.Mensagem, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ResultadoApontamento_OperacaoSemDefinicao_NaoRecebeTempoMinuto5()
-    {
-        string service = LerArquivoProjeto("Servicos", "Processo", "ResultadoApontamentoServico.cs");
-        string metodo = ExtrairMetodo(service, "public async Task<IReadOnlyList<ResultadoApontamentoItem>> ListarDefinicoesAsync");
-
-        Assert.Contains("return configurados.OrderBy", metodo, StringComparison.Ordinal);
-        Assert.DoesNotContain("CriarDefinicoesPadrao();", metodo[..metodo.IndexOf("return CriarDefinicoesPadrao();", StringComparison.Ordinal)], StringComparison.Ordinal);
-    }
+    // REMOVIDO na promocao da linha Q: ResultadoApontamento_OperacaoSemDefinicao_NaoRecebeTempoMinuto5
+    // asseverava que ListarDefinicoesAsync terminava em "return CriarDefinicoesPadrao();", isto e, exigia o
+    // fallback para definicao fixa. O Q removeu esse fallback de proposito: sem perfil resolvido ou com erro
+    // de banco o servico e fail-closed, em vez de devolver definicao inventada.
 
     [Fact]
     public void ResultadoApontamento_Form_DeveTratarExcecaoDePersistenciaSemConcluir()
@@ -567,7 +574,7 @@ public sealed class ProcessoResultadoApontamentoFormTests
     public async Task ResultadoApontamento_RepositorioComFalha_DevePropagarParaTratamentoDaTela()
     {
         ResultadoApontamentoServico servico = new(new RepositorioResultadoApontamentoComFalha());
-        ResultadoApontamentoItem item = ResultadoApontamentoServico.CriarDefinicoesPadrao().Single();
+        ResultadoApontamentoItem item = ItemFixture();
         item.Resultado = 5m;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => servico.RegistrarAsync(ContextoPadrao(), new[] { item }));
@@ -866,7 +873,7 @@ public sealed class ProcessoResultadoApontamentoFormTests
         private readonly IReadOnlyList<ResultadoApontamentoItem> _definicoes;
 
         public FakeResultadoApontamentoRepositorio()
-            : this(ResultadoApontamentoServico.CriarDefinicoesPadrao())
+            : this(DefinicoesFixture())
         {
         }
 
@@ -884,9 +891,14 @@ public sealed class ProcessoResultadoApontamentoFormTests
         }
 
         public Task<IReadOnlyList<ResultadoApontamentoItem>> ListarDefinicoesAsync(
-            ContextoApontamentoProcesso contexto,
+            long codigoPerfilResultado,
             CancellationToken cancellationToken)
             => Task.FromResult(_definicoes);
+
+        public Task<IReadOnlyList<ResultadoPersistidoApontamento>> ListarResultadosPersistidosDoApontamentoAsync(
+            long codigoApontamento,
+            CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<ResultadoPersistidoApontamento>>(Array.Empty<ResultadoPersistidoApontamento>());
     }
 
     private sealed class RepositorioResultadoApontamentoComFalha : IResultadoApontamentoRepositorio
@@ -895,9 +907,14 @@ public sealed class ProcessoResultadoApontamentoFormTests
             => throw new InvalidOperationException("falha fake sanitizada");
 
         public Task<IReadOnlyList<ResultadoApontamentoItem>> ListarDefinicoesAsync(
-            ContextoApontamentoProcesso contexto,
+            long codigoPerfilResultado,
             CancellationToken cancellationToken)
-            => Task.FromResult(ResultadoApontamentoServico.CriarDefinicoesPadrao());
+            => Task.FromResult(DefinicoesFixture());
+
+        public Task<IReadOnlyList<ResultadoPersistidoApontamento>> ListarResultadosPersistidosDoApontamentoAsync(
+            long codigoApontamento,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("falha fake sanitizada");
     }
 }
 

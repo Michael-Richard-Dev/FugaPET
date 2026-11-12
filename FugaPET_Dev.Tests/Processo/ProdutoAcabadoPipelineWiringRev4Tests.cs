@@ -1,8 +1,9 @@
-﻿using System.Net;
+using System.Net;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Servicos.Ambiente;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Tela.Processo;
@@ -304,11 +305,29 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             codigoUsuario: 42);
         caixa.CodigoProdutoAcabadoCaixa = 123;
 
+        // GATE 118B: as quantidades do 261 vem do ALOCADOR (deltas), nunca mais da OP em cache.
+        Resultado261Cumulativo alocacao = new(
+            CenarioAllocator261.Ok,
+            "alocacao de teste",
+            [
+                ItemAlocado("13473", "1", "2000044", "PP01", "G", "0000000140", 26.667m),
+                ItemAlocado("13473", "2", "3000007", "PP02", "ST", string.Empty, 26.667m),
+                ItemAlocado("13473", "3", "3000008", "PP02", "ST", string.Empty, 26.667m),
+                ItemAlocado("13473", "4", "3000009", "PP02", "ST", string.Empty, 26.667m)
+            ],
+            8m,
+            []);
+
         ProdutoAcabadoPipelineOrigem origem = ProcessoProdutoAcabadoForm.MontarOrigemPipelineRuntime(
             caixa,
             consulta.Ordem,
-            new DateTime(2026, 8, 12, 21, 57, 0, DateTimeKind.Utc));
+            new DateTime(2026, 8, 12, 21, 57, 0, DateTimeKind.Utc),
+            alocacao);
         ResultadoComandosPipeline resultado = ProdutoAcabadoPipelineCommandBuilder.Construir(origem);
+
+        // As quantidades enviadas sao os DELTAS, nao a RequiredQuantity integral (200) da OP.
+        Assert.All(origem.Componentes, componente => Assert.Equal(26.667m, componente.Quantidade));
+        Assert.DoesNotContain(origem.Componentes, componente => componente.Quantidade == 200m);
 
         Assert.Equal(new DateTime(2026, 8, 12), origem.PostingDate);
         Assert.Equal(new DateTime(2026, 8, 12), origem.DocumentDate);
@@ -344,11 +363,13 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
     {
         string form = LerProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
         string metodo = ExtrairMetodo(form, "private async Task SolicitarEnvioCaixaPipelineAsync()");
-        Assert.Contains("ProdutoAcabadoPipelineOrigem origem = MontarOrigemPipelineRuntime(caixa, _ordemAtual, DateTime.UtcNow);", metodo, StringComparison.Ordinal);
+        // GATE 118B: a origem passou a receber o resultado do alocador (leitura fresca + deltas).
+        Assert.Contains("MontarOrigemPipelineRuntime(caixa, _ordemAtual, DateTime.UtcNow, alocacao)", metodo, StringComparison.Ordinal);
+        Assert.Contains("await _controller.CalcularAlocacao261FrescaAsync(caixa)", metodo, StringComparison.Ordinal);
         string helper = ExtrairMetodo(form, "internal static ProdutoAcabadoPipelineOrigem MontarOrigemPipelineRuntime");
         Assert.Contains("PostingDate = dataOperacionalPipeline", helper, StringComparison.Ordinal);
         Assert.Contains("DocumentDate = dataOperacionalPipeline", helper, StringComparison.Ordinal);
-        Assert.Contains("Componentes = MontarComponentesPipelineRuntime(origemOrdem)", helper, StringComparison.Ordinal);
+        Assert.Contains("Componentes = MontarComponentesPipelineRuntime(alocacao)", helper, StringComparison.Ordinal);
         Assert.Contains("Material101 = caixa.Material", helper, StringComparison.Ordinal);
         Assert.DoesNotContain("DateTime.Now", helper, StringComparison.Ordinal);
         Assert.DoesNotContain("DateTime.Today", helper, StringComparison.Ordinal);
@@ -361,6 +382,24 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
         Assert.DoesNotContain("DateTime.Now", builder, StringComparison.Ordinal);
         Assert.DoesNotContain("DateTime.Today", builder, StringComparison.Ordinal);
     }
+
+    /// <summary>GATE 118B: item de alocacao (delta) para montar a origem do pipeline nos testes.</summary>
+    private static Item261Alocado ItemAlocado(
+        string reserva, string itemReserva, string material, string deposito,
+        string unidade, string lote, decimal delta)
+        => new()
+        {
+            Reservation = reserva,
+            ReservationItem = itemReserva,
+            Material = material,
+            Plant = "3007",
+            StorageLocation = deposito,
+            Batch = lote,
+            Unidade = unidade,
+            TargetCumulative = delta,
+            WithdrawnFresco = 0m,
+            Delta261 = delta
+        };
 
     private static OrdemProducaoSap OrdemSapValidaRuntimeShape()
         => new()
@@ -382,7 +421,8 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
                     Centro = "3007",
                     Deposito = "PP02",
                     QuantidadePrevista = 60m,
-                    QuantidadeEntregue = 0m,
+                    QuantidadePrevistaSap = 60m,
+                    QuantidadeRecebidaSap = 0m, // GATE 118B: MfgOrderItemGoodsReceiptQty (tri-state)
                     Unidade = "UN",
                     Lote = "67008561F"
                 }
@@ -476,7 +516,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
     };
 
     private const string CpiBase = "https://cpi.exemplo.local/base";
-    private const string EndpointCpi = "https://cpi.exemplo.local/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
+    private const string EndpointCpi = "https://cpi.exemplo.local/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
 
 
     [Fact]
@@ -498,16 +538,19 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             """);
             Dictionary<string, string> ambiente = new()
             {
-                ["FUGAPET_SAP_PALLET_WRITE_ENABLED"] = "true",
+                ["FUGAPET_Q_SAP_PALLET_WRITE_ENABLED"] = "true",
                 ["FUGAPET_SAP_PALLET_INT012_USERNAME"] = "usuario-cpi-fake",
                 ["FUGAPET_SAP_PALLET_INT012_PASSWORD"] = "senha-cpi-fake",
-                ["FUGAPET_SAP_USERNAME"] = "usuario-sap-fake",
-                ["FUGAPET_SAP_PASSWORD"] = "senha-sap-fake"
+                ["FUGAPET_Q_SAP_USERNAME"] = "usuario-sap-fake",
+                ["FUGAPET_Q_SAP_PASSWORD"] = "senha-sap-fake"
             };
 
             ConfiguracaoSap configuracao = LeitorConfiguracaoSap.Carregar(
                 arquivo,
-                nome => ambiente.GetValueOrDefault(nome));
+                nome => ambiente.GetValueOrDefault(nome),
+                // GATE 120G: override de gate de escrita e lido SOMENTE no alvo Process — este e o
+                // leitor por alvo que o runtime passa em LeitorConfiguracaoSap.Carregar().
+                (nome, alvo) => alvo == EnvironmentVariableTarget.Process ? ambiente.GetValueOrDefault(nome) : null);
             ProdutoAcabadoController controller = new(
                 new ProductionOrderSapFakeServico(OrdemSapValida()),
                 configuracaoSap: configuracao,
@@ -517,6 +560,8 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             Assert.True(configuracao.ProdutoAcabadoPipelineHabilitado);
             Assert.False(string.IsNullOrWhiteSpace(configuracao.PalletInt012BaseUrl));
             Assert.NotEmpty(configuracao.PalletInt012HostsPermitidos);
+            Assert.False(string.IsNullOrWhiteSpace(configuracao.PalletInt012Usuario));
+            Assert.False(string.IsNullOrWhiteSpace(configuracao.PalletInt012Senha));
             Assert.True(controller.PaleteInt012EnvioAutorizado);
         }
         finally
@@ -537,7 +582,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             HandlingUnitBaseUrl = "https://s4.exemplo.local/sap/opu/odata4/handlingunit",
             PalletInt012BaseUrl = "",
             HostsPermitidos = ["s4.exemplo.local"],
-            Usuario = "u", Senha = "p"
+            Usuario = "u", Senha = "p", PalletInt012Usuario = "u", PalletInt012Senha = "p"
         };
         HandlerCaptura h = new();
         IProdutoAcabadoPaleteInt012Gateway gw = FabricaProdutoAcabadoPaleteInt012Gateway.Criar(cfg, () => h);
@@ -556,6 +601,8 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             HostsPermitidos = ["cpi.exemplo.local"],
             Usuario = "u",
             Senha = "p",
+            PalletInt012Usuario = "u",
+            PalletInt012Senha = "p"
         };
         HandlerCaptura h = new();
         IProdutoAcabadoPaleteInt012Gateway gw = FabricaProdutoAcabadoPaleteInt012Gateway.Criar(cfg, () => h);
@@ -572,7 +619,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             PalletWriteHabilitado = false,
             PalletInt012BaseUrl = CpiBase,
             PalletInt012HostsPermitidos = ["cpi.exemplo.local"],
-            Usuario = "u", Senha = "p"
+            Usuario = "u", Senha = "p", PalletInt012Usuario = "u", PalletInt012Senha = "p"
         };
         HandlerCaptura h = new();
         IProdutoAcabadoPaleteInt012Gateway gw = FabricaProdutoAcabadoPaleteInt012Gateway.Criar(cfg, () => h);
@@ -590,7 +637,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             EscritaHabilitada = false,
             PalletInt012BaseUrl = CpiBase,
             PalletInt012HostsPermitidos = ["cpi.exemplo.local"],
-            Usuario = "u", Senha = "p"
+            Usuario = "u", Senha = "p", PalletInt012Usuario = "u", PalletInt012Senha = "p"
         };
         HandlerCaptura h = new();
         IProdutoAcabadoPaleteInt012Gateway gw = FabricaProdutoAcabadoPaleteInt012Gateway.Criar(cfg, () => h);
@@ -612,7 +659,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             PalletInt012BaseUrl = CpiBase,
             PalletInt012HostsPermitidos = [], // allowlist prÃ³pria vazia
             HostsPermitidos = ["cpi.exemplo.local"], // allowlist SAP genÃ©rica NÃƒO deve ser usada
-            Usuario = "u", Senha = "p"
+            Usuario = "u", Senha = "p", PalletInt012Usuario = "u", PalletInt012Senha = "p"
         };
         HandlerCaptura h = new();
         IProdutoAcabadoPaleteInt012Gateway gw = FabricaProdutoAcabadoPaleteInt012Gateway.Criar(cfg, () => h);
@@ -683,6 +730,13 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             PalletInt012HostsPermitidos = ["cpi.exemplo.local"],
             Usuario = "u",
             Senha = "p",
+            PalletInt012Usuario = "u",
+            PalletInt012Senha = "p",
+            SapClient = "110",
+            PerfilLocalQ = true,
+            BaseUrl = UrlSapQ(),
+            HostsPermitidos = [ValidadorAmbienteQ.SapHostEsperado],
+            TarasFisicasEmbalagemPalete = TarasFisicasTeste()
         };
         ProdutoAcabadoController controller = new(new ProductionOrderSapFakeServico(OrdemSapValida()), configuracaoSap: cfg, pipelineStore: new ProdutoAcabadoPipelineStoreMemoria());
         ProdutoAcabadoPalete palete = controller.MontarPalete(OrdemValida(), [CaixaConfirmada(1)], [], 1, 1, "PALLET01");
@@ -700,7 +754,14 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
         FakePaleteGateway gateway = new(EstadoPaleteInt012.Confirmado);
         ProdutoAcabadoController controller = new(
             new ProductionOrderSapFakeServico(OrdemSapValida()),
-            configuracaoSap: new ConfiguracaoSap(),
+            configuracaoSap: new ConfiguracaoSap
+            {
+                SapClient = "110",
+                PerfilLocalQ = true,
+                BaseUrl = UrlSapQ(),
+                HostsPermitidos = [ValidadorAmbienteQ.SapHostEsperado],
+                TarasFisicasEmbalagemPalete = TarasFisicasTeste()
+            },
             pipelineStore: store,
             paleteInt012Gateway: gateway);
         ProdutoAcabadoPalete palete = controller.MontarPalete(OrdemValida(), [CaixaConfirmada(1)], [], 1, 1, "PALLET01");
@@ -734,8 +795,32 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             Lote = "L001",
             StatusIntegracao = StatusIntegracaoCaixa.ConfirmadaSap,
             HandlingUnitExternalId = $"30001{numero:0000}",
+            // GATE 126V: o centro passa a integrar a chave logica da tara fisica do palete; sem ele o
+            // Plant do palete sairia vazio e a composicao outbound bloquearia por chave incompleta.
+            Centro = "3007",
+            Deposito = "PA01",
             PesoBrutoKg = 10m, PesoLiquidoKg = 9m, TaraKg = 1m
         };
+
+    /// <summary>
+    /// GATE 126X: campos que fazem a configuracao satisfazer a IDENTIDADE QAS110 (perfil Q reconhecido na
+    /// carga + destino SAP Q validado por host/porta/allowlist). Aplicados aos fixtures de palete.
+    /// </summary>
+    private static string UrlSapQ()
+        => $"https://{ValidadorAmbienteQ.SapHostEsperado}:{ValidadorAmbienteQ.SapPortaEsperada}/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/";
+
+    /// <summary>GATE 126V: mapeamento de tara fisica da embalagem para os cenarios de palete deste arquivo.</summary>
+    private static IReadOnlyList<TaraFisicaEmbalagemConfigurada> TarasFisicasTeste() =>
+    [
+        new()
+        {
+            SapClient = "110",
+            Centro = "3007",
+            MaterialEmbalagem = "PALLET01",
+            PesoKg = 1.000m,
+            Unidade = "KG"
+        }
+    ];
 
     private static int ContarOcorrencias(string texto, string alvo)
     {
@@ -827,6 +912,8 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
             => Task.FromResult(ResultadoConsultaOrdemProducaoSap.Encontrada(ordem));
     }
 }
+
+
 
 
 

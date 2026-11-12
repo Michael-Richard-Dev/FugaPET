@@ -27,19 +27,28 @@ public sealed class BalancaContratoPersistenciaTests
     [Fact]
     public void PropostaGaia_DeveCobrirRegrasEDependenciasOperacionais()
     {
-        string conteudo = File.ReadAllText(Path.Combine(
+        string caminhoPacote = Path.Combine(
             RaizProjeto,
             "BancoDados",
             "001_incrementais",
-            "028_h28_cadastro_balanca_regras_banco_GAIA",
-            "028_h28_cadastro_balanca_regras_banco_PROPOSTA_GAIA.sql"));
+            "028_h28_cadastro_balanca_HML_GAIA.zip");
+
+        using System.IO.Compression.ZipArchive pacote =
+            System.IO.Compression.ZipFile.OpenRead(caminhoPacote);
+        System.IO.Compression.ZipArchiveEntry? proposta = pacote.GetEntry(
+            "028_h28_cadastro_balanca_regras_banco_HML_PROPOSTA_GAIA.sql");
+
+        Assert.NotNull(proposta);
+
+        using StreamReader leitor = new(proposta.Open());
+        string conteudo = leitor.ReadToEnd();
 
         string[] trechosObrigatorios =
         [
             "ck_balanca_nome_tamanho_funcional",
             "ck_balanca_serial_campos_obrigatorios",
-            "baud_rate > 0",
-            "data_bits > 0",
+            "baud_rate IS NOT NULL",
+            "data_bits IS NOT NULL",
             "fn_balanca_dependencias_ativas",
             "trg_balanca_bloquear_inativacao_em_uso",
             "entrada_produto_pesagem",

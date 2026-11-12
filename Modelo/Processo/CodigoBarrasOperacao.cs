@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Processo;
+namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Resultado da interpretação do código de barras da operação da OP. Sempre preserva

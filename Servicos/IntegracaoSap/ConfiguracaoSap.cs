@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -8,8 +8,11 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 /// </summary>
 public sealed class ConfiguracaoSap
 {
-    /// <summary>URL base do servico OData do pedido de compra (ate .../purchaseorder/0001).</summary>
+    /// <summary>URL base legada do SAP standard. Mantida para compatibilidade de clientes antigos.</summary>
     public string BaseUrl { get; init; } = string.Empty;
+
+    /// <summary>URL base explicita do servico OData de Pedido de Compra (API_PURCHASEORDER_2).</summary>
+    public string PurchaseOrderBaseUrl { get; init; } = string.Empty;
 
     /// <summary>
     /// URL base do servico OData de Movimentos de Material (API_MATERIAL_DOCUMENT_SRV), usada para
@@ -69,38 +72,46 @@ public sealed class ConfiguracaoSap
 
     /// <summary>
     /// Autorizacao ESPECIFICA e ISOLADA do POST do MaterialDocument (261/101) do PRODUTO ACABADO. Independente
-    /// de <see cref="EscritaHabilitada"/> (que permanece false) e da de HU. Padrao false ⇒ camada PA bloqueia
-    /// ANTES de qualquer HTTP. Nunca libera PATCH/DELETE nem outros endpoints. Chave FUGAPET_SAP_PA_MATERIAL_DOCUMENT_WRITE_ENABLED.
+    /// de <see cref="EscritaHabilitada"/> e da de HU. Padrao false ⇒ camada PA bloqueia ANTES de qualquer HTTP.
+    /// Chave FUGAPET_SAP_PA_MATERIAL_DOCUMENT_WRITE_ENABLED.
     /// </summary>
     public bool ProdutoAcabadoMaterialDocumentWriteHabilitado { get; init; }
 
     /// <summary>
-    /// Autorizacao ESPECIFICA e ISOLADA do POST do palete (INT012/CPI). Independente das demais. Padrao false
-    /// ⇒ gateway INT012 fail-closed (zero HTTP). Nunca reutiliza FUGAPET_SAP_WRITE_ENABLED. Chave FUGAPET_SAP_PALLET_WRITE_ENABLED.
+    /// Autorizacao ESPECIFICA e ISOLADA do POST do palete (INT012/CPI). Padrao false ⇒ gateway INT012 fail-closed.
+    /// Nunca reutiliza FUGAPET_SAP_WRITE_ENABLED. Chave FUGAPET_SAP_PALLET_WRITE_ENABLED.
     /// </summary>
     public bool PalletWriteHabilitado { get; init; }
 
     /// <summary>
-    /// REV4-§4: gate ESPECIFICO do NOVO pipeline de Produto Acabado (261 → 101 → HU). Padrao false. Independente
-    /// de <see cref="EscritaHabilitada"/>, <see cref="HuWriteHabilitado"/> e dos gates de escrita. Quando false,
-    /// o runtime mantem EXATAMENTE o caminho HU individual homologado. Quando true, o botao ENVIAR CAIXA SAP passa a
-    /// executar SOMENTE 261 → 101 → HU (HU isolada proibida). Chave FUGAPET_SAP_PA_PIPELINE_ENABLED.
+    /// Gate ESPECIFICO do NOVO pipeline de Produto Acabado (261 → 101 → HU). Padrao false: mantem o fluxo HU
+    /// individual homologado. Independente dos demais gates. Chave FUGAPET_SAP_PA_PIPELINE_ENABLED.
     /// </summary>
     public bool ProdutoAcabadoPipelineHabilitado { get; init; }
 
     /// <summary>
-    /// REV4-§14: URL base ESPECIFICA do endpoint CPI do palete (INT012). NUNCA derivada de
-    /// <see cref="HandlingUnitBaseUrl"/> (S/4 Handling Unit e CPI sao integracoes distintas). Vazia ⇒ gateway
-    /// INT012 fail-closed (zero HTTP). Chave FUGAPET_SAP_PALLET_INT012_BASE_URL.
+    /// URL base ESPECIFICA do endpoint CPI do palete (INT012). NUNCA derivada de <see cref="HandlingUnitBaseUrl"/>.
+    /// Vazia ⇒ gateway INT012 fail-closed. Chave FUGAPET_SAP_PALLET_INT012_BASE_URL.
     /// </summary>
     public string PalletInt012BaseUrl { get; init; } = string.Empty;
 
     /// <summary>
-    /// REV4-§14: allowlist PROPRIA de hosts do CPI/INT012 (independente de <see cref="HostsPermitidos"/> do S/4).
-    /// Vazia ⇒ o gateway INT012 usa a allowlist geral apenas se explicitamente configurada; sem host valido ⇒
-    /// fail-closed. Chave FUGAPET_SAP_PALLET_INT012_ALLOWED_HOSTS.
+    /// Allowlist PROPRIA de hosts do CPI/INT012 (independente de <see cref="HostsPermitidos"/>). Sem host valido
+    /// ⇒ fail-closed. Chave FUGAPET_SAP_PALLET_INT012_ALLOWED_HOSTS.
     /// </summary>
     public IReadOnlyList<string> PalletInt012HostsPermitidos { get; init; } = [];
+
+    /// <summary>
+    /// GATE 046-K: Usuario Basic Auth DEDICADO do CPI/INT012. NUNCA reutiliza Usuario/Senha SAP genericos.
+    /// Ausente = gateway INT012 fail-closed. Somente por ambiente. Chave FUGAPET_SAP_PALLET_INT012_USERNAME.
+    /// </summary>
+    public string PalletInt012Usuario { get; init; } = string.Empty;
+
+    /// <summary>
+    /// GATE 046-K: Senha Basic Auth DEDICADA do CPI/INT012. NUNCA reutiliza Usuario/Senha SAP genericos.
+    /// Ausente = gateway INT012 fail-closed. Somente por ambiente. Chave FUGAPET_SAP_PALLET_INT012_PASSWORD.
+    /// </summary>
+    public string PalletInt012Senha { get; init; } = string.Empty;
 
     public int TimeoutSegundos { get; init; } = 30;
 
@@ -110,6 +121,9 @@ public sealed class ConfiguracaoSap
         && !string.IsNullOrWhiteSpace(Usuario)
         && !string.IsNullOrWhiteSpace(Senha)
         && HostsPermitidos.Count > 0;
+
+    public string PurchaseOrderBaseUrlEfetiva =>
+        !string.IsNullOrWhiteSpace(PurchaseOrderBaseUrl) ? PurchaseOrderBaseUrl : BaseUrl;
 
     /// <summary>
     /// True quando, alem da configuracao base (credenciais + allowlist), ha URL do servico de
@@ -264,23 +278,75 @@ public sealed class ConfiguracaoSap
     {
         get
         {
-            string derivadoDoMaterialDocument = DerivarUrlServicoSap(MaterialDocumentBaseUrl, "API_PRODUCTION_ROUTING");
+            // GATE 095F (095D/095E-R1): fonte ÚNICA V3 — API_PRODUCTION_ROUTING;v=3. Sem API_PRODUCTION_VERSION.
+            string derivadoDoMaterialDocument = DerivarUrlServicoSap(MaterialDocumentBaseUrl, "API_PRODUCTION_ROUTING;v=3");
             return !string.IsNullOrWhiteSpace(derivadoDoMaterialDocument)
                 ? derivadoDoMaterialDocument
-                : DerivarUrlServicoSap(BaseUrl, "API_PRODUCTION_ROUTING");
+                : DerivarUrlServicoSap(BaseUrl, "API_PRODUCTION_ROUTING;v=3");
         }
     }
 
     /// <summary>
-    /// True quando ha URL (derivada) das DUAS APIs do roteiro (versao + roteiro) + credenciais + allowlist.
-    /// Sem isso a resolucao do marcador PP_FORM fica indisponivel (fail-closed no Controle de Apontamentos).
+    /// GATE 095F: readiness do roteiro V3 = URL efetiva de API_PRODUCTION_ROUTING;v=3 + credenciais + allowlist.
+    /// NÃO depende mais de ProductionVersion (removida do fluxo do Controle de Apontamentos). Sem isso a
+    /// resolução do marcador PP_FORM fica indisponível (fail-closed no Controle de Apontamentos).
     /// </summary>
     public bool ProductionRoutingConfigurado =>
-        !string.IsNullOrWhiteSpace(ProductionVersionBaseUrlEfetiva)
-        && !string.IsNullOrWhiteSpace(ProductionRoutingBaseUrlEfetiva)
+        !string.IsNullOrWhiteSpace(ProductionRoutingBaseUrlEfetiva)
         && !string.IsNullOrWhiteSpace(Usuario)
         && !string.IsNullOrWhiteSpace(Senha)
         && HostsPermitidos.Count > 0;
+
+    /// <summary>
+    /// URL base efetiva do serviço de Work Center (API_WORKCENTER, entidade A_WorkCenters), usada para
+    /// resolver Plant + WorkCenter (WorkCenterInternalID + WorkCenterTypeCode). Deriva do padrão SAP já
+    /// configurado (MaterialDocument e, em último caso, BaseUrl); sem campo dedicado. Vazia ⇒ fail-closed.
+    /// </summary>
+    public string WorkCenterBaseUrlEfetiva
+    {
+        get
+        {
+            string derivadoDoMaterialDocument = DerivarUrlServicoSap(MaterialDocumentBaseUrl, "API_WORKCENTER");
+            return !string.IsNullOrWhiteSpace(derivadoDoMaterialDocument)
+                ? derivadoDoMaterialDocument
+                : DerivarUrlServicoSap(BaseUrl, "API_WORKCENTER");
+        }
+    }
+
+    /// <summary>
+    /// True quando há URL (derivada) do serviço de Work Center + credenciais + allowlist. Sem isso, a
+    /// resolução Plant + WorkCenter fica indisponível (fail-closed no Controle de Apontamentos).
+    /// </summary>
+    public bool WorkCenterConfigurado =>
+        !string.IsNullOrWhiteSpace(WorkCenterBaseUrlEfetiva)
+        && !string.IsNullOrWhiteSpace(Usuario)
+        && !string.IsNullOrWhiteSpace(Senha)
+        && HostsPermitidos.Count > 0;
+
+    /// <summary>
+    /// GATE Q PACKAGING-05: habilitação da CAPABILITY de norma de embalagem no ambiente Q. Resolvida
+    /// EXCLUSIVAMENTE por variável de ambiente Q-namespaced (FUGAPET_Q_SAP_PACKAGING_ENABLED) no alvo
+    /// Process, e somente quando User/Machine estão ausentes. Config técnica legada de Packaging NUNCA
+    /// habilita. JSON NUNCA habilita. Padrão false (fail-closed).
+    /// </summary>
+    public bool PackagingHabilitado { get; init; }
+
+    /// <summary>
+    /// GATE 126X: true SOMENTE quando o perfil local REALMENTE lido do arquivo de configuracao foi
+    /// reconhecido como Q (<c>PerfilAmbienteLocal.EhQ</c>, GATE 120G). Gravada por
+    /// <c>LeitorConfiguracaoSap</c> no momento da carga; nao e texto livre nem variavel de ambiente.
+    /// Sozinha NAO autoriza nada: a identidade QAS110 exige tambem o destino SAP Q validado
+    /// (ver <c>ValidadorIdentidadeQas110</c>). Padrao false (fail-closed).
+    /// </summary>
+    public bool PerfilLocalQ { get; init; }
+
+    /// <summary>
+    /// GATE 126V: mapeamento operacional da tara FISICA do material de embalagem do palete, por
+    /// mandante + centro + material. Origem EXCLUSIVA: configuracao.sap.json, secao "sap" /
+    /// "taras_fisicas_embalagem_palete". Nunca vem de hu_palete, nunca de constante no codigo.
+    /// Vazio ⇒ composicao outbound do palete fica fail-closed (ausencia NAO e tara zero).
+    /// </summary>
+    public IReadOnlyList<Modelo.IntegracaoSap.TaraFisicaEmbalagemConfigurada> TarasFisicasEmbalagemPalete { get; init; } = [];
 
     /// <summary>
     /// Endpoint consultável (somente leitura) do serviço de norma/estrutura de embalagem do Produto Acabado
@@ -421,3 +487,5 @@ public sealed class ConfiguracaoSap
     public const string MensagemConfiguracaoInvalida =
         "Configuração SAP inválida. Acione o suporte técnico.";
 }
+
+

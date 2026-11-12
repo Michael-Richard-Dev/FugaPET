@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -21,7 +21,7 @@ public sealed class PedidoCompraSapApiClient
     {
         _configuracao = configuracao ?? throw new ArgumentNullException(nameof(configuracao));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _baseUri = ValidadorUrlSap.ValidarBaseUrl(configuracao);
+        _baseUri = ValidadorUrlSap.ValidarBaseUrl(configuracao.PurchaseOrderBaseUrlEfetiva, configuracao.HostsPermitidos);
 
         string credenciais = Convert.ToBase64String(
             Encoding.UTF8.GetBytes($"{configuracao.Usuario}:{configuracao.Senha}"));
@@ -81,6 +81,15 @@ public sealed class PedidoCompraSapApiClient
         return new ResultadoConsultaPedidosSap(todos, paginas, itens);
     }
 
+    /// <summary>
+    /// GATE 105D: consulta o cabeçalho de UM pedido com classificação EXPLÍCITA de falha. Não usa
+    /// EnsureSuccessStatusCode (que perderia o contexto). Contrato:
+    /// 404 → null (NAO_ENCONTRADO, resultado conhecido, não é falha técnica);
+    /// 401/403/5xx/demais não-sucesso → <see cref="ConsultaSapException"/> com o cenário;
+    /// 2xx com corpo inválido → RESPOSTA_INVALIDA;
+    /// rede/TLS/timeout → CONECTIVIDADE/TLS/TIMEOUT;
+    /// cancelamento do chamador → <see cref="OperationCanceledException"/> propagada (sem erro falso).
+    /// </summary>
     public async Task<PedidoCompraSap?> ConsultarPedidoAsync(
         string numeroPedido,
         CancellationToken cancellationToken = default)
@@ -90,17 +99,86 @@ public sealed class PedidoCompraSapApiClient
             return null;
         }
 
-        Uri url = MontarUrlPedido(numeroPedido);
-        using HttpRequestMessage requisicao = CriarRequisicao(HttpMethod.Get, url);
-        using HttpResponseMessage resposta = await _httpClient.SendAsync(requisicao, cancellationToken);
-        if (resposta.StatusCode == System.Net.HttpStatusCode.NotFound)
+        string correlationId = Guid.NewGuid().ToString("N");
+
+        Uri url;
+        try
         {
-            return null;
+            url = MontarUrlPedido(numeroPedido);
+        }
+        catch (Exception ex) when (ex is UriFormatException or ArgumentException or InvalidOperationException)
+        {
+            // Endpoint/allowlist inválidos: a consulta nem pode ser executada.
+            throw new ConsultaSapException(
+                CenarioFalhaConsultaSap.ConfiguracaoInvalida,
+                httpStatus: null,
+                $"Destino SAP rejeitado na montagem da URL ({ex.GetType().Name}).",
+                correlationId,
+                ex);
         }
 
-        resposta.EnsureSuccessStatusCode();
-        string corpo = await resposta.Content.ReadAsStringAsync(cancellationToken);
-        return MapearPedidoEspecifico(corpo);
+        HttpResponseMessage resposta;
+        try
+        {
+            using HttpRequestMessage requisicao = CriarRequisicao(HttpMethod.Get, url);
+            resposta = await _httpClient.SendAsync(requisicao, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cancelamento SOLICITADO pelo chamador: não é falha do SAP.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw ClassificadorFalhaConsultaSap.Tipar(ex, correlationId);
+        }
+
+        using (resposta)
+        {
+            if (resposta.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            if (!resposta.IsSuccessStatusCode)
+            {
+                int status = (int)resposta.StatusCode;
+                throw new ConsultaSapException(
+                    ClassificadorFalhaConsultaSap.ClassificarHttp(status),
+                    status,
+                    $"O SAP respondeu HTTP {status} na consulta do pedido.",
+                    correlationId);
+            }
+
+            string corpo;
+            try
+            {
+                corpo = await resposta.Content.ReadAsStringAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw ClassificadorFalhaConsultaSap.Tipar(ex, correlationId);
+            }
+
+            try
+            {
+                return MapearPedidoEspecifico(corpo);
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
+            {
+                // 2xx cujo corpo não pôde ser interpretado com segurança. Nunca propagar o corpo bruto.
+                throw new ConsultaSapException(
+                    CenarioFalhaConsultaSap.RespostaInvalida,
+                    (int)resposta.StatusCode,
+                    $"Resposta 2xx do SAP nao pode ser interpretada ({ex.GetType().Name}).",
+                    correlationId,
+                    ex);
+            }
+        }
     }
 
     /// <summary>
@@ -578,3 +656,4 @@ public sealed class PedidoCompraSapApiClient
         return null;
     }
 }
+

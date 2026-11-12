@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 
 namespace FugaPET_Dev.AcessoDados.Banco;
 

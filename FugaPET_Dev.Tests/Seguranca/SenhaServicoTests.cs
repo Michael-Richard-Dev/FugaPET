@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Servicos.Seguranca;
+using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Tests.Seguranca;
 

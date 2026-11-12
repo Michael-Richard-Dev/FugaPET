@@ -6,7 +6,7 @@ namespace FugaPET_Dev.Tela.Comum;
 /// </summary>
 public static class IconeJanelaHelper
 {
-    private const string CaminhoIcone = "Servicos\\icone\\fuga.ico";
+    private const string CaminhoIcone = "Servicos\\icone\\fugapet.ico";
 
     public static void AplicarIconePadrao(Form janela)
     {

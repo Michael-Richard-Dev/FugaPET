@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.Cadastro;
+﻿using FugaPET_Dev.Modelo.Cadastro;
 using System.Globalization;
 
 namespace FugaPET_Dev.Tela.Processo;
@@ -45,7 +45,7 @@ public sealed class SelecaoTaraPesagemForm : Form
         };
 
         _statusLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        _statusLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        _statusLabel.ForeColor = Color.FromArgb(200, 78, 10);
         _statusLabel.Location = new Point(26, 78);
         _statusLabel.Size = new Size(650, 22);
 

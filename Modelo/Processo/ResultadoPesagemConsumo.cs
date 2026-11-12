@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>Cenarios do registro de uma pesagem LOCAL de consumo (Tarefa 4).</summary>
 public enum CenarioPesagemConsumo

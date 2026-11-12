@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Servicos.IntegracaoSap;
+﻿namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
 internal static class ValidadorUrlSap
 {

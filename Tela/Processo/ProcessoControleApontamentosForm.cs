@@ -1,8 +1,9 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.Processo;
+using FugaPET_Dev.Servicos.Ambiente;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Servicos.Terminal;
 using FugaPET_Dev.Tela.Comum;
@@ -31,6 +32,8 @@ public partial class ProcessoControleApontamentosForm : Form
     // Bloqueia nova leitura enquanto a anterior está sendo processada (leitor dispara em rajada).
     private bool _processandoLeitura;
     private OrdemProducaoSap? _ordemAtual;
+    private ContextoApontamentoProcesso? _contextoRecovery;
+    private string _codigoInicioRecovery = string.Empty;
 
     // Rodapé padrão (relógio + células de identificação), igual às demais telas de Processo.
     private Label? _footerHoraLabel;
@@ -176,7 +179,7 @@ public partial class ProcessoControleApontamentosForm : Form
 
         ConfigurarHoverBotaoTitulo(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigurarHoverBotaoTitulo(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigurarHoverBotaoTitulo(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigurarHoverBotaoTitulo(closeWindowLabel, Color.FromArgb(200, 78, 10));
     }
 
     private void CustomTitleBar_MouseDown(object? sender, MouseEventArgs e)
@@ -399,20 +402,6 @@ public partial class ProcessoControleApontamentosForm : Form
                     MessageBoxIcon.Warning);
                 break;
 
-            case CenarioLeituraApontamento.OperacaoAutomatica:
-                DefinirInstrucao(
-                    "Esta operação é automática no SAP. Leia o código de início de uma operação manual.");
-                MessageBox.Show(resultado.Mensagem, "Controle de Apontamentos",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                break;
-
-            case CenarioLeituraApontamento.ContratoRoteiroNaoResolvido:
-                DefinirInstrucao(
-                    "Não foi possível resolver o roteiro da operação no SAP. O apontamento está bloqueado.");
-                MessageBox.Show(resultado.Mensagem, "Controle de Apontamentos",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                break;
-
             default:
                 DefinirInstrucao(resultado.Mensagem);
                 MessageBox.Show(resultado.Mensagem, "Controle de Apontamentos",
@@ -428,6 +417,8 @@ public partial class ProcessoControleApontamentosForm : Form
     /// </summary>
     private async Task AbrirTelaDestinoAsync(ContextoApontamentoProcesso contexto, CodigoBarrasOperacao codigo)
     {
+        _contextoRecovery = contexto;
+        _codigoInicioRecovery = codigo.CodigoOriginal;
         ResultadoExecucaoProcesso execucao = ResultadoExecucaoProcesso.NaoConcluido;
 
         try
@@ -436,7 +427,7 @@ public partial class ProcessoControleApontamentosForm : Form
             {
                 TipoProcessoOperacao.ConsumoMateriaPrima => AbrirConsumo(contexto, ModoConsumoMaterial.MateriaPrima),
                 TipoProcessoOperacao.ConsumoQuimicos => AbrirConsumo(contexto, ModoConsumoMaterial.Quimico),
-                TipoProcessoOperacao.ConsumoSemiAcabado => AbrirConsumoSemiAcabado(contexto),
+                TipoProcessoOperacao.SemiAcabado => AbrirSemiAcabado(contexto),
                 TipoProcessoOperacao.ResultadoApontamento => AbrirResultadoApontamento(contexto),
                 _ => AvisarDestinoNaoConectado(contexto)
             };
@@ -456,7 +447,7 @@ public partial class ProcessoControleApontamentosForm : Form
         try
         {
             liberouTermino = await _controller.RegistrarConclusaoOperacionalAsync(
-                contexto.CodigoApontamento, execucao, _usuarioSessao, _estacao, codigo, CancellationToken.None);
+                contexto.CodigoApontamento, execucao, _usuarioSessao, _estacao, codigo, contexto.TipoProcesso, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -467,6 +458,8 @@ public partial class ProcessoControleApontamentosForm : Form
 
         if (liberouTermino)
         {
+            _contextoRecovery = null;
+            _codigoInicioRecovery = string.Empty;
             statusApontamentoValueLabel.Text = "AGUARDANDO TÉRMINO";
             statusApontamentoValueLabel.ForeColor = Color.FromArgb(217, 119, 6);
             statusLabel.Text = "Atividade concluída. Leia o código de término para finalizar a operação.";
@@ -487,6 +480,160 @@ public partial class ProcessoControleApontamentosForm : Form
 
         DevolverFocoParaLeitor();
     }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.Shift | Keys.R) && AmbienteQAtivo())
+        {
+            _ = ExecutarRecoveryConsumoConfirmadoAsync();
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    private static bool AmbienteQAtivo()
+        => string.Equals(
+            Environment.GetEnvironmentVariable(ValidadorAmbienteQ.VariavelAmbienteAppEnv, EnvironmentVariableTarget.Process),
+            "Q",
+            StringComparison.Ordinal);
+
+    private async Task ExecutarRecoveryConsumoConfirmadoAsync()
+    {
+        if (_processandoLeitura || _contextoRecovery is null || string.IsNullOrWhiteSpace(_codigoInicioRecovery))
+        {
+            MessageBox.Show(
+                "Não há um apontamento de consumo em andamento disponível para recovery.",
+                "Recovery controlado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        DadosRecoveryConsumo? dados = SolicitarDadosRecoveryConsumo();
+        if (dados is null)
+        {
+            return;
+        }
+
+        _processandoLeitura = true;
+        try
+        {
+            bool recuperado = await _controller.RecuperarConsumoConfirmadoAsync(
+                _contextoRecovery,
+                dados.CodigoLancamento,
+                dados.Material,
+                dados.Reserva,
+                dados.ItemReserva,
+                dados.Lote,
+                _usuarioSessao,
+                _estacao,
+                _codigoInicioRecovery,
+                CancellationToken.None);
+
+            if (!recuperado)
+            {
+                MessageBox.Show(
+                    "Recovery recusado. A identidade ou o estado persistido diverge do informado; nenhuma alteração foi aplicada.",
+                    "Recovery controlado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            statusApontamentoValueLabel.Text = "AGUARDANDO TÉRMINO";
+            statusApontamentoValueLabel.ForeColor = Color.FromArgb(217, 119, 6);
+            statusLabel.Text = "Lançamento confirmado recuperado. Leia o código de término para finalizar a operação.";
+            DefinirInstrucao(statusLabel.Text);
+            _contextoRecovery = null;
+            _codigoInicioRecovery = string.Empty;
+            MessageBox.Show(statusLabel.Text, "Recovery controlado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        finally
+        {
+            _processandoLeitura = false;
+            DevolverFocoParaLeitor();
+        }
+    }
+
+    private DadosRecoveryConsumo? SolicitarDadosRecoveryConsumo()
+    {
+        using Form dialogo = new()
+        {
+            Text = "Recovery controlado de consumo confirmado",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            ClientSize = new Size(500, 300)
+        };
+
+        TableLayoutPanel layout = new()
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 2,
+            RowCount = 7
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        TextBox codigoLancamento = AdicionarCampo(layout, 0, "Código lançamento");
+        TextBox material = AdicionarCampo(layout, 1, "Material esperado");
+        TextBox reserva = AdicionarCampo(layout, 2, "Reserva esperada");
+        TextBox itemReserva = AdicionarCampo(layout, 3, "Item reserva esperado");
+        TextBox lote = AdicionarCampo(layout, 4, "Lote esperado");
+
+        Label aviso = new()
+        {
+            Text = "A operação só será alterada se todos os dados coincidirem exatamente com um único lançamento CONFIRMADO_SAP.",
+            AutoSize = true,
+            ForeColor = Color.DarkRed,
+            MaximumSize = new Size(300, 0)
+        };
+        layout.Controls.Add(aviso, 1, 5);
+
+        FlowLayoutPanel botoes = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
+        Button confirmar = new() { Text = "Recuperar", DialogResult = DialogResult.OK, AutoSize = true };
+        Button cancelar = new() { Text = "Cancelar", DialogResult = DialogResult.Cancel, AutoSize = true };
+        botoes.Controls.Add(confirmar);
+        botoes.Controls.Add(cancelar);
+        layout.Controls.Add(botoes, 1, 6);
+        dialogo.Controls.Add(layout);
+        dialogo.AcceptButton = confirmar;
+        dialogo.CancelButton = cancelar;
+
+        if (dialogo.ShowDialog(this) != DialogResult.OK
+            || !long.TryParse(codigoLancamento.Text.Trim(), out long codigo)
+            || codigo <= 0
+            || string.IsNullOrWhiteSpace(material.Text)
+            || string.IsNullOrWhiteSpace(reserva.Text)
+            || string.IsNullOrWhiteSpace(itemReserva.Text)
+            || string.IsNullOrWhiteSpace(lote.Text))
+        {
+            return null;
+        }
+
+        return new DadosRecoveryConsumo(
+            codigo, material.Text.Trim(), reserva.Text.Trim(), itemReserva.Text.Trim(), lote.Text.Trim());
+    }
+
+    private static TextBox AdicionarCampo(TableLayoutPanel layout, int linha, string titulo)
+    {
+        Label label = new() { Text = titulo, AutoSize = true, Anchor = AnchorStyles.Left };
+        TextBox campo = new() { Dock = DockStyle.Fill };
+        layout.Controls.Add(label, 0, linha);
+        layout.Controls.Add(campo, 1, linha);
+        return campo;
+    }
+
+    private sealed record DadosRecoveryConsumo(
+        long CodigoLancamento,
+        string Material,
+        string Reserva,
+        string ItemReserva,
+        string Lote);
 
     private ResultadoExecucaoProcesso AvisarDestinoNaoConectado(ContextoApontamentoProcesso contexto)
     {
@@ -513,12 +660,12 @@ public partial class ProcessoControleApontamentosForm : Form
         }
     }
 
-    private ResultadoExecucaoProcesso AbrirConsumoSemiAcabado(ContextoApontamentoProcesso contexto)
+    private ResultadoExecucaoProcesso AbrirResultadoApontamento(ContextoApontamentoProcesso contexto)
     {
         Hide();
         try
         {
-            using ProcessoConsumoSemiAcabadoForm form = new(contexto);
+            using ProcessoResultadoApontamentoForm form = new(contexto);
             form.ShowDialog(this);
             return form.ResultadoExecucaoApontamento;
         }
@@ -527,12 +674,17 @@ public partial class ProcessoControleApontamentosForm : Form
             Show();
         }
     }
-    private ResultadoExecucaoProcesso AbrirResultadoApontamento(ContextoApontamentoProcesso contexto)
+
+    // GATE 103V: operação SEMI_ACABADO (ex.: OP1000173/0140/WC3007043) reusa integralmente a tela existente
+    // ProcessoSemiAcabadoForm, abrindo-a JÁ com a OP do contexto. O roteamento é SEMPRE por TipoProcesso
+    // (nunca por operação/descrição). O fechamento da tela não conclui o apontamento: só um resultado
+    // ConfirmadoSap/ConcluidoLocalmente devolvido libera a transição para AGUARDANDO_FINALIZACAO.
+    private ResultadoExecucaoProcesso AbrirSemiAcabado(ContextoApontamentoProcesso contexto)
     {
         Hide();
         try
         {
-            using ProcessoResultadoApontamentoForm form = new(contexto);
+            using ProcessoSemiAcabadoForm form = new(contexto);
             form.ShowDialog(this);
             return form.ResultadoExecucaoApontamento;
         }
@@ -762,7 +914,7 @@ public partial class ProcessoControleApontamentosForm : Form
             Dock = DockStyle.Left,
             Width = 28,
             Font = new Font("Segoe MDL2 Assets", 10F),
-            ForeColor = Color.FromArgb(212, 37, 49),
+            ForeColor = Color.FromArgb(250, 105, 26),
             Text = glyph,
             TextAlign = ContentAlignment.MiddleCenter
         };

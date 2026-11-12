@@ -33,6 +33,7 @@ public partial class ProcessoProducaoForm : UserControl
     {
         InitializeComponent();
         AddPaletizacaoCard();
+        CompactarCardsVisiveis();
         ApplyProductionIcons();
         AddHistoricoConsumoButton();
         AddDiagnosticoConsumoButton();
@@ -89,7 +90,7 @@ public partial class ProcessoProducaoForm : UserControl
             new Point(28, 602),
             "Paletização por\r\nHU",
             "Formação de paletes\r\npor HU de caixas",
-            "F9",
+            "F8",
             out paletizacaoIconLabel,
             out paletizacaoTitleLabel,
             out paletizacaoDescriptionLabel,
@@ -99,6 +100,30 @@ public partial class ProcessoProducaoForm : UserControl
 
         contentPanel.Controls.Add(paletizacaoCard);
         paletizacaoCard.BringToFront();
+    }
+
+    private void CompactarCardsVisiveis()
+    {
+        Control[] cards =
+        [
+            entradaProdutoCard,
+            entradaQuimicosCard,
+            processoConsumoMaterialCard,
+            processoConsumoQuimicosCard,
+            processoSemiAcabadoCard,
+            processoProdutoAcabadoCard,
+            ordensAndamentoCard,
+            controleApontamentosCard,
+            paletizacaoCard!
+        ];
+
+        Control[] cardsVisiveis = cards.Where(card => card.Visible).ToArray();
+        for (int indice = 0; indice < cardsVisiveis.Length; indice++)
+        {
+            int coluna = indice % 4;
+            int linha = indice / 4;
+            cardsVisiveis[indice].Location = new Point(28 + (coluna * 256), 70 + (linha * 266));
+        }
     }
 
     private static RoundedPanel CriarModuloCard(
@@ -144,7 +169,7 @@ public partial class ProcessoProducaoForm : UserControl
             Cursor = Cursors.Hand,
             Dock = DockStyle.Fill,
             Font = new Font("Segoe MDL2 Assets", 22F, FontStyle.Regular, GraphicsUnit.Point, 0),
-            ForeColor = Color.FromArgb(229, 27, 43),
+            ForeColor = Color.FromArgb(200, 78, 10),
             ImageAlign = ContentAlignment.MiddleCenter,
             Text = string.Empty,
             TextAlign = ContentAlignment.MiddleCenter
@@ -419,6 +444,7 @@ public partial class ProcessoProducaoForm : UserControl
         PaletizacaoRequested?.Invoke(this, EventArgs.Empty);
     }
 }
+
 
 
 

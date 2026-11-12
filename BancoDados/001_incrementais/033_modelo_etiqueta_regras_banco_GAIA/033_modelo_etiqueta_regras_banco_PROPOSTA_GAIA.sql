@@ -1,7 +1,7 @@
--- ============================================================
+﻿-- ============================================================
 -- 033_modelo_etiqueta_regras_banco_PROPOSTA_GAIA.sql
 -- Projeto FugaPET_Dev
--- Banco PostgreSQL - Schema desenvolvimento
+-- Banco PostgreSQL - Schema homologacao
 -- Objeto: Cadastro de Modelo de Etiqueta
 --
 -- OBJETIVO
@@ -27,7 +27,7 @@
 --   4. Para HML, ajustar o schema (homologacao) antes de aplicar.
 -- ============================================================
 
-SET search_path TO desenvolvimento;
+SET search_path TO homologacao;
 
 BEGIN;
 
@@ -39,17 +39,17 @@ DECLARE
     v_dups integer;
     v_val  integer;
 BEGIN
-    IF to_regclass('desenvolvimento.modelo_etiqueta') IS NULL THEN
-        RAISE EXCEPTION 'Tabela desenvolvimento.modelo_etiqueta nao existe.';
+    IF to_regclass('homologacao.modelo_etiqueta') IS NULL THEN
+        RAISE EXCEPTION 'Tabela homologacao.modelo_etiqueta nao existe.';
     END IF;
-    IF to_regclass('desenvolvimento.etiqueta') IS NULL THEN
-        RAISE EXCEPTION 'Tabela desenvolvimento.etiqueta nao existe.';
+    IF to_regclass('homologacao.etiqueta') IS NULL THEN
+        RAISE EXCEPTION 'Tabela homologacao.etiqueta nao existe.';
     END IF;
 
     SELECT count(*) INTO v_dups
       FROM (
         SELECT upper(trim(nome_modelo_etiqueta)) AS nome, versao
-          FROM desenvolvimento.modelo_etiqueta
+          FROM homologacao.modelo_etiqueta
          GROUP BY upper(trim(nome_modelo_etiqueta)), versao
         HAVING count(*) > 1
       ) d;
@@ -58,7 +58,7 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO v_val
-      FROM desenvolvimento.modelo_etiqueta
+      FROM homologacao.modelo_etiqueta
      WHERE nome_modelo_etiqueta IS NULL
         OR char_length(trim(nome_modelo_etiqueta)) < 2
         OR char_length(trim(nome_modelo_etiqueta)) > 80
@@ -76,31 +76,31 @@ END $$;
 -- ============================================================
 -- 2. Checks de tamanho e valores
 -- ============================================================
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_nome_tamanho
     CHECK (char_length(trim(nome_modelo_etiqueta)) BETWEEN 2 AND 80);
 
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_observacao_tamanho
     CHECK (observacao IS NULL OR char_length(trim(observacao)) <= 255);
 
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_versao_positiva
     CHECK (versao > 0);
 
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_dpi_positivo
     CHECK (dpi IS NULL OR dpi > 0);
 
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_largura_positiva
     CHECK (largura_mm IS NULL OR largura_mm > 0);
 
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_altura_positiva
     CHECK (altura_mm IS NULL OR altura_mm > 0);
 
-ALTER TABLE desenvolvimento.modelo_etiqueta
+ALTER TABLE homologacao.modelo_etiqueta
     ADD CONSTRAINT ck_modelo_etiqueta_zpl_nao_vazio
     CHECK (conteudo_zpl IS NOT NULL AND char_length(trim(conteudo_zpl)) > 0);
 
@@ -110,18 +110,18 @@ ALTER TABLE desenvolvimento.modelo_etiqueta
 --    (uq_modelo_etiqueta_nome_versao), ele deve ser REMOVIDO/substituído por este global.
 -- ============================================================
 CREATE UNIQUE INDEX uq_modelo_etiqueta_nome_versao_global
-    ON desenvolvimento.modelo_etiqueta (upper(trim(nome_modelo_etiqueta)), versao);
+    ON homologacao.modelo_etiqueta (upper(trim(nome_modelo_etiqueta)), versao);
 
 -- ============================================================
 -- 4. Proteção de inativação: bloquear inativar modelo com etiqueta ATIVA vinculada
 --    (a aplicação já faz UPDATE atômico com NOT EXISTS; este trigger é a mesma regra no banco).
 -- ============================================================
-CREATE OR REPLACE FUNCTION desenvolvimento.fn_bloqueia_inativar_modelo_com_etiqueta_ativa()
+CREATE OR REPLACE FUNCTION homologacao.fn_bloqueia_inativar_modelo_com_etiqueta_ativa()
 RETURNS trigger AS $$
 BEGIN
     IF OLD.situacao_modelo_etiqueta = true AND NEW.situacao_modelo_etiqueta = false THEN
         IF EXISTS (
-            SELECT 1 FROM desenvolvimento.etiqueta e
+            SELECT 1 FROM homologacao.etiqueta e
              WHERE e.codigo_modelo_etiqueta = OLD.codigo_modelo_etiqueta
                AND e.situacao_etiqueta = true
         ) THEN
@@ -133,22 +133,22 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_bloqueia_inativar_modelo_com_etiqueta_ativa
-    BEFORE UPDATE ON desenvolvimento.modelo_etiqueta
+    BEFORE UPDATE ON homologacao.modelo_etiqueta
     FOR EACH ROW
-    EXECUTE FUNCTION desenvolvimento.fn_bloqueia_inativar_modelo_com_etiqueta_ativa();
+    EXECUTE FUNCTION homologacao.fn_bloqueia_inativar_modelo_com_etiqueta_ativa();
 
 COMMIT;
 
 -- ============================================================
 -- ROLLBACK (manual se necessário):
---   DROP TRIGGER IF EXISTS trg_bloqueia_inativar_modelo_com_etiqueta_ativa ON desenvolvimento.modelo_etiqueta;
---   DROP FUNCTION IF EXISTS desenvolvimento.fn_bloqueia_inativar_modelo_com_etiqueta_ativa();
---   DROP INDEX IF EXISTS desenvolvimento.uq_modelo_etiqueta_nome_versao_global;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_zpl_nao_vazio;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_altura_positiva;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_largura_positiva;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_dpi_positivo;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_versao_positiva;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_observacao_tamanho;
---   ALTER TABLE desenvolvimento.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_nome_tamanho;
+--   DROP TRIGGER IF EXISTS trg_bloqueia_inativar_modelo_com_etiqueta_ativa ON homologacao.modelo_etiqueta;
+--   DROP FUNCTION IF EXISTS homologacao.fn_bloqueia_inativar_modelo_com_etiqueta_ativa();
+--   DROP INDEX IF EXISTS homologacao.uq_modelo_etiqueta_nome_versao_global;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_zpl_nao_vazio;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_altura_positiva;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_largura_positiva;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_dpi_positivo;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_versao_positiva;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_observacao_tamanho;
+--   ALTER TABLE homologacao.modelo_etiqueta DROP CONSTRAINT IF EXISTS ck_modelo_etiqueta_nome_tamanho;
 -- ============================================================

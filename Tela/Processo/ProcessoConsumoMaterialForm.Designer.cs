@@ -446,14 +446,14 @@ partial class ProcessoConsumoMaterialForm
         productionOrderCaptionLabel.TabIndex = 0;
         productionOrderCaptionLabel.Text = "ORDEM DE PRODUÇÃO";
         // 
-        // productionOrderComboBox (mesmo padrao do pedidoComboBox da Entrada: ComboBox editavel)
+        // productionOrderComboBox (mesmo padrão do pedidoComboBox da Entrada: ComboBox editável)
         //
         productionOrderComboBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         productionOrderComboBox.BackColor = Color.White;
         productionOrderComboBox.DropDownWidth = 220;
         productionOrderComboBox.FlatStyle = FlatStyle.Flat;
         productionOrderComboBox.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionOrderComboBox.ForeColor = Color.FromArgb(229, 27, 43);
+        productionOrderComboBox.ForeColor = Color.FromArgb(200, 78, 10);
         productionOrderComboBox.Location = new Point(16, 24);
         productionOrderComboBox.Name = "productionOrderComboBox";
         productionOrderComboBox.Size = new Size(112, 29);
@@ -517,7 +517,7 @@ partial class ProcessoConsumoMaterialForm
         lotTextBox.BackColor = Color.White;
         lotTextBox.BorderStyle = BorderStyle.None;
         lotTextBox.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        lotTextBox.ForeColor = Color.FromArgb(229, 27, 43);
+        lotTextBox.ForeColor = Color.FromArgb(200, 78, 10);
         lotTextBox.Location = new Point(16, 25);
         lotTextBox.Multiline = true;
         lotTextBox.Name = "lotTextBox";
@@ -581,7 +581,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         stepLabel.BackColor = Color.Transparent;
         stepLabel.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        stepLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        stepLabel.ForeColor = Color.FromArgb(200, 78, 10);
         stepLabel.Location = new Point(16, 24);
         stepLabel.Name = "stepLabel";
         stepLabel.Size = new Size(108, 18);
@@ -781,7 +781,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // productionReadingsUnderlineLabel
         // 
-        productionReadingsUnderlineLabel.BackColor = Color.FromArgb(229, 27, 43);
+        productionReadingsUnderlineLabel.BackColor = Color.FromArgb(200, 78, 10);
         productionReadingsUnderlineLabel.Location = new Point(17, 36);
         productionReadingsUnderlineLabel.Name = "productionReadingsUnderlineLabel";
         productionReadingsUnderlineLabel.Size = new Size(62, 2);
@@ -867,10 +867,10 @@ partial class ProcessoConsumoMaterialForm
         productionDataGridView.BackgroundColor = Color.White;
         productionDataGridView.BorderStyle = BorderStyle.None;
         productionDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dataGridViewCellStyle12.BackColor = Color.FromArgb(17, 24, 39);
+        dataGridViewCellStyle12.BackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle12.Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         dataGridViewCellStyle12.ForeColor = Color.White;
-        dataGridViewCellStyle12.SelectionBackColor = Color.FromArgb(17, 24, 39);
+        dataGridViewCellStyle12.SelectionBackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle12.SelectionForeColor = Color.White;
         productionDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle12;
         productionDataGridView.ColumnHeadersHeight = 24;
@@ -879,7 +879,7 @@ partial class ProcessoConsumoMaterialForm
         dataGridViewCellStyle16.BackColor = Color.FromArgb(250, 251, 252);
         dataGridViewCellStyle16.Font = new Font("Cascadia Code", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         dataGridViewCellStyle16.ForeColor = Color.FromArgb(45, 49, 56);
-        dataGridViewCellStyle16.SelectionBackColor = Color.FromArgb(229, 27, 43);
+        dataGridViewCellStyle16.SelectionBackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle16.SelectionForeColor = Color.White;
         dataGridViewCellStyle16.WrapMode = DataGridViewTriState.False;
         productionDataGridView.DefaultCellStyle = dataGridViewCellStyle16;
@@ -1092,7 +1092,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // apontamentoInfoAccentBar
         // 
-        apontamentoInfoAccentBar.BackColor = Color.FromArgb(229, 27, 43);
+        apontamentoInfoAccentBar.BackColor = Color.FromArgb(200, 78, 10);
         apontamentoInfoAccentBar.Location = new Point(10, 11);
         apontamentoInfoAccentBar.Name = "apontamentoInfoAccentBar";
         apontamentoInfoAccentBar.Size = new Size(6, 56);
@@ -1143,7 +1143,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // apontamentoChipAccentBar
         // 
-        apontamentoChipAccentBar.BackColor = Color.FromArgb(229, 27, 43);
+        apontamentoChipAccentBar.BackColor = Color.FromArgb(200, 78, 10);
         apontamentoChipAccentBar.Location = new Point(10, 8);
         apontamentoChipAccentBar.Name = "apontamentoChipAccentBar";
         apontamentoChipAccentBar.Size = new Size(5, 20);
@@ -1545,7 +1545,7 @@ partial class ProcessoConsumoMaterialForm
         balanceTextBox.BackColor = Color.White;
         balanceTextBox.BorderStyle = BorderStyle.None;
         balanceTextBox.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        balanceTextBox.ForeColor = Color.FromArgb(184, 18, 32);
+        balanceTextBox.ForeColor = Color.FromArgb(200, 78, 10);
         balanceTextBox.Location = new Point(422, 24);
         balanceTextBox.Margin = new Padding(0);
         balanceTextBox.Multiline = true;
@@ -1598,7 +1598,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // materialTitleUnderlineLabel
         // 
-        materialTitleUnderlineLabel.BackColor = Color.FromArgb(229, 27, 43);
+        materialTitleUnderlineLabel.BackColor = Color.FromArgb(200, 78, 10);
         materialTitleUnderlineLabel.Location = new Point(17, 36);
         materialTitleUnderlineLabel.Name = "materialTitleUnderlineLabel";
         materialTitleUnderlineLabel.Size = new Size(62, 2);
@@ -1676,7 +1676,7 @@ partial class ProcessoConsumoMaterialForm
         dataGridViewCellStyle22.BackColor = Color.FromArgb(250, 251, 252);
         dataGridViewCellStyle22.Font = new Font("Cascadia Code", 6.75F);
         dataGridViewCellStyle22.ForeColor = Color.FromArgb(45, 49, 56);
-        dataGridViewCellStyle22.SelectionBackColor = Color.FromArgb(229, 27, 43);
+        dataGridViewCellStyle22.SelectionBackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle22.SelectionForeColor = Color.White;
         dataGridViewCellStyle22.WrapMode = DataGridViewTriState.False;
         materialDataGridView.DefaultCellStyle = dataGridViewCellStyle22;
@@ -1892,7 +1892,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Margin = new Padding(0);
         cellUserIcon.Name = "cellUserIcon";
@@ -1942,7 +1942,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Margin = new Padding(0);
         cellTerminalIcon.Name = "cellTerminalIcon";
@@ -1992,7 +1992,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Margin = new Padding(0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
@@ -2042,7 +2042,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Margin = new Padding(0);
         cellBancoIcon.Name = "cellBancoIcon";
@@ -2092,7 +2092,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Margin = new Padding(0);
         cellHoraIcon.Name = "cellHoraIcon";
@@ -2141,7 +2141,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Margin = new Padding(0);
         cellDataIcon.Name = "cellDataIcon";
@@ -2202,7 +2202,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(24, 31, 43);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         tableLayoutPanel2.SetColumnSpan(customTitleBarPanel, 2);
         customTitleBarPanel.Controls.Add(logoSaLabel);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
@@ -2307,11 +2307,11 @@ partial class ProcessoConsumoMaterialForm
         // 
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(910, 10);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
@@ -2540,7 +2540,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         boxesCounterLabel.BackColor = Color.FromArgb(250, 251, 252);
         boxesCounterLabel.Font = new Font("Segoe UI", 15.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        boxesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        boxesCounterLabel.ForeColor = Color.FromArgb(200, 78, 10);
         boxesCounterLabel.Location = new Point(3, 16);
         boxesCounterLabel.Name = "boxesCounterLabel";
         boxesCounterLabel.Size = new Size(177, 28);
@@ -2576,7 +2576,7 @@ partial class ProcessoConsumoMaterialForm
         packagesCounterLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         packagesCounterLabel.BackColor = Color.FromArgb(250, 251, 252);
         packagesCounterLabel.Font = new Font("Segoe UI", 15.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        packagesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        packagesCounterLabel.ForeColor = Color.FromArgb(200, 78, 10);
         packagesCounterLabel.Location = new Point(3, 16);
         packagesCounterLabel.Name = "packagesCounterLabel";
         packagesCounterLabel.Size = new Size(177, 28);
@@ -2586,7 +2586,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // weightSummaryAccentBar
         // 
-        weightSummaryAccentBar.BackColor = Color.FromArgb(229, 27, 43);
+        weightSummaryAccentBar.BackColor = Color.FromArgb(200, 78, 10);
         weightSummaryAccentBar.Location = new Point(14, 14);
         weightSummaryAccentBar.Name = "weightSummaryAccentBar";
         weightSummaryAccentBar.Size = new Size(4, 28);
@@ -2628,7 +2628,7 @@ partial class ProcessoConsumoMaterialForm
         iniciarLeituraButton.BaseBackColor = Color.FromArgb(34, 166, 82);
         iniciarLeituraButton.BaseForeColor = Color.White;
         iniciarLeituraButton.Font = new Font("Cascadia Code", 6.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        iniciarLeituraButton.IconGlyph = "";
+        iniciarLeituraButton.IconGlyph = "▶";
         iniciarLeituraButton.KeyHint = "F5";
         iniciarLeituraButton.Location = new Point(12, 350);
         iniciarLeituraButton.Name = "iniciarLeituraButton";
@@ -2653,7 +2653,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         leituraManualButton.BackColor = Color.Transparent;
         leituraManualButton.Font = new Font("Cascadia Code", 6.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        leituraManualButton.IconGlyph = "";
+        leituraManualButton.IconGlyph = "✎";
         leituraManualButton.KeyHint = "F9";
         leituraManualButton.Location = new Point(12, 442);
         leituraManualButton.Name = "leituraManualButton";
@@ -2778,7 +2778,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // stopActionPanel
         // 
-        stopActionPanel.BackColor = Color.FromArgb(55, 60, 69);
+        stopActionPanel.BackColor = Color.FromArgb(200, 78, 10);
         stopActionPanel.Controls.Add(stopActionIconLabel);
         stopActionPanel.Controls.Add(stopActionTextLabel);
         stopActionPanel.Dock = DockStyle.Fill;
@@ -2814,7 +2814,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // deleteLastLegendPanel
         // 
-        deleteLastLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        deleteLastLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         deleteLastLegendPanel.Controls.Add(deleteLastLegendIconLabel);
         deleteLastLegendPanel.Controls.Add(deleteLastLegendTextLabel);
         deleteLastLegendPanel.Dock = DockStyle.Fill;
@@ -2847,7 +2847,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // deleteByCodeLegendPanel
         // 
-        deleteByCodeLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        deleteByCodeLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         deleteByCodeLegendPanel.Controls.Add(deleteByCodeLegendIconLabel);
         deleteByCodeLegendPanel.Controls.Add(deleteByCodeLegendTextLabel);
         deleteByCodeLegendPanel.Dock = DockStyle.Fill;
@@ -2880,7 +2880,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // readWeightLegendPanel
         // 
-        readWeightLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        readWeightLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         readWeightLegendPanel.BorderStyle = BorderStyle.FixedSingle;
         readWeightLegendPanel.Controls.Add(readWeightLegendIconLabel);
         readWeightLegendPanel.Controls.Add(readWeightLegendTextLabel);
@@ -2914,7 +2914,7 @@ partial class ProcessoConsumoMaterialForm
         // 
         // manualLotLegendPanel
         // 
-        manualLotLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        manualLotLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         manualLotLegendPanel.Controls.Add(manualLotLegendIconLabel);
         manualLotLegendPanel.Controls.Add(manualLotLegendTextLabel);
         manualLotLegendPanel.Dock = DockStyle.Fill;
@@ -3198,6 +3198,9 @@ partial class ProcessoConsumoMaterialForm
     private FugaPET_Dev.Tela.ActionPillButton lerEtiquetaButton;
     private FugaPET_Dev.Tela.ActionPillButton leituraManualButton;
 }
+
+
+
 
 
 

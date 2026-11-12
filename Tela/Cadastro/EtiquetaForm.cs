@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using FugaPET_Dev.AcessoDados.Banco;
@@ -690,7 +690,7 @@ public partial class EtiquetaForm : Form
             ? "Inativar Etiqueta        F8"
             : "Reativar Etiqueta        F8";
         situacaoButton.ForeColor = _situacaoSelecionadaAtiva
-            ? Color.FromArgb(229, 27, 43)
+            ? Color.FromArgb(200, 78, 10)
             : Color.FromArgb(22, 163, 74);
         situacaoButton.FlatAppearance.BorderColor = _situacaoSelecionadaAtiva
             ? Color.FromArgb(203, 213, 225)

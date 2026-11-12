@@ -43,6 +43,14 @@ internal sealed class ProdutoAcabadoNormaEmbalagemSapServico : IProdutoAcabadoNo
         string mat = (material ?? string.Empty).Trim();
         string correlationId = Guid.NewGuid().ToString("N")[..12];
 
+        // GATE Q PACKAGING-05: capability desabilitada ⇒ indisponibilidade CONTROLADA antes de QUALQUER
+        // HttpRequestMessage/HttpClient/DNS/socket/CPI. HTTP_REQUEST_COUNT permanece 0. Sem segredo.
+        if (!_configuracao.PackagingHabilitado)
+        {
+            RegistrarDiagnostico($"[{correlationId}] Material {mat}: capability de norma de embalagem desabilitada (Q gate false).");
+            return ResultadoConsultaNormaEmbalagemSap.DeNaoConfigurada();
+        }
+
         // 1. Config: URL/allowlist ausentes → NaoConfigurada; URL+allowlist ok mas sem credencial própria → CredencialAusente.
         if (string.IsNullOrWhiteSpace(_configuracao.PackagingBaseUrl)
             || _configuracao.PackagingHostsPermitidos.Count == 0)

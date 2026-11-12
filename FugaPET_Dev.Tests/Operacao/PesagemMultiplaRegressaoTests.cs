@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tests.Operacao;
+﻿namespace FugaPET_Dev.Tests.Operacao;
 
 /// <summary>
 /// Regressão: a correção da escala decimal fica EXCLUSIVAMENTE no leitor serial. A tela de pesagem NÃO pode

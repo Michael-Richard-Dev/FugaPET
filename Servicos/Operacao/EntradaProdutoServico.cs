@@ -296,15 +296,34 @@ public sealed class EntradaProdutoServico
         CancellationToken cancellationToken = default)
         => _repositorio.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken);
 
+    /// <summary>GATE 096D: revalidação PÓS-RESERVA (status ENVIADO_SAP). Read-only; sem mudança de status/SAP.</summary>
+    public Task<IReadOnlyList<EntradaProdutoItemEnvioSap>> ListarItensReservadosParaRevalidacaoSapAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ListarItensReservadosParaRevalidacaoSapAsync(codigoLancamento, cancellationToken);
+
+    /// <summary>GATE 096D: libera a reserva num abort pré-POST, restaurando o StatusAnterior (fail-closed).</summary>
+    public Task<bool> LiberarReservaEnvioSapAposAbortPrePostAsync(
+        long codigoLancamento,
+        string statusAnterior,
+        CancellationToken cancellationToken = default)
+        => _repositorio.LiberarReservaEnvioSapAposAbortPrePostAsync(codigoLancamento, statusAnterior, cancellationToken);
+
     /// <summary>Status atual do lancamento (defesa de reenvio antes da criacao do documento de material).</summary>
     public Task<string?> ObterStatusLancamentoAsync(
         long codigoLancamento,
         CancellationToken cancellationToken = default)
         => _repositorio.ObterStatusLancamentoAsync(codigoLancamento, cancellationToken);
 
+    /// <summary>READ-ONLY (12G-D): localiza o lancamento local elegivel de um pedido para reidratar a tela.</summary>
+    public Task<long?> ObterCodigoLancamentoLocalElegivelPorPedidoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+        => _repositorio.ObterCodigoLancamentoLocalElegivelPorPedidoAsync(numeroPedido, cancellationToken);
+
     /// <summary>Reserva atomica do lancamento (FINALIZADO_LOCAL/ERRO_SAP -&gt; ENVIADO_SAP) antes do POST.
     /// Retorna false quando outro envio ja reservou (concorrencia/idempotencia).</summary>
-    public Task<bool> TentarReservarLancamentoParaEnvioSapAsync(
+    public Task<ResultadoReservaEnvioSap> TentarReservarLancamentoParaEnvioSapAsync(
         long codigoLancamento,
         CancellationToken cancellationToken = default)
         => _repositorio.TentarReservarLancamentoParaEnvioSapAsync(codigoLancamento, cancellationToken);

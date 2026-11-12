@@ -72,6 +72,34 @@ public interface IProdutoAcabadoPipeline045Operacoes
         => RegistrarTimeoutPaleteAsync(codigoPalete, erro, endpoint, usuario, terminal, ct);
     Task<bool> VincularCaixaPaleteAsync(long codigoPalete, long codigoCaixa, int sequencia, long usuario, string terminal, CancellationToken ct = default);
 
+    // GATE 122C (TRACK B): as duas primitivas de RECONCILIACAO do palete ja existiam no banco
+    // (fn_pa_045_palete_registrar_reconciliacao / fn_pa_045_palete_liberar_reprocessamento) e no store,
+    // porem NAO estavam nesta interface — logo nenhum servico conseguia chama-las e um palete
+    // INDETERMINADO ficava sem caminho de aplicacao. Ficam expostas aqui, com default FAIL-CLOSED:
+    // implementacao sem suporte NAO reconcilia e NAO libera (retorna false), nunca simula sucesso.
+    // Ambas dependem de AdquirirRecoveryPaleteAsync previo: o store usa o recovery_claim_token como
+    // FENCING, portanto sem recovery adquirido elas retornam false por construcao.
+
+    /// <summary>
+    /// Registra o resultado da reconciliacao do palete (fn_pa_045_palete_registrar_reconciliacao).
+    /// Exige recovery previamente adquirido (fencing). <paramref name="resultado"/> e o veredito
+    /// comprovado; <paramref name="huPai"/> a UC quando existir; <paramref name="evidenciaJson"/> a
+    /// evidencia sanitizada. NUNCA libera reprocessamento por si.
+    /// </summary>
+    Task<bool> RegistrarReconciliacaoPaleteAsync(
+        long codigoPalete, string resultado, string? huPai, string evidenciaJson, string? erro,
+        long usuario, string terminal, CancellationToken ct = default)
+        => Task.FromResult(false);
+
+    /// <summary>
+    /// Libera o palete para reprocessamento (fn_pa_045_palete_liberar_reprocessamento). SOMENTE apos
+    /// reconciliacao que PROVE que o SAP nao executou. Exige recovery adquirido (fencing).
+    /// </summary>
+    Task<bool> LiberarReprocessamentoPaleteAsync(
+        long codigoPalete, string tipoLiberacao, string motivo, long usuario, string terminal,
+        CancellationToken ct = default)
+        => Task.FromResult(false);
+
     // GATE 046-E §3/§4: criação ATÔMICA (uma conexão/uma transação) — palete + TODOS os vínculos, ou nada.
     // Default fail-closed: implementações sem suporte transacional não persistem parcialmente.
     Task<ResultadoCriacaoPaleteLocalAtomica> CriarPaleteComCaixasAsync(

@@ -1,4 +1,4 @@
-using FugaPET_Dev.AcessoDados.Banco;
+﻿using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Modelo.Diagnostico;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using Npgsql;

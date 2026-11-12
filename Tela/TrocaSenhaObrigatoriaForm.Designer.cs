@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela;
 
@@ -145,7 +145,7 @@ partial class TrocaSenhaObrigatoriaForm
         // 
         // salvarButton
         // 
-        salvarButton.BackColor = Color.FromArgb(229, 27, 43);
+        salvarButton.BackColor = Color.FromArgb(200, 78, 10);
         salvarButton.FlatAppearance.BorderSize = 0;
         salvarButton.FlatStyle = FlatStyle.Flat;
         salvarButton.Font = new Font("Segoe UI", 8.25F, FontStyle.Bold);
@@ -160,7 +160,7 @@ partial class TrocaSenhaObrigatoriaForm
         // 
         // mensagemLabel
         // 
-        mensagemLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        mensagemLabel.ForeColor = Color.FromArgb(200, 78, 10);
         mensagemLabel.Location = new Point(24, 245);
         mensagemLabel.Name = "mensagemLabel";
         mensagemLabel.Size = new Size(206, 46);

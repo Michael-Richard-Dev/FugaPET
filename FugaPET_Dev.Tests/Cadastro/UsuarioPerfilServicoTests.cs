@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Servicos.Cadastro;
+using FugaPET_Dev.Servicos.Cadastro;
 
 namespace FugaPET_Dev.Tests.Cadastro;
 

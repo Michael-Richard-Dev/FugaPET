@@ -1,4 +1,4 @@
-using FugaPET_Dev.Controle;
+﻿using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.Cadastro;
@@ -142,9 +142,17 @@ public sealed class PreCarregamentoPedidosEntradaTests
         ResultadoConsultaPedido resultado = await controller.ConsultarPedidoAsync("4500000030");
 
         Assert.False(resultado.Sucesso);
-        Assert.Equal(
-            "Pedido não encontrado no cache local e SAP indisponível no momento.",
-            resultado.Mensagem);
+        // GATE 105G: falha NÃO técnica da sincronização preserva a mensagem REAL; a frase genérica
+        // "Pedido não encontrado no cache local e SAP indisponível no momento." foi eliminada.
+        Assert.Equal("SAP indisponivel.", resultado.Mensagem);
+        Assert.DoesNotContain(
+            "SAP indisponível no momento",
+            resultado.Mensagem,
+            StringComparison.OrdinalIgnoreCase);
+        // A consulta ocorreu (condição funcional) e nenhum veredito de negócio foi emitido.
+        Assert.True(resultado.ConsultaTecnicaOk);
+        Assert.Equal(CenarioFalhaConsultaSap.Nenhum, resultado.CenarioFalhaSap);
+        Assert.Empty(resultado.MotivoBloqueioLiberacao);
     }
 
     private static EntradaProdutoController CriarController(FakePedidoCache pedido)

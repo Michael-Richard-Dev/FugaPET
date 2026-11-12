@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Caixa individual de Produto Acabado, PERSISTÍVEL. Uma caixa por vez: identidade estável

@@ -119,3 +119,4 @@ public sealed class ClassificadorOrdemConsumoMaterial
     private static string NormalizarProduto(string? produto)
         => (produto ?? string.Empty).Trim().ToUpperInvariant();
 }
+

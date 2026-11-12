@@ -5,15 +5,27 @@ namespace FugaPET_Dev.Tests.IntegracaoSap;
 public sealed class PublicacaoHmlConfiguracaoSapTests
 {
     [Fact]
-    public void Csproj_DevePublicarConfiguracaoSapExemploELocalQuandoExistir()
+    public void Csproj_DevePublicarSomenteModelosEProtegerConfiguracaoRealDaMaquina()
     {
         string csproj = LerArquivoProjeto("FugaPET_Dev.csproj");
 
+        // Modelos (.exemplo.json) vao para o publish como referencia da 1a configuracao.
         Assert.Contains("<None Include=\"configuracao.sap.exemplo.json\">", csproj, StringComparison.Ordinal);
+        // O DEV NAO publica ambiente.q.json: aquele marcador declara o ambiente Q e nao existe nesta linha.
+        Assert.DoesNotContain("ambiente.q.json", csproj, StringComparison.Ordinal);
+        Assert.Contains("<Content Include=\"configuracao.banco.exemplo.json\">", csproj, StringComparison.Ordinal);
+        Assert.Contains("<Content Include=\"configuracao.terminal.exemplo.json\">", csproj, StringComparison.Ordinal);
+
+        // Configuracoes REAIS existem no bin (execucao local) mas NUNCA no publish,
+        // para que o pacote de atualizacao nao sobrescreva os configuracao.*.json da maquina.
         Assert.Contains("<None Update=\"configuracao.sap.json\" Condition=\"Exists('configuracao.sap.json')\">", csproj, StringComparison.Ordinal);
         Assert.Contains("<Content Include=\"configuracao.banco.json\" Condition=\"Exists('configuracao.banco.json')\">", csproj, StringComparison.Ordinal);
         Assert.Contains("<Content Include=\"configuracao.terminal.json\" Condition=\"Exists('configuracao.terminal.json')\">", csproj, StringComparison.Ordinal);
-        Assert.True(csproj.Split("<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>").Length >= 5);
+
+        // Modelos vao para publish; configuracoes reais permanecem protegidas.
+        Assert.Equal(0, Contar(csproj, "ambiente.q.json"));
+        Assert.Equal(3, Contar(csproj, "<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>"));
+        Assert.Equal(3, Contar(csproj, "<CopyToPublishDirectory>Never</CopyToPublishDirectory>"));
     }
 
     [Fact]
@@ -68,6 +80,9 @@ public sealed class PublicacaoHmlConfiguracaoSapTests
         Assert.Contains("GetPackagingSet", checklist, StringComparison.Ordinal);
     }
 
+    private static int Contar(string texto, string trecho)
+        => texto.Split(trecho, StringSplitOptions.None).Length - 1;
+
     private static string LerArquivoProjeto(params string[] partes)
         => File.ReadAllText(Path.Combine(RaizProjeto(), Path.Combine(partes)));
 
@@ -87,3 +102,5 @@ public sealed class PublicacaoHmlConfiguracaoSapTests
         throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nao encontrada.");
     }
 }
+
+

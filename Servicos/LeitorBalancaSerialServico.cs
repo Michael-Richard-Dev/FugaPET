@@ -1,4 +1,6 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.IO.Ports;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -34,14 +36,14 @@ internal sealed class LeitorBalancaSerialServico
     {
         if (!string.IsNullOrWhiteSpace(configuracao.PortaSerial))
         {
-            return LerPesoDaPorta(configuracao.PortaSerial, 1200, configuracao);
+            return LerPesoDaPortaConfigurada(configuracao.PortaSerial, 1200, configuracao);
         }
 
         if (!string.IsNullOrWhiteSpace(_nomePortaDetectada))
         {
             try
             {
-                return LerPesoDaPorta(_nomePortaDetectada, 1200, configuracao);
+                return LerPesoDaPortaConfigurada(_nomePortaDetectada, 1200, configuracao);
             }
             catch (Exception) when (PodeRetentarDescoberta())
             {
@@ -54,15 +56,13 @@ internal sealed class LeitorBalancaSerialServico
 
     private string DescobrirBalancaELerPeso(BalancaLeituraConfiguracao configuracao)
     {
-        string[] nomesPortas = SerialPort.GetPortNames()
-            .OrderBy(nomePorta => nomePorta, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        string[] nomesPortas = ObterPortasDisponiveisSeguras();
 
         foreach (string nomePorta in nomesPortas)
         {
             try
             {
-                string peso = LerPesoDaPorta(nomePorta, 700, configuracao);
+                string peso = LerPesoDaPortaDescoberta(nomePorta, nomesPortas, 700, configuracao);
                 _nomePortaDetectada = nomePorta;
                 return peso;
             }
@@ -71,7 +71,8 @@ internal sealed class LeitorBalancaSerialServico
             }
         }
 
-        throw new ErroOperacionalEsperadoException("Nenhuma balanca foi encontrada. Verifique a conexao USB.");
+        RegistrarFalhaSerial("DESCOBERTA", string.Empty, nomesPortas, null);
+        throw new ErroOperacionalEsperadoException("Nenhuma balan\u00e7a foi encontrada. Verifique a conex\u00e3o USB ou ajuste o cadastro da balan\u00e7a.");
     }
 
     private static bool PodeRetentarDescoberta()
@@ -79,7 +80,32 @@ internal sealed class LeitorBalancaSerialServico
         return true;
     }
 
-    private static string LerPesoDaPorta(string nomePorta, int tempoLimiteMilissegundos, BalancaLeituraConfiguracao configuracao)
+    private static string LerPesoDaPortaConfigurada(string nomePorta, int tempoLimiteMilissegundos, BalancaLeituraConfiguracao configuracao)
+    {
+        string portaNormalizada = NormalizarNomePorta(nomePorta);
+        string[] portasDisponiveis = ObterPortasDisponiveisSeguras();
+        if (!PortaExiste(portaNormalizada, portasDisponiveis))
+        {
+            RegistrarFalhaSerial("CONFIGURADA", portaNormalizada, portasDisponiveis, null);
+            throw new ErroOperacionalEsperadoException(MensagemPortaNaoEncontrada(portaNormalizada));
+        }
+
+        return ExecutarLeituraPorta(portaNormalizada, portasDisponiveis, tempoLimiteMilissegundos, configuracao);
+    }
+
+    private static string LerPesoDaPortaDescoberta(string nomePorta, string[] portasDisponiveis, int tempoLimiteMilissegundos, BalancaLeituraConfiguracao configuracao)
+    {
+        string portaNormalizada = NormalizarNomePorta(nomePorta);
+        if (!PortaExiste(portaNormalizada, portasDisponiveis))
+        {
+            RegistrarFalhaSerial("DESCOBERTA_PORTA_INEXISTENTE", portaNormalizada, portasDisponiveis, null);
+            throw new ErroOperacionalEsperadoException(MensagemPortaNaoEncontrada(portaNormalizada));
+        }
+
+        return ExecutarLeituraPorta(portaNormalizada, portasDisponiveis, tempoLimiteMilissegundos, configuracao);
+    }
+
+    private static string ExecutarLeituraPorta(string nomePorta, string[] portasDisponiveis, int tempoLimiteMilissegundos, BalancaLeituraConfiguracao configuracao)
     {
         using SerialPort portaSerial = new(nomePorta, configuracao.BaudRate, configuracao.Paridade, configuracao.DataBits, configuracao.StopBits)
         {
@@ -87,8 +113,16 @@ internal sealed class LeitorBalancaSerialServico
             Encoding = Encoding.ASCII
         };
 
-        portaSerial.Open();
-        portaSerial.DiscardInBuffer();
+        try
+        {
+            portaSerial.Open();
+            portaSerial.DiscardInBuffer();
+        }
+        catch (Exception ex) when (EhErroSerialControlado(ex))
+        {
+            RegistrarFalhaSerial("ABRIR_PORTA", nomePorta, portasDisponiveis, ex);
+            throw new ErroOperacionalEsperadoException(MensagemFalhaPorta(nomePorta, ex));
+        }
 
         StringBuilder buffer = new();
         DateTime prazo = DateTime.Now.AddMilliseconds(tempoLimiteMilissegundos);
@@ -130,6 +164,11 @@ internal sealed class LeitorBalancaSerialServico
             catch (TimeoutException)
             {
             }
+            catch (Exception ex) when (EhErroSerialControlado(ex))
+            {
+                RegistrarFalhaSerial("LER_PORTA", nomePorta, portasDisponiveis, ex);
+                throw new ErroOperacionalEsperadoException(MensagemFalhaPorta(nomePorta, ex));
+            }
         }
 
         string? peso = TentarExtrairPeso(buffer.ToString(), configuracao.Protocolo);
@@ -139,6 +178,67 @@ internal sealed class LeitorBalancaSerialServico
         }
 
         throw new ErroOperacionalEsperadoException($"Nenhum peso foi recebido na porta {nomePorta}.");
+    }
+
+    private static string[] ObterPortasDisponiveisSeguras()
+    {
+        try
+        {
+            return SerialPort.GetPortNames()
+                .Select(NormalizarNomePorta)
+                .Where(nomePorta => !string.IsNullOrWhiteSpace(nomePorta))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(nomePorta => nomePorta, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception ex) when (EhErroSerialControlado(ex))
+        {
+            RegistrarFalhaSerial("LISTAR_PORTAS", string.Empty, [], ex);
+            return [];
+        }
+    }
+
+    private static bool PortaExiste(string nomePorta, string[] portasDisponiveis)
+        => portasDisponiveis.Any(porta => string.Equals(porta, nomePorta, StringComparison.OrdinalIgnoreCase));
+
+    private static string NormalizarNomePorta(string? nomePorta)
+        => (nomePorta ?? string.Empty).Trim().ToUpperInvariant();
+
+    private static string MensagemPortaNaoEncontrada(string nomePorta)
+        => $"Balan\u00e7a n\u00e3o encontrada na porta {nomePorta}. Verifique a conex\u00e3o USB ou ajuste o cadastro da balan\u00e7a.";
+
+    private static string MensagemFalhaPorta(string nomePorta, Exception ex)
+    {
+        if (ex is UnauthorizedAccessException)
+        {
+            return $"Balan\u00e7a na porta {nomePorta} est\u00e1 indispon\u00edvel ou em uso por outro aplicativo. Feche outros programas e tente novamente.";
+        }
+
+        if (ex is TimeoutException)
+        {
+            return $"Tempo esgotado ao comunicar com a balan\u00e7a na porta {nomePorta}. Verifique a conex\u00e3o USB.";
+        }
+
+        return MensagemPortaNaoEncontrada(nomePorta);
+    }
+
+    private static bool EhErroSerialControlado(Exception ex)
+        => ex is FileNotFoundException
+            or IOException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or TimeoutException;
+
+    private static void RegistrarFalhaSerial(string etapa, string portaConfigurada, string[] portasDisponiveis, Exception? excecao)
+    {
+        string portas = portasDisponiveis.Length == 0 ? "nenhuma" : string.Join(",", portasDisponiveis);
+        Trace.TraceWarning(
+            "Leitura balan\u00e7a serial HML: etapa={0}; processo={1}; porta_configurada={2}; portas_disponiveis={3}; excecao={4}",
+            etapa,
+            "EntradaProduto/ConsumoMaterial",
+            string.IsNullOrWhiteSpace(portaConfigurada) ? "<nao_informada>" : portaConfigurada,
+            portas,
+            excecao?.ToString() ?? "<sem_excecao>");
     }
 
     // internal para teste direto (InternalsVisibleTo="FugaPET_Dev.Tests"). Caminho final de buffer.

@@ -34,7 +34,7 @@
     <value>..\\Servicos\\icone\\stop-action.png;System.Drawing.Bitmap, System.Drawing.Common</value>
   </data>
   <data name="fuga_2026_logo" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\\Servicos\\image\\Fuga-2026-branco-sem-fundo-cortado.png;System.Drawing.Bitmap, System.Drawing.Common</value>
+    <value>..\\Servicos\\image\\FugaPet sem fundo 1.png;System.Drawing.Bitmap, System.Drawing.Common</value>
   </data>
   <data name="print_green" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\\Servicos\\icone\\print-green.png;System.Drawing.Bitmap, System.Drawing.Common</value>

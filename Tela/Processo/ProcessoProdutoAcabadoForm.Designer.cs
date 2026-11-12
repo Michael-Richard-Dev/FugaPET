@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tela.Processo;
+namespace FugaPET_Dev.Tela.Processo;
 
 partial class ProcessoProdutoAcabadoForm
 {
@@ -420,7 +420,7 @@ partial class ProcessoProdutoAcabadoForm
         productionOrderTextBox.BackColor = Color.White;
         productionOrderTextBox.BorderStyle = BorderStyle.None;
         productionOrderTextBox.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        productionOrderTextBox.ForeColor = Color.FromArgb(229, 27, 43);
+        productionOrderTextBox.ForeColor = Color.FromArgb(200, 78, 10);
         productionOrderTextBox.Location = new Point(16, 25);
         productionOrderTextBox.Multiline = false;
         productionOrderTextBox.Name = "productionOrderTextBox";
@@ -488,7 +488,7 @@ partial class ProcessoProdutoAcabadoForm
         lotTextBox.BackColor = Color.White;
         lotTextBox.BorderStyle = BorderStyle.None;
         lotTextBox.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        lotTextBox.ForeColor = Color.FromArgb(229, 27, 43);
+        lotTextBox.ForeColor = Color.FromArgb(200, 78, 10);
         lotTextBox.Location = new Point(16, 25);
         lotTextBox.Multiline = true;
         lotTextBox.Name = "lotTextBox";
@@ -554,7 +554,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         stepLabel.BackColor = Color.Transparent;
         stepLabel.Font = new Font("Segoe UI", 17.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-        stepLabel.ForeColor = Color.FromArgb(229, 27, 43);
+        stepLabel.ForeColor = Color.FromArgb(200, 78, 10);
         stepLabel.Location = new Point(16, 25);
         stepLabel.Name = "stepLabel";
         stepLabel.Size = new Size(42, 25);
@@ -1057,7 +1057,7 @@ partial class ProcessoProdutoAcabadoForm
         balanceTextBox.BackColor = Color.White;
         balanceTextBox.BorderStyle = BorderStyle.None;
         balanceTextBox.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        balanceTextBox.ForeColor = Color.FromArgb(184, 18, 32);
+        balanceTextBox.ForeColor = Color.FromArgb(200, 78, 10);
         balanceTextBox.Location = new Point(422, 24);
         balanceTextBox.Margin = new Padding(0);
         balanceTextBox.Multiline = true;
@@ -1111,7 +1111,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // materialTitleUnderlineLabel
         // 
-        materialTitleUnderlineLabel.BackColor = Color.FromArgb(229, 27, 43);
+        materialTitleUnderlineLabel.BackColor = Color.FromArgb(200, 78, 10);
         materialTitleUnderlineLabel.Location = new Point(17, 36);
         materialTitleUnderlineLabel.Name = "materialTitleUnderlineLabel";
         materialTitleUnderlineLabel.Size = new Size(62, 2);
@@ -1190,7 +1190,7 @@ partial class ProcessoProdutoAcabadoForm
         dataGridViewCellStyle6.BackColor = Color.FromArgb(250, 251, 252);
         dataGridViewCellStyle6.Font = new Font("Cascadia Code", 6.75F);
         dataGridViewCellStyle6.ForeColor = Color.FromArgb(45, 49, 56);
-        dataGridViewCellStyle6.SelectionBackColor = Color.FromArgb(229, 27, 43);
+        dataGridViewCellStyle6.SelectionBackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle6.SelectionForeColor = Color.White;
         dataGridViewCellStyle6.WrapMode = DataGridViewTriState.False;
         materialDataGridView.DefaultCellStyle = dataGridViewCellStyle6;
@@ -1329,7 +1329,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // productionReadingsUnderlineLabel
         // 
-        productionReadingsUnderlineLabel.BackColor = Color.FromArgb(229, 27, 43);
+        productionReadingsUnderlineLabel.BackColor = Color.FromArgb(200, 78, 10);
         productionReadingsUnderlineLabel.Location = new Point(17, 36);
         productionReadingsUnderlineLabel.Name = "productionReadingsUnderlineLabel";
         productionReadingsUnderlineLabel.Size = new Size(62, 2);
@@ -1415,10 +1415,10 @@ partial class ProcessoProdutoAcabadoForm
         productionDataGridView.BackgroundColor = Color.White;
         productionDataGridView.BorderStyle = BorderStyle.None;
         productionDataGridView.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dataGridViewCellStyle7.BackColor = Color.FromArgb(17, 24, 39);
+        dataGridViewCellStyle7.BackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle7.Font = new Font("Cascadia Code", 6.75F, FontStyle.Bold);
         dataGridViewCellStyle7.ForeColor = Color.White;
-        dataGridViewCellStyle7.SelectionBackColor = Color.FromArgb(17, 24, 39);
+        dataGridViewCellStyle7.SelectionBackColor = Color.FromArgb(200, 78, 10);
         dataGridViewCellStyle7.SelectionForeColor = Color.White;
         productionDataGridView.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle7;
         productionDataGridView.ColumnHeadersHeight = 24;
@@ -1710,7 +1710,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         cellUserIcon.Dock = DockStyle.Left;
         cellUserIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellUserIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellUserIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellUserIcon.Location = new Point(0, 0);
         cellUserIcon.Margin = new Padding(0);
         cellUserIcon.Name = "cellUserIcon";
@@ -1760,7 +1760,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         cellTerminalIcon.Dock = DockStyle.Left;
         cellTerminalIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellTerminalIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellTerminalIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellTerminalIcon.Location = new Point(0, 0);
         cellTerminalIcon.Margin = new Padding(0);
         cellTerminalIcon.Name = "cellTerminalIcon";
@@ -1810,7 +1810,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         cellEmpresaIcon.Dock = DockStyle.Left;
         cellEmpresaIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellEmpresaIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellEmpresaIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellEmpresaIcon.Location = new Point(0, 0);
         cellEmpresaIcon.Margin = new Padding(0);
         cellEmpresaIcon.Name = "cellEmpresaIcon";
@@ -1860,7 +1860,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         cellBancoIcon.Dock = DockStyle.Left;
         cellBancoIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellBancoIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellBancoIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellBancoIcon.Location = new Point(0, 0);
         cellBancoIcon.Margin = new Padding(0);
         cellBancoIcon.Name = "cellBancoIcon";
@@ -1910,7 +1910,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         cellHoraIcon.Dock = DockStyle.Left;
         cellHoraIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellHoraIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellHoraIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellHoraIcon.Location = new Point(0, 0);
         cellHoraIcon.Margin = new Padding(0);
         cellHoraIcon.Name = "cellHoraIcon";
@@ -1959,7 +1959,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         cellDataIcon.Dock = DockStyle.Left;
         cellDataIcon.Font = new Font("Segoe MDL2 Assets", 10F);
-        cellDataIcon.ForeColor = Color.FromArgb(212, 37, 49);
+        cellDataIcon.ForeColor = Color.FromArgb(250, 105, 26);
         cellDataIcon.Location = new Point(0, 0);
         cellDataIcon.Margin = new Padding(0);
         cellDataIcon.Name = "cellDataIcon";
@@ -2020,7 +2020,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // customTitleBarPanel
         // 
-        customTitleBarPanel.BackColor = Color.FromArgb(24, 31, 43);
+        customTitleBarPanel.BackColor = Color.FromArgb(200, 78, 10);
         tableLayoutPanel2.SetColumnSpan(customTitleBarPanel, 2);
         customTitleBarPanel.Controls.Add(logoSaLabel);
         customTitleBarPanel.Controls.Add(menuHeaderLabel);
@@ -2136,11 +2136,11 @@ partial class ProcessoProdutoAcabadoForm
         // 
         sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(58, 68, 83);
+        sapStatusPanel.BorderColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.BorderRadius = 12;
         sapStatusPanel.Controls.Add(sapStatusDotLabel);
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(24, 31, 43);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(910, 10);
         sapStatusPanel.Name = "sapStatusPanel";
         sapStatusPanel.ShadowBlur = 0;
@@ -2319,7 +2319,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         boxesValueLabel.BackColor = Color.Transparent;
         boxesValueLabel.Font = new Font("Segoe UI", 19F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        boxesValueLabel.ForeColor = Color.FromArgb(212, 37, 49);
+        boxesValueLabel.ForeColor = Color.FromArgb(250, 105, 26);
         boxesValueLabel.Location = new Point(16, 160);
         boxesValueLabel.Name = "boxesValueLabel";
         boxesValueLabel.Size = new Size(110, 38);
@@ -2338,7 +2338,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // boxesProgressFill
         // 
-        boxesProgressFill.BackColor = Color.FromArgb(212, 37, 49);
+        boxesProgressFill.BackColor = Color.FromArgb(250, 105, 26);
         boxesProgressFill.Location = new Point(0, 0);
         boxesProgressFill.Name = "boxesProgressFill";
         boxesProgressFill.Size = new Size(88, 6);
@@ -2374,7 +2374,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         packagesValueLabel.BackColor = Color.Transparent;
         packagesValueLabel.Font = new Font("Segoe UI", 19F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        packagesValueLabel.ForeColor = Color.FromArgb(212, 37, 49);
+        packagesValueLabel.ForeColor = Color.FromArgb(250, 105, 26);
         packagesValueLabel.Location = new Point(16, 262);
         packagesValueLabel.Name = "packagesValueLabel";
         packagesValueLabel.Size = new Size(110, 38);
@@ -2393,7 +2393,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // packagesProgressFill
         // 
-        packagesProgressFill.BackColor = Color.FromArgb(212, 37, 49);
+        packagesProgressFill.BackColor = Color.FromArgb(250, 105, 26);
         packagesProgressFill.Location = new Point(0, 0);
         packagesProgressFill.Name = "packagesProgressFill";
         packagesProgressFill.Size = new Size(126, 6);
@@ -2469,7 +2469,7 @@ partial class ProcessoProdutoAcabadoForm
         // excluirCodigoButton
         // 
         excluirCodigoButton.BackColor = Color.Transparent;
-        excluirCodigoButton.BaseForeColor = Color.FromArgb(212, 37, 49);
+        excluirCodigoButton.BaseForeColor = Color.FromArgb(250, 105, 26);
         excluirCodigoButton.Font = new Font("Cascadia Code", 5.8F, FontStyle.Bold, GraphicsUnit.Point, 0);
         excluirCodigoButton.IconFontFamily = "Segoe MDL2 Assets";
         excluirCodigoButton.IconGlyph = "\uE74D";
@@ -2598,7 +2598,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // stopActionPanel
         // 
-        stopActionPanel.BackColor = Color.FromArgb(55, 60, 69);
+        stopActionPanel.BackColor = Color.FromArgb(200, 78, 10);
         stopActionPanel.Controls.Add(stopActionIconLabel);
         stopActionPanel.Controls.Add(stopActionTextLabel);
         stopActionPanel.Dock = DockStyle.Fill;
@@ -2634,7 +2634,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // deleteLastLegendPanel
         // 
-        deleteLastLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        deleteLastLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         deleteLastLegendPanel.Controls.Add(deleteLastLegendIconLabel);
         deleteLastLegendPanel.Controls.Add(deleteLastLegendTextLabel);
         deleteLastLegendPanel.Dock = DockStyle.Fill;
@@ -2667,7 +2667,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // deleteByCodeLegendPanel
         // 
-        deleteByCodeLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        deleteByCodeLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         deleteByCodeLegendPanel.Controls.Add(deleteByCodeLegendIconLabel);
         deleteByCodeLegendPanel.Controls.Add(deleteByCodeLegendTextLabel);
         deleteByCodeLegendPanel.Dock = DockStyle.Fill;
@@ -2757,7 +2757,7 @@ partial class ProcessoProdutoAcabadoForm
         packagesCounterLabel.BackColor = Color.FromArgb(247, 248, 250);
         packagesCounterLabel.BorderStyle = BorderStyle.FixedSingle;
         packagesCounterLabel.Font = new Font("Segoe UI", 23F);
-        packagesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        packagesCounterLabel.ForeColor = Color.FromArgb(200, 78, 10);
         packagesCounterLabel.Location = new Point(3, -45);
         packagesCounterLabel.Name = "packagesCounterLabel";
         packagesCounterLabel.Size = new Size(139, 48);
@@ -2771,7 +2771,7 @@ partial class ProcessoProdutoAcabadoForm
         boxesCounterLabel.BackColor = Color.FromArgb(247, 248, 250);
         boxesCounterLabel.BorderStyle = BorderStyle.FixedSingle;
         boxesCounterLabel.Font = new Font("Segoe UI", 23F);
-        boxesCounterLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        boxesCounterLabel.ForeColor = Color.FromArgb(200, 78, 10);
         boxesCounterLabel.Location = new Point(3, -19);
         boxesCounterLabel.Name = "boxesCounterLabel";
         boxesCounterLabel.Size = new Size(139, 1);
@@ -2781,7 +2781,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // readWeightLegendPanel
         // 
-        readWeightLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        readWeightLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         readWeightLegendPanel.BorderStyle = BorderStyle.FixedSingle;
         readWeightLegendPanel.Controls.Add(readWeightLegendIconLabel);
         readWeightLegendPanel.Controls.Add(readWeightLegendTextLabel);
@@ -2815,7 +2815,7 @@ partial class ProcessoProdutoAcabadoForm
         // 
         // manualLotLegendPanel
         // 
-        manualLotLegendPanel.BackColor = Color.FromArgb(55, 60, 69);
+        manualLotLegendPanel.BackColor = Color.FromArgb(200, 78, 10);
         manualLotLegendPanel.Controls.Add(manualLotLegendIconLabel);
         manualLotLegendPanel.Controls.Add(manualLotLegendTextLabel);
         manualLotLegendPanel.Dock = DockStyle.Fill;

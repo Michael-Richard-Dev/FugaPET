@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.Consumo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -883,7 +883,9 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("_controller.EnviarConsumoSap261Async(", form, StringComparison.Ordinal);
         Assert.Contains("_enviandoSap", form, StringComparison.Ordinal);
         Assert.Contains("Enviar SAP 261", form, StringComparison.Ordinal);
-        Assert.Contains("Deseja enviar este consumo ao SAP agora?", form, StringComparison.Ordinal);
+        // GATE 101E-P2: cerimônia de autorização explícita do envio 261 (confirmação humana + capability bound).
+        Assert.Contains("Autorizar um envio SAP 261 para este consumo?", form, StringComparison.Ordinal);
+        Assert.Contains("ConfirmarEHabilitarEnvio261Async", form, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpMethod.Patch", form, StringComparison.Ordinal);
 
         // NAO envia automaticamente apos salvar: ConfirmarConsumoAsync nao chama o envio SAP.
@@ -1338,7 +1340,7 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("private OrdemProducaoConsumo? _ordemConsumoAtual;", form, StringComparison.Ordinal);
         Assert.Contains("private ComponenteConsumoMaterial? _componenteConsumoSelecionado;", form, StringComparison.Ordinal);
         // Mensagem de componente bloqueado pela regra operacional central.
-        Assert.Contains("Opera??o bloqueada para este componente", form, StringComparison.Ordinal);
+        Assert.Contains("Operação bloqueada para este componente", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2919,6 +2921,57 @@ public sealed class ProcessoConsumoMaterialFormTests
         Assert.Contains("!ComponentePodeOperar(componente, out _)", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("atual is not null && atual.PesagemLiberada", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("!componente.PesagemLiberada", metodo, StringComparison.Ordinal);
+    }
+
+    // ===================== GATE 101E-P3: seam único de cerimônia 261 (normal + recovery) =====================
+
+    [Fact]
+    public void P3_SeamUnico_FluxoNormalERecoveryCompartilhamAutorizarEEnviar()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        // O seam existe e é o ÚNICO ponto que confirma+habilita+envia.
+        Assert.Contains("private async Task<ResultadoEnvioConsumoSap261?> AutorizarEEnviarSap261Async(", form, StringComparison.Ordinal);
+
+        // Fluxo normal (pós-confirmar) delega ao seam.
+        string executar = ExtrairMetodo(form, "private Task<ResultadoEnvioConsumoSap261?> ExecutarEnvioSap261AposConfirmarAsync");
+        Assert.Contains("AutorizarEEnviarSap261Async(codigoLancamento, usuario)", executar, StringComparison.Ordinal);
+
+        // Envio manual (botão) usa o seam e NÃO chama o controller diretamente (caminho único).
+        string enviar = ExtrairMetodo(form, "private async Task EnviarSap261Async()");
+        Assert.Contains("AutorizarEEnviarSap261Async(codigoLancamento, usuario)", enviar, StringComparison.Ordinal);
+        Assert.DoesNotContain("_controller.EnviarConsumoSap261Async(", enviar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void P3_SeamCerimoniaUmaVez_HabilitacaoAntesDoEnvio()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+        string seam = ExtrairMetodo(form, "private async Task<ResultadoEnvioConsumoSap261?> AutorizarEEnviarSap261Async");
+
+        // Exatamente UMA confirmação/habilitação por envio (dentro do seam), ANTES do controller (claim→writer→POST).
+        int idxConfirma = seam.IndexOf("ConfirmarEHabilitarEnvio261Async", StringComparison.Ordinal);
+        int idxEnvio = seam.IndexOf("_controller.EnviarConsumoSap261Async", StringComparison.Ordinal);
+        Assert.True(idxConfirma >= 0 && idxEnvio > idxConfirma); // habilita antes de enviar
+        // Recusa ⇒ retorna null (zero claim/HTTP; PENDENTE preservado).
+        Assert.Contains("return null;", seam, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void P3_SemDuplaCerimonia_ConfirmarEHabilitarSoNoSeam()
+    {
+        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialForm.cs");
+
+        // ConfirmarEHabilitarEnvio261Async é INVOCADA em um único ponto (o seam) — além da própria definição.
+        int invocacoes = ContarOcorrencias(form, "ConfirmarEHabilitarEnvio261Async(codigoLancamento)");
+        Assert.Equal(1, invocacoes);
+    }
+
+    private static int ContarOcorrencias(string texto, string alvo)
+    {
+        int total = 0, i = 0;
+        while ((i = texto.IndexOf(alvo, i, StringComparison.Ordinal)) >= 0) { total++; i += alvo.Length; }
+        return total;
     }
 
     private static string LerArquivoProjeto(params string[] partes)

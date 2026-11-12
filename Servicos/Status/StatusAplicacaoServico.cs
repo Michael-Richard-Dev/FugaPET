@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Status;
+using FugaPET_Dev.Modelo.Status;
 
 namespace FugaPET_Dev.Servicos.Status;
 

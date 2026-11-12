@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela.Processo;
 
@@ -63,7 +63,7 @@ partial class ProcessoResultadoApontamentoForm
     private static readonly Color CorBorda = Color.FromArgb(226, 232, 240);
     private static readonly Color CorTextoForte = Color.FromArgb(17, 24, 39);
     private static readonly Color CorTextoSuave = Color.FromArgb(75, 85, 99);
-    private static readonly Color CorAcento = Color.FromArgb(229, 27, 43);
+    private static readonly Color CorAcento = Color.FromArgb(200, 78, 10);
 
     protected override void Dispose(bool disposing)
     {
@@ -141,7 +141,7 @@ partial class ProcessoResultadoApontamentoForm
         sapStatusPanel.BorderColor = Color.FromArgb(55, 65, 81);
         sapStatusPanel.BorderRadius = 8;
         sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(31, 41, 55);
+        sapStatusPanel.FillColor = Color.FromArgb(200, 78, 10);
         sapStatusPanel.Location = new Point(900, 26);
         sapStatusPanel.Size = new Size(260, 32);
         sapStatusLabel.Dock = DockStyle.Fill;

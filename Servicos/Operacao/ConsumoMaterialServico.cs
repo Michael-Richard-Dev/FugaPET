@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Banco;
+using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Consumo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -109,6 +109,16 @@ public sealed class ConsumoMaterialServico
     // já existente (mesmo cliente HTTP da Entrada). É a única fonte que libera a classificação do componente.
     private readonly Func<IProductMasterSapServico> _criarProductMasterServico;
     private readonly IOrdemProducaoCacheServico _cacheOrdensProducao;
+
+    // GATE 101E-P2: autoridade da capability 261 (singleton em produção). O writer a CONSOME antes do HTTP; o
+    // serviço só a usa para MARCAR RECONCILIAÇÃO nos casos indeterminados/falha-de-persistência-pós-sucesso.
+    private FugaPET_Dev.Servicos.IntegracaoSap.IRuntimeSapWriteCapability261Service _capability261 =
+        FugaPET_Dev.Servicos.IntegracaoSap.RuntimeSapWriteCapability261.Instancia;
+
+    internal FugaPET_Dev.Servicos.IntegracaoSap.IRuntimeSapWriteCapability261Service Capability261Teste
+    {
+        set => _capability261 = value;
+    }
 
     public ConsumoMaterialServico()
         : this(
@@ -575,8 +585,19 @@ public sealed class ConsumoMaterialServico
         }
 
         string chaveNegocio = $"CONSUMO {lancamento.Codigo} OP {lancamento.NumeroOrdem}";
+        // GATE 101E-P2: codigo_lancamento EXPLÍCITO ao writer (nunca extraído da chaveNegocio). O writer aplica o
+        // FINAL WRITE GATE (env OR capability261.TryAdquirir261(codigo)) imediatamente antes do HTTP.
         ResultadoEnvioConsumoSap261 envio =
-            await sap261Servico.EnviarConsumo261Async(preview.Payload, chaveNegocio, cancellationToken);
+            await sap261Servico.EnviarConsumo261Async(preview.Payload, lancamento.Codigo, chaveNegocio, cancellationToken);
+
+        // §6: escrita NÃO autorizada (capability ausente/expirada/PK divergente, env=false) ⇒ ZERO HTTP.
+        // DETERMINADO (nenhum POST): libera o lançamento de volta a PENDENTE_SAP; SEM reconciliação.
+        if (!envio.EnvioAutorizado)
+        {
+            await repositorio.MarcarFalhaSapAsync(lancamento.Codigo, cancellationToken);
+            return envio;
+        }
+
         if (!envio.Sucesso && MensagemIndicaLoteObrigatorioSap(envio.Mensagem))
         {
             envio = SubstituirMensagemFalhaSap(envio, MensagemSapExigeLote);
@@ -586,7 +607,7 @@ public sealed class ConsumoMaterialServico
             envio = SubstituirMensagemFalhaSap(envio, MensagemSapReservaNaoPermiteMovimento);
         }
 
-        // Sucesso COM documento E ano: confirma (exige ENVIANDO_SAP). Erro de confirmacao = critico.
+        // §10: sucesso INEQUÍVOCO (HTTP sucesso + documento + ano) ⇒ CONFIRMADO_SAP.
         if (envio.Sucesso
             && !string.IsNullOrWhiteSpace(envio.DocumentoMaterialSap)
             && !string.IsNullOrWhiteSpace(envio.ExercicioDocumentoMaterialSap))
@@ -607,14 +628,56 @@ public sealed class ConsumoMaterialServico
             }
             catch (Exception)
             {
+                // §14: SAP confirmou (documento+ano), MAS a persistência local falhou ⇒ INDETERMINADO local.
+                // DB permanece ENVIANDO_SAP (NÃO MarcarFalhaSap, NÃO PENDENTE); capability ⇒ RECONCILIACAO. Blind retry proibido.
+                _capability261.MarcarReconciliacao(lancamento.Codigo);
                 return ResultadoEnvioConsumoSap261.Falha(MensagemConfirmacaoCritica, envio.StatusHttp, envio.CorrelationId);
             }
         }
 
-        // Tarefa Consumo 22.5: falha SAP apos a reserva libera o lancamento para PENDENTE_SAP,
-        // mantendo o mesmo registro local para reenvio manual seguro e sem perda de pesagem.
+        // §12: RESULTADO INDETERMINADO (sem status / 408 / 5xx / 2xx sem documento/ano) ⇒ o POST PODE ter ocorrido.
+        // Mantém ENVIANDO_SAP (NÃO MarcarFalhaSap, NÃO PENDENTE); capability ⇒ RECONCILIACAO. Sem segundo POST/blind retry.
+        // Obs.: um 2xx "sucesso" SEM documento/ano também é indeterminado (ResultadoIndeterminado só cobre !Sucesso).
+        bool sucessoSemDocumentoCompleto = envio.Sucesso
+            && (string.IsNullOrWhiteSpace(envio.DocumentoMaterialSap)
+                || string.IsNullOrWhiteSpace(envio.ExercicioDocumentoMaterialSap));
+        if (envio.ResultadoIndeterminado || sucessoSemDocumentoCompleto)
+        {
+            _capability261.MarcarReconciliacao(lancamento.Codigo);
+            return MontarResultadoIndeterminado(envio);
+        }
+
+        // §11: REJEIÇÃO COMPROVADA (4xx de negócio, exceto 408) ⇒ falha segura e reenviável: PENDENTE_SAP,
+        // mantendo o mesmo registro local e a pesagem. Capability permanece CONSUMIDA (novo envio exige nova cerimônia).
         await repositorio.MarcarFalhaSapAsync(lancamento.Codigo, cancellationToken);
         return MontarResultadoFalhaSapPendente(envio);
+    }
+
+    // GATE 101E-P2 §12: resultado indeterminado — DB permanece ENVIANDO_SAP; reconciliação requerida; sem reenvio automático.
+    private static ResultadoEnvioConsumoSap261 MontarResultadoIndeterminado(ResultadoEnvioConsumoSap261 envio)
+    {
+        string resumoSap = envio.StatusHttp.HasValue ? $"HTTP {envio.StatusHttp}" : "sem status HTTP";
+        if (!string.IsNullOrWhiteSpace(envio.MensagemSap))
+        {
+            resumoSap += Environment.NewLine + $"Mensagem: {envio.MensagemSap}";
+        }
+        else if (!string.IsNullOrWhiteSpace(envio.Mensagem))
+        {
+            resumoSap += Environment.NewLine + envio.Mensagem;
+        }
+
+        string mensagem =
+            "O resultado do envio SAP 261 é INDETERMINADO: o documento PODE ter sido criado."
+            + Environment.NewLine
+            + "O lançamento permanece EM ENVIO (reconciliação requerida) — reenvio automático BLOQUEADO."
+            + Environment.NewLine
+            + "Acione o suporte para reconciliar com o SAP antes de qualquer nova tentativa."
+            + Environment.NewLine + Environment.NewLine
+            + "SAP retornou:" + Environment.NewLine + resumoSap;
+
+        return ResultadoEnvioConsumoSap261.Falha(
+            mensagem, envio.StatusHttp, envio.CorrelationId, envio.MetodoHttp, envio.Endpoint,
+            envio.ResponseBody, envio.CodigoErroSap, envio.MensagemSap, envio.DetalhesErroSap, envio.PayloadJson);
     }
 
     private static ResultadoEnvioConsumoSap261 MontarResultadoFalhaSapPendente(

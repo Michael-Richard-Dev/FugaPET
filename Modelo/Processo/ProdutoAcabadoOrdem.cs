@@ -8,8 +8,12 @@ public sealed class ProdutoAcabadoOrdem
     public string Centro { get; init; } = string.Empty;
     public string DepositoDestino { get; init; } = string.Empty;
     public decimal QuantidadePlanejada { get; init; }
-    public decimal QuantidadeEntregue { get; init; }
-    public decimal QuantidadePendente { get; init; }
+
+    // GATE 118B: MfgOrderItemActualDeliveryQty nao existe no contrato real, e a antiga
+    // QuantidadeEntregue (decimal nao-nullable) valia sempre 0 por conta disso. Substituida pelo
+    // campo autoritativo em TRI-STATE; null = INDETERMINADO e nunca 0.
+    public decimal? QuantidadeRecebidaSap { get; init; }   // MfgOrderItemGoodsReceiptQty
+    public decimal? QuantidadePendente { get; init; }      // calculavel so com recebido conhecido
     public string Unidade { get; init; } = "KG";
     public string Lote { get; init; } = string.Empty;
     public string ItemOrdem { get; init; } = string.Empty;
@@ -32,4 +36,3 @@ public sealed record ProdutoAcabadoComponenteOrdem
     public string Lote { get; init; } = string.Empty;
     public string TipoMovimento { get; init; } = string.Empty;
 }
-

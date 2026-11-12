@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Modelo.Processo;
 
@@ -59,6 +59,17 @@ public static class FiltroItensEntradaMaterial
         int totalItens)
     {
         string pedido = string.IsNullOrWhiteSpace(numeroPedido) ? "(não informado)" : numeroPedido.Trim();
+
+        // GATE 073: na porta única não existem as telas separadas — mensagem genérica, sem "Use a tela de ...".
+        if (modo == ModoEntradaMaterial.RecebimentoMercadoria)
+        {
+            return "Este Pedido de Compra não possui itens de mercadoria (matéria-prima ou químico) para recebimento.\r\n\r\n"
+                + $"Pedido: {pedido}\r\n"
+                + $"Itens encontrados: {totalItens}\r\n"
+                + "Itens de mercadoria encontrados: 0\r\n\r\n"
+                + "Verifique o tipo do material no SAP (esperado ROH, HIBE, VERP ou HALB).";
+        }
+
         bool quimico = modo == ModoEntradaMaterial.Quimico;
         string tipo = quimico ? "Entrada de Químicos" : "Entrada de Matéria-Prima";
         string telaAlternativa = quimico ? "Entrada de Matéria-Prima" : "Entrada de Químicos";

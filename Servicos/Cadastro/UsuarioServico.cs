@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Seguranca;

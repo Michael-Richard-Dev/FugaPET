@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>
 /// Estados da integração de UMA caixa individual de Produto Acabado (Handling Unit), ALINHADOS 1:1 ao

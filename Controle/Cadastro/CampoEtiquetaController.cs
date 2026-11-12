@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Cadastro;
+using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Cadastro;
 
 namespace FugaPET_Dev.Controle.Cadastro;

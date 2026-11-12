@@ -257,7 +257,8 @@ public sealed class EtiquetaFormTecnicaTests
     [Fact]
     public void Tela_PosOperacaoVoltaAoModoVazio()
     {
-        Assert.Contains("await CarregarEtiquetasAsync();\r\n        VoltarAoModoVazio();", Form.Replace("\n", "\r\n"), StringComparison.Ordinal);
+        string formNormalizado = Form.Replace("\r\n", "\n").Replace("\r", "\n");
+        Assert.Contains("await CarregarEtiquetasAsync();\n        VoltarAoModoVazio();", formNormalizado, StringComparison.Ordinal);
         Assert.Contains("AplicarModoCard(ModoCard.Vazio)", Form, StringComparison.Ordinal);
         Assert.Contains("etiquetasDataGridView.ClearSelection()", Form, StringComparison.Ordinal);
         Assert.Contains("LimparResumo()", Form, StringComparison.Ordinal);

@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 034_etiqueta_validacao_GAIA.sql
 -- PROPOSTA - NAO EXECUTAR
 -- Validacao pos-proposta 034 - Cadastro de Etiqueta

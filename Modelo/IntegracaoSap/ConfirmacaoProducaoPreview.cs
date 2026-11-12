@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.IntegracaoSap;
+﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// PREVIEW TECNICO (NAO enviado ao SAP) do caminho de Confirmacao de Producao para componentes

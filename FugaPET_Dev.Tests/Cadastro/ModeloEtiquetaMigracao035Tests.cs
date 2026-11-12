@@ -7,11 +7,10 @@ namespace FugaPET_Dev.Tests.Cadastro;
 /// </summary>
 public sealed class ModeloEtiquetaMigracao035Tests
 {
-    private const string Pasta = "035_modelo_etiqueta_regras_banco_FINAL_GAIA";
+    private const string Pasta = "_Q_VARIANTES_GAIA_REV1\\035";
 
     [Theory]
-    [InlineData("DEV")]
-    [InlineData("HML")]
+    [InlineData("Q")]
     public void Preflight_DetectaDuplicidadeGlobal(string amb)
     {
         string sql = LerScript($"035_modelo_etiqueta_preflight_{amb}.sql");
@@ -21,17 +20,16 @@ public sealed class ModeloEtiquetaMigracao035Tests
     }
 
     [Theory]
-    [InlineData("DEV")]
-    [InlineData("HML")]
+    [InlineData("Q")]
     public void Aplicar_CriaObjetosEsperadosEEhTransacionalEIdempotente(string amb)
     {
         string sql = LerScript($"035_modelo_etiqueta_aplicar_{amb}.sql");
         Assert.Contains("BEGIN;", sql, StringComparison.Ordinal);
         Assert.Contains("COMMIT;", sql, StringComparison.Ordinal);
         // Índice global (com IF NOT EXISTS) e remoção do parcial antigo.
-        Assert.Contains("DROP INDEX IF EXISTS", sql, StringComparison.Ordinal);
+        Assert.Contains("DROP INDEX homologacao.uq_modelo_etiqueta_nome_versao_global", sql, StringComparison.Ordinal);
         Assert.Contains("uq_modelo_etiqueta_nome_versao", sql, StringComparison.Ordinal);
-        Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS uq_modelo_etiqueta_nome_versao_global", sql, StringComparison.Ordinal);
+        Assert.Contains("uq_modelo_etiqueta_nome_versao_global", sql, StringComparison.Ordinal);
         // Função e trigger.
         Assert.Contains("CREATE OR REPLACE FUNCTION", sql, StringComparison.Ordinal);
         Assert.Contains("fn_bloqueia_inativar_modelo_com_etiqueta_ativa", sql, StringComparison.Ordinal);
@@ -44,15 +42,14 @@ public sealed class ModeloEtiquetaMigracao035Tests
         Assert.Contains("ck_modelo_etiqueta_altura_positiva", sql, StringComparison.Ordinal);
         // Idempotência: não recria checks já existentes; preflight embutido antes de DROP/CREATE.
         Assert.Contains("IF NOT EXISTS (SELECT 1 FROM pg_constraint", sql, StringComparison.Ordinal);
-        Assert.Contains("APLICAR abortado", sql, StringComparison.Ordinal);
+        Assert.Contains("APLICAR 035 abortado", sql, StringComparison.Ordinal);
         // Não recria versão/ZPL.
         Assert.DoesNotContain("ADD CONSTRAINT ck_modelo_etiqueta_versao", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("ADD CONSTRAINT ck_modelo_etiqueta_zpl_nao_vazio", sql, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("DEV")]
-    [InlineData("HML")]
+    [InlineData("Q")]
     public void Validar_ConfirmaIndiceTriggerECincoChecks(string amb)
     {
         string sql = LerScript($"035_modelo_etiqueta_validar_{amb}.sql");
@@ -67,17 +64,16 @@ public sealed class ModeloEtiquetaMigracao035Tests
     }
 
     [Theory]
-    [InlineData("DEV")]
-    [InlineData("HML")]
+    [InlineData("Q")]
     public void Rollback_RestauraIndiceParcialERemoveObjetosDo035(string amb)
     {
         string sql = LerScript($"035_modelo_etiqueta_rollback_{amb}.sql");
-        Assert.Contains("DROP TRIGGER IF EXISTS trg_bloqueia_inativar_modelo_com_etiqueta_ativa", sql, StringComparison.Ordinal);
-        Assert.Contains("DROP FUNCTION IF EXISTS", sql, StringComparison.Ordinal);
-        Assert.Contains("DROP INDEX IF EXISTS", sql, StringComparison.Ordinal);
+        Assert.Contains("trg_bloqueia_inativar_modelo_com_etiqueta_ativa", sql, StringComparison.Ordinal);
+        Assert.Contains("DROP FUNCTION homologacao.fn_bloqueia_inativar_modelo_com_etiqueta_ativa", sql, StringComparison.Ordinal);
+        Assert.Contains("DROP INDEX homologacao.uq_modelo_etiqueta_nome_versao_global", sql, StringComparison.Ordinal);
         Assert.Contains("uq_modelo_etiqueta_nome_versao_global", sql, StringComparison.Ordinal);
         // Restaura o índice parcial anterior (WHERE situacao = true).
-        Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS uq_modelo_etiqueta_nome_versao", sql, StringComparison.Ordinal);
+        Assert.Contains("CREATE UNIQUE INDEX uq_modelo_etiqueta_nome_versao", sql, StringComparison.Ordinal);
         Assert.Contains("WHERE situacao_modelo_etiqueta = true", sql, StringComparison.Ordinal);
     }
 
@@ -88,11 +84,11 @@ public sealed class ModeloEtiquetaMigracao035Tests
     [InlineData("rollback")]
     public void Scripts_NaoContemComandosDeExclusaoDeDados(string kind)
     {
-        foreach (string amb in new[] { "DEV", "HML" })
+        foreach (string amb in new[] { "Q" })
         {
             string sql = LerScript($"035_modelo_etiqueta_{kind}_{amb}.sql").ToUpperInvariant();
             Assert.DoesNotContain("DELETE FROM", sql, StringComparison.Ordinal);
-            Assert.DoesNotContain("TRUNCATE", sql, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"(?im)^\s*TRUNCATE\b", sql);
             // Não deve haver UPDATE de linhas de dados (apenas DDL). "UPDATE" só apareceria em "BEFORE UPDATE" (trigger).
             Assert.DoesNotContain("UPDATE MODELO_ETIQUETA SET", sql, StringComparison.Ordinal);
         }
@@ -102,7 +98,7 @@ public sealed class ModeloEtiquetaMigracao035Tests
     public void Pacote_TemOsNoveArquivos()
     {
         string dir = Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", Pasta);
-        foreach (string amb in new[] { "DEV", "HML" })
+        foreach (string amb in new[] { "Q" })
         {
             foreach (string kind in new[] { "preflight", "aplicar", "validar", "rollback" })
             {
@@ -110,7 +106,7 @@ public sealed class ModeloEtiquetaMigracao035Tests
                     $"Faltando 035_modelo_etiqueta_{kind}_{amb}.sql");
             }
         }
-        Assert.True(File.Exists(Path.Combine(dir, "README_035_MODELO_ETIQUETA_FINAL_GAIA.txt")), "Faltando README.");
+        Assert.Equal(4, Directory.EnumerateFiles(dir, "035_modelo_etiqueta_*_Q.sql").Count());
     }
 
     private static string LerScript(string nome)

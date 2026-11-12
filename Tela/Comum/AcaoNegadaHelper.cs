@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Controle;
+using FugaPET_Dev.Controle;
 using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Tela.Comum;

@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Consumo;
+﻿namespace FugaPET_Dev.Modelo.Consumo;
 
 /// <summary>Detalhe de uma pesagem do componente (tabela consumo_material_pesagem).</summary>
 public sealed class ConsumoMaterialPesagem

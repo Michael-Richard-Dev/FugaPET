@@ -230,18 +230,18 @@ public sealed class ProdutoAcabadoFormDelegacao044Tests
         Assert.DoesNotContain("LimparOp()", envio, StringComparison.Ordinal);
     }
 
-    // §6: runtime NÃO aprovado quando a configuração efetiva usa postgres; aprovado só com fugapet_dev_app.
+    // §6: runtime NÃO aprovado quando a configuração efetiva usa postgres; aprovado só com fugapet_hml_app.
     [Fact]
     public void Runtime_NaoAprovado_QuandoConfiguracaoUsaPostgres()
     {
         ConfiguracaoBancoPostgreSql comPostgres = new() { Usuario = "postgres" };
         Assert.False(DiagnosticoRuntimeBanco.RuntimeAplicacaoAprovado(comPostgres));
-        Assert.Contains("RUNTIME_DB_ROLE_INCOMPATIVEL=fugapet_dev_app_nao_configurado",
+        Assert.Contains("RUNTIME_DB_ROLE_INCOMPATIVEL=fugapet_hml_app_nao_configurado",
             DiagnosticoRuntimeBanco.Classificar(comPostgres), StringComparison.Ordinal);
 
-        ConfiguracaoBancoPostgreSql comApp = new() { Usuario = "fugapet_dev_app" };
+        ConfiguracaoBancoPostgreSql comApp = new() { Usuario = "fugapet_hml_app" };
         Assert.True(DiagnosticoRuntimeBanco.RuntimeAplicacaoAprovado(comApp));
-        Assert.Equal("RUNTIME_FUGAPET_DEV_APP_VALIDADO", DiagnosticoRuntimeBanco.Classificar(comApp));
+        Assert.Equal("RUNTIME_FUGAPET_HML_APP_VALIDADO", DiagnosticoRuntimeBanco.Classificar(comApp));
     }
 
     // §6: a Fábrica do repositório reporta o diagnóstico e NÃO usa SET ROLE em código produtivo.

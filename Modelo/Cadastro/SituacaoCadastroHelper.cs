@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Cadastro;
+﻿namespace FugaPET_Dev.Modelo.Cadastro;
 
 /// <summary>
 /// Tarefa Tipo de Tara (Ajuste 1): interpretação EXPLÍCITA da situação selecionada na tela

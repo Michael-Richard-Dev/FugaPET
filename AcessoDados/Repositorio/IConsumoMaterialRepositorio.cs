@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.Consumo;
+﻿using FugaPET_Dev.Modelo.Consumo;
 
 namespace FugaPET_Dev.AcessoDados.Repositorio;
 
@@ -49,3 +49,4 @@ public interface IConsumoMaterialRepositorio
         DateTime enviadoSapEmUtc,
         CancellationToken cancellationToken = default);
 }
+

@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Operacao;
+namespace FugaPET_Dev.Servicos.Operacao;
 
 /// <summary>
 /// Resultado da leitura de peso da balanca. Evita exceptions para fluxos esperados
@@ -6,6 +6,8 @@
 /// </summary>
 public sealed record ResultadoLeituraPeso(bool Sucesso, string Peso, string Mensagem)
 {
+    public long? CodigoBalanca { get; init; }
+
     public static ResultadoLeituraPeso Ok(string peso) => new(true, peso, string.Empty);
 
     public static ResultadoLeituraPeso Falha(string mensagem) => new(false, string.Empty, mensagem);

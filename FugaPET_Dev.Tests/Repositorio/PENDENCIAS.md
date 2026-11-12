@@ -1,4 +1,4 @@
-﻿# Pendencias de testes com banco
+# Pendencias de testes com banco
 
 Suite automatizada (xUnit) cobre, sem banco, as guardas de validacao/autorizacao que rodam
 ANTES de tocar repositorio e tambem contratos estaticos dos fluxos criticos:
@@ -18,7 +18,7 @@ Testes COMPORTAMENTAIS (nao contratuais) ja cobertos:
 - AcaoNegadaAuditoriaTests: acao operacional negada registra acesso negado (spy de AuditoriaServico). (#3)
 - MapeamentoCampoEtiquetaServicoTests: excecao generica em SalvarAsync vira falha amigavel (repo fake que lanca). (#4)
 - UsuarioAtualizacaoVinculosTests: AtualizarComVinculosAsync repassa EXATAMENTE 1 perfil ao repositorio (orquestracao). (#6)
-- RepositorioIntegracaoBancoTests: quando `FUGAPET_DEV_TESTE_CONNECTION_STRING` aponta para banco
+- RepositorioIntegracaoBancoTests: quando `FUGAPET_HML_TESTE_CONNECTION_STRING` aponta para banco
   dedicado de teste, prova com PostgreSQL real:
   - UsuarioPerfilRepositorio.SincronizarPerfilUnicoAsync mantem exatamente um perfil ativo.
   - UsuarioRepositorio.AtualizarComVinculosAsync atualiza usuario, perfil unico e setor padrao.
@@ -31,7 +31,7 @@ Como executar os testes reais de repositorio:
 3. Aplicar o schema `homologacao` no banco de teste.
 4. Configurar a variavel:
 
-   `FUGAPET_DEV_TESTE_CONNECTION_STRING=Host=localhost;Port=5432;Database=fuga_balanca_teste;Username=...;Password=...`
+   `FUGAPET_HML_TESTE_CONNECTION_STRING=Host=localhost;Port=5432;Database=fuga_balanca_teste;Username=...;Password=...`
 
 5. Rodar `dotnet test`.
 
@@ -51,6 +51,6 @@ cobrir os FLUXOS COMPLETOS com acesso real:
 
 - InserirComVinculosAsync de ponta a ponta
 
-Nao criar testes contra o banco local de homologacao/desenvolvimento, para evitar falso positivo
+Nao criar testes contra o banco local de homologacao/homologacao, para evitar falso positivo
 e alteracao de dados reais. Caminho recomendado: extrair interfaces dos repositorios e usar fakes,
 ou provisionar banco efemero dedicado para testes de integracao.

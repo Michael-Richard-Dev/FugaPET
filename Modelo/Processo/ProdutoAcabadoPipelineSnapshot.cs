@@ -72,3 +72,20 @@ public enum EtapaPipelineProdutoAcabado
     Concluido,
     Bloqueada
 }
+
+/// <summary>
+/// GATE 113M (B2): estado do vínculo 045 de uma caixa. A distinção entre "não tem vínculo" e "não foi
+/// possível consultar" é de SEGURANÇA: só o primeiro autoriza o envio HU direto (113G: 0 linhas ⇒ HU-only
+/// legítimo). O indeterminado NUNCA pode ser tratado como ausência de vínculo.
+/// </summary>
+public enum EstadoVinculo045
+{
+    /// <summary>Consulta executada e materialmente ZERO etapas ⇒ caixa HU-only legítima.</summary>
+    SemVinculo,
+
+    /// <summary>Consulta executada e UMA OU MAIS etapas ⇒ caixa pertence ao pipeline 045 (irreversível).</summary>
+    ComVinculo,
+
+    /// <summary>Não foi possível consultar (operações ausentes/sem persistência/exceção) ⇒ fail-closed.</summary>
+    ConsultaIndisponivel
+}

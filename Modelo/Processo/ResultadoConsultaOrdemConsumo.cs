@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>Cenarios da consulta da Ordem de Producao na Tela de Consumo de Materia-Prima.</summary>
 public enum CenarioConsultaOrdemConsumo

@@ -21,6 +21,14 @@ public sealed class ResultadoEnvioConsumoSap261
     public string? PayloadJson { get; init; }
 
     /// <summary>
+    /// GATE 101E-P2: false SOMENTE quando o FINAL WRITE GATE negou a escrita (capability 261 ausente/expirada/de
+    /// outro lançamento e env write=false) — ou seja, ZERO HTTP comprovado (nenhum POST). É DETERMINADO (não
+    /// indeterminado): o consumidor pode liberar o lançamento com segurança, sem reconciliação. True em todos os
+    /// demais casos (inclusive falha técnica após a aquisição, que é indeterminada via <see cref="ResultadoIndeterminado"/>).
+    /// </summary>
+    public bool EnvioAutorizado { get; init; } = true;
+
+    /// <summary>
     /// Classifica a falha como INDETERMINADA: o documento PODE ter sido criado no SAP, então o
     /// resultado não é uma rejeição comprovada. Consumidores devem BLOQUEAR (não liberar término,
     /// não reenviar automaticamente) em vez de tratar como erro seguro.
@@ -64,6 +72,18 @@ public sealed class ResultadoEnvioConsumoSap261
             StatusHttp = statusHttp,
             CorrelationId = correlationId,
             Mensagem = $"Consumo enviado ao SAP. Documento {documento}/{exercicio}."
+        };
+
+    /// <summary>
+    /// GATE 101E-P2: escrita NÃO autorizada pelo FINAL WRITE GATE (capability 261 ausente/expirada/PK divergente e
+    /// env write=false). ZERO HTTP: nenhum POST ocorreu. Determinado e seguro (sem reconciliação).
+    /// </summary>
+    public static ResultadoEnvioConsumoSap261 NaoAutorizado(string mensagem)
+        => new()
+        {
+            Sucesso = false,
+            EnvioAutorizado = false,
+            Mensagem = mensagem
         };
 
     public static ResultadoEnvioConsumoSap261 Falha(

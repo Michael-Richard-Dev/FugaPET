@@ -477,3 +477,4 @@ public sealed class SemiAcabadoRepositorio : RepositorioBase, ISemiAcabadoReposi
         => new(nome, valor is null ? DBNull.Value : valor);
 }
 
+

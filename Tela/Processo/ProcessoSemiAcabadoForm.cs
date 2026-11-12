@@ -13,11 +13,29 @@ namespace FugaPET_Dev.Tela.Processo;
 public partial class ProcessoSemiAcabadoForm : Form
 {
     internal const string EndpointConsultaOpSemiAcabado = "GET /sap/opu/odata/sap/API_PRODUCTION_ORDER_2_SRV/A_ProductionOrder_2('<OP>')?$format=json&$expand=to_ProductionOrderItem,to_ProductionOrderOperation,to_ProductionOrderStatus&sap-client=110";
-    internal const string MensagemBalancaSemiAcabadoNaoConfigurada = "BalanÃ§a de produto semi-acabado nÃ£o configurada para esta operaÃ§Ã£o.";
+    internal const string MensagemBalancaSemiAcabadoNaoConfigurada = "Balança de produto semi-acabado não configurada para esta operação.";
 
     private readonly SemiAcabadoController _controller;
+
+    // GATE 103V: quando aberta pelo Controle de Apontamentos, a tela nasce com a OP deste contexto
+    // (autoritativa; o operador não troca de OP). Null no fluxo manual — o comportamento manual é preservado.
+    private readonly ContextoApontamentoProcesso? _contextoApontamento;
+
+    /// <summary>
+    /// GATE 103V: resultado devolvido ao Controle de Apontamentos. Inicia SEMPRE NaoConcluido — fechar a tela,
+    /// cancelar a confirmação, abandonar a pesagem ou falhar antes do 101 NÃO fabrica conclusão. Só o sucesso
+    /// inequívoco do movimento 101 (com codigo_semi_acabado_lancamento persistido) devolve ConfirmadoSap.
+    /// </summary>
+    internal ResultadoExecucaoProcesso ResultadoExecucaoApontamento { get; private set; }
+        = ResultadoExecucaoProcesso.NaoConcluido;
     private readonly BalancaLeituraServico _balancaLeituraServico = new();
     private readonly ImpressaoSemiAcabadoServico _impressaoSemiAcabadoServico = new();
+
+    // GATE 104C: cerimônia one-shot de habilitação da escrita SAP 101 (mesma política HABILITAR_ESCRITA_SAP
+    // certificada na Entrada). Rótulo de tela próprio para a auditoria identificar o Semi-Acabado, sem alterar
+    // a policy nem criar env/permissão novos. A confirmação humana do envio permanece a única ação do operador.
+    private readonly global::FugaPET_Dev.Servicos.IntegracaoSap.HabilitacaoEscritaSapServico _habilitacaoEscritaSap
+        = new("ProcessoSemiAcabadoForm");
     private readonly Dictionary<string, List<PesagemSemiAcabado>> _pesagensPorItemOrdem = [];
     private readonly Dictionary<string, TaraCadastro> _tarasPorItemOrdem = [];
     private IReadOnlyList<SemiAcabadoOrdem> _itensOrdem = [];
@@ -28,11 +46,11 @@ public partial class ProcessoSemiAcabadoForm : Form
     private bool _operacaoEmAndamento;
 
     private readonly Dictionary<string, bool> _confirmadoNaSessaoPorItem = [];
-    // CÃ³digo do lanÃ§amento persistido reutilizado no reenvio (nÃ£o insere novo cabeÃ§alho/pesagens) e no histÃ³rico.
+    // Código do lançamento persistido reutilizado no reenvio (não insere novo cabeçalho/pesagens) e no histórico.
     private long? _codigoLancamentoPersistido;
     private bool _modoReenvioLancamentoPersistido;
     private string _statusLancamentoPersistidoAtual = string.Empty;
-    // ProteÃ§Ã£o entre reinicializaÃ§Ãµes: lanÃ§amento aberto em ENVIANDO_SAP/DIVERGENCIA_SAP bloqueia nova pesagem/envio.
+    // Proteção entre reinicializações: lançamento aberto em ENVIANDO_SAP/DIVERGENCIA_SAP bloqueia nova pesagem/envio.
     private bool _bloqueioLancamentoAberto;
     private int _versaoSelecaoItem;
     private bool _restaurandoSelecaoItem;
@@ -73,6 +91,18 @@ public partial class ProcessoSemiAcabadoForm : Form
     {
     }
 
+    // GATE 103V: abertura a partir do Controle de Apontamentos — a tela nasce com a OP do contexto.
+    public ProcessoSemiAcabadoForm(ContextoApontamentoProcesso contexto)
+        : this(new SemiAcabadoController(), contexto ?? throw new ArgumentNullException(nameof(contexto)))
+    {
+    }
+
+    internal ProcessoSemiAcabadoForm(SemiAcabadoController controller, ContextoApontamentoProcesso? contexto)
+        : this(controller)
+    {
+        _contextoApontamento = contexto;
+    }
+
     internal ProcessoSemiAcabadoForm(SemiAcabadoController controller)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
@@ -98,23 +128,44 @@ public partial class ProcessoSemiAcabadoForm : Form
             return;
         }
 
+        // GATE 103V: modo apontamento — carrega a OP do contexto automaticamente após validar permissão.
+        if (_contextoApontamento is not null)
+        {
+            AplicarContextoApontamentoSemiAcabado();
+            await ConsultarOpSelecionadaAsync();
+            return;
+        }
+
         pedidoComboBox.Focus();
+    }
+
+    // GATE 103V: no modo apontamento a OP vem do contexto (autoritativa) e o operador NÃO pode trocar de OP.
+    // Fora do contexto (fluxo manual) este método não é chamado e o seletor permanece livre.
+    private void AplicarContextoApontamentoSemiAcabado()
+    {
+        if (_contextoApontamento is null)
+        {
+            return;
+        }
+
+        pedidoComboBox.Text = _contextoApontamento.NumeroOrdem;
+        pedidoComboBox.Enabled = false;
     }
 
     private void AplicarModoProdutoSemiAcabado()
     {
         Text = "Produto Semi-Acabado";
         headerTitleLabel.Text = "Produto Semi-Acabado";
-        headerSubtitleLabel.Text = "Pesagem e entrada de produto semi-acabado por ordem de produÃ§Ã£o";
+        headerSubtitleLabel.Text = "Pesagem e entrada de produto semi-acabado por ordem de produção";
         productionOrderCaptionLabel.Text = "OP";
-        pedidoComboBox.AccessibleName = "Ordem de ProduÃ§Ã£o";
+        pedidoComboBox.AccessibleName = "Ordem de Produção";
         stepCaptionLabel.Text = "Consulta de OP";
         stepDescriptionLabel.Text = "OP selecionada";
         finishedProductCaptionLabel.Text = "Semi-acabado";
-        // Tarefa 20.5 (Ajuste 2): igual ao Consumo â€” sÃ³ o codigo do material no card, sem descricao duplicada.
+        // Tarefa 20.5 (Ajuste 2): igual ao Consumo — só o codigo do material no card, sem descricao duplicada.
         finishedProductTextBox.Visible = false;
         lotCaptionLabel.Text = "Lote";
-        ovenExitCaptionLabel.Text = "DepÃ³sito destino";
+        ovenExitCaptionLabel.Text = "Depósito destino";
         classificationDateCaptionLabel.Text = "Saldo pendente";
         manufacturingDateCaptionLabel.Text = "Quantidade planejada";
         expirationDateCaptionLabel.Text = "Quantidade entregue";
@@ -124,17 +175,17 @@ public partial class ProcessoSemiAcabadoForm : Form
         productionActionsButton.Visible = false;
         boxesCaptionLabel.Text = "Saldo OP";
         packagesCaptionLabel.Text = "Pesagens";
-        readWeightLegendTextLabel.Text = "F12 - Ler peso balanÃ§a";
+        readWeightLegendTextLabel.Text = "F12 - Ler peso balança";
         manualLotLegendTextLabel.Text = "F9 - Digitar peso";
         lerEtiquetaButton.PrimaryText = "LER PESO";
         lerEtiquetaButton.KeyHint = "F12";
         leituraManualButton.PrimaryText = "DIGITAR PESO";
         leituraManualButton.KeyHint = "F9";
-        deleteLastLegendTextLabel.Text = "Del - Cancelar Ãºltima pesagem";
+        deleteLastLegendTextLabel.Text = "Del - Cancelar última pesagem";
         deleteByCodeLegendTextLabel.Text = "Esc - Fechar";
         statusValueLabel.Text = "AGUARDANDO OP";
         statusHintLabel.Text = "Informe uma OP para iniciar.";
-        sapStatusLabel.Text = _controller.SapSimulado ? "SAP OP: DEMONSTRAÃ‡ÃƒO" : "SAP OP: CONSULTA";
+        sapStatusLabel.Text = _controller.SapSimulado ? "SAP OP: DEMONSTRAÇÃO" : "SAP OP: CONSULTA";
         statusLabel.Text = "Informe uma OP para consulta.";
         CarregarContextoTerminal();
         balanceTextBox.Text = MensagemBalancaSemiAcabadoNaoConfigurada;
@@ -147,7 +198,7 @@ public partial class ProcessoSemiAcabadoForm : Form
     }
 
     /// <summary>
-    /// Tarefa 20.5 (Ajuste 1): mesmo padrao do Consumo â€” esconde o painel do icone (marca rosa atras do
+    /// Tarefa 20.5 (Ajuste 1): mesmo padrao do Consumo — esconde o painel do icone (marca rosa atras do
     /// campo de OP) e estica o ComboBox de OP para ocupar toda a largura do cartao.
     /// </summary>
     private void ConfigurarCampoOrdemProducaoSemiAcabado()
@@ -194,7 +245,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         pedidoComboBox.KeyDown += PedidoComboBox_KeyDown;
         pedidoComboBox.Validated += async (_, _) => await ConsultarOpSelecionadaAsync();
         // Tarefa 20.5: o icone de busca (marca rosa) fica oculto; a consulta ocorre por Enter/Validated.
-        // NÃ£o assinar o Click do productionOrderSearchLabel (evita NRE caso o controle seja removido do Designer).
+        // Não assinar o Click do productionOrderSearchLabel (evita NRE caso o controle seja removido do Designer).
         iniciarLeituraButton.Click += IniciarLeitura_Click;
         startActionPanel.Click += IniciarLeitura_Click;
         lerEtiquetaButton.Click += ReadWeightLegend_Click;
@@ -223,7 +274,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         // Tarefa 20.5 (Ajuste 5): mesmo efeito hover do cabecalho da Entrada.
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(200, 78, 10));
     }
 
     private static void ConfigureTitleButtonHover(Label button, Color hoverColor)
@@ -252,7 +303,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_operacaoEmAndamento)
         {
             e.Cancel = true;
-            statusLabel.Text = "Aguarde a conclusÃ£o da consulta ou do envio ao SAP antes de sair.";
+            statusLabel.Text = "Aguarde a conclusão da consulta ou do envio ao SAP antes de sair.";
             return;
         }
 
@@ -300,8 +351,8 @@ public partial class ProcessoSemiAcabadoForm : Form
         }
 
         DialogResult resposta = MessageBox.Show(
-            "Existem pesagens ainda nÃ£o confirmadas e etiquetas que jÃ¡ podem ter sido impressas.\n\n"
-            + "Ao continuar, essas pesagens serÃ£o descartadas e nÃ£o poderÃ£o ser recuperadas.\n\n"
+            "Existem pesagens ainda não confirmadas e etiquetas que já podem ter sido impressas.\n\n"
+            + "Ao continuar, essas pesagens serão descartadas e não poderão ser recuperadas.\n\n"
             + "Descarte fisicamente todas as etiquetas correspondentes.\n\n"
             + "Deseja realmente continuar?",
             $"Confirmar {acao}",
@@ -311,7 +362,7 @@ public partial class ProcessoSemiAcabadoForm : Form
 
         if (resposta != DialogResult.Yes)
         {
-            statusLabel.Text = "OperaÃ§Ã£o cancelada. Pesagens locais e etiquetas preservadas.";
+            statusLabel.Text = "Operação cancelada. Pesagens locais e etiquetas preservadas.";
             return false;
         }
 
@@ -372,15 +423,15 @@ public partial class ProcessoSemiAcabadoForm : Form
         productionDataGridView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         productionDataGridView.MultiSelect = false;
         productionDataGridView.ReadOnly = true;
-        // Tarefa 20.6 (Ajuste 1.1): semantica operacional â€” coluna "Peso" recebe o liquido pesado.
+        // Tarefa 20.6 (Ajuste 1.1): semantica operacional — coluna "Peso" recebe o liquido pesado.
         productionCodeColumn.HeaderText = "Material";
-        productionProductColumn.HeaderText = "DescriÃ§Ã£o";
+        productionProductColumn.HeaderText = "Descrição";
         productionQuantityColumn.HeaderText = "Qtd planejada";
         productionWeightColumn.HeaderText = "Saldo pendente";
         productionPesoLidoColumn.HeaderText = "Peso";
         productionItemIdColumn.HeaderText = "Item OP";
         productionPesoOrigemColumn.HeaderText = "Origem";
-        productionNumeroItemColumn.HeaderText = "DepÃ³sito destino";
+        productionNumeroItemColumn.HeaderText = "Depósito destino";
     }
 
     private void ConfigurarGridPesagens()
@@ -392,7 +443,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         materialStatusColumn.HeaderText = "Seq./Status";
         materialCodeColumn.HeaderText = "Bruto KG";
         materialDescriptionColumn.HeaderText = "Tara KG";
-        materialLotColumn.HeaderText = "LÃ­quido KG";
+        materialLotColumn.HeaderText = "Líquido KG";
         materialExpirationColumn.HeaderText = "Registrado em";
         materialBalanceColumn.HeaderText = "Origem";
     }
@@ -453,7 +504,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         {
             LimparOpCarregada();
             System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha ao consultar OP: {ex.GetType().Name}");
-            MessageBox.Show("NÃ£o foi possÃ­vel consultar a OP. Tente novamente.", "Consulta de OP", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Não foi possível consultar a OP. Tente novamente.", "Consulta de OP", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
@@ -465,10 +516,10 @@ public partial class ProcessoSemiAcabadoForm : Form
     }
 
     /// <summary>
-    /// ProteÃ§Ã£o entre reinicializaÃ§Ãµes (Â§4): consulta o lanÃ§amento ABERTO do item selecionado e reage por status.
-    /// FINALIZADO_LOCAL/ERRO_SAP recuperam o mesmo lanÃ§amento e suas pesagens persistidas (reenvio controlado,
-    /// sem novo cabeÃ§alho); ENVIANDO_SAP/DIVERGENCIA_SAP bloqueiam nova pesagem e novo envio. HistÃ³rico persistido
-    /// aqui compÃµe o MESMO lanÃ§amento reaberto â€” nunca um lanÃ§amento novo (CONFIRMADO_SAP nÃ£o Ã© aberto).
+    /// Proteção entre reinicializações (§4): consulta o lançamento ABERTO do item selecionado e reage por status.
+    /// FINALIZADO_LOCAL/ERRO_SAP recuperam o mesmo lançamento e suas pesagens persistidas (reenvio controlado,
+    /// sem novo cabeçalho); ENVIANDO_SAP/DIVERGENCIA_SAP bloqueiam nova pesagem e novo envio. Histórico persistido
+    /// aqui compõe o MESMO lançamento reaberto — nunca um lançamento novo (CONFIRMADO_SAP não é aberto).
     /// </summary>
     private async Task AvaliarLancamentoAbertoDoItemSelecionadoAsync()
         => await AvaliarLancamentoAbertoDoItemSelecionadoAsync(null, 0);
@@ -498,9 +549,9 @@ public partial class ProcessoSemiAcabadoForm : Form
         }
         catch (Exception ex)
         {
-            // Estrutura ainda nÃ£o aplicada ou falha de leitura nÃ£o pode travar o fluxo local de pesagem.
+            // Estrutura ainda não aplicada ou falha de leitura não pode travar o fluxo local de pesagem.
             System.Diagnostics.Trace.TraceWarning(
-                $"[ProcessoSemiAcabadoForm] Falha ao avaliar lanÃ§amento aberto: {ex.GetType().Name}");
+                $"[ProcessoSemiAcabadoForm] Falha ao avaliar lançamento aberto: {ex.GetType().Name}");
             return;
         }
 
@@ -537,7 +588,7 @@ public partial class ProcessoSemiAcabadoForm : Form
                 _modoReenvioPorItem[chaveAtual] = false;
                 statusValueLabel.Text = "ENVIANDO SAP";
                 statusHintLabel.Text = "Envio em andamento. Aguarde ou acione o suporte para verificar no SAP.";
-                statusLabel.Text = "JÃ¡ existe um envio em andamento para esta OP/item. Novo envio bloqueado.";
+                statusLabel.Text = "Já existe um envio em andamento para esta OP/item. Novo envio bloqueado.";
                 break;
 
             case "DIVERGENCIA_SAP":
@@ -546,9 +597,9 @@ public partial class ProcessoSemiAcabadoForm : Form
                 _bloqueioLancamentoPorItem[chaveAtual] = true;
                 _modoReenvioLancamentoPersistido = false;
                 _modoReenvioPorItem[chaveAtual] = false;
-                statusValueLabel.Text = "DIVERGÃŠNCIA SAP";
-                statusHintLabel.Text = "Confira o documento no SAP. NÃ£o reenviar sem suporte.";
-                statusLabel.Text = "LanÃ§amento com divergÃªncia SAP. Novo lanÃ§amento e novo envio bloqueados.";
+                statusValueLabel.Text = "DIVERGÊNCIA SAP";
+                statusHintLabel.Text = "Confira o documento no SAP. Não reenviar sem suporte.";
+                statusLabel.Text = "Lançamento com divergência SAP. Novo lançamento e novo envio bloqueados.";
                 break;
 
             case "ERRO_SAP":
@@ -556,8 +607,8 @@ public partial class ProcessoSemiAcabadoForm : Form
                 _modoReenvioLancamentoPersistido = true;
                 _modoReenvioPorItem[chaveAtual] = true;
                 statusValueLabel.Text = "ERRO SAP";
-                statusHintLabel.Text = "Reenvio controlado do mesmo lanÃ§amento (nÃ£o cria novo).";
-                statusLabel.Text = "LanÃ§amento anterior com ERRO_SAP recuperado. Confirme para reenviar o mesmo lanÃ§amento.";
+                statusHintLabel.Text = "Reenvio controlado do mesmo lançamento (não cria novo).";
+                statusLabel.Text = "Lançamento anterior com ERRO_SAP recuperado. Confirme para reenviar o mesmo lançamento.";
                 break;
 
             case "FINALIZADO_LOCAL":
@@ -565,8 +616,8 @@ public partial class ProcessoSemiAcabadoForm : Form
                 _modoReenvioLancamentoPersistido = true;
                 _modoReenvioPorItem[chaveAtual] = true;
                 statusValueLabel.Text = "PENDENTE ENVIO";
-                statusHintLabel.Text = "LanÃ§amento local pendente recuperado (nÃ£o duplica).";
-                statusLabel.Text = "LanÃ§amento local pendente recuperado. Confirme para enviar ao SAP.";
+                statusHintLabel.Text = "Lançamento local pendente recuperado (não duplica).";
+                statusLabel.Text = "Lançamento local pendente recuperado. Confirme para enviar ao SAP.";
                 break;
         }
 
@@ -580,9 +631,9 @@ public partial class ProcessoSemiAcabadoForm : Form
     }
 
     /// <summary>
-    /// Recupera as pesagens persistidas do MESMO lanÃ§amento aberto (ERRO_SAP/FINALIZADO_LOCAL) para o item
-    /// selecionado, preservando cada <see cref="PesagemSemiAcabado.CodigoEtiqueta"/> (reimpressÃ£o idÃªntica).
-    /// Estas pesagens compÃµem o total/payload por serem o prÃ³prio lanÃ§amento reenviado â€” nÃ£o Ã© histÃ³rico novo.
+    /// Recupera as pesagens persistidas do MESMO lançamento aberto (ERRO_SAP/FINALIZADO_LOCAL) para o item
+    /// selecionado, preservando cada <see cref="PesagemSemiAcabado.CodigoEtiqueta"/> (reimpressão idêntica).
+    /// Estas pesagens compõem o total/payload por serem o próprio lançamento reenviado — não é histórico novo.
     /// </summary>
     private async Task CarregarLancamentoPersistidoParaReenvioAsync(long codigoLancamento, string? chaveEsperada = null, int versaoSelecao = 0)
     {
@@ -754,7 +805,7 @@ public partial class ProcessoSemiAcabadoForm : Form
             {
                 statusLabel.Text = historicas == 0
                     ? "Item selecionado. Nenhuma pesagem confirmada anterior encontrada."
-                    : $"HistÃ³rico confirmado carregado: {historicas} pesagem(ns). Duplo clique na pesagem para reimprimir.";
+                    : $"Histórico confirmado carregado: {historicas} pesagem(ns). Duplo clique na pesagem para reimprimir.";
             }
             else
             {
@@ -843,7 +894,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (ItemAtualConfirmadoNaSessao)
         {
             MessageBox.Show(
-                "Este item jÃ¡ foi confirmado no SAP nesta sessÃ£o. Recarregue a OP para iniciar um novo lanÃ§amento.",
+                "Este item já foi confirmado no SAP nesta sessão. Recarregue a OP para iniciar um novo lançamento.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -853,7 +904,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_modoReenvioLancamentoPersistido || _bloqueioLancamentoAberto)
         {
             MessageBox.Show(
-                "LanÃ§amento persistido recuperado. A leitura fica bloqueada; use Confirmar para reenviar ou reimprima as etiquetas.",
+                "Lançamento persistido recuperado. A leitura fica bloqueada; use Confirmar para reenviar ou reimprima as etiquetas.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -923,11 +974,11 @@ public partial class ProcessoSemiAcabadoForm : Form
 
         if (!pesagem.Valida)
         {
-            MessageBox.Show("Pesagem cancelada nÃ£o pode ser reimpressa.", "ReimpressÃ£o", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Pesagem cancelada não pode ser reimpressa.", "Reimpressão", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        // ReimpressÃ£o exige permissÃ£o REIMPRIMIR (nÃ£o burlar pelo duplo clique).
+        // Reimpressão exige permissão REIMPRIMIR (não burlar pelo duplo clique).
         if (await BloquearAcaoSemPermissaoAsync(PermissoesSistema.Acoes.Reimprimir, "reimprimir etiqueta de semi-acabado"))
         {
             return;
@@ -939,12 +990,12 @@ public partial class ProcessoSemiAcabadoForm : Form
             await _impressaoSemiAcabadoServico.ReimprimirPesagemAsync(
                 ordemReimpressao,
                 pesagem);
-            statusLabel.Text = $"ReimpressÃ£o enviada para a pesagem {pesagem.Sequencia:00}.";
+            statusLabel.Text = $"Reimpressão enviada para a pesagem {pesagem.Sequencia:00}.";
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha na reimpressÃ£o semi-acabado: {ex.GetType().Name}");
-            MessageBox.Show("NÃ£o foi possÃ­vel reimprimir a etiqueta desta pesagem.", "ReimpressÃ£o", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha na reimpressão semi-acabado: {ex.GetType().Name}");
+            MessageBox.Show("Não foi possível reimprimir a etiqueta desta pesagem.", "Reimpressão", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -968,8 +1019,8 @@ public partial class ProcessoSemiAcabadoForm : Form
         {
             if (SelecaoContinuaAtual(chaveEsperada, versaoSelecao))
             {
-                System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha ao carregar histÃ³rico confirmado: {ex.GetType().Name}");
-                statusLabel.Text = "NÃ£o foi possÃ­vel carregar o histÃ³rico confirmado deste item.";
+                System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha ao carregar histórico confirmado: {ex.GetType().Name}");
+                statusLabel.Text = "Não foi possível carregar o histórico confirmado deste item.";
             }
 
             return historico;
@@ -1047,16 +1098,16 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (!leitura.Sucesso)
         {
             string mensagem = string.IsNullOrWhiteSpace(leitura.Mensagem)
-                ? "NÃ£o foi possÃ­vel ler o peso da balanÃ§a."
+                ? "Não foi possível ler o peso da balança."
                 : leitura.Mensagem;
             statusLabel.Text = mensagem;
-            MessageBox.Show(mensagem, "BalanÃ§a", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(mensagem, "Balança", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         if (!TryParsePesoKg(leitura.Peso, out decimal pesoBrutoKg))
         {
-            MessageBox.Show("Peso retornado pela balanÃ§a Ã© invÃ¡lido.", "BalanÃ§a", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Peso retornado pela balança é inválido.", "Balança", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1065,10 +1116,10 @@ public partial class ProcessoSemiAcabadoForm : Form
 
     private async Task RegistrarPesoManualAsync()
     {
-        // TODO PermissÃµes:
-        // Quando a matriz de permissÃµes do Produto Semi-Acabado for criada,
-        // separar permissÃ£o de peso manual se o negÃ³cio exigir.
-        // Tarefa 20.5 (Ajuste 3): sem matriz especÃ­fica, usa a mesma permissÃ£o operacional do processo (Executar).
+        // TODO Permissões:
+        // Quando a matriz de permissões do Produto Semi-Acabado for criada,
+        // separar permissão de peso manual se o negócio exigir.
+        // Tarefa 20.5 (Ajuste 3): sem matriz específica, usa a mesma permissão operacional do processo (Executar).
         if (await BloquearAcaoSemPermissaoAsync(PermissoesSistema.Acoes.Executar, "informar peso manual de produto semi-acabado"))
         {
             return;
@@ -1103,7 +1154,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         decimal pesoLiquidoKg = pesoBrutoKg - taraKg;
         if (pesoLiquidoKg <= 0m)
         {
-            MessageBox.Show("Peso lÃ­quido do semi-acabado deve ser maior que zero.", "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Peso líquido do semi-acabado deve ser maior que zero.", "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
@@ -1139,19 +1190,19 @@ public partial class ProcessoSemiAcabadoForm : Form
         AtualizarGridPesagens();
         AtualizarResumoPesagem();
         AtualizarContadores();
-        statusLabel.Text = $"Peso registrado. Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | LÃ­quido: {FormatarKg(pesoLiquidoKg)}.";
+        statusLabel.Text = $"Peso registrado. Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
         try
         {
             await _impressaoSemiAcabadoServico.ImprimirNovaPesagemAsync(
                 _ordemSelecionada,
                 pesagem);
-            statusLabel.Text += " Etiqueta enviada para impressÃ£o.";
+            statusLabel.Text += " Etiqueta enviada para impressão.";
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha ao imprimir etiqueta semi-acabado: {ex.GetType().Name}");
             MessageBox.Show(
-                "Pesagem registrada, mas a etiqueta nÃ£o foi impressa. Use duplo clique na pesagem para reimprimir.",
+                "Pesagem registrada, mas a etiqueta não foi impressa. Use duplo clique na pesagem para reimprimir.",
                 "Etiqueta",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -1171,7 +1222,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (ItemAtualConfirmadoNaSessao)
         {
             MessageBox.Show(
-                "Semi-acabado jÃ¡ confirmado nesta sessÃ£o. Recarregue a OP para iniciar novo lanÃ§amento.",
+                "Semi-acabado já confirmado nesta sessão. Recarregue a OP para iniciar novo lançamento.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -1181,8 +1232,8 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_bloqueioLancamentoAberto)
         {
             MessageBox.Show(
-                "LanÃ§amento aberto para esta OP/item (envio em andamento ou divergÃªncia SAP). "
-                + "NÃ£o Ã© possÃ­vel registrar nova pesagem atÃ© verificaÃ§Ã£o no SAP/suporte.",
+                "Lançamento aberto para esta OP/item (envio em andamento ou divergência SAP). "
+                + "Não é possível registrar nova pesagem até verificação no SAP/suporte.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -1192,7 +1243,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_modoReenvioLancamentoPersistido)
         {
             MessageBox.Show(
-                "LanÃ§amento persistido recuperado para reenvio. NÃ£o Ã© possÃ­vel alterar pesagens; confirme para reenviar ou consulte o histÃ³rico.",
+                "Lançamento persistido recuperado para reenvio. Não é possível alterar pesagens; confirme para reenviar ou consulte o histórico.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -1216,7 +1267,7 @@ public partial class ProcessoSemiAcabadoForm : Form
 
     private async Task ConfirmarSemiAcabadoAsync()
     {
-        // ProteÃ§Ã£o contra duplo clique: um envio por vez (nÃ£o salvar/claim/documento em duplicidade).
+        // Proteção contra duplo clique: um envio por vez (não salvar/claim/documento em duplicidade).
         if (_operacaoEmAndamento)
         {
             return;
@@ -1236,8 +1287,8 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_bloqueioLancamentoAberto)
         {
             MessageBox.Show(
-                "Existe um lanÃ§amento aberto para esta OP/item (envio em andamento ou divergÃªncia SAP). "
-                + "Novo envio bloqueado atÃ© verificaÃ§Ã£o no SAP/suporte.",
+                "Existe um lançamento aberto para esta OP/item (envio em andamento ou divergência SAP). "
+                + "Novo envio bloqueado até verificação no SAP/suporte.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -1251,7 +1302,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         int validas = PesagemSemiAcabadoCalculos.ContarValidas(pesagens);
         if (validas == 0)
         {
-            MessageBox.Show("Registre ao menos uma pesagem vÃ¡lida antes de confirmar o semi-acabado.", "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Registre ao menos uma pesagem válida antes de confirmar o semi-acabado.", "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1259,38 +1310,80 @@ public partial class ProcessoSemiAcabadoForm : Form
             ordemConfirmada,
             pesagens,
             EstadoSessaoUsuarioAtual.SessaoAtual?.Login ?? Environment.UserName);
-        // Reenvio: reutiliza o MESMO lanÃ§amento jÃ¡ persistido (nÃ£o insere novo cabeÃ§alho nem reinsere pesagens).
+        // Reenvio: reutiliza o MESMO lançamento já persistido (não insere novo cabeçalho nem reinsere pesagens).
         lancamento.CodigoSemiAcabadoLancamento = _codigoLancamentoPersistido;
         decimal pesoLiquidoTotal = lancamento.PesoLiquidoTotalKg;
 
-        // ConfirmaÃ§Ã£o ao operador antes do envio real (movimento 101).
+        // Confirmação ao operador antes do envio real (movimento 101).
         DialogResult confirmacao = MessageBox.Show(
-            $"Confirmar produÃ§Ã£o de semi-acabado e enviar ao SAP (movimento 101)?\n\n"
+            $"Confirmar produção de semi-acabado e enviar ao SAP (movimento 101)?\n\n"
             + $"OP: {ordemConfirmada.NumeroOrdem}\n"
             + $"Material: {ordemConfirmada.MaterialProduzido}\n"
-            + $"Pesagens vÃ¡lidas: {validas}\n"
-            + $"Peso lÃ­quido total: {FormatarKg(pesoLiquidoTotal)}\n"
+            + $"Pesagens válidas: {validas}\n"
+            + $"Peso líquido total: {FormatarKg(pesoLiquidoTotal)}\n"
             + $"Movimento: 101",
             "Confirmar Produto Semi-Acabado",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
         if (confirmacao != DialogResult.Yes)
         {
-            statusLabel.Text = "ConfirmaÃ§Ã£o cancelada.";
+            statusLabel.Text = "Confirmação cancelada.";
             return;
         }
 
         _operacaoEmAndamento = true;
         productionDataGridView.Enabled = false;
         AtualizarBotoesOperacao();
-        statusLabel.Text = "Enviando lanÃ§amento ao SAP (movimento 101)...";
+        statusLabel.Text = "Preparando lançamento para envio ao SAP (movimento 101)...";
         try
         {
-            ResultadoEnvioSemiAcabadoSap resultado =
-                await _controller.SalvarEEnviarMaterialDocument101Async(lancamento, CancellationToken.None);
+            // GATE 104C-D: IDENTIDADE DURÁVEL ANTES de armar a capability. Persiste (1º envio) ou recupera
+            // (reenvio/ERRO_SAP) o lançamento e valida OP/item/status — SEM armar, SEM claim, SEM HTTP. Falha
+            // aqui: capability permanece DESABILITADA, ZERO POST.
+            PreparacaoEnvioSemiAcabado preparo =
+                await _controller.PrepararEnvio101Async(lancamento, CancellationToken.None);
+            if (preparo.CodigoLancamento > 0)
+            {
+                _codigoLancamentoPersistido = preparo.CodigoLancamento;
+                _codigoLancamentoPersistidoPorItem[chaveConfirmada] = preparo.CodigoLancamento;
+            }
 
-            // Preserva o cÃ³digo persistido ANTES de analisar sucesso/falha: um ERRO_SAP reenviÃ¡vel deve
-            // reutilizar exatamente esta linha no prÃ³ximo clique (nÃ£o duplicar cabeÃ§alho nem pesagens).
+            ResultadoEnvioSemiAcabadoSap resultado;
+            if (!preparo.Sucesso)
+            {
+                resultado = preparo.Falha!;
+            }
+            else
+            {
+                // GATE 104C: cerimônia one-shot 101 — DETALHE INTERNO do envio (a confirmação humana é a ÚNICA
+                // ação do operador). Só agora que a PK durável existe: valida HABILITAR_ESCRITA_SAP, executa a
+                // auditoria durável fail-closed (ENABLE_REQUESTED + ENABLED) e ARMA a capability imediatamente
+                // antes do claim/writer. Falha de sessão/permissão/auditoria/armamento/config/CSRF => ZERO POST e
+                // o apontamento permanece NaoConcluido (sem blind retry). O writer (MaterialDocumentSapServico)
+                // consome one-shot (ARMADA→CONSUMIDA) antes do HTTP.
+                global::FugaPET_Dev.Servicos.Cadastro.ResultadoOperacao habilitacaoEscrita =
+                    await _habilitacaoEscritaSap.HabilitarParaEnvioAsync(CancellationToken.None);
+                if (!habilitacaoEscrita.Sucesso)
+                {
+                    statusValueLabel.Text = "ENVIO BLOQUEADO";
+                    statusHintLabel.Text = habilitacaoEscrita.Mensagem;
+                    statusLabel.Text = habilitacaoEscrita.Mensagem;
+                    MessageBox.Show(
+                        habilitacaoEscrita.Mensagem,
+                        "Produto Semi-Acabado",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                statusLabel.Text = "Enviando lançamento ao SAP (movimento 101)...";
+                // GATE 104C-D: envia o MESMO lançamento persistido (claim FINALIZADO_LOCAL/ERRO_SAP → ENVIANDO_SAP,
+                // writer consome one-shot → CONSUMIDA, exatamente 1 POST). Sem novo cabeçalho/pesagens.
+                resultado = await _controller.EnviarPreparado101Async(preparo, CancellationToken.None);
+            }
+
+            // Preserva o código persistido ANTES de analisar sucesso/falha: um ERRO_SAP reenviável deve
+            // reutilizar exatamente esta linha no próximo clique (não duplicar cabeçalho nem pesagens).
             if (resultado.CodigoLancamento is > 0)
             {
                 _codigoLancamentoPersistido = resultado.CodigoLancamento;
@@ -1304,11 +1397,21 @@ public partial class ProcessoSemiAcabadoForm : Form
                 _confirmadoNaSessaoPorItem[chaveConfirmada] = true;
                 _leituraIniciada = false;
                 statusValueLabel.Text = "CONFIRMADO SAP";
-                statusHintLabel.Text = $"Documento {resultado.MaterialDocument}/{resultado.MaterialDocumentYear}. HistÃ³rico preservado para reimpressÃ£o.";
+                statusHintLabel.Text = $"Documento {resultado.MaterialDocument}/{resultado.MaterialDocumentYear}. Histórico preservado para reimpressão.";
                 statusLabel.Text = $"Semi-acabado CONFIRMADO no SAP. Documento {resultado.MaterialDocument}/{resultado.MaterialDocumentYear}.";
                 AtualizarEstadoLeitura(false);
+                // GATE 103V: só o sucesso INEQUÍVOCO do 101 (documento + ano + lançamento persistido > 0) devolve
+                // ConfirmadoSap ao apontamento, com o MESMO codigo_semi_acabado_lancamento persistido.
+                if (resultado.CodigoLancamento is > 0)
+                {
+                    ResultadoExecucaoApontamento = new ResultadoExecucaoProcesso(
+                        ResultadoExecucaoProcessoApontamento.ConfirmadoSap,
+                        resultado.CodigoLancamento,
+                        statusLabel.Text,
+                        indicadorConfirmadoSap: true);
+                }
                 MessageBox.Show(
-                    $"ProduÃ§Ã£o confirmada no SAP.\n\nDocumento de material: {resultado.MaterialDocument}/{resultado.MaterialDocumentYear}.",
+                    $"Produção confirmada no SAP.\n\nDocumento de material: {resultado.MaterialDocument}/{resultado.MaterialDocumentYear}.",
                     "Produto Semi-Acabado",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
@@ -1321,27 +1424,39 @@ public partial class ProcessoSemiAcabadoForm : Form
                 return;
             }
 
-            // Nenhum caminho de falha confirma a sessÃ£o nem apaga pesagens.
+            // Nenhum caminho de falha confirma a sessão nem apaga pesagens.
             if (resultado.DivergenciaSap)
             {
                 _bloqueioLancamentoAberto = true;
                 _bloqueioLancamentoPorItem[chaveConfirmada] = true;
-                statusValueLabel.Text = "DIVERGÃŠNCIA SAP";
+                statusValueLabel.Text = "DIVERGÊNCIA SAP";
                 statusHintLabel.Text = resultado.Mensagem;
                 statusLabel.Text = resultado.Mensagem;
-                MessageBox.Show(resultado.Mensagem, "DivergÃªncia SAP", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // GATE 103V: divergência NÃO conclui — reflete DivergenciaSap (término bloqueado até regularização).
+                ResultadoExecucaoApontamento = new ResultadoExecucaoProcesso(
+                    ResultadoExecucaoProcessoApontamento.DivergenciaSap,
+                    resultado.CodigoLancamento,
+                    resultado.Mensagem,
+                    indicadorConfirmadoSap: false);
+                MessageBox.Show(resultado.Mensagem, "Divergência SAP", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             statusValueLabel.Text = resultado.EstruturaPendente ? "ESTRUTURA PENDENTE" : "ERRO SAP";
             statusHintLabel.Text = resultado.Mensagem;
             statusLabel.Text = resultado.Mensagem;
+            // GATE 103V: erro/estrutura pendente NÃO conclui — reflete ErroSap (término bloqueado).
+            ResultadoExecucaoApontamento = new ResultadoExecucaoProcesso(
+                ResultadoExecucaoProcessoApontamento.ErroSap,
+                resultado.CodigoLancamento,
+                resultado.Mensagem,
+                indicadorConfirmadoSap: false);
             MessageBox.Show(resultado.Mensagem, "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceError($"[ProcessoSemiAcabadoForm] Falha ao confirmar semi-acabado: {ex.GetType().Name}");
-            statusLabel.Text = "NÃ£o foi possÃ­vel concluir o envio ao SAP. Acione o suporte.";
+            statusLabel.Text = "Não foi possível concluir o envio ao SAP. Acione o suporte.";
             MessageBox.Show(statusLabel.Text, "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
@@ -1377,6 +1492,22 @@ public partial class ProcessoSemiAcabadoForm : Form
         }
     }
 
+    // GATE 103Y: EnvioDuplicadoBloqueado NUNCA conclui o apontamento — nem quando o lançamento persistido
+    // consultado está CONFIRMADO_SAP. Só o caminho NORMAL do 101 (sucesso inequívoco) conclui. Fail-closed.
+    // internal static para teste direto (InternalsVisibleTo) sem instanciar o Form nem tocar banco/SAP.
+    internal static ResultadoExecucaoProcesso ResolverResultadoApontamentoEnvioDuplicadoBloqueado(
+        string? statusPersistido,
+        long? codigoLancamento,
+        string mensagem)
+        => (statusPersistido ?? string.Empty) switch
+        {
+            "DIVERGENCIA_SAP" => new ResultadoExecucaoProcesso(
+                ResultadoExecucaoProcessoApontamento.DivergenciaSap, codigoLancamento, mensagem, indicadorConfirmadoSap: false),
+            "ERRO_SAP" => new ResultadoExecucaoProcesso(
+                ResultadoExecucaoProcessoApontamento.ErroSap, codigoLancamento, mensagem, indicadorConfirmadoSap: false),
+            _ => ResultadoExecucaoProcesso.NaoConcluido
+        };
+
     private async Task TratarEnvioDuplicadoBloqueadoAsync(ResultadoEnvioSemiAcabadoSap resultado, SemiAcabadoOrdem ordemConfirmada, string chave)
     {
         LancamentoSemiAcabado? persistido = null;
@@ -1390,7 +1521,7 @@ public partial class ProcessoSemiAcabadoForm : Form
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha ao consultar lanÃ§amento bloqueado: {ex.GetType().Name}");
+                System.Diagnostics.Trace.TraceWarning($"[ProcessoSemiAcabadoForm] Falha ao consultar lançamento bloqueado: {ex.GetType().Name}");
             }
         }
 
@@ -1408,8 +1539,8 @@ public partial class ProcessoSemiAcabadoForm : Form
             case "DIVERGENCIA_SAP":
                 _bloqueioLancamentoAberto = true;
                 _bloqueioLancamentoPorItem[chave] = true;
-                statusValueLabel.Text = "DIVERGÃŠNCIA SAP";
-                statusHintLabel.Text = "Confira o documento no SAP. NÃ£o reenviar sem suporte.";
+                statusValueLabel.Text = "DIVERGÊNCIA SAP";
+                statusHintLabel.Text = "Confira o documento no SAP. Não reenviar sem suporte.";
                 statusLabel.Text = resultado.Mensagem;
                 break;
 
@@ -1419,7 +1550,7 @@ public partial class ProcessoSemiAcabadoForm : Form
                 AtualizarEstadoLeitura(false);
                 statusValueLabel.Text = "CONFIRMADO SAP";
                 statusHintLabel.Text = string.IsNullOrWhiteSpace(persistido?.MaterialDocument)
-                    ? "LanÃ§amento jÃ¡ confirmado no SAP."
+                    ? "Lançamento já confirmado no SAP."
                     : $"Documento {persistido.MaterialDocument}/{persistido.MaterialDocumentYear}.";
                 statusLabel.Text = statusHintLabel.Text;
                 break;
@@ -1435,7 +1566,7 @@ public partial class ProcessoSemiAcabadoForm : Form
                 _bloqueioLancamentoAberto = false;
                 _bloqueioLancamentoPorItem[chave] = false;
                 statusValueLabel.Text = "ERRO SAP";
-                statusHintLabel.Text = "Reenvio controlado do mesmo lanÃ§amento (nÃ£o cria novo).";
+                statusHintLabel.Text = "Reenvio controlado do mesmo lançamento (não cria novo).";
                 statusLabel.Text = resultado.Mensagem;
                 break;
 
@@ -1447,6 +1578,13 @@ public partial class ProcessoSemiAcabadoForm : Form
                 statusLabel.Text = resultado.Mensagem;
                 break;
         }
+
+        // GATE 103Y: o caminho duplicado NUNCA conclui o apontamento — nem quando o persistido está
+        // CONFIRMADO_SAP (o estado visual/bloqueio acima é preservado; só o resultado do apontamento muda).
+        // A decisão é centralizada e fail-closed: apenas DIVERGENCIA_SAP/ERRO_SAP refletem estado; o resto
+        // (incluindo CONFIRMADO_SAP e ENVIANDO_SAP) permanece NaoConcluido. Só o 101 NORMAL conclui.
+        ResultadoExecucaoApontamento = ResolverResultadoApontamentoEnvioDuplicadoBloqueado(
+            status, resultado.CodigoLancamento, resultado.Mensagem);
 
         AtualizarBotoesOperacao();
         MessageBox.Show(resultado.Mensagem, "Produto Semi-Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1466,7 +1604,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_contextoTerminal?.IdBalancaPadrao is not long idBalanca || idBalanca <= 0)
         {
             statusLabel.Text = MensagemBalancaSemiAcabadoNaoConfigurada;
-            MessageBox.Show(MensagemBalancaSemiAcabadoNaoConfigurada, "BalanÃ§a", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(MensagemBalancaSemiAcabadoNaoConfigurada, "Balança", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
@@ -1489,25 +1627,25 @@ public partial class ProcessoSemiAcabadoForm : Form
 
         if (_idSetorSelecionado is not long codigoSetor || codigoSetor <= 0)
         {
-            string mensagem = "UsuÃ¡rio sem setor definido: nÃ£o Ã© possÃ­vel selecionar a tara do semi-acabado.";
+            string mensagem = "Usuário sem setor definido: não é possível selecionar a tara do semi-acabado.";
             statusLabel.Text = mensagem;
-            MessageBox.Show(mensagem, "SeleÃ§Ã£o de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(mensagem, "Seleção de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;
         }
 
         IReadOnlyList<TaraCadastro> taras = await _controller.ListarTarasAtivasPorSetorAsync(codigoSetor);
         if (taras.Count == 0)
         {
-            string mensagem = "Nenhuma tara ativa para o setor do usuÃ¡rio. Cadastre uma tara antes de pesar.";
+            string mensagem = "Nenhuma tara ativa para o setor do usuário. Cadastre uma tara antes de pesar.";
             statusLabel.Text = mensagem;
-            MessageBox.Show(mensagem, "SeleÃ§Ã£o de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(mensagem, "Seleção de Tara", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;
         }
 
         using SelecaoTaraPesagemForm form = new(taras, _ordemSelecionada.MaterialProduzido);
         if (form.ShowDialog(this) != DialogResult.OK || form.TaraSelecionada is null)
         {
-            statusLabel.Text = "SeleÃ§Ã£o de tara cancelada.";
+            statusLabel.Text = "Seleção de tara cancelada.";
             return null;
         }
 
@@ -1575,7 +1713,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         string texto = pesoTextBox.Text.Trim().Replace(',', '.');
         if (!decimal.TryParse(texto, NumberStyles.Number, CultureInfo.InvariantCulture, out pesoKg) || pesoKg <= 0m)
         {
-            MessageBox.Show("Informe um peso bruto vÃ¡lido maior que zero.", "Peso manual", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Informe um peso bruto válido maior que zero.", "Peso manual", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
@@ -1738,7 +1876,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         if (_modoReenvioLancamentoPersistido || _bloqueioLancamentoAberto)
         {
             MessageBox.Show(
-                "NÃ£o Ã© possÃ­vel cancelar pesagem de lanÃ§amento persistido ou bloqueado pelo SAP.",
+                "Não é possível cancelar pesagem de lançamento persistido ou bloqueado pelo SAP.",
                 "Produto Semi-Acabado",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -1753,9 +1891,9 @@ public partial class ProcessoSemiAcabadoForm : Form
         }
 
         if (MessageBox.Show(
-                $"A etiqueta desta pesagem jÃ¡ pode ter sido impressa.\n\n"
+                $"A etiqueta desta pesagem já pode ter sido impressa.\n\n"
                 + $"Pesagem: {ultimaValida.Sequencia:00}\n"
-                + $"Peso lÃ­quido: {FormatarKg(ultimaValida.PesoLiquidoKg)}\n\n"
+                + $"Peso líquido: {FormatarKg(ultimaValida.PesoLiquidoKg)}\n\n"
                 + "Descarte fisicamente a etiqueta cancelada.\n"
                 + "Confirma o cancelamento?",
                 "Cancelar pesagem",
@@ -1771,7 +1909,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         AtualizarGridPesagens();
         AtualizarResumoPesagem();
         AtualizarContadores();
-        statusLabel.Text = "Ãšltima pesagem do semi-acabado cancelada.";
+        statusLabel.Text = "Última pesagem do semi-acabado cancelada.";
     }
 
     private void AtualizarGridPesagens()
@@ -1819,11 +1957,11 @@ public partial class ProcessoSemiAcabadoForm : Form
     {
         PesagemSemiAcabado pesagem = contexto.Pesagem;
         string origemStatus = contexto.Historica
-            ? $"{pesagem.Origem} Â· HISTÃ“RICO CONFIRMADO"
-            : $"{pesagem.Origem} Â· {pesagem.StatusPesagem}";
+            ? $"{pesagem.Origem} · HISTÓRICO CONFIRMADO"
+            : $"{pesagem.Origem} · {pesagem.StatusPesagem}";
         string documento = string.IsNullOrWhiteSpace(contexto.MaterialDocument)
             ? string.Empty
-            : $" Â· DOC {contexto.MaterialDocument}/{contexto.MaterialDocumentYear}";
+            : $" · DOC {contexto.MaterialDocument}/{contexto.MaterialDocumentYear}";
 
         int indice = materialDataGridView.Rows.Add(
             pesagem.Sequencia.ToString("00", CultureInfo.InvariantCulture),
@@ -1838,7 +1976,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         foreach (DataGridViewCell cell in linha.Cells)
         {
             cell.ToolTipText = contexto.Historica
-                ? $"HistÃ³rico confirmado {contexto.MaterialDocument}/{contexto.MaterialDocumentYear}"
+                ? $"Histórico confirmado {contexto.MaterialDocument}/{contexto.MaterialDocumentYear}"
                 : "Pesagem atual";
         }
 
@@ -1879,7 +2017,7 @@ public partial class ProcessoSemiAcabadoForm : Form
         string chave = ChaveItemOrdem(ordem);
         List<PesagemSemiAcabado> pesagens = ObterPesagens(chave);
 
-        // Total da linha considera SOMENTE pesagens vÃ¡lidas (canceladas nÃ£o entram no total nem no payload SAP).
+        // Total da linha considera SOMENTE pesagens válidas (canceladas não entram no total nem no payload SAP).
         decimal pesoLiquidoTotal = PesagemSemiAcabadoCalculos.SomarPesoLiquidoValido(pesagens);
         string origem = DescreverOrigemConsolidada(pesagens);
 
@@ -1926,7 +2064,7 @@ public partial class ProcessoSemiAcabadoForm : Form
 
     private static string DescreverOrigemConsolidada(IReadOnlyList<PesagemSemiAcabado> pesagens)
     {
-        // Origem consolidada considera apenas pesagens VÃLIDAS.
+        // Origem consolidada considera apenas pesagens VÁLIDAS.
         List<PesagemSemiAcabado> validas = pesagens.Where(PesagemSemiAcabadoCalculos.PesagemValida).ToList();
         if (validas.Count == 0)
         {
@@ -1950,11 +2088,11 @@ public partial class ProcessoSemiAcabadoForm : Form
         decimal utilizado = _ordemSelecionada is null
             ? 0m
             : PesagemSemiAcabadoCalculos.SomarPesoLiquidoValido(ObterPesagens(ChaveItemOrdem(_ordemSelecionada)));
-        weightSummaryTitleLabel.Text = "INFORMAÃ‡ÃƒO DE PESAGEM";
+        weightSummaryTitleLabel.Text = "INFORMAÇÃO DE PESAGEM";
         weightSummarySubtitleLabel.Text = $"Previsto: {FormatarKg(saldo)} | Utilizado: {FormatarKg(utilizado)} | Restante: {FormatarKg(Math.Max(saldo - utilizado, 0m))}";
-        apontamentoInfoCaptionLabel.Text = "Peso bruto / tara / lÃ­quido";
+        apontamentoInfoCaptionLabel.Text = "Peso bruto / tara / líquido";
         apontamentoInfoValueLabel.Text = _ordemSelecionada is null
-            ? "Bruto: 0,000 KG | Tara: 0,000 KG | LÃ­quido: 0,000 KG"
+            ? "Bruto: 0,000 KG | Tara: 0,000 KG | Líquido: 0,000 KG"
             : MontarResumoUltimaPesagem();
         apontamentoChipCaptionLabel.Text = "OP";
         apontamentoChipValueLabel.Text = _ordemSelecionada?.NumeroOrdem ?? "-";
@@ -1964,19 +2102,19 @@ public partial class ProcessoSemiAcabadoForm : Form
     {
         if (_ordemSelecionada is null)
         {
-            return "Bruto: 0,000 KG | Tara: 0,000 KG | LÃ­quido: 0,000 KG";
+            return "Bruto: 0,000 KG | Tara: 0,000 KG | Líquido: 0,000 KG";
         }
 
         PesagemSemiAcabado? ultima = PesagemSemiAcabadoCalculos.UltimaValida(ObterPesagens(ChaveItemOrdem(_ordemSelecionada)));
         return ultima is null
-            ? "Bruto: 0,000 KG | Tara: 0,000 KG | LÃ­quido: 0,000 KG"
-            : $"Bruto: {FormatarKg(ultima.PesoBrutoKg)} | Tara: {FormatarKg(ultima.PesoTaraKg)} | LÃ­quido: {FormatarKg(ultima.PesoLiquidoKg)}";
+            ? "Bruto: 0,000 KG | Tara: 0,000 KG | Líquido: 0,000 KG"
+            : $"Bruto: {FormatarKg(ultima.PesoBrutoKg)} | Tara: {FormatarKg(ultima.PesoTaraKg)} | Líquido: {FormatarKg(ultima.PesoLiquidoKg)}";
     }
 
     private void AtualizarContadores()
     {
         decimal saldoTotal = _itensOrdem.Sum(i => i.QuantidadePendente);
-        // Contador operacional conta SOMENTE pesagens vÃ¡lidas (canceladas ficam sÃ³ no histÃ³rico visual do grid).
+        // Contador operacional conta SOMENTE pesagens válidas (canceladas ficam só no histórico visual do grid).
         int quantidadePesagens = _pesagensPorItemOrdem.Values.Sum(PesagemSemiAcabadoCalculos.ContarValidas);
         boxesCounterLabel.Text = saldoTotal.ToString("0.###", CultureInfo.GetCultureInfo("pt-BR"));
         packagesCounterLabel.Text = quantidadePesagens.ToString("000", CultureInfo.InvariantCulture);
@@ -2014,7 +2152,7 @@ public partial class ProcessoSemiAcabadoForm : Form
             ? Color.FromArgb(187, 229, 199)
             : Color.FromArgb(248, 190, 190);
 
-        statusCardIcon.Text = iniciada ? "âœ“" : "!";
+        statusCardIcon.Text = iniciada ? "✓" : "!";
         statusCardIcon.ForeColor = statusColor;
 
         statusValueLabel.Text = iniciada ? "ATIVA" : "INATIVA";
@@ -2052,7 +2190,7 @@ public partial class ProcessoSemiAcabadoForm : Form
     private void AtualizarBotoesOperacao()
     {
         bool livre = !_operacaoEmAndamento;
-        // BotÃ£o Confirmar depende de existir ao menos UMA pesagem VÃLIDA (canceladas nÃ£o contam).
+        // Botão Confirmar depende de existir ao menos UMA pesagem VÁLIDA (canceladas não contam).
         bool possuiPesagem = _ordemSelecionada is not null
             && PesagemSemiAcabadoCalculos.ContarValidas(ObterPesagens(ChaveItemOrdem(_ordemSelecionada))) > 0;
 
@@ -2064,11 +2202,11 @@ public partial class ProcessoSemiAcabadoForm : Form
             && !_modoReenvioLancamentoPersistido
             && !_bloqueioLancamentoAberto;
         iniciarLeituraButton.BaseBackColor = _leituraIniciada
-            ? Color.FromArgb(212, 37, 49)
+            ? Color.FromArgb(250, 105, 26)
             : podeAlternarLeitura ? Color.FromArgb(34, 166, 82) : Color.FromArgb(156, 163, 175);
         iniciarLeituraButton.BaseForeColor = Color.White;
-        iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
-        iniciarLeituraButton.IconGlyph = _leituraIniciada ? "îœš" : "î¨";
+        iniciarLeituraButton.IconFontFamily = "Segoe UI Symbol";
+        iniciarLeituraButton.IconGlyph = _leituraIniciada ? "■" : "▶";
         iniciarLeituraButton.PrimaryText = _leituraIniciada ? "PARAR LEITURA" : "INICIAR LEITURA";
         iniciarLeituraButton.Enabled = podeAlternarLeitura;
         iniciarLeituraButton.Cursor = podeAlternarLeitura ? Cursors.Hand : Cursors.Default;
@@ -2127,8 +2265,8 @@ public partial class ProcessoSemiAcabadoForm : Form
 
     private async Task<bool> BloquearAcaoSemPermissaoAsync(string acao, string descricaoAcao)
     {
-        // TODO PermissÃµes:
-        // Criar permissÃ£o especÃ­fica para Produto Semi-Acabado quando a matriz de permissÃµes for atualizada.
+        // TODO Permissões:
+        // Criar permissão específica para Produto Semi-Acabado quando a matriz de permissões for atualizada.
         if (AutorizacaoServico.PossuiPermissao(AutorizacaoServico.ModuloProcesso, PermissoesSistema.Rotinas.LeituraProducao, acao))
         {
             return false;
@@ -2141,7 +2279,7 @@ public partial class ProcessoSemiAcabadoForm : Form
             descricaoAcao,
             "ProcessoSemiAcabadoForm");
 
-        string mensagem = "UsuÃ¡rio sem permissÃ£o para executar produto semi-acabado.";
+        string mensagem = "Usuário sem permissão para executar produto semi-acabado.";
         statusLabel.Text = mensagem;
         MessageBox.Show(mensagem, "Acesso negado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         return true;
@@ -2151,7 +2289,7 @@ public partial class ProcessoSemiAcabadoForm : Form
     {
         if (saldoPendenteKg > 0m && pesoLiquidoTotalKg > saldoPendenteKg)
         {
-            mensagem = $"Peso lÃ­quido informado ({pesoLiquidoTotalKg:0.###} KG) ultrapassa o saldo previsto do semi-acabado ({saldoPendenteKg:0.###} KG).";
+            mensagem = $"Peso líquido informado ({pesoLiquidoTotalKg:0.###} KG) ultrapassa o saldo previsto do semi-acabado ({saldoPendenteKg:0.###} KG).";
             return false;
         }
 
@@ -2240,7 +2378,7 @@ public partial class ProcessoSemiAcabadoForm : Form
             return false;
         }
 
-        statusLabel.Text = "Aguarde a conclusÃ£o da operaÃ§Ã£o em andamento.";
+        statusLabel.Text = "Aguarde a conclusão da operação em andamento.";
         return true;
     }
 
@@ -2288,4 +2426,7 @@ public partial class ProcessoSemiAcabadoForm : Form
     {
     }
 }
+
+
+
 

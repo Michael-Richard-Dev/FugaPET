@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Auditoria;
+namespace FugaPET_Dev.Servicos.Auditoria;
 
 /// <summary>
 /// Fachada de alto nivel para registrar eventos em auditoria_acao_usuario.
@@ -107,6 +107,30 @@ public class AuditoriaServico
             modulo: ModuloCadastro,
             tela: tela,
             cancellationToken: cancellationToken));
+    }
+
+    // ============================================================
+    // AUTORIZACAO DE ESCRITA SAP (capability runtime 12E-E-B)
+    // FAIL-CLOSED: NAO usa ExecutarSeguroAsync. A excecao PROPAGA para que a falha de
+    // persistencia da auditoria impeca o armamento da capability (AUDIT_FAILURE -> NAO ARMAR).
+    // Nunca registra segredo/token/credencial.
+    // ============================================================
+    public virtual Task RegistrarAutorizacaoEscritaSapDuravelAsync(
+        string acao,
+        string resultado,
+        string mensagem,
+        string? tela = null,
+        CancellationToken cancellationToken = default)
+    {
+        long? operador = Seguranca.EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario;
+        return _acaoUsuarioServico.RegistrarAsync(
+            acao: acao,
+            resultado: resultado,
+            codigoUsuario: operador,
+            mensagem: mensagem,
+            modulo: "INTEGRACAO_SAP",
+            tela: tela,
+            cancellationToken: cancellationToken);
     }
 
     public virtual Task RegistrarEventoOperacionalAsync(

@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -15,7 +15,7 @@ public partial class PerfilAcessoForm : Form
     private readonly bool _integracaoBancoHabilitada = EstadoIntegracaoBanco.Habilitado;
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
+    private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
     private System.Windows.Forms.Timer? _footerClockTimer;
     private readonly List<ProfileRowSelection> _profileRowSelections = new();
     private readonly List<ProfileSearchRow> _profileSearchRows = new();
@@ -514,7 +514,7 @@ public partial class PerfilAcessoForm : Form
 
         ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
         ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(200, 78, 10));
         //voltarButton.Click += (_, _) => Close();
         AlignHeaderRightControls();
     }

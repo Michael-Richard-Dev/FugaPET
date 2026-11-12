@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 034_etiqueta_regras_banco_PROPOSTA_GAIA.sql
 -- PROPOSTA - NAO EXECUTAR
 -- Projeto FugaPET_Dev

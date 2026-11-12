@@ -1,7 +1,7 @@
 -- ============================================================
 -- 031_tipo_tara_regras_banco_PROPOSTA_GAIA.sql
 -- Projeto FugaPET_Dev
--- Banco PostgreSQL - Schema desenvolvimento
+-- Banco PostgreSQL - Schema homologacao
 -- Objeto: Cadastro de Tipo de Tara
 --
 -- OBJETIVO
@@ -24,7 +24,7 @@
 --   4. Para HML, ajustar o schema (homologacao) antes de aplicar.
 -- ============================================================
 
-SET search_path TO desenvolvimento;
+SET search_path TO homologacao;
 
 BEGIN;
 
@@ -37,19 +37,19 @@ DECLARE
     v_tam    integer;
     v_desc   integer;
 BEGIN
-    IF to_regclass('desenvolvimento.tipo_tara') IS NULL THEN
-        RAISE EXCEPTION 'Tabela desenvolvimento.tipo_tara nao existe.';
+    IF to_regclass('homologacao.tipo_tara') IS NULL THEN
+        RAISE EXCEPTION 'Tabela homologacao.tipo_tara nao existe.';
     END IF;
 
-    IF to_regclass('desenvolvimento.tara') IS NULL THEN
-        RAISE EXCEPTION 'Tabela desenvolvimento.tara nao existe.';
+    IF to_regclass('homologacao.tara') IS NULL THEN
+        RAISE EXCEPTION 'Tabela homologacao.tara nao existe.';
     END IF;
 
     -- Duplicados GLOBAIS (independente da situacao) — bloqueiam o indice unico.
     SELECT count(*) INTO v_dups
       FROM (
         SELECT upper(trim(nome_tipo_tara))
-          FROM desenvolvimento.tipo_tara
+          FROM homologacao.tipo_tara
          GROUP BY upper(trim(nome_tipo_tara))
         HAVING count(*) > 1
       ) d;
@@ -58,7 +58,7 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO v_tam
-      FROM desenvolvimento.tipo_tara
+      FROM homologacao.tipo_tara
      WHERE nome_tipo_tara IS NULL
         OR char_length(trim(nome_tipo_tara)) < 2
         OR char_length(trim(nome_tipo_tara)) > 80;
@@ -67,7 +67,7 @@ BEGIN
     END IF;
 
     SELECT count(*) INTO v_desc
-      FROM desenvolvimento.tipo_tara
+      FROM homologacao.tipo_tara
      WHERE descricao_tipo_tara IS NOT NULL
        AND char_length(trim(descricao_tipo_tara)) > 255;
     IF v_desc > 0 THEN
@@ -78,11 +78,11 @@ END $$;
 -- ============================================================
 -- 2. Checks de tamanho (nome 2..80, descricao <=255)
 -- ============================================================
-ALTER TABLE desenvolvimento.tipo_tara
+ALTER TABLE homologacao.tipo_tara
     ADD CONSTRAINT ck_tipo_tara_nome_tamanho
     CHECK (char_length(trim(nome_tipo_tara)) BETWEEN 2 AND 80);
 
-ALTER TABLE desenvolvimento.tipo_tara
+ALTER TABLE homologacao.tipo_tara
     ADD CONSTRAINT ck_tipo_tara_descricao_tamanho
     CHECK (descricao_tipo_tara IS NULL OR char_length(trim(descricao_tipo_tara)) <= 255);
 
@@ -90,18 +90,18 @@ ALTER TABLE desenvolvimento.tipo_tara
 -- 3. Indice UNICO GLOBAL por upper(trim(nome_tipo_tara)) (independe da situacao)
 -- ============================================================
 CREATE UNIQUE INDEX uq_tipo_tara_nome_global
-    ON desenvolvimento.tipo_tara (upper(trim(nome_tipo_tara)));
+    ON homologacao.tipo_tara (upper(trim(nome_tipo_tara)));
 
 -- ============================================================
 -- 4. Bloqueio de inativacao com Tara ATIVA vinculada (trigger)
 -- ============================================================
-CREATE OR REPLACE FUNCTION desenvolvimento.fn_tipo_tara_bloqueia_inativacao()
+CREATE OR REPLACE FUNCTION homologacao.fn_tipo_tara_bloqueia_inativacao()
 RETURNS trigger AS $$
 BEGIN
     IF OLD.situacao_tipo_tara = true
        AND NEW.situacao_tipo_tara = false
        AND EXISTS (
-            SELECT 1 FROM desenvolvimento.tara
+            SELECT 1 FROM homologacao.tara
              WHERE codigo_tipo_tara = OLD.codigo_tipo_tara
                AND situacao_tara = true
        )
@@ -112,19 +112,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_tipo_tara_bloqueia_inativacao ON desenvolvimento.tipo_tara;
+DROP TRIGGER IF EXISTS trg_tipo_tara_bloqueia_inativacao ON homologacao.tipo_tara;
 CREATE TRIGGER trg_tipo_tara_bloqueia_inativacao
-    BEFORE UPDATE OF situacao_tipo_tara ON desenvolvimento.tipo_tara
+    BEFORE UPDATE OF situacao_tipo_tara ON homologacao.tipo_tara
     FOR EACH ROW
-    EXECUTE FUNCTION desenvolvimento.fn_tipo_tara_bloqueia_inativacao();
+    EXECUTE FUNCTION homologacao.fn_tipo_tara_bloqueia_inativacao();
 
 COMMIT;
 
 -- ============================================================
 -- ROLLBACK (executar manualmente se necessario):
---   DROP TRIGGER IF EXISTS trg_tipo_tara_bloqueia_inativacao ON desenvolvimento.tipo_tara;
---   DROP FUNCTION IF EXISTS desenvolvimento.fn_tipo_tara_bloqueia_inativacao();
---   DROP INDEX IF EXISTS desenvolvimento.uq_tipo_tara_nome_global;
---   ALTER TABLE desenvolvimento.tipo_tara DROP CONSTRAINT IF EXISTS ck_tipo_tara_descricao_tamanho;
---   ALTER TABLE desenvolvimento.tipo_tara DROP CONSTRAINT IF EXISTS ck_tipo_tara_nome_tamanho;
+--   DROP TRIGGER IF EXISTS trg_tipo_tara_bloqueia_inativacao ON homologacao.tipo_tara;
+--   DROP FUNCTION IF EXISTS homologacao.fn_tipo_tara_bloqueia_inativacao();
+--   DROP INDEX IF EXISTS homologacao.uq_tipo_tara_nome_global;
+--   ALTER TABLE homologacao.tipo_tara DROP CONSTRAINT IF EXISTS ck_tipo_tara_descricao_tamanho;
+--   ALTER TABLE homologacao.tipo_tara DROP CONSTRAINT IF EXISTS ck_tipo_tara_nome_tamanho;
 -- ============================================================

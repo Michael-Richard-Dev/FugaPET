@@ -31,8 +31,20 @@ public sealed record EntradaProdutoItemEnvioSap
     /// <summary>Deposito / StorageLocation do item (entrada_produto_item.deposito).</summary>
     public string? Deposito { get; init; }
 
-    /// <summary>Unidade de medida original do pedido (entrada_produto_item.unidade), apenas informativa no envio 101.</summary>
+    /// <summary>
+    /// Unidade de medida da quantidade do pedido (entrada_produto_item.unidade).
+    /// GATE R2: deixou de ser apenas informativa — no caminho ROH ela alimenta EntryUnit e e VALIDADA
+    /// (somente KG neste incremento).
+    /// </summary>
     public string? Unidade { get; init; }
+
+    /// <summary>
+    /// GATE R2: quantidade INTEGRAL do item do Pedido de Compra (OrderQuantity), de
+    /// entrada_produto_item.quantidade_prevista, na unidade de <see cref="Unidade"/>.
+    /// TRI-STATE: null = DESCONHECIDA (bloqueia o caminho ROH), nunca 0 por ausencia. NUNCA e
+    /// substituida pelo peso nem pelo saldo do pedido.
+    /// </summary>
+    public decimal? QuantidadePedidoItem { get; init; }
 
     /// <summary>Batch — numero do lote local (entrada_produto_lote.numero_lote). Uma posicao SAP por lote.</summary>
     public string? NumeroLote { get; init; }

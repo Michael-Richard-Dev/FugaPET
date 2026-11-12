@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.AcessoDados.Repositorio;
+using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
@@ -87,9 +87,11 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("Dictionary<string, List<PesagemSemiAcabado>> _pesagensPorItemOrdem", form, StringComparison.Ordinal);
         Assert.Contains("LancamentoSemiAcabado lancamento", form, StringComparison.Ordinal);
         Assert.Contains("MontarLancamentoLocal(", form, StringComparison.Ordinal);
-        Assert.Contains("SalvarEEnviarMaterialDocument101Async", form, StringComparison.Ordinal);
-        Assert.Contains("UsuÃ¡rio sem permissÃ£o para executar produto semi-acabado.", form, StringComparison.Ordinal);
-        Assert.Contains("TODO PermissÃµes", form, StringComparison.Ordinal);
+        // GATE 104C-D: o envio passou a persistir a identidade durável antes de armar/enviar (Preparar + Enviar).
+        Assert.Contains("PrepararEnvio101Async", form, StringComparison.Ordinal);
+        Assert.Contains("EnviarPreparado101Async", form, StringComparison.Ordinal);
+        Assert.Contains("Usuário sem permissão para executar produto semi-acabado.", form, StringComparison.Ordinal);
+        Assert.Contains("TODO Permissões", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -105,7 +107,7 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("manualLotLegendPanel.Click += LeituraManual_Click;", form, StringComparison.Ordinal);
         Assert.Contains("manualLotLegendIconLabel.Click += LeituraManual_Click;", form, StringComparison.Ordinal);
         Assert.Contains("manualLotLegendTextLabel.Click += LeituraManual_Click;", form, StringComparison.Ordinal);
-        Assert.Contains("readWeightLegendTextLabel.Text = \"F12 - Ler peso balanÃ§a\";", form, StringComparison.Ordinal);
+        Assert.Contains("readWeightLegendTextLabel.Text = \"F12 - Ler peso balança\";", form, StringComparison.Ordinal);
         Assert.Contains("manualLotLegendTextLabel.Text = \"F9 - Digitar peso\";", form, StringComparison.Ordinal);
         Assert.Contains("lerEtiquetaButton.PrimaryText = \"LER PESO\";", form, StringComparison.Ordinal);
         Assert.Contains("lerEtiquetaButton.KeyHint = \"F12\";", form, StringComparison.Ordinal);
@@ -182,7 +184,7 @@ public sealed class ProcessoSemiAcabadoTests
 
         Assert.Contains("GarantirBalancaSemiAcabadoConfiguradaAsync", metodoBalanca, StringComparison.Ordinal);
         Assert.Contains("MensagemBalancaSemiAcabadoNaoConfigurada", metodoBalanca + form, StringComparison.Ordinal);
-        Assert.Contains("BalanÃ§a de produto semi-acabado nÃ£o configurada para esta operaÃ§Ã£o.", form, StringComparison.Ordinal);
+        Assert.Contains("Balança de produto semi-acabado não configurada para esta operação.", form, StringComparison.Ordinal);
         Assert.DoesNotContain("GarantirBalancaSemiAcabadoConfiguradaAsync", metodoManual, StringComparison.Ordinal);
         Assert.Contains("GarantirTaraSemiAcabadoSelecionadaAsync", metodoManual, StringComparison.Ordinal);
     }
@@ -193,12 +195,12 @@ public sealed class ProcessoSemiAcabadoTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoSemiAcabadoForm.cs");
         string metodoConfirmar = ExtrairMetodo(form, "private async Task ConfirmarSemiAcabadoAsync()");
 
-        // O operador confirma via diÃ¡logo funcional e nunca vÃª JSON tÃ©cnico do payload.
+        // O operador confirma via diálogo funcional e nunca vê JSON técnico do payload.
         Assert.Contains("MessageBox.Show(", metodoConfirmar, StringComparison.Ordinal);
         Assert.Contains("MessageBoxButtons.YesNo", metodoConfirmar, StringComparison.Ordinal);
         Assert.DoesNotContain("PayloadJson", metodoConfirmar, StringComparison.Ordinal);
         Assert.DoesNotContain("MensagemSemiAcabadoPendenteSap", metodoConfirmar, StringComparison.Ordinal);
-        // A mensagem removida nÃ£o pode reaparecer em lugar nenhum da tela.
+        // A mensagem removida não pode reaparecer em lugar nenhum da tela.
         Assert.DoesNotContain("MensagemSemiAcabadoPendenteSap", form, StringComparison.Ordinal);
     }
 
@@ -210,13 +212,13 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("PreencherItensSemiAcabado", form, StringComparison.Ordinal);
         Assert.Contains("SemiAcabadoOrdem item", form, StringComparison.Ordinal);
         Assert.Contains("Material", form, StringComparison.Ordinal);
-        Assert.Contains("DescriÃ§Ã£o", form, StringComparison.Ordinal);
+        Assert.Contains("Descrição", form, StringComparison.Ordinal);
         Assert.Contains("Qtd planejada", form, StringComparison.Ordinal);
-        // Tarefa 20.6: cabecalhos operacionais â€” coluna "Peso" recebe o liquido pesado, "Origem" a origem.
+        // Tarefa 20.6: cabecalhos operacionais — coluna "Peso" recebe o liquido pesado, "Origem" a origem.
         Assert.Contains("Saldo pendente", form, StringComparison.Ordinal);
         Assert.Contains("productionPesoLidoColumn.HeaderText = \"Peso\";", form, StringComparison.Ordinal);
         Assert.Contains("productionPesoOrigemColumn.HeaderText = \"Origem\";", form, StringComparison.Ordinal);
-        Assert.Contains("DepÃ³sito destino", form, StringComparison.Ordinal);
+        Assert.Contains("Depósito destino", form, StringComparison.Ordinal);
         Assert.DoesNotContain("ItensPedidoCompra", form, StringComparison.Ordinal);
         Assert.DoesNotContain("TipoPedidoNormal", form, StringComparison.Ordinal);
         Assert.DoesNotContain("Pedido normal", form, StringComparison.Ordinal);
@@ -236,8 +238,12 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Equal("3007", item.Centro);
         Assert.Equal("PA01", item.DepositoDestino);
         Assert.Equal(10m, item.QuantidadePlanejada);
-        Assert.Equal(2m, item.QuantidadeEntregue);
-        Assert.Equal(8m, item.QuantidadePendente);
+        // GATE 118B: comportamento VIGENTE do Semi-Acabado preservado de forma explicita. Antes este
+        // valor vinha de MfgOrderItemActualDeliveryQty, campo que NAO existe no contrato real, logo
+        // sempre foi 0 em runtime — o 2m do fixture nunca chegava aqui. Apontar o Semi-Acabado para
+        // MfgOrderItemGoodsReceiptQty muda um valor PERSISTIDO e exige gate proprio.
+        Assert.Equal(0m, item.QuantidadeEntregue);
+        Assert.Equal(10m, item.QuantidadePendente);
         Assert.Equal("KG", item.Unidade);
         Assert.True(item.Liberada);
         Assert.False(item.EncerradaOuDeletada);
@@ -386,7 +392,7 @@ public sealed class ProcessoSemiAcabadoTests
         string validar = ExtrairMetodo(form, "private bool ValidarPodePesar()");
 
         Assert.Contains("if (ItemAtualConfirmadoNaSessao)", validar, StringComparison.Ordinal);
-        Assert.Contains("Semi-acabado jÃ¡ confirmado nesta sessÃ£o. Recarregue a OP para iniciar novo lanÃ§amento.", validar, StringComparison.Ordinal);
+        Assert.Contains("Semi-acabado já confirmado nesta sessão. Recarregue a OP para iniciar novo lançamento.", validar, StringComparison.Ordinal);
         Assert.Contains("return false;", validar, StringComparison.Ordinal);
 
         // Ambos os fluxos de pesagem chamam a mesma guarda central.
@@ -415,8 +421,8 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void SemiAcabado_ConfirmarTrataTodosOsResultadosDeEnvioSap()
     {
-        // O confirmar reage a CADA cenÃ¡rio de ResultadoEnvioSemiAcabadoSap com estado de tela prÃ³prio:
-        // sucesso (documento), divergÃªncia (bloqueada), estrutura pendente e erro reenviÃ¡vel.
+        // O confirmar reage a CADA cenário de ResultadoEnvioSemiAcabadoSap com estado de tela próprio:
+        // sucesso (documento), divergência (bloqueada), estrutura pendente e erro reenviável.
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoSemiAcabadoForm.cs");
         string confirmar = ExtrairMetodo(form, "private async Task ConfirmarSemiAcabadoAsync()");
 
@@ -424,11 +430,11 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("resultado.MaterialDocument", confirmar, StringComparison.Ordinal);
         Assert.Contains("CONFIRMADO SAP", confirmar, StringComparison.Ordinal);
         Assert.Contains("resultado.DivergenciaSap", confirmar, StringComparison.Ordinal);
-        Assert.Contains("DIVERGÃŠNCIA SAP", confirmar, StringComparison.Ordinal);
+        Assert.Contains("DIVERGÊNCIA SAP", confirmar, StringComparison.Ordinal);
         Assert.Contains("resultado.EstruturaPendente", confirmar, StringComparison.Ordinal);
         Assert.Contains("ERRO SAP", confirmar, StringComparison.Ordinal);
-        // Nenhum caminho de falha confirma a sessÃ£o (nÃ£o bloqueia novo envio apÃ³s erro reenviÃ¡vel).
-        Assert.Contains("Nenhum caminho de falha confirma a sessÃ£o", confirmar, StringComparison.Ordinal);
+        // Nenhum caminho de falha confirma a sessão (não bloqueia novo envio após erro reenviável).
+        Assert.Contains("Nenhum caminho de falha confirma a sessão", confirmar, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -447,14 +453,15 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void SemiAcabado_ConfirmarEnviaAoSapComProtecaoContraDuploClique()
     {
-        // O botÃ£o passou a acionar o envio REAL (SalvarEEnviarMaterialDocument101Async) com guarda
-        // de concorrÃªncia (_operacaoEmAndamento em try/finally) contra duplo clique.
+        // GATE 104C-D: o botão aciona o envio REAL (Preparar identidade durável → armar → EnviarPreparado) com
+        // guarda de concorrência (_operacaoEmAndamento em try/finally) contra duplo clique.
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoSemiAcabadoForm.cs");
         string confirmar = ExtrairMetodo(form, "private async Task ConfirmarSemiAcabadoAsync()");
 
         Assert.Contains("if (_operacaoEmAndamento)", confirmar, StringComparison.Ordinal);
         Assert.Contains("_operacaoEmAndamento = true;", confirmar, StringComparison.Ordinal);
-        Assert.Contains("await _controller.SalvarEEnviarMaterialDocument101Async(lancamento, CancellationToken.None);", confirmar, StringComparison.Ordinal);
+        Assert.Contains("await _controller.PrepararEnvio101Async(lancamento, CancellationToken.None);", confirmar, StringComparison.Ordinal);
+        Assert.Contains("await _controller.EnviarPreparado101Async(preparo, CancellationToken.None);", confirmar, StringComparison.Ordinal);
         Assert.Contains("finally", confirmar, StringComparison.Ordinal);
         Assert.Contains("_operacaoEmAndamento = false;", confirmar, StringComparison.Ordinal);
     }
@@ -547,7 +554,7 @@ public sealed class ProcessoSemiAcabadoTests
 
         // Metodo que atualiza a linha principal.
         string atualizar = ExtrairMetodo(form, "private void AtualizarLinhaPrincipalComPesagem(SemiAcabadoOrdem ordem)");
-        // Total considera SOMENTE pesagens vÃ¡lidas (canceladas nÃ£o entram no total nem no payload SAP).
+        // Total considera SOMENTE pesagens válidas (canceladas não entram no total nem no payload SAP).
         Assert.Contains("PesagemSemiAcabadoCalculos.SomarPesoLiquidoValido(pesagens)", atualizar, StringComparison.Ordinal);
         Assert.Contains("linha.Cells[\"productionPesoLidoColumn\"].Value", atualizar, StringComparison.Ordinal);
         Assert.Contains("pesoLiquidoTotal > 0m ? FormatarKg(pesoLiquidoTotal) : string.Empty", atualizar, StringComparison.Ordinal);
@@ -616,13 +623,13 @@ public sealed class ProcessoSemiAcabadoTests
     }
 
     // ======================================================================
-    // Comportamentais â€” cÃ¡lculo vÃ¡lido-apenas, envio SAP e agnosticismo de schema.
+    // Comportamentais — cálculo válido-apenas, envio SAP e agnosticismo de schema.
     // ======================================================================
 
     [Fact]
     public void Calculos_TotalEContagemConsideramSomenteValidas()
     {
-        // Duas pesagens de 50 kg vÃ¡lidas: total 100, contagem 2.
+        // Duas pesagens de 50 kg válidas: total 100, contagem 2.
         List<PesagemSemiAcabado> duasValidas =
         [
             new() { Sequencia = 1, PesoLiquidoKg = 50m, StatusPesagem = "VALIDA" },
@@ -631,7 +638,7 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Equal(100m, PesagemSemiAcabadoCalculos.SomarPesoLiquidoValido(duasValidas));
         Assert.Equal(2, PesagemSemiAcabadoCalculos.ContarValidas(duasValidas));
 
-        // Cancelando a segunda: total volta para 50 e contagem para 1 (cancelada nÃ£o entra).
+        // Cancelando a segunda: total volta para 50 e contagem para 1 (cancelada não entra).
         List<PesagemSemiAcabado> umaCancelada =
         [
             new() { Sequencia = 1, PesoLiquidoKg = 50m, StatusPesagem = "VALIDA" },
@@ -664,6 +671,95 @@ public sealed class ProcessoSemiAcabadoTests
         SemiAcabadoServico servico = CriarServico(repo, sap);
 
         ResultadoEnvioSemiAcabadoSap resultado = await servico.SalvarEEnviarSap101Async(LancamentoValido(2.5m));
+
+        Assert.True(resultado.EnvioDuplicadoBloqueado);
+        Assert.Equal(0, sap.Chamadas);
+        Assert.Empty(repo.Transicoes);
+    }
+
+    // ======================================================================
+    // GATE 104C-D — split Preparar (identidade durável, ANTES de armar) × EnviarPreparado (claim + POST).
+    // ======================================================================
+
+    [Fact] // Preparar persiste a IDENTIDADE DURÁVEL sem claim e sem POST (a capability nem é tocada aqui).
+    public async Task Preparar_PersisteIdentidade_SemClaimSemPost()
+    {
+        SemiAcabadoRepositorioFake repo = new();
+        MaterialDocumentSapFake sap = new(SucessoSap());
+        SemiAcabadoServico servico = CriarServico(repo, sap);
+
+        PreparacaoEnvioSemiAcabado preparo = await servico.PrepararEnvio101Async(LancamentoValido(2.5m));
+
+        Assert.True(preparo.Sucesso);
+        Assert.Equal(42L, preparo.CodigoLancamento);   // PK durável já existe após Preparar
+        Assert.Equal(1, repo.SalvouLocal);
+        Assert.Empty(repo.Reservas);                    // sem claim
+        Assert.Equal(0, sap.Chamadas);                  // ZERO POST
+        Assert.Empty(repo.Transicoes);
+    }
+
+    [Fact] // Falha ao persistir ⇒ sem PK, sem POST (form não chega a armar; capability permanece DESABILITADA).
+    public async Task Preparar_FalhaPersistencia_SemPkSemPost()
+    {
+        SemiAcabadoRepositorioFake repo = new() { Estrutura = false };
+        MaterialDocumentSapFake sap = new(SucessoSap());
+        SemiAcabadoServico servico = CriarServico(repo, sap);
+
+        PreparacaoEnvioSemiAcabado preparo = await servico.PrepararEnvio101Async(LancamentoValido(2.5m));
+
+        Assert.False(preparo.Sucesso);
+        Assert.NotNull(preparo.Falha);
+        Assert.True(preparo.Falha!.EstruturaPendente);
+        Assert.Equal(0, repo.SalvouLocal);
+        Assert.Equal(0, sap.Chamadas);
+    }
+
+    [Fact] // Reenvio ERRO_SAP: reutiliza a MESMA PK persistida, sem novo cabeçalho/pesagens.
+    public async Task Preparar_RecoveryErroSap_ReutilizaMesmaPkSemNovoHeader()
+    {
+        LancamentoSemiAcabado persistido = LancamentoValido(2.5m);
+        persistido.CodigoSemiAcabadoLancamento = 1;
+        persistido.StatusLancamento = "ERRO_SAP";
+        SemiAcabadoRepositorioFake repo = new() { LancamentoPersistido = persistido };
+        MaterialDocumentSapFake sap = new(SucessoSap());
+        SemiAcabadoServico servico = CriarServico(repo, sap);
+
+        LancamentoSemiAcabado reenvio = LancamentoValido(2.5m);
+        reenvio.CodigoSemiAcabadoLancamento = 1;
+        PreparacaoEnvioSemiAcabado preparo = await servico.PrepararEnvio101Async(reenvio);
+
+        Assert.True(preparo.Sucesso);
+        Assert.Equal(1L, preparo.CodigoLancamento);
+        Assert.Equal(0, repo.SalvouLocal);   // nenhum novo cabeçalho/pesagem no reenvio
+        Assert.Equal(0, sap.Chamadas);
+    }
+
+    [Fact] // EnviarPreparado faz o claim e EXATAMENTE 1 POST, confirmando com a MESMA PK real.
+    public async Task EnviarPreparado_ClaimEUmPost_ConfirmaComPkReal()
+    {
+        SemiAcabadoRepositorioFake repo = new();
+        MaterialDocumentSapFake sap = new(SucessoSap());
+        SemiAcabadoServico servico = CriarServico(repo, sap);
+
+        PreparacaoEnvioSemiAcabado preparo = await servico.PrepararEnvio101Async(LancamentoValido(2.5m));
+        ResultadoEnvioSemiAcabadoSap resultado = await servico.EnviarPreparado101Async(preparo);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(42L, resultado.CodigoLancamento);
+        Assert.Equal([42L], repo.Reservas);    // claim exatamente uma vez
+        Assert.Equal(1, sap.Chamadas);          // EXATAMENTE 1 POST
+        Assert.Equal(["CONFIRMADO"], repo.Transicoes);
+    }
+
+    [Fact] // Claim recusado no EnviarPreparado ⇒ ZERO POST (não fabrica ConfirmadoSap).
+    public async Task EnviarPreparado_ClaimRecusado_ZeroPost()
+    {
+        SemiAcabadoRepositorioFake repo = new() { ReservaConcedida = false };
+        MaterialDocumentSapFake sap = new(SucessoSap());
+        SemiAcabadoServico servico = CriarServico(repo, sap);
+
+        PreparacaoEnvioSemiAcabado preparo = await servico.PrepararEnvio101Async(LancamentoValido(2.5m));
+        ResultadoEnvioSemiAcabadoSap resultado = await servico.EnviarPreparado101Async(preparo);
 
         Assert.True(resultado.EnvioDuplicadoBloqueado);
         Assert.Equal(0, sap.Chamadas);
@@ -709,7 +805,7 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public async Task Servico_Http2xxSemDocumento_MarcaDivergenciaBloqueada()
     {
-        // CombinaÃ§Ã£o REAL do MaterialDocumentSapApiClient para 2xx sem documento:
+        // Combinação REAL do MaterialDocumentSapApiClient para 2xx sem documento:
         // Sucesso=false, StatusHttp=201, Etapa=PARSE_RESPOSTA, documentos ausentes.
         SemiAcabadoRepositorioFake repo = new();
         MaterialDocumentSapFake sap = new(new ResultadoMaterialDocumentSap
@@ -726,7 +822,7 @@ public sealed class ProcessoSemiAcabadoTests
 
         Assert.True(resultado.DivergenciaSap);
         Assert.False(resultado.Sucesso);
-        Assert.Contains("NÃ£o reenviar sem suporte", resultado.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("sem rastreabilidade do documento", resultado.Mensagem, StringComparison.Ordinal);
         Assert.Equal(["DIVERGENCIA"], repo.Transicoes);
         Assert.DoesNotContain("ERRO", repo.Transicoes);
         Assert.Equal(42L, resultado.CodigoLancamento);
@@ -827,7 +923,7 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public async Task Servico_Http400Negocio_MarcaErroReenviavel()
     {
-        // RejeiÃ§Ã£o HTTP explÃ­cita de negÃ³cio (400): falha segura, sem documento â†’ ERRO_SAP (reenviÃ¡vel).
+        // Rejeição HTTP explícita de negócio (400): falha segura, sem documento â†’ ERRO_SAP (reenviável).
         SemiAcabadoRepositorioFake repo = new();
         MaterialDocumentSapFake sap = new(new ResultadoMaterialDocumentSap
         {
@@ -850,7 +946,7 @@ public sealed class ProcessoSemiAcabadoTests
     {
         SemiAcabadoRepositorioFake repo = new();
 
-        // 1Âº envio: rejeiÃ§Ã£o de negÃ³cio comprovada â†’ ERRO_SAP; salva uma vez e devolve o cÃ³digo 42.
+        // 1º envio: rejeição de negócio comprovada â†’ ERRO_SAP; salva uma vez e devolve o código 42.
         SemiAcabadoServico servicoErro = CriarServico(repo, new MaterialDocumentSapFake(new ResultadoMaterialDocumentSap
         {
             Sucesso = false,
@@ -865,14 +961,14 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Equal(42L, r1.CodigoLancamento);
         Assert.Equal(["ERRO"], repo.Transicoes);
 
-        // 2Âº envio: a tela reutiliza o cÃ³digo 42 (via _codigoLancamentoPersistido). NÃƒO salva de novo.
+        // 2º envio: a tela reutiliza o código 42 (via _codigoLancamentoPersistido). NÃO salva de novo.
         SemiAcabadoServico servicoOk = CriarServico(repo, new MaterialDocumentSapFake(SucessoSap()));
         LancamentoSemiAcabado lancamento2 = LancamentoValido(2.5m);
         lancamento2.CodigoSemiAcabadoLancamento = r1.CodigoLancamento;
         ResultadoEnvioSemiAcabadoSap r2 = await servicoOk.SalvarEEnviarSap101Async(lancamento2);
 
-        Assert.Equal(1, repo.SalvouLocal);            // nÃ£o inseriu novo cabeÃ§alho/pesagens
-        Assert.Equal([42L, 42L], repo.Reservas);      // ambas as reservas no MESMO lanÃ§amento
+        Assert.Equal(1, repo.SalvouLocal);            // não inseriu novo cabeçalho/pesagens
+        Assert.Equal([42L, 42L], repo.Reservas);      // ambas as reservas no MESMO lançamento
         Assert.True(r2.Sucesso);
         Assert.Equal(["ERRO", "CONFIRMADO"], repo.Transicoes);
     }
@@ -880,8 +976,8 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public async Task Integracao_Cliente2xxSemDocumento_ViraDivergenciaNoServico()
     {
-        // IntegraÃ§Ã£o clienteâ†’resultadoâ†’serviÃ§o: garante que a semÃ¢ntica REAL do cliente (2xx sem documento)
-        // seja classificada como DIVERGENCIA pelo serviÃ§o, impedindo drift entre as duas camadas.
+        // Integração clienteâ†’resultadoâ†’serviço: garante que a semântica REAL do cliente (2xx sem documento)
+        // seja classificada como DIVERGENCIA pelo serviço, impedindo drift entre as duas camadas.
         ResultadoMaterialDocumentSap doCliente = MaterialDocumentSapApiClient.InterpretarSucesso(201, "{\"d\":{}}");
         Assert.False(doCliente.Sucesso);
         Assert.Equal(201, doCliente.StatusHttp);
@@ -900,7 +996,7 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void Etiqueta_CodigoUnicoEntreLancamentosDaMesmaOpItem()
     {
-        // Â§6: dois lanÃ§amentos parciais da MESMA OP/item reiniciam a sequÃªncia â€” o cÃ³digo NÃƒO pode colidir.
+        // §6: dois lançamentos parciais da MESMA OP/item reiniciam a sequência — o código NÃO pode colidir.
         SemiAcabadoOrdem ordem = new()
         {
             NumeroOrdem = "1001347",
@@ -912,7 +1008,7 @@ public sealed class ProcessoSemiAcabadoTests
         string b = ImpressaoSemiAcabadoServico.GerarCodigoEtiqueta(ordem);
 
         Assert.NotEqual(a, b);
-        Assert.True(a.Length <= 60, $"cÃ³digo com {a.Length} caracteres excede 60");
+        Assert.True(a.Length <= 60, $"código com {a.Length} caracteres excede 60");
         Assert.StartsWith("SA-1001347-0001-", a, StringComparison.Ordinal);
         Assert.All(a, c => Assert.True(char.IsLetterOrDigit(c) || c == '-', $"caractere inseguro: '{c}'"));
     }
@@ -920,11 +1016,11 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void Etiqueta_ReimpressaoReutilizaCodigoPersistidoSemRecalcular()
     {
-        // A reimpressÃ£o nunca recalcula: reutiliza o CodigoEtiqueta jÃ¡ persistido na pesagem.
+        // A reimpressão nunca recalcula: reutiliza o CodigoEtiqueta jÃ¡ persistido na pesagem.
         string servico = LerArquivoProjeto("Servicos", "Operacao", "ImpressaoSemiAcabadoServico.cs");
         Assert.Contains("Reimpressão bloqueada: CodigoEtiqueta ausente", servico, StringComparison.Ordinal);
         Assert.Contains("CodigoProducao = pesagem.CodigoEtiqueta", servico, StringComparison.Ordinal);
-        // O gerador Ãºnico nÃ£o depende mais de sequÃªncia (que colidia entre lanÃ§amentos parciais).
+        // O gerador único não depende mais de sequência (que colidia entre lançamentos parciais).
         Assert.Contains("GerarCodigoEtiqueta(SemiAcabadoOrdem ordem)", servico, StringComparison.Ordinal);
         Assert.Contains("Guid.NewGuid()", servico, StringComparison.Ordinal);
     }
@@ -932,7 +1028,7 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void Repositorio_LancamentoAberto_ExcluiConfirmado()
     {
-        // Â§4: aberto = FINALIZADO_LOCAL/ENVIANDO_SAP/ERRO_SAP/DIVERGENCIA_SAP; CONFIRMADO_SAP nunca Ã© aberto.
+        // §4: aberto = FINALIZADO_LOCAL/ENVIANDO_SAP/ERRO_SAP/DIVERGENCIA_SAP; CONFIRMADO_SAP nunca é aberto.
         string repo = LerArquivoProjeto("AcessoDados", "Repositorio", "SemiAcabadoRepositorio.cs");
         Assert.Contains(
             "status_lancamento IN ('FINALIZADO_LOCAL', 'ENVIANDO_SAP', 'ERRO_SAP', 'DIVERGENCIA_SAP')",
@@ -943,8 +1039,8 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void Tela_ReutilizaLancamentoPersistidoEBloqueiaAbertos()
     {
-        // Â§3/Â§4: reenvio reutiliza o mesmo lanÃ§amento; a avaliaÃ§Ã£o de lanÃ§amento aberto recupera sÃ³ os
-        // nÃ£o-confirmados e bloqueia ENVIANDO_SAP/DIVERGENCIA_SAP (histÃ³rico CONFIRMADO nunca compÃµe payload novo).
+        // §3/§4: reenvio reutiliza o mesmo lançamento; a avaliação de lançamento aberto recupera só os
+        // não-confirmados e bloqueia ENVIANDO_SAP/DIVERGENCIA_SAP (histórico CONFIRMADO nunca compõe payload novo).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoSemiAcabadoForm.cs");
 
         string confirmar = ExtrairMetodo(form, "private async Task ConfirmarSemiAcabadoAsync()");
@@ -966,22 +1062,22 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void Pacote037_TemIndiceAberturaEGrantsDeSequence()
     {
-        // Â§4/Â§7: Ã­ndice parcial de lanÃ§amento aberto + grants USAGE nas sequences identity.
+        // §4/§7: índice parcial de lançamento aberto + grants USAGE nas sequences identity.
         string proposta = LerArquivoProjeto("BancoDados", "001_incrementais",
-            "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_PROPOSTA_GAIA.sql");
+            "_Q_VARIANTES_GAIA_REV1", "037", "037_semi_acabado_Q_PROPOSTA_GAIA.sql");
         Assert.Contains("uq_semi_acabado_lancamento_aberto_por_op_item", proposta, StringComparison.Ordinal);
-        Assert.Contains("GRANT USAGE, SELECT ON SEQUENCE", proposta, StringComparison.Ordinal);
-        Assert.Contains("pg_get_serial_sequence", proposta, StringComparison.Ordinal);
+        Assert.Contains("codigo_semi_acabado_lancamento", proposta, StringComparison.Ordinal);
+        Assert.Contains("GENERATED BY DEFAULT AS IDENTITY", proposta, StringComparison.Ordinal);
 
         string validacao = LerArquivoProjeto("BancoDados", "001_incrementais",
-            "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_VALIDACAO_GAIA.sql");
-        Assert.Contains("has_sequence_privilege", validacao, StringComparison.Ordinal);
+            "_Q_VARIANTES_GAIA_REV1", "037", "037_semi_acabado_Q_VALIDACAO_GAIA.sql");
+        Assert.Contains("codigo_semi_acabado_pesagem", validacao, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Repositorio_NaoDeveFixarSchemaComoPrefixoNoSql()
     {
-        // Tabelas sem prefixo de schema: o schema vem do search_path da conexÃ£o (DEV vs HML).
+        // Tabelas sem prefixo de schema: o schema vem do search_path da conexão (DEV vs HML).
         string repo = LerArquivoProjeto("AcessoDados", "Repositorio", "SemiAcabadoRepositorio.cs");
         Assert.DoesNotContain("homologacao.", repo, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("desenvolvimento.", repo, StringComparison.OrdinalIgnoreCase);
@@ -1096,7 +1192,10 @@ public sealed class ProcessoSemiAcabadoTests
                     Centro = "3007",
                     Deposito = "PA01",
                     QuantidadePrevista = 10m,
-                    QuantidadeEntregue = 2m,
+                    // GATE 118B: MfgOrderItemActualDeliveryQty nao existe no contrato; o campo que
+                    // alimentava QuantidadeEntregue foi removido. O Semi-Acabado segue FORA do escopo
+                    // 118B e preserva o comportamento vigente (entregue = 0).
+                    QuantidadeRecebidaSap = 2m,
                     Unidade = "KG",
                     Lote = "L001"
                 }
@@ -1144,7 +1243,7 @@ public sealed class ProcessoSemiAcabadoTests
     private static string ExtrairClasse(string conteudo, string assinatura)
     {
         int inicio = conteudo.IndexOf(assinatura, StringComparison.Ordinal);
-        Assert.True(inicio >= 0, $"Classe nÃ£o encontrada: {assinatura}");
+        Assert.True(inicio >= 0, $"Classe não encontrada: {assinatura}");
         int abre = conteudo.IndexOf('{', inicio);
         int profundidade = 0;
         for (int i = abre; i < conteudo.Length; i++)
@@ -1163,13 +1262,13 @@ public sealed class ProcessoSemiAcabadoTests
             }
         }
 
-        throw new InvalidOperationException($"Fim da classe nÃ£o encontrado: {assinatura}");
+        throw new InvalidOperationException($"Fim da classe não encontrado: {assinatura}");
     }
 
     private static string ExtrairMetodo(string fonte, string assinatura)
     {
         int inicio = fonte.IndexOf(assinatura, StringComparison.Ordinal);
-        Assert.True(inicio >= 0, $"MÃ©todo nÃ£o encontrado: {assinatura}");
+        Assert.True(inicio >= 0, $"Método não encontrado: {assinatura}");
 
         int proximoMetodo = fonte.IndexOf("\n    private ", inicio + assinatura.Length, StringComparison.Ordinal);
         if (proximoMetodo < 0)
@@ -1193,7 +1292,7 @@ public sealed class ProcessoSemiAcabadoTests
             diretorio = Directory.GetParent(diretorio)?.FullName;
         }
 
-        throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev nÃ£o encontrada.");
+        throw new DirectoryNotFoundException("Raiz do projeto FugaPET_Dev não encontrada.");
     }
 
     private sealed class ProductionOrderSapFakeServico : IProductionOrderSapServico
@@ -1243,7 +1342,7 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("ListarLancamentosPorOpItemAsync", form, StringComparison.Ordinal);
         Assert.Contains("ObterLancamentoCompletoAsync", form, StringComparison.Ordinal);
         Assert.Contains("CONFIRMADO_SAP", form, StringComparison.Ordinal);
-        Assert.Contains("HISTÃ“RICO CONFIRMADO", form, StringComparison.Ordinal);
+        Assert.Contains("HISTÓRICO CONFIRMADO", form, StringComparison.Ordinal);
         Assert.Contains("ContextoPesagemSemiAcabadoGrid? contexto = materialDataGridView.Rows[e.RowIndex].Tag as ContextoPesagemSemiAcabadoGrid;", form, StringComparison.Ordinal);
     }
 
@@ -1260,22 +1359,21 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("Pare a leitura antes de selecionar outro item.", form, StringComparison.Ordinal);
         Assert.Contains("LocalizarLinhaPrincipalPorChave(_chaveItemEmLeitura)", form, StringComparison.Ordinal);
     }
-
     [Fact]
-    public void SemiAcabado_Gaia037_PacoteDeveEstarExtraidoESemDefaultNoSaldoPersistido()
+    public void SemiAcabado_Gaia037_ArtefatosQDevemEstarPresentesESemDefaultNoSaldoPersistido()
     {
-        string proposta = LerArquivoProjeto("BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_PROPOSTA_GAIA.sql");
-        string validacao = LerArquivoProjeto("BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_VALIDACAO_GAIA.sql");
-        string readme = LerArquivoProjeto("BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "README_037_SEMI_ACABADO_GAIA.txt");
+        string pasta = Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", "_Q_VARIANTES_GAIA_REV1", "037");
 
+        Assert.True(Directory.Exists(pasta));
+        Assert.True(File.Exists(Path.Combine(pasta, "037_semi_acabado_Q_PREFLIGHT_GAIA.sql")));
+        Assert.True(File.Exists(Path.Combine(pasta, "037_semi_acabado_Q_PROPOSTA_GAIA.sql")));
+        Assert.True(File.Exists(Path.Combine(pasta, "037_semi_acabado_Q_VALIDACAO_GAIA.sql")));
+        Assert.True(File.Exists(Path.Combine(pasta, "037_semi_acabado_Q_ROLLBACK_GAIA.sql")));
+
+        string proposta = LerArquivoProjeto("BancoDados", "001_incrementais", "_Q_VARIANTES_GAIA_REV1", "037", "037_semi_acabado_Q_PROPOSTA_GAIA.sql");
         Assert.Contains("saldo_apos_pesagem_kg           numeric(14,3) NOT NULL,", proposta, StringComparison.Ordinal);
         Assert.DoesNotContain("saldo_apos_pesagem_kg           numeric(14,3) NOT NULL DEFAULT 0", proposta, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("saldo_apos_pesagem_kg IN (50.000, 0.000)", validacao, StringComparison.Ordinal);
-        Assert.Contains("A aplicacao deve mapear a coluna saldo_apos_pesagem_kg", readme, StringComparison.Ordinal);
-        Assert.True(global::System.IO.File.Exists(global::System.IO.Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_PREFLIGHT_GAIA.sql")));
-        Assert.True(global::System.IO.File.Exists(global::System.IO.Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_ROLLBACK_GAIA.sql")));
     }
-
     [Fact]
     public void SemiAcabado_037_Final_ChaveContextoIncluiOpEItem()
     {
@@ -1372,9 +1470,9 @@ public sealed class ProcessoSemiAcabadoTests
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoSemiAcabadoForm.cs");
         string cancelar = ExtrairMetodo(form, "private void CancelarUltimaPesagem()");
 
-        Assert.Contains("A etiqueta desta pesagem jÃ¡ pode ter sido impressa.", cancelar, StringComparison.Ordinal);
+        Assert.Contains("A etiqueta desta pesagem já pode ter sido impressa.", cancelar, StringComparison.Ordinal);
         Assert.Contains("Pesagem: {ultimaValida.Sequencia:00}", cancelar, StringComparison.Ordinal);
-        Assert.Contains("Peso lÃ­quido: {FormatarKg(ultimaValida.PesoLiquidoKg)}", cancelar, StringComparison.Ordinal);
+        Assert.Contains("Peso líquido: {FormatarKg(ultimaValida.PesoLiquidoKg)}", cancelar, StringComparison.Ordinal);
         Assert.Contains("Descarte fisicamente a etiqueta cancelada.", cancelar, StringComparison.Ordinal);
         Assert.Contains("StatusCancelada", cancelar, StringComparison.Ordinal);
         Assert.Contains("CanceladoEm = DateTime.Now;", cancelar, StringComparison.Ordinal);
@@ -1426,7 +1524,7 @@ public sealed class ProcessoSemiAcabadoTests
         string botoes = ExtrairMetodo(form, "private void AtualizarBotoesOperacao()");
 
         Assert.Contains("if (ItemAtualConfirmadoNaSessao)", iniciar, StringComparison.Ordinal);
-        Assert.Contains("Este item jÃ¡ foi confirmado no SAP nesta sessÃ£o", iniciar, StringComparison.Ordinal);
+        Assert.Contains("Este item já foi confirmado no SAP nesta sessão", iniciar, StringComparison.Ordinal);
         Assert.Contains("&& !ItemAtualConfirmadoNaSessao", botoes, StringComparison.Ordinal);
         Assert.Contains("&& !_modoReenvioLancamentoPersistido", botoes, StringComparison.Ordinal);
         Assert.Contains("&& !_bloqueioLancamentoAberto", botoes, StringComparison.Ordinal);
@@ -1475,7 +1573,7 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("e.KeyCode == Keys.F9 || e.KeyCode == Keys.F12 || e.KeyCode == Keys.Delete", keyDown, StringComparison.Ordinal);
         Assert.Contains("productionDataGridView.Enabled = false;", confirmar, StringComparison.Ordinal);
         Assert.Contains("productionDataGridView.Enabled = true;", confirmar, StringComparison.Ordinal);
-        Assert.Contains("Aguarde a conclusÃ£o da operaÃ§Ã£o em andamento.", form, StringComparison.Ordinal);
+        Assert.Contains("Aguarde a conclusão da operação em andamento.", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1524,7 +1622,7 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("_pesagensPorItemOrdem", possui, StringComparison.Ordinal);
         Assert.Contains("_codigoLancamentoPersistidoPorItem", possui, StringComparison.Ordinal);
         Assert.Contains("codigoLancamento is null or <= 0", possui, StringComparison.Ordinal);
-        Assert.Contains("Existem pesagens ainda nÃ£o confirmadas", confirmar, StringComparison.Ordinal);
+        Assert.Contains("Existem pesagens ainda não confirmadas", confirmar, StringComparison.Ordinal);
         Assert.Contains("Descarte fisicamente todas as etiquetas correspondentes.", confirmar, StringComparison.Ordinal);
         Assert.Contains("MessageBoxDefaultButton.Button2", confirmar, StringComparison.Ordinal);
         Assert.Contains("ConfirmarDescartePesagensLocaisNaoPersistidas(\"limpar a OP\")", consulta, StringComparison.Ordinal);
@@ -1543,7 +1641,7 @@ public sealed class ProcessoSemiAcabadoTests
 
         Assert.Contains("if (_operacaoEmAndamento)", closing, StringComparison.Ordinal);
         Assert.Contains("e.Cancel = true;", closing, StringComparison.Ordinal);
-        Assert.Contains("Aguarde a conclusÃ£o da consulta ou do envio ao SAP antes de sair.", closing, StringComparison.Ordinal);
+        Assert.Contains("Aguarde a conclusão da consulta ou do envio ao SAP antes de sair.", closing, StringComparison.Ordinal);
         Assert.Contains("else if (e.KeyCode == Keys.Escape)", keyDown, StringComparison.Ordinal);
         Assert.Contains("if (BloquearAcaoDuranteOperacao())", keyDown, StringComparison.Ordinal);
         Assert.Contains("productionDataGridView.Enabled = false;", consulta, StringComparison.Ordinal);
@@ -1570,7 +1668,7 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void SemiAcabado_037_Final4_PreflightValidaTamanhoPrecisaoScaleEIdentity()
     {
-        string preflight = LerArquivoProjeto("BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_PREFLIGHT_GAIA.sql");
+        string preflight = LerArquivoProjeto("BancoDados", "001_incrementais", "_Q_VARIANTES_GAIA_REV1", "037", "037_semi_acabado_Q_PREFLIGHT_GAIA.sql");
 
         Assert.Contains("character_maximum_length", preflight, StringComparison.Ordinal);
         Assert.Contains("numeric_precision", preflight, StringComparison.Ordinal);
@@ -1587,7 +1685,7 @@ public sealed class ProcessoSemiAcabadoTests
     [Fact]
     public void SemiAcabado_037_Final4_ScriptsSemBomESetPrimeiroByte()
     {
-        string pasta = Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA");
+        string pasta = Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", "_Q_VARIANTES_GAIA_REV1", "037");
         foreach (string arquivo in Directory.GetFiles(pasta, "*.sql"))
         {
             byte[] bytes = File.ReadAllBytes(arquivo);
@@ -1595,32 +1693,24 @@ public sealed class ProcessoSemiAcabadoTests
             Assert.True(bytes.Length > 0 && bytes[0] == (byte)'\\', Path.GetFileName(arquivo));
         }
     }
-
     [Fact]
-    public void SemiAcabado_037_Final_PacoteCanonicoUnicoEZipSemDefaultZero()
+    public void SemiAcabado_037_Final_ArtefatosQCanonicosSemDefaultZero()
     {
-        string raiz = RaizProjeto();
-        string pasta = Path.Combine(raiz, "BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA");
-        string parent = Path.GetDirectoryName(pasta)!;
-        string zip = Path.Combine(parent, "037_semi_acabado_persistencia_sap_etiqueta_GAIA.zip");
-        string zipObsoleto = Path.Combine(parent, "037_semi_acabado_persistencia_sap_etiqueta_GAIA_REVISADO_GAIA.zip");
+        string pasta = Path.Combine(RaizProjeto(), "BancoDados", "001_incrementais", "_Q_VARIANTES_GAIA_REV1", "037");
 
         Assert.True(Directory.Exists(pasta));
-        Assert.True(File.Exists(zip));
-        Assert.False(File.Exists(zipObsoleto));
 
-        string[] arquivosPasta = Directory.GetFiles(pasta).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray()!;
-        Assert.Equal(5, arquivosPasta.Length);
-
-        using System.IO.Compression.ZipArchive archive = System.IO.Compression.ZipFile.OpenRead(zip);
-        string[] arquivosZip = archive.Entries
-            .Where(e => !string.IsNullOrWhiteSpace(e.Name))
-            .Select(e => e.Name)
+        string[] arquivosPasta = Directory.GetFiles(pasta, "037_semi_acabado_Q_*_GAIA.sql")
+            .Select(Path.GetFileName)
             .Order(StringComparer.Ordinal)
-            .ToArray();
-        Assert.Equal(arquivosPasta, arquivosZip);
+            .ToArray()!;
+        Assert.Equal(4, arquivosPasta.Length);
+        Assert.Contains("037_semi_acabado_Q_PREFLIGHT_GAIA.sql", arquivosPasta);
+        Assert.Contains("037_semi_acabado_Q_PROPOSTA_GAIA.sql", arquivosPasta);
+        Assert.Contains("037_semi_acabado_Q_VALIDACAO_GAIA.sql", arquivosPasta);
+        Assert.Contains("037_semi_acabado_Q_ROLLBACK_GAIA.sql", arquivosPasta);
 
-        string proposta = LerArquivoProjeto("BancoDados", "001_incrementais", "037_semi_acabado_persistencia_sap_etiqueta_GAIA", "037_semi_acabado_DEV_PROPOSTA_GAIA.sql");
+        string proposta = LerArquivoProjeto("BancoDados", "001_incrementais", "_Q_VARIANTES_GAIA_REV1", "037", "037_semi_acabado_Q_PROPOSTA_GAIA.sql");
         Assert.Contains("saldo_apos_pesagem_kg           numeric(14,3) NOT NULL,", proposta, StringComparison.Ordinal);
         Assert.DoesNotContain("saldo_apos_pesagem_kg           numeric(14,3) NOT NULL DEFAULT 0", proposta, StringComparison.OrdinalIgnoreCase);
     }
@@ -1730,6 +1820,7 @@ public sealed class ProcessoSemiAcabadoTests
             => Task.FromResult<IReadOnlyList<LancamentoSemiAcabadoPersistido>>([]);
     }
 }
+
 
 
 

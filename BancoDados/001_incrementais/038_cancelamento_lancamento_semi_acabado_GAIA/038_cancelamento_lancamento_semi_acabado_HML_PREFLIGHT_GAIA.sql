@@ -1,7 +1,7 @@
 ﻿\set ON_ERROR_STOP on
 -- ============================================================
 -- 038_cancelamento_lancamento_semi_acabado_HML_PREFLIGHT_GAIA.sql
--- Projeto FugaPET_HML | Schema: homologacao
+-- Projeto FugaPET_Dev | Schema: homologacao
 -- EXECUCAO CONTROLADA. NAO EXECUTAR AUTOMATICAMENTE.
 -- ============================================================
 

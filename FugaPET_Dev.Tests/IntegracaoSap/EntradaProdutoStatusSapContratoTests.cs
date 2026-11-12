@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tests.IntegracaoSap;
+﻿namespace FugaPET_Dev.Tests.IntegracaoSap;
 
 public sealed class EntradaProdutoStatusSapContratoTests
 {

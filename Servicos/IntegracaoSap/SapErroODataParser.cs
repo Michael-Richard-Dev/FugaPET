@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Xml.Linq;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 
@@ -132,3 +132,4 @@ internal static class SapErroODataParser
     private static string? Limpar(string? valor)
         => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 }
+

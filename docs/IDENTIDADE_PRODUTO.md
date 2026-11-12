@@ -1,4 +1,4 @@
-﻿# Identidade do Produto — FugaPET
+# Identidade do Produto — FugaPET
 
 ## Nome oficial
 

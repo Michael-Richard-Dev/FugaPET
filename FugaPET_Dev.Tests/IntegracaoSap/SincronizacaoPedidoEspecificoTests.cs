@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 
 namespace FugaPET_Dev.Tests.IntegracaoSap;
@@ -13,10 +14,13 @@ public sealed class SincronizacaoPedidoEspecificoTests
             new HttpResponseMessage(HttpStatusCode.NotFound)));
         SincronizacaoPedidoCompraSapServico servico = CriarServico(http);
 
-        var resultado = await servico.SincronizarPedidoAsync("4500000999");
+        // GATE 105G: 404 sobe CLASSIFICADO (NAO_ENCONTRADO/404). Antes era degradado para
+        // "Pedido nao liberado para entrada." — um 404 disfarçado de veredito de negócio.
+        ConsultaSapException erro = await Assert.ThrowsAsync<ConsultaSapException>(
+            () => servico.SincronizarPedidoAsync("4500000999"));
 
-        Assert.False(resultado.Sucesso);
-        Assert.Contains("nao liberado", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(CenarioFalhaConsultaSap.NaoEncontrado, erro.Cenario);
+        Assert.Equal(404, erro.HttpStatus);
     }
 
     [Fact]
@@ -189,10 +193,12 @@ public sealed class SincronizacaoPedidoEspecificoTests
         };
         SincronizacaoPedidoCompraSapServico servico = CriarServico(http);
 
-        var resultado = await servico.SincronizarPedidoAsync("4500000010");
+        // GATE 105G: timeout sobe CLASSIFICADO (TIMEOUT) em vez de virar texto genérico, para que o
+        // cache miss no controller apresente "SAP não respondeu" com o cenário preservado.
+        ConsultaSapException erro = await Assert.ThrowsAsync<ConsultaSapException>(
+            () => servico.SincronizarPedidoAsync("4500000010"));
 
-        Assert.False(resultado.Sucesso);
-        Assert.Contains("tempo limite", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(CenarioFalhaConsultaSap.Timeout, erro.Cenario);
     }
 
     [Fact]

@@ -39,8 +39,8 @@ public sealed class LogIntegracaoSapGovernancaTests
             : LocalizarArquivo(
                 "BancoDados",
                 "000_baseline",
-                "Banco_Desenvolvimento_V1_1_Geral",
-                "000_execucao_completa_desenvolvimento_v1_1.sql");
+                "Banco_Homologacao_V1_1_Geral",
+                "000_execucao_completa_homologacao_v1_1.sql");
         string conteudoCompleto = File.ReadAllText(caminho);
         string conteudo = ExtrairSecao(
             conteudoCompleto,

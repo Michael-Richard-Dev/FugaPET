@@ -1,22 +1,31 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace FugaPET_Dev.AcessoDados.Banco;
 
 public static class LeitorConfiguracaoBancoPostgreSql
 {
     private const string NomeArquivoConfiguracao = "configuracao.banco.json";
-    private const string VariavelAmbienteConexao = "FUGAPET_DEV_CONEXAO_POSTGRES";
-    private const string VariavelAmbienteSenha = "FUGAPET_DEV_POSTGRES_SENHA";
+    private const string VariavelAmbienteConexao = "FUGAPET_Q_CONEXAO_POSTGRES";
+    private const string VariavelAmbienteSenha = "FUGAPET_Q_POSTGRES_SENHA";
 
     public static ConfiguracaoBancoPostgreSql Carregar()
+        => Carregar(ObterVariavelAmbiente, Path.Combine(AppContext.BaseDirectory, NomeArquivoConfiguracao));
+
+    internal static ConfiguracaoBancoPostgreSql Carregar(
+        Func<string, string?> obterVariavelAmbiente,
+        string? caminhoArquivo = null)
     {
-        string? conexaoAmbiente = ObterVariavelAmbiente(VariavelAmbienteConexao);
+        string? conexaoAmbiente = obterVariavelAmbiente(VariavelAmbienteConexao);
         if (!string.IsNullOrWhiteSpace(conexaoAmbiente))
         {
-            return ParsePorConnectionString(conexaoAmbiente);
+            // GATE 20D: o caminho por connection string preserva Host/Port/Database/Username/SearchPath da
+            // própria string; a SENHA, quando não materializada de forma válida na connection string
+            // (Password ausente/blank), é complementada EXCLUSIVAMENTE por FUGAPET_Q_POSTGRES_SENHA. Sem
+            // fallback HML, sem senha default, sem hardcode — ausência de secret permanece fail-closed.
+            return ParsePorConnectionString(conexaoAmbiente, obterVariavelAmbiente(VariavelAmbienteSenha));
         }
 
-        string caminhoArquivo = Path.Combine(AppContext.BaseDirectory, NomeArquivoConfiguracao);
+        caminhoArquivo ??= Path.Combine(AppContext.BaseDirectory, NomeArquivoConfiguracao);
         if (!File.Exists(caminhoArquivo))
         {
             return new ConfiguracaoBancoPostgreSql();
@@ -35,11 +44,11 @@ public static class LeitorConfiguracaoBancoPostgreSql
             Habilitado = LerBooleano(banco, "habilitado", false),
             ModoDemonstracao = LerBooleano(banco, "modo_demonstracao", false),
             AmbienteDemonstrativo = LerBooleano(banco, "ambiente_demonstrativo", false),
-            Servidor = LerTexto(banco, "servidor", "127.0.0.1"),
+            Servidor = LerTexto(banco, "servidor", string.Empty),
             Porta = LerInteiro(banco, "porta", 5432),
-            NomeBanco = LerTexto(banco, "nome_banco", "api_balanca"),
-            Schema = ValidarSchema(LerTexto(banco, "schema", "desenvolvimento")),
-            Usuario = LerTexto(banco, "usuario", "postgres"),
+            NomeBanco = LerTexto(banco, "nome_banco", string.Empty),
+            Schema = ValidarSchema(LerTexto(banco, "schema", string.Empty)),
+            Usuario = LerTexto(banco, "usuario", string.Empty),
             Senha = LerSenha(banco),
             TimeoutSegundos = LerInteiro(banco, "timeout_segundos", 15),
             Pooling = LerBooleano(banco, "pooling", true),
@@ -47,7 +56,9 @@ public static class LeitorConfiguracaoBancoPostgreSql
         };
     }
 
-    private static ConfiguracaoBancoPostgreSql ParsePorConnectionString(string connectionString)
+    private static ConfiguracaoBancoPostgreSql ParsePorConnectionString(
+        string connectionString,
+        string? senhaComplementarAmbiente)
     {
         Dictionary<string, string> itens = new(StringComparer.OrdinalIgnoreCase);
         string[] pares = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -60,21 +71,28 @@ public static class LeitorConfiguracaoBancoPostgreSql
             }
         }
 
+        // GATE 20D: precedência da connection string para Password; se ausente/blank, complementa por
+        // FUGAPET_Q_POSTGRES_SENHA. Ausência de ambos ⇒ senha vazia (fail-closed). Sem fallback/hardcode.
+        string senhaConexao = LerChave(itens, "Password", string.Empty);
+        string senhaFinal = !string.IsNullOrWhiteSpace(senhaConexao)
+            ? senhaConexao
+            : (senhaComplementarAmbiente?.Trim() ?? string.Empty);
+
         return new ConfiguracaoBancoPostgreSql
         {
             Habilitado = true,
             ModoDemonstracao = false,
             AmbienteDemonstrativo = false,
-            Servidor = LerChave(itens, "Host", "127.0.0.1"),
+            Servidor = LerChave(itens, "Host", string.Empty),
             Porta = int.TryParse(LerChave(itens, "Port", "5432"), out int porta) ? porta : 5432,
-            NomeBanco = LerChave(itens, "Database", "api_balanca"),
+            NomeBanco = LerChave(itens, "Database", string.Empty),
             Schema = ValidarSchema(
                 LerChave(
                     itens,
                     "Search Path",
-                    LerChave(itens, "SearchPath", "desenvolvimento"))),
-            Usuario = LerChave(itens, "Username", "postgres"),
-            Senha = LerChave(itens, "Password", string.Empty),
+                    LerChave(itens, "SearchPath", string.Empty))),
+            Usuario = LerChave(itens, "Username", string.Empty),
+            Senha = senhaFinal,
             TimeoutSegundos = int.TryParse(LerChave(itens, "Timeout", "15"), out int timeout) ? timeout : 15,
             Pooling = bool.TryParse(LerChave(itens, "Pooling", "true"), out bool pooling) && pooling,
             SslMode = LerChave(itens, "SSL Mode", "Prefer")
@@ -86,9 +104,11 @@ public static class LeitorConfiguracaoBancoPostgreSql
 
     private static string ValidarSchema(string schema)
     {
-        string valor = string.IsNullOrWhiteSpace(schema)
-            ? "desenvolvimento"
-            : schema.Trim();
+        string valor = schema.Trim();
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            return string.Empty;
+        }
 
         if (!char.IsLetter(valor[0]) && valor[0] != '_'
             || valor.Any(caractere => !char.IsLetterOrDigit(caractere) && caractere != '_'))

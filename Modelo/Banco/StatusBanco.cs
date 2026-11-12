@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.Banco;
+namespace FugaPET_Dev.Modelo.Banco;
 
 public sealed class StatusBanco
 {

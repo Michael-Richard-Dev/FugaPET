@@ -1072,6 +1072,7 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
                    item.centro,
                    item.deposito,
                    item.unidade,
+                   item.quantidade_prevista,
                    lote.numero_lote,
                    lote.data_fabricacao,
                    lote.data_vencimento,
@@ -1094,6 +1095,7 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
                AND item.status_item IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
              GROUP BY lancamento.numero_pedido, item.numero_item,
                       item.material, item.centro, item.deposito, item.unidade,
+                      item.quantidade_prevista,
                       pesagem.codigo_entrada_produto_lote,
                       lote.numero_lote, lote.data_fabricacao, lote.data_vencimento
             HAVING COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
@@ -1120,14 +1122,43 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
                 Centro = leitor.IsDBNull(5) ? null : leitor.GetString(5),
                 Deposito = leitor.IsDBNull(6) ? null : leitor.GetString(6),
                 Unidade = leitor.IsDBNull(7) ? null : leitor.GetString(7),
-                NumeroLote = leitor.IsDBNull(8) ? null : leitor.GetString(8),
-                DataFabricacao = leitor.IsDBNull(9) ? null : leitor.GetDateTime(9),
-                DataValidade = leitor.IsDBNull(10) ? null : leitor.GetDateTime(10),
-                CodigoEntradaProdutoLote = leitor.IsDBNull(11) ? 0L : leitor.GetInt64(11)
+                // GATE R2: quantidade INTEGRAL do item do pedido (OrderQuantity). NULL permanece NULL
+                // (tri-state) — desconhecida bloqueia o caminho ROH a jusante, nunca vira zero.
+                QuantidadePedidoItem = leitor.IsDBNull(8) ? null : leitor.GetDecimal(8),
+                NumeroLote = leitor.IsDBNull(9) ? null : leitor.GetString(9),
+                DataFabricacao = leitor.IsDBNull(10) ? null : leitor.GetDateTime(10),
+                DataValidade = leitor.IsDBNull(11) ? null : leitor.GetDateTime(11),
+                CodigoEntradaProdutoLote = leitor.IsDBNull(12) ? 0L : leitor.GetInt64(12)
             });
         }
 
         return itens;
+    }
+
+    /// <summary>
+    /// READ-ONLY (12G-D): localiza o lancamento local ELEGIVEL para envio 101 de um pedido, para reidratar
+    /// a tela apos restart. Retorna o codigo do lancamento mais recente com status FINALIZADO_LOCAL/ERRO_SAP
+    /// (exclui ENVIADO_SAP/CONFIRMADO_SAP/CANCELADO), ou null. Nao altera dados, nao reserva, nao cria.
+    /// </summary>
+    public async Task<long?> ObterCodigoLancamentoLocalElegivelPorPedidoAsync(
+        string numeroPedido,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT codigo_entrada_produto_lancamento
+              FROM entrada_produto_lancamento
+             WHERE trim(numero_pedido) = trim(@numero_pedido)
+               AND situacao_entrada_produto_lancamento = true
+               AND status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
+             ORDER BY codigo_entrada_produto_lancamento DESC
+             LIMIT 1;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(new NpgsqlParameter("@numero_pedido", numeroPedido?.Trim() ?? string.Empty));
+        object? retorno = await comando.ExecuteScalarAsync(cancellationToken);
+        return retorno is long codigo ? codigo : null;
     }
 
     /// <summary>
@@ -1159,27 +1190,155 @@ public sealed class EntradaProdutoRepositorio : RepositorioBase
     /// se outro envio ja reservou ou o status nao permite (concorrencia/idempotencia). Nao cria
     /// documento de material — apenas marca a intencao de envio antes do POST.
     /// </summary>
-    public async Task<bool> TentarReservarLancamentoParaEnvioSapAsync(
+    public async Task<Modelo.Entrada.ResultadoReservaEnvioSap> TentarReservarLancamentoParaEnvioSapAsync(
         long codigoLancamento,
         CancellationToken cancellationToken = default)
     {
         long? usuario = ObterCodigoUsuarioSessao();
 
+        // GATE 096D: claim ATÔMICO que materializa o StatusAnterior EFETIVAMENTE consumido pela transição.
+        // A CTE trava a linha elegível (FOR UPDATE) e captura o status pré-update; o UPDATE só afeta essa linha;
+        // RETURNING devolve o status anterior. Se nada elegível/concorrência: 0 linhas ⇒ Reservado=false.
         const string sql = """
-            UPDATE entrada_produto_lancamento
+            WITH elegivel AS (
+                SELECT codigo_entrada_produto_lancamento, status_lancamento
+                  FROM entrada_produto_lancamento
+                 WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+                   AND situacao_entrada_produto_lancamento = true
+                   AND status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
+                 FOR UPDATE
+            )
+            UPDATE entrada_produto_lancamento l
                SET status_lancamento = 'ENVIADO_SAP',
                    entrada_produto_lancamento_atualizado_por = @usuario
-             WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
-               AND situacao_entrada_produto_lancamento = true
-               AND status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP');
+              FROM elegivel
+             WHERE l.codigo_entrada_produto_lancamento = elegivel.codigo_entrada_produto_lancamento
+            RETURNING elegivel.status_lancamento AS status_anterior;
             """;
 
         await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
         await using NpgsqlCommand comando = new(sql, conexao);
         comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
         comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
-        int afetadas = await comando.ExecuteNonQueryAsync(cancellationToken);
-        return afetadas == 1;
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+        return await leitor.ReadAsync(cancellationToken)
+            ? new Modelo.Entrada.ResultadoReservaEnvioSap(true, leitor.GetString(0))
+            : new Modelo.Entrada.ResultadoReservaEnvioSap(false, null);
+    }
+
+    // GATE 096D: loader PÓS-RESERVA (revalidação). Idêntico ao pré-envio EXCETO por exigir status_lancamento =
+    // 'ENVIADO_SAP' (o estado just-reservado). Read-only; NÃO muda status; sem SAP. Reproduz a mesma semântica
+    // NumeroItem.Trim() → SUM(peso_liquido VÁLIDA) para comparação com o snapshot autorizado.
+    public async Task<IReadOnlyList<EntradaProdutoItemEnvioSap>> ListarItensReservadosParaRevalidacaoSapAsync(
+        long codigoLancamento,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT lancamento.numero_pedido,
+                   item.numero_item,
+                   COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0)::numeric(14,3) AS peso_liquido,
+                   COALESCE(SUM(pesagem.peso_bruto_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0)::numeric(14,3) AS peso_bruto,
+                   item.material,
+                   item.centro,
+                   item.deposito,
+                   item.unidade,
+                   item.quantidade_prevista,
+                   lote.numero_lote,
+                   lote.data_fabricacao,
+                   lote.data_vencimento,
+                   pesagem.codigo_entrada_produto_lote
+              FROM entrada_produto_lancamento lancamento
+              JOIN entrada_produto_item item
+                ON item.codigo_entrada_produto_lancamento =
+                   lancamento.codigo_entrada_produto_lancamento
+              JOIN entrada_produto_pesagem pesagem
+                ON pesagem.codigo_entrada_produto_item =
+                   item.codigo_entrada_produto_item
+              LEFT JOIN entrada_produto_lote lote
+                ON lote.codigo_entrada_produto_lote =
+                   pesagem.codigo_entrada_produto_lote
+             WHERE lancamento.codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND lancamento.situacao_entrada_produto_lancamento = true
+               AND item.situacao_entrada_produto_item = true
+               -- Revalidação PÓS-RESERVA: o lançamento já está reservado (ENVIADO_SAP).
+               AND lancamento.status_lancamento = 'ENVIADO_SAP'
+               AND item.status_item IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
+             GROUP BY lancamento.numero_pedido, item.numero_item,
+                      item.material, item.centro, item.deposito, item.unidade,
+                      item.quantidade_prevista,
+                      pesagem.codigo_entrada_produto_lote,
+                      lote.numero_lote, lote.data_fabricacao, lote.data_vencimento
+            HAVING COALESCE(SUM(pesagem.peso_liquido_kg) FILTER (
+                       WHERE pesagem.situacao_entrada_produto_pesagem = true
+                         AND pesagem.status_pesagem = 'VALIDA'
+                   ), 0) > 0
+             ORDER BY item.numero_item, lote.numero_lote NULLS LAST;
+            """;
+
+        List<EntradaProdutoItemEnvioSap> itens = [];
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+        while (await leitor.ReadAsync(cancellationToken))
+        {
+            itens.Add(new EntradaProdutoItemEnvioSap
+            {
+                NumeroPedido = leitor.GetString(0),
+                NumeroItem = leitor.GetString(1),
+                PesoLiquidoKg = leitor.GetDecimal(2),
+                PesoBrutoKg = leitor.GetDecimal(3),
+                Material = leitor.IsDBNull(4) ? null : leitor.GetString(4),
+                Centro = leitor.IsDBNull(5) ? null : leitor.GetString(5),
+                Deposito = leitor.IsDBNull(6) ? null : leitor.GetString(6),
+                Unidade = leitor.IsDBNull(7) ? null : leitor.GetString(7),
+                // GATE R2: quantidade INTEGRAL do item do pedido (OrderQuantity). NULL permanece NULL
+                // (tri-state) — desconhecida bloqueia o caminho ROH a jusante, nunca vira zero.
+                QuantidadePedidoItem = leitor.IsDBNull(8) ? null : leitor.GetDecimal(8),
+                NumeroLote = leitor.IsDBNull(9) ? null : leitor.GetString(9),
+                DataFabricacao = leitor.IsDBNull(10) ? null : leitor.GetFieldValue<DateTime>(10),
+                DataValidade = leitor.IsDBNull(11) ? null : leitor.GetFieldValue<DateTime>(11),
+                CodigoEntradaProdutoLote = leitor.IsDBNull(12) ? 0L : leitor.GetInt64(12)
+            });
+        }
+
+        return itens;
+    }
+
+    // GATE 096D: libera a reserva num ABORT PRÉ-POST, restaurando o StatusAnterior. Destino permitido SOMENTE
+    // FINALIZADO_LOCAL/ERRO_SAP; update CONDICIONAL a status='ENVIADO_SAP'. rowcount=1 ⇒ liberado; 0 ⇒ FAIL_CLOSED
+    // (não sobrescreve estado concorrente). NÃO é falha SAP; NÃO usa AtualizarStatusAposEnvioSapAsync.
+    public async Task<bool> LiberarReservaEnvioSapAposAbortPrePostAsync(
+        long codigoLancamento,
+        string statusAnterior,
+        CancellationToken cancellationToken = default)
+    {
+        if (statusAnterior is not ("FINALIZADO_LOCAL" or "ERRO_SAP"))
+        {
+            return false;
+        }
+
+        long? usuario = ObterCodigoUsuarioSessao();
+        const string sql = """
+            UPDATE entrada_produto_lancamento
+               SET status_lancamento = @status_anterior,
+                   entrada_produto_lancamento_atualizado_por = @usuario
+             WHERE codigo_entrada_produto_lancamento = @codigo_lancamento
+               AND status_lancamento = 'ENVIADO_SAP';
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.Add(ParametroLongo("@codigo_lancamento", codigoLancamento));
+        comando.Parameters.Add(ParametroTexto("@status_anterior", statusAnterior));
+        comando.Parameters.Add(ParametroUsuarioObrigatorio("@usuario", usuario));
+        return await comando.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
     public async Task AtualizarStatusAposEnvioSapAsync(

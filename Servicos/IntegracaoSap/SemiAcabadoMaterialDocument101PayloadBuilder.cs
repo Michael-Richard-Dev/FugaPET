@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using FugaPET_Dev.Modelo.IntegracaoSap;
@@ -22,40 +22,40 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
         SemiAcabadoOrdem ordem = lancamento.Ordem;
         if (string.IsNullOrWhiteSpace(ordem.NumeroOrdem))
         {
-            return ResultadoPreviewSemiAcabado101.Falha("OP do semi-acabado não informada.");
+            return ResultadoPreviewSemiAcabado101.Falha("OP do semi-acabado nÃ£o informada.");
         }
 
         if (string.IsNullOrWhiteSpace(ordem.MaterialProduzido))
         {
-            return ResultadoPreviewSemiAcabado101.Falha("Material produzido não informado.");
+            return ResultadoPreviewSemiAcabado101.Falha("Material produzido nÃ£o informado.");
         }
 
         if (string.IsNullOrWhiteSpace(ordem.Centro))
         {
-            return ResultadoPreviewSemiAcabado101.Falha("Centro do semi-acabado não informado.");
+            return ResultadoPreviewSemiAcabado101.Falha("Centro do semi-acabado nÃ£o informado.");
         }
 
         if (string.IsNullOrWhiteSpace(ordem.DepositoDestino))
         {
-            return ResultadoPreviewSemiAcabado101.Falha("Depósito destino do semi-acabado não informado.");
+            return ResultadoPreviewSemiAcabado101.Falha("DepÃ³sito destino do semi-acabado nÃ£o informado.");
         }
 
         decimal quantidade = lancamento.PesoLiquidoTotalKg;
         if (quantidade <= 0m)
         {
-            return ResultadoPreviewSemiAcabado101.Falha("Peso líquido total do semi-acabado deve ser maior que zero.");
+            return ResultadoPreviewSemiAcabado101.Falha("Peso lÃ­quido total do semi-acabado deve ser maior que zero.");
         }
 
         if (ordem.QuantidadePendente > 0m && quantidade > ordem.QuantidadePendente)
         {
             return ResultadoPreviewSemiAcabado101.Falha(
-                $"Peso líquido informado ({quantidade:0.###} KG) ultrapassa o saldo previsto do semi-acabado ({ordem.QuantidadePendente:0.###} KG).");
+                $"Peso lÃ­quido informado ({quantidade:0.###} KG) ultrapassa o saldo previsto do semi-acabado ({ordem.QuantidadePendente:0.###} KG).");
         }
 
         string unidade = string.IsNullOrWhiteSpace(ordem.Unidade) ? "KG" : ordem.Unidade.Trim().ToUpperInvariant();
         if (!string.Equals(unidade, "KG", StringComparison.OrdinalIgnoreCase))
         {
-            return ResultadoPreviewSemiAcabado101.Falha("Unidade do semi-acabado incompatível com o fluxo atual. Esperado KG.");
+            return ResultadoPreviewSemiAcabado101.Falha("Unidade do semi-acabado incompatÃ­vel com o fluxo atual. Esperado KG.");
         }
 
         SemiAcabadoMaterialDocument101Request payload = new()
@@ -134,12 +134,12 @@ public sealed class SemiAcabadoMaterialDocument101PayloadBuilder
     {
         if (string.IsNullOrWhiteSpace(materialDocument))
         {
-            return ResultadoEnvioSemiAcabado101.Falha("SAP não retornou MaterialDocument. Semi-acabado não será confirmado.");
+            return ResultadoEnvioSemiAcabado101.Falha("SAP nÃ£o retornou MaterialDocument. Semi-acabado nÃ£o serÃ¡ confirmado.");
         }
 
         if (string.IsNullOrWhiteSpace(materialDocumentYear))
         {
-            return ResultadoEnvioSemiAcabado101.Falha("SAP não retornou MaterialDocumentYear. Semi-acabado não será confirmado.");
+            return ResultadoEnvioSemiAcabado101.Falha("SAP nÃ£o retornou MaterialDocumentYear. Semi-acabado nÃ£o serÃ¡ confirmado.");
         }
 
         return ResultadoEnvioSemiAcabado101.Confirmado(materialDocument.Trim(), materialDocumentYear.Trim());
@@ -211,3 +211,6 @@ public sealed class ResultadoMaterialDocumentSemiAcabadoRequest
     public static ResultadoMaterialDocumentSemiAcabadoRequest Falha(string mensagem)
         => new(false, mensagem, null);
 }
+
+
+

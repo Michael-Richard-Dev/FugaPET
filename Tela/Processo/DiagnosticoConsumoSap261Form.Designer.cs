@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Tela.Processo;
+﻿namespace FugaPET_Dev.Tela.Processo;
 
 partial class DiagnosticoConsumoSap261Form
 {

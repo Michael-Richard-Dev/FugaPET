@@ -211,6 +211,54 @@ public sealed class ProductionOrderSapApiClientTests
         Assert.Single(ordem.Itens);
         Assert.Equal("0001", ordem.Itens[0].ItemOrdem);
         Assert.Equal(100m, ordem.Itens[0].QuantidadePrevista);
+
+        // GATE 118B: espelhos TRI-STATE do contrato real.
+        Assert.Equal(50m, comp.QuantidadeNecessariaSap);
+        Assert.Equal(0m, comp.QuantidadeRetiradaSap);
+        Assert.Equal(50m, comp.QuantidadeDisponivelConfirmadaSap);
+        Assert.False(comp.QuantidadeFixa);                            // QuantityIsFixed=false explicito
+        Assert.Null(ordem.Componentes[1].QuantidadeFixa);             // ausente => null, nunca false
+        Assert.Equal(10m, ordem.Componentes[1].QuantidadeRetiradaSap);
+        Assert.Equal(0m, ordem.Itens[0].QuantidadeRecebidaSap);       // MfgOrderItemGoodsReceiptQty
+        Assert.Equal(100m, ordem.Itens[0].QuantidadePrevistaSap);
+    }
+
+    /// <summary>
+    /// GATE 118B: ausencia das propriedades do contrato NAO pode virar 0/false nos espelhos tri-state.
+    /// </summary>
+    [Fact]
+    public void Mapeamento_TriState_AusenciaViraNullNuncaZeroOuFalse()
+    {
+        const string json = """
+        {
+          "d": {
+            "ManufacturingOrder": "1000001234",
+            "to_ProductionOrderComponent": {
+              "results": [ { "Reservation": "795", "ReservationItem": "1", "Material": "2000219" } ]
+            },
+            "to_ProductionOrderItem": {
+              "results": [ { "ManufacturingOrderItem": "1", "Material": "4000174" } ]
+            }
+          }
+        }
+        """;
+
+        OrdemProducaoSap? ordem = ProductionOrderSapApiClient.MapearOrdem(json);
+
+        Assert.NotNull(ordem);
+        ComponenteOrdemProducaoSap comp = Assert.Single(ordem!.Componentes);
+        Assert.Null(comp.QuantidadeNecessariaSap);
+        Assert.Null(comp.QuantidadeRetiradaSap);
+        Assert.Null(comp.QuantidadeDisponivelConfirmadaSap);
+        Assert.Null(comp.QuantidadeFixa);
+
+        ItemOrdemProducaoSap item = Assert.Single(ordem.Itens);
+        Assert.Null(item.QuantidadeRecebidaSap);
+        Assert.Null(item.QuantidadePrevistaSap);
+
+        // Os campos LEGADO (decimal nao-nullable) seguem colapsando em 0 — comportamento preservado.
+        Assert.Equal(0m, comp.QuantidadeRetirada);
+        Assert.Equal(0m, item.QuantidadePrevista);
     }
 
     [Fact]
@@ -407,6 +455,7 @@ public sealed class ProductionOrderSapApiClientTests
               "BaseUnit": "PC",
               "WithdrawnQuantity": "0.000",
               "ConfirmedAvailableQuantity": "50.000",
+              "QuantityIsFixed": false,
               "GoodsMovementType": "261",
               "ReservationIsFinallyIssued": true,
               "MatlCompIsMarkedForDeletion": "X",
@@ -454,7 +503,7 @@ public sealed class ProductionOrderSapApiClientTests
               "Material": "MAT-12345",
               "StorageLocation": "0001",
               "MfgOrderItemPlannedTotalQty": "100.000",
-              "MfgOrderItemActualDeliveryQty": "0.000",
+              "MfgOrderItemGoodsReceiptQty": "0.000",
               "Batch": ""
             }
           ]
@@ -601,3 +650,4 @@ public sealed class ProductionOrderSapApiClientTests
         }
     }
 }
+

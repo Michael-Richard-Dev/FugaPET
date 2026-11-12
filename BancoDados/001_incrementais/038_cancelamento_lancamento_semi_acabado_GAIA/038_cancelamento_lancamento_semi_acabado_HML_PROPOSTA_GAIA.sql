@@ -1,7 +1,7 @@
 ﻿\set ON_ERROR_STOP on
 -- ============================================================
 -- 038_cancelamento_lancamento_semi_acabado_HML_PROPOSTA_GAIA.sql
--- Projeto FugaPET_HML | Schema: homologacao
+-- Projeto FugaPET_Dev | Schema: homologacao
 -- Objeto: cancelamento local controlado de lancamento antigo ERRO_SAP de Produto Semiacabado
 -- EXECUCAO CONTROLADA. NAO EXECUTAR AUTOMATICAMENTE.
 -- ============================================================

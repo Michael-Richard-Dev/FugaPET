@@ -88,7 +88,15 @@ public sealed class ProdutoAcabadoPipeline045OrquestradorTests
         public Task<bool> RegistrarErroPaleteAsync(long c, int h, string r, string erro, string e, long u, string t, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> RegistrarTimeoutPaleteAsync(long c, string erro, string e, long u, string t, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> VincularCaixaPaleteAsync(long c, long cx, int seq, long u, string t, CancellationToken ct = default) => Task.FromResult(true);
-        public Task<IReadOnlyList<Linha045>> LerEstadoEtapasAsync(long c, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<Linha045>)[]);
+        // GATE 113J (§4): o orquestrador deixou de CRIAR o fluxo 045 e passou a EXIGIR que ele já exista
+        // (early binding na finalização local). Por isso o fake agora devolve, por padrão, o vínculo VÁLIDO
+        // (etapas 261 + 101) — que é a precondição real do envio. Testes que precisam do cenário
+        // zero/parcial sobrescrevem EtapasVinculadas.
+        public List<string> EtapasVinculadas { get; } = ["261", "101"];
+        public Task<IReadOnlyList<Linha045>> LerEstadoEtapasAsync(long c, CancellationToken ct = default)
+            => Task.FromResult((IReadOnlyList<Linha045>)EtapasVinculadas
+                .Select(e => new Linha045(new Dictionary<string, object?> { ["etapa"] = e }))
+                .ToList());
         public Task<IReadOnlyList<Linha045>> LerEstadoPaleteAsync(long c, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<Linha045>)[]);
     }
 
@@ -195,9 +203,12 @@ public sealed class ProdutoAcabadoPipeline045OrquestradorTests
 
         Assert.Equal(EtapaPipelineProdutoAcabado.Concluido, r.UltimaEtapa);
         Assert.Equal(1, a.Chamadas); Assert.Equal(1, b.Chamadas); Assert.Equal(1, h.Chamadas);
+        // GATE 113J (§4): "iniciar" NÃO faz mais parte da sequência do envio — o fluxo 045 é estabelecido no
+        // early binding da finalização local e aqui é apenas PROVADO como existente.
         Assert.Equal(
-            ["iniciar", "preparar:261", "claim:261", "sucesso:261", "preparar:101", "claim:101", "sucesso:101"],
+            ["preparar:261", "claim:261", "sucesso:261", "preparar:101", "claim:101", "sucesso:101"],
             ops.Log);
+        Assert.DoesNotContain("iniciar", ops.Log);
     }
 
     [Theory]
@@ -538,6 +549,7 @@ public sealed class ProdutoAcabadoPipeline045OrquestradorTests
         return Path.Combine(dir, Path.Combine(partes));
     }
 }
+
 
 
 

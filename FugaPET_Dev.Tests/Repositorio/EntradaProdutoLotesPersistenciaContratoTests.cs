@@ -280,25 +280,54 @@ public sealed class EntradaProdutoLotesPersistenciaContratoTests
 
         Assert.Contains("BancoTesteIntegracao.DestrutivoAutorizado()", atributo);
         Assert.Contains("BancoTesteIntegracao.VariavelPermitirDestrutivo", atributo);
-        Assert.DoesNotContain("BancoTesteEntradaLotesDev", atributo, StringComparison.Ordinal);
+        Assert.DoesNotContain("BancoTesteEntradaLotesHml", atributo, StringComparison.Ordinal);
         Assert.DoesNotContain("OptInConfigurado", atributo, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TesteEstatico_GuardEntradaLotes_DeveUsarAtributoExclusivoSomenteNosDoisTestesNovos()
+    public void TesteEstatico_GuardEntradaLotes_DeveUsarAtributosExclusivosNosQuatroTestesReais()
     {
         string fonte = LerFonte("FugaPET_Dev.Tests", "Repositorio", "EntradaProdutoLotesIntegracaoBancoTests.cs");
         string atributo = ExtrairMetodo(fonte, "EntradaLotesIntegrationFactAttribute()");
 
-        Assert.Contains("BancoTesteEntradaLotesDev.VariavelConnectionString", atributo);
-        Assert.Contains("BancoTesteEntradaLotesDev.VariavelPermitirEntradaLotesReal", atributo);
-        Assert.Contains("BancoTesteEntradaLotesDev.VariavelConfirmarDatabase", atributo);
+        Assert.Contains("BancoTesteEntradaLotesHml.ObterMotivoOptInIncompleto()", atributo);
         Assert.DoesNotContain("BancoTesteIntegracao", atributo, StringComparison.Ordinal);
         // 3 usam o atributo de opt-in puro; 1 (repeticao omitindo item) usa a variante que também exige um
-        // pedido com dois itens no DEV, com skip REAL em tempo de descoberta.
+        // pedido com dois itens no HML, com skip REAL em tempo de descoberta.
         Assert.Equal(3, ContarOcorrencias(fonte, "[EntradaLotesIntegrationFact]"));
         Assert.Equal(1, ContarOcorrencias(fonte, "[EntradaLotesDoisItensIntegrationFact]"));
         Assert.DoesNotContain("[IntegrationFact]", fonte, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TesteEstatico_GuardEntradaLotes_DeveExigirBancoDescartavelRoleAplicacaoESemLimpezaDestrutiva()
+    {
+        string fonte = LerFonte("FugaPET_Dev.Tests", "Repositorio", "EntradaProdutoLotesIntegracaoBancoTests.cs");
+
+        Assert.Contains("FUGAPET_HML_CONFIRMAR_DATABASE_DESCARTAVEL", fonte, StringComparison.Ordinal);
+        Assert.Contains("FUGAPET_HML_CONFIRMAR_DESCARTE_TOTAL", fonte, StringComparison.Ordinal);
+        Assert.Contains("fuga_jales_local_homologacao_v1_2_teste_4g_", fonte, StringComparison.Ordinal);
+        Assert.Contains("DatabaseCanonicoBloqueado", fonte, StringComparison.Ordinal);
+        Assert.Contains("StartsWith(PrefixoDatabaseDescartavel", fonte, StringComparison.Ordinal);
+        Assert.Contains("current_database()", fonte, StringComparison.Ordinal);
+        Assert.Contains("current_user", fonte, StringComparison.Ordinal);
+        Assert.Contains("session_user", fonte, StringComparison.Ordinal);
+        Assert.Contains("current_setting('search_path')", fonte, StringComparison.Ordinal);
+        Assert.Contains("rolsuper", fonte, StringComparison.Ordinal);
+        Assert.Contains("fugapet_hml_app", fonte, StringComparison.Ordinal);
+        Assert.Contains("has_table_privilege", fonte, StringComparison.Ordinal);
+        Assert.Contains("BANCO_DESCARTAVEL_NAO_ESTA_LIMPO", fonte, StringComparison.Ordinal);
+        Assert.Contains("log_alteracao_cadastral", fonte, StringComparison.Ordinal);
+        Assert.Contains("ValidarAuditoriaInsercaoAsync", fonte, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("DELETE FROM", fonte, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TRUNCATE", fonte, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CASCADE", fonte, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("session_replication_role", fonte, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LimparLancamentoAsync", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("LimparPorTerminalAsync", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("setval", fonte, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM homologacao.log_alteracao_cadastral", fonte, StringComparison.OrdinalIgnoreCase);
     }
     private static string LerFonte(params string[] partes)
         => File.ReadAllText(Path.Combine(new[] { LocalizarRaizProjeto() }.Concat(partes).ToArray()));
@@ -352,8 +381,6 @@ public sealed class EntradaProdutoLotesPersistenciaContratoTests
         throw new InvalidOperationException($"Nao foi possivel extrair o corpo do metodo {nomeMetodo}.");
     }
 }
-
-
 
 
 

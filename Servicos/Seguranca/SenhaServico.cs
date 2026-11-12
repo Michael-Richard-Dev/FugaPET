@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Seguranca;
+namespace FugaPET_Dev.Servicos.Seguranca;
 
 /// <summary>
 /// Servico unico responsavel por gerar e verificar hashes de senha (BCrypt).

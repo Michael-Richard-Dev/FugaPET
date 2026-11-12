@@ -29,13 +29,20 @@ public sealed class SegurancaSapC11Tests
             }));
         PedidoCompraSapApiClient cliente = new(CriarConfiguracao(), http);
 
-        HttpRequestException erro = await Assert.ThrowsAsync<HttpRequestException>(
+        // GATE 105D: a falha passou a ser TIPADA (ConsultaSapException) preservando o status e o cenário,
+        // sem jamais expor o corpo da resposta.
+        ConsultaSapException erro = await Assert.ThrowsAsync<ConsultaSapException>(
             () => cliente.ConsultarPedidoAsync("4500000010"));
 
-        Assert.Equal(status, erro.StatusCode);
+        Assert.Equal((int)status, erro.HttpStatus);
+        Assert.Equal(ClassificadorFalhaConsultaSap.ClassificarHttp(status), erro.Cenario);
         Assert.DoesNotContain(
             "credencial-nao-pode-vazar",
             erro.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "credencial-nao-pode-vazar",
+            erro.MensagemTecnicaSanitizada ?? string.Empty,
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -64,8 +71,11 @@ public sealed class SegurancaSapC11Tests
             }));
         PedidoCompraSapApiClient cliente = new(CriarConfiguracao(), http);
 
-        await Assert.ThrowsAnyAsync<JsonException>(
+        // GATE 105D: 2xx com corpo inválido vira RESPOSTA_INVALIDA tipada (não JsonException crua).
+        ConsultaSapException erro = await Assert.ThrowsAsync<ConsultaSapException>(
             () => cliente.ConsultarPedidoAsync("4500000010"));
+
+        Assert.Equal(CenarioFalhaConsultaSap.RespostaInvalida, erro.Cenario);
     }
 
     [Theory]

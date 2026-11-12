@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo.IntegracaoSap;
+﻿using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
@@ -18,6 +18,7 @@ internal sealed class ConsumoMaterialSap261MockServico : IConsumoMaterialSap261S
 
     public Task<ResultadoEnvioConsumoSap261> EnviarConsumo261Async(
         ConsumoMaterialSap261Request requisicao,
+        long codigoLancamento,
         string chaveNegocio,
         CancellationToken cancellationToken = default)
         => Task.FromResult(ValidarProntoParaEnvio());

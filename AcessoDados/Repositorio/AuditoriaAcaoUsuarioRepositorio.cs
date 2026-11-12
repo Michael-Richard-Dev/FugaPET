@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Nodes;
+using System.Text.Json.Nodes;
 using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Comum;
 using FugaPET_Dev.Modelo.Cadastro;

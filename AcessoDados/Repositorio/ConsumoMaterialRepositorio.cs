@@ -1,4 +1,4 @@
-using FugaPET_Dev.AcessoDados.Banco;
+﻿using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.AcessoDados.Comum;
 using FugaPET_Dev.Modelo.Consumo;
 using Npgsql;
@@ -512,3 +512,4 @@ public sealed class ConsumoMaterialRepositorio : RepositorioBase, IConsumoMateri
         return pesagens;
     }
 }
+

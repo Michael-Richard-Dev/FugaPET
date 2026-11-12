@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Controle;
+using FugaPET_Dev.Controle;
 using FugaPET_Dev.Modelo;
 using FugaPET_Dev.Servicos;
 using FugaPET_Dev.Servicos.Auditoria;

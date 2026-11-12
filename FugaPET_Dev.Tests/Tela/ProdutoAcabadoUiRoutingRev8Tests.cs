@@ -1,14 +1,14 @@
-﻿using FugaPET_Dev.Controle.Processo;
+using FugaPET_Dev.Controle.Processo;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 
 namespace FugaPET_Dev.Tests.Tela;
 
 /// <summary>
-/// REV8 (Hermes 14:11): roteamento de UI para os caminhos produtivos. CAIXA: quando o pipeline PA estÃ¡
-/// habilitado a Form roteia para EnviarCaixaPipelineAsync (nunca HU direta); indisponÃ­vel â‡’ bloqueia com motivo,
-/// sem fallback silencioso. PALETE: montar/preview = zero POST; integraÃ§Ã£o INT012 sÃ³ por aÃ§Ã£o explÃ­cita
-/// (EnviarPaleteInt012Async). PrimeiraEntregaHu nÃ£o torna o palete permanentemente inacessÃ­vel.
+/// REV8 (Hermes 14:11): roteamento de UI para os caminhos produtivos. CAIXA: quando o pipeline PA está
+/// habilitado a Form roteia para EnviarCaixaPipelineAsync (nunca HU direta); indisponível ⇒ bloqueia com motivo,
+/// sem fallback silencioso. PALETE: montar/preview = zero POST; integração INT012 só por ação explícita
+/// (EnviarPaleteInt012Async). PrimeiraEntregaHu não torna o palete permanentemente inacessível.
 /// </summary>
 public sealed class ProdutoAcabadoUiRoutingRev8Tests
 {
@@ -31,7 +31,7 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     {
         string metodo = ExtrairMetodo(Form(), "private async Task SolicitarEnvioCaixaPipelineAsync()");
         Assert.Contains("if (!_controller.PipelinePaDisponivel)", metodo, StringComparison.Ordinal);
-        // Bloqueia exibindo o motivo e NÃƒO cai em HU-only dentro do caminho do pipeline.
+        // Bloqueia exibindo o motivo e NÃO cai em HU-only dentro do caminho do pipeline.
         Assert.Contains("PipelinePaMotivo", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("EnviarCaixaHandlingUnitAsync", metodo, StringComparison.Ordinal);
     }
@@ -39,7 +39,7 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     [Fact]
     public void Caixa_HuOnly_ChamadaUnica_NoCaminhoLegado()
     {
-        // Uma Ãºnica chamada a EnviarCaixaHandlingUnitAsync (caminho legado HU), nunca no caminho do pipeline.
+        // Uma única chamada a EnviarCaixaHandlingUnitAsync (caminho legado HU), nunca no caminho do pipeline.
         Assert.Equal(1, ContarOcorrencias(Form(), "_controller.EnviarCaixaHandlingUnitAsync("));
     }
 
@@ -47,20 +47,23 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     [Fact]
     public void Palete_MontarLocal_NaoChamaInt012()
     {
-        string criar = ExtrairMetodo(Form(), "private async void CriarPaleteLocal()");
-        Assert.DoesNotContain("EnviarPaleteInt012Async", criar, StringComparison.Ordinal); // montar = zero POST
+        string form = Form();
+        Assert.Contains("paletização saiu do Produto Acabado", form, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("_criarPaleteCard.Visible = false;", form, StringComparison.Ordinal);
+        Assert.Contains("paletesDataGridView.Visible = false;", form, StringComparison.Ordinal);
+        Assert.Contains("productionActionsButton.Visible = false;", form, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Palete_IntegracaoInt012_SoPorAcaoExplicita()
     {
         string form = Form();
-        // AÃ§Ã£o explÃ­cita: duplo clique no grid dispara IntegrarPaleteSelecionadoAsync, que chama o Controller.
+        // Ação explícita: duplo clique no grid dispara IntegrarPaleteSelecionadoAsync, que chama o Controller.
         Assert.Contains("paletesDataGridView.CellDoubleClick += async", form, StringComparison.Ordinal);
         Assert.Contains("IntegrarPaleteSelecionadoAsync", form, StringComparison.Ordinal);
         string integrar = ExtrairMetodo(form, "private async Task IntegrarPaleteSelecionadoAsync(int rowIndex)");
         Assert.Contains("_controller.EnviarPaleteInt012Async(palete)", integrar, StringComparison.Ordinal);
-        // Ãšnico ponto de POST de palete na Form.
+        // Único ponto de POST de palete na Form.
         Assert.Equal(1, ContarOcorrencias(form, "_controller.EnviarPaleteInt012Async("));
     }
 
@@ -68,7 +71,7 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     public void Palete_PrimeiraEntregaHu_NaoTornaInacessivel_QuandoGateOn()
     {
         string form = Form();
-        // Card e montagem passam a considerar o gate do pipeline â€” deixam de ficar permanentemente ocultos/inativos.
+        // Card e montagem passam a considerar o gate do pipeline — deixam de ficar permanentemente ocultos/inativos.
         Assert.Contains("PrimeiraEntregaHu && !_controller.PipelinePaGateHabilitado", form, StringComparison.Ordinal);
     }
 
@@ -77,12 +80,12 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     public async Task Controller_EnviarPaleteInt012_FailClosed_ZeroPost_Default()
     {
         ProdutoAcabadoController controller = new(); // default = fail-closed (sem CPI/DB configurados)
-        Assert.False(controller.PaleteInt012EnvioAutorizado); // gate/base/allowlist CPI ausentes por padrÃ£o
+        Assert.False(controller.PaleteInt012EnvioAutorizado); // gate/base/allowlist CPI ausentes por padrão
 
         ProdutoAcabadoCaixa c1 = CaixaConfirmada(1);
         ProdutoAcabadoPalete palete = controller.MontarPalete(OrdemValida(), [c1], [], 1, 1, "PACK_TEST_001");
         ResultadoPaleteInt012 r = await controller.EnviarPaleteInt012Async(palete);
-        Assert.NotEqual(EstadoPaleteInt012.Confirmado, r.Estado); // NaoEnviado â€” nenhum POST real
+        Assert.NotEqual(EstadoPaleteInt012.Confirmado, r.Estado); // NaoEnviado — nenhum POST real
     }
 
     // ---------------- helpers ----------------
@@ -105,7 +108,7 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     private static string ExtrairMetodo(string fonte, string assinatura)
     {
         int inicio = fonte.IndexOf(assinatura, StringComparison.Ordinal);
-        Assert.True(inicio >= 0, $"Assinatura nÃ£o encontrada: {assinatura}");
+        Assert.True(inicio >= 0, $"Assinatura não encontrada: {assinatura}");
         int abre = fonte.IndexOf('{', inicio);
         int profundidade = 0;
         for (int i = abre; i < fonte.Length; i++)

@@ -1,4 +1,4 @@
-using System.IO.Ports;
+﻿using System.IO.Ports;
 using System.Reflection;
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Cadastro;
@@ -42,6 +42,7 @@ public sealed class BalancaLeituraServicoProtocoloTests : IDisposable
 
         // Protocolo transportado e normalizado.
         Assert.Equal("P03", config.Protocolo);
+        Assert.Equal(CodigoBalancaPadrao, config.CodigoBalanca);
         // Parâmetros seriais preservados.
         Assert.Equal("COM7", config.PortaSerial);
         Assert.Equal(9600, config.BaudRate);

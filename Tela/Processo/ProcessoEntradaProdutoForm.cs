@@ -1,4 +1,4 @@
-using FugaPET_Dev.Modelo;
+﻿using FugaPET_Dev.Modelo;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
@@ -56,7 +56,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private const int WmNclButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const string WindowIconPath = "Servicos\\icone\\fuga.ico";
+    private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
     private const string TipoPedidoNormal = "NB";
     private const string DescricaoPedidoNormal = "Pedido normal (NB)";
     private const string ColunaReimpressaoEtiqueta = "productionReprintColumn";
@@ -64,7 +64,7 @@ public partial class ProcessoEntradaProdutoForm : Form
     private static readonly Color RowLight = Color.FromArgb(250, 251, 252);
     private static readonly Color StartActionHoverBorder = Color.FromArgb(34, 197, 94);
     private static readonly Color ReadWeightHoverBorder = Color.FromArgb(59, 130, 246);
-    private static readonly Color DangerActionHoverBorder = Color.FromArgb(229, 27, 43);
+    private static readonly Color DangerActionHoverBorder = Color.FromArgb(200, 78, 10);
     private static readonly Color EnabledLegendTextColor = Color.FromArgb(229, 231, 235);
     private static readonly Color DisabledLegendTextColor = Color.FromArgb(120, 126, 136);
     private static readonly Color SidePanelDefaultColor = Color.FromArgb(45, 49, 56);
@@ -121,6 +121,9 @@ public partial class ProcessoEntradaProdutoForm : Form
     private readonly global::FugaPET_Dev.Controle.Cadastro.TaraController _taraController;
     private Task _envioSapTask = Task.CompletedTask;
     private readonly ToolTip _envioSapToolTip = new();
+    // Cerimônia de habilitação da escrita SAP 101 (12E-E-B). Construção sem efeito colateral (auditoria lazy).
+    // 12G-B: acionada como detalhe interno do botão de envio original (sem botão separado).
+    private readonly global::FugaPET_Dev.Servicos.IntegracaoSap.HabilitacaoEscritaSapServico _habilitacaoEscritaSap = new();
     private readonly ContextMenuStrip _filtroItensPedidoMenu = new();
     private Label? _estadoVazioItensLabel;
     private FiltroItensEntrada _filtroItensAtual = FiltroItensEntrada.Todos;
@@ -216,6 +219,453 @@ public partial class ProcessoEntradaProdutoForm : Form
             _fechamentoTelaCts.Cancel();
             _controller.LimparOperacaoComLotes();
         };
+
+        // GATE 081: melhoria visual/legibilidade — SOMENTE no modo Recebimento de Mercadoria e por ÚLTIMO,
+        // após toda a configuração de fontes/estilos, para não ser sobrescrita.
+        AplicarLegibilidadeRecebimentoMercadoria();
+    }
+
+    // GATE 081: identidade FugaPET + ícone laranja/traços brancos + status SAP destacado + tipografia 2.0x.
+    // Escopo estrito: só quando a tela é a porta única "Recebimento de Mercadoria". Só apresentação — nenhuma
+    // regra de negócio, SAP, persistência, filtro ROH/HIBE, lote/tara ou Excluir Pesagem é alterada aqui.
+    private void AplicarLegibilidadeRecebimentoMercadoria()
+    {
+        if (_modoEntrada != global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.RecebimentoMercadoria)
+        {
+            return;
+        }
+
+        SuspendLayout();
+
+        // §4 Identidade FugaPET (substitui o branding local Fuga Couros pelo logo FugaPET aprovado). O logo é
+        // renderizado em BRANCO sobre o laranja (não cinza), preservando a transparência; a barrinha divisória
+        // do cabeçalho também vai a branco.
+        companyLogoPictureBox.Image = CarregarLogoFugaPetBranco();
+        companyLogoPictureBox.Tag = "FUGAPET_LOGO";
+        logoSaLabel.ForeColor = Color.White;
+        headerDividerLabel.BackColor = Color.White;
+
+        // §5 Ícone do título: fundo LARANJA FugaPET + desenho de TRAÇOS BRANCOS (asset aprovado). Sem vermelho/rosa.
+        headerTitleIconPanel.BackColor = Color.Transparent;
+        headerTitleIconPanel.FillColor = Color.Transparent;
+        headerTitleIconPictureBox.Image = ExtrairTracosBrancos(global::FugaPET_Dev.Properties.Resources.production_title_icon);
+        headerTitleIconPictureBox.Tag = "FUGAPET_ICON_BRANCO";
+
+        // §6 Status SAP com destaque ALTO: badge preenchido (laranja) + texto branco. O cálculo/estado SAP
+        // (AtualizarEstadoVisualIntegracaoSap) só troca a cor do "dot" e o texto — este realce não é sobrescrito.
+        sapStatusPanel.FillColor = LegibilidadeRecebimentoMercadoria.LaranjaFugaPetEscuro;
+        sapStatusPanel.BorderColor = LegibilidadeRecebimentoMercadoria.LaranjaFugaPet;
+        sapStatusLabel.ForeColor = Color.White;
+        sapStatusLabel.Tag = "SAP_STATUS_DESTAQUE";
+
+        // FIX4: a ampliação 2.0x é aplicada SOMENTE à ÁREA INTERNA (cards/grid/painel direito). O CABEÇALHO
+        // (customTitleBarPanel) e o RODAPÉ (footerBar) permanecem no tamanho PADRÃO das demais telas — não são
+        // escalados nem têm suas linhas de altura crescidas. Só a identidade FugaPET/ícone/status SAP acima é
+        // aplicada ao cabeçalho (não altera tamanho).
+        LegibilidadeRecebimentoMercadoria.AplicarEscalaFonte(rootTableLayoutPanel, LegibilidadeRecebimentoMercadoria.Escala);
+        LegibilidadeRecebimentoMercadoria.AplicarEscalaFonte(sidePanel, LegibilidadeRecebimentoMercadoria.Escala);
+        LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(rootTableLayoutPanel);
+        LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(sidePanel);
+
+        // Orçamento de altura: só a faixa interna dos cards (linha 0 ABSOLUTA do rootTableLayoutPanel) cresce
+        // até caber o conteúdo 2.0x; a grade (linha Percent) cede o espaço. Cabeçalho/rodapé ficam no padrão.
+        AjustarOrcamentoAlturaRecebimento();
+
+        // Painel lateral (Status/Qtde/Peso/Iniciar Leitura): alarga a coluna, alarga o conteúdo (empurrando pra
+        // dentro), aumenta o botão e reempilha para a fonte 2.0x não quebrar/cortar.
+        AjustarPainelLateralRecebimento();
+
+        // Grade: alarga as colunas fixas para caber os cabeçalhos 2.0x (Material/Quantidade/Unidade/Peso/Pesagens)
+        // e reduz o peso da coluna "Descrição do Material" (Fill) para ela não dominar — assim todas aparecem.
+        AjustarColunasGridRecebimento();
+
+        // Toolbar acima da grade: aumenta busca + botões (harmonia com a fonte 2.0x) e os traz para a esquerda,
+        // logo após o título, alinhados verticalmente.
+        AjustarToolbarGridRecebimento();
+
+        // §8/§9/§13 Sem AutoScroll: a janela permanece Maximizada, cabendo integralmente na área de trabalho
+        // (1920x1080 / 100%). A grade é a região elástica; nenhuma barra de rolagem de janela é necessária.
+        AutoScroll = false;
+        WindowState = FormWindowState.Maximized;
+
+        ResumeLayout(true);
+        PerformLayout();
+    }
+
+    private static Image CarregarLogoFugaPetBranco()
+    {
+        string caminho = Path.Combine(
+            AppContext.BaseDirectory,
+            "Servicos\\image\\FugaPet branco sem fundo.png");
+
+        if (!File.Exists(caminho))
+        {
+            return global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
+        }
+
+        using Image imagem = Image.FromFile(caminho);
+        return new Bitmap(imagem);
+    }
+
+    private static Bitmap ExtrairTracosBrancos(Bitmap origem)
+    {
+        Bitmap resultado = new(origem.Width, origem.Height);
+
+        for (int x = 0; x < origem.Width; x++)
+        {
+            for (int y = 0; y < origem.Height; y++)
+            {
+                Color pixel = origem.GetPixel(x, y);
+                resultado.SetPixel(
+                    x,
+                    y,
+                    pixel.A > 0 && pixel.G >= 160 && pixel.B >= 160
+                        ? Color.FromArgb(pixel.A, Color.White)
+                        : Color.Transparent);
+            }
+        }
+
+        return resultado;
+    }
+
+    // GATE 082-FIX3: redistribui a altura reservando o necessário para as faixas de conteúdo e deixando a grade
+    // absorver o restante. Os tetos FIXOS reais são linhas ABSOLUTAS: tableLayoutPanel2 linha 0 (cabeçalho, 52),
+    // tableLayoutPanel2 linha 2 (rodapé, 38) e rootTableLayoutPanel linha 0 (cards, 86). Medimos pela BASE dos
+    // controles-filho (já crescidos com a fonte 2.0x), não pelo PreferredSize do painel (que devolve ~1x quando
+    // AutoSize=false). Só CRESCE. A linha Percent (grade + painel direito) cede o espaço.
+    private void AjustarOrcamentoAlturaRecebimento()
+    {
+        // CARDS — linha 0 ABSOLUTA de rootTableLayoutPanel (faixa interna). A grade (linha Percent) cede o espaço;
+        // o cabeçalho/rodapé ficam no padrão.
+
+        // O container dos 4 cards (tableLayoutPanel3) tinha Anchor Top|Left|Right com ALTURA FIXA (69px), então
+        // não crescia quando a faixa aumentava — as caixas ficavam curtas e o texto transbordava por baixo.
+        // Anexa Bottom para o container esticar na vertical e preencher toda a faixa dos cards.
+        tableLayoutPanel3.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+
+        // A linha dos cards ocupa 100% da altura (a 2ª linha do tableLayoutPanel3 está vazia → vai a 0), assim as
+        // caixas (RoundedPanel Dock=Fill) crescem e contornam legenda + valor por inteiro.
+        if (tableLayoutPanel3.RowStyles.Count >= 2)
+        {
+            tableLayoutPanel3.RowStyles[0].SizeType = SizeType.Percent;
+            tableLayoutPanel3.RowStyles[0].Height = 100f;
+            tableLayoutPanel3.RowStyles[1].SizeType = SizeType.Percent;
+            tableLayoutPanel3.RowStyles[1].Height = 0f;
+        }
+
+        int alturaCards = 0;
+        foreach (Control card in new Control[]
+                 { productionOrderShadowPanel, lotCardPanel, stepCardPanel, finishedProductCardPanel })
+        {
+            int baseCard = 0;
+            foreach (Control filho in card.Controls)
+            {
+                baseCard = Math.Max(baseCard, filho.Bottom);
+            }
+            alturaCards = Math.Max(alturaCards, baseCard + card.Padding.Bottom + 12);
+        }
+
+        // Piso confortável: a faixa dos cards ~dobra para acomodar a fonte 2.0x (o grid diminui).
+        alturaCards = Math.Max(alturaCards, 160);
+        LegibilidadeRecebimentoMercadoria.CrescerTetoDeConteudo(rootTableLayoutPanel, 0, alturaCards);
+
+        // Harmoniza o conteúdo interno de cada card: ícone no topo-direito; legenda + valor(es) alargados (não
+        // cortam horizontal), com altura garantida (não cortam embaixo) e o grupo centralizado verticalmente na
+        // caixa — reaplicado no resize (vale também ao maximizar).
+        foreach (Control card in new Control[]
+                 { productionOrderShadowPanel, lotCardPanel, stepCardPanel, finishedProductCardPanel })
+        {
+            HarmonizarConteudoCard(card);
+        }
+    }
+
+    private void AjustarToolbarGridRecebimento()
+    {
+        const int y = 6;
+        const int altura = 34;
+        const int gap = 12;
+        const int margemDir = 16;
+
+        // Remove o traço laranja de sublinhado abaixo de "ITENS DO PEDIDO".
+        productionReadingsUnderlineLabel.Visible = false;
+
+        // Título "ITENS DO PEDIDO" à esquerda, sem cortar, centralizado na linha.
+        productionReadingsTitleLabel.Left = 34;
+        int largTitulo = productionReadingsTitleLabel.PreferredSize.Width;
+        if (largTitulo > productionReadingsTitleLabel.Width)
+        {
+            productionReadingsTitleLabel.Width = largTitulo;
+        }
+        productionReadingsTitleLabel.Top = y + Math.Max(0, (altura - productionReadingsTitleLabel.Height) / 2);
+
+        // Dimensiona busca + botões (mesmos tamanhos), mas ENCOSTA o grupo na direita da caixa.
+        productionSearchPanel.Size = new Size(340, altura);
+        productionSearchTextBox.Height = Math.Min(productionSearchTextBox.PreferredSize.Height, altura - 8);
+        productionSearchTextBox.Top = Math.Max(2, (altura - productionSearchTextBox.Height) / 2);
+
+        productionFilterButton.Height = altura;
+        productionFilterButton.Width = Math.Max(productionFilterButton.Width, TextRenderer.MeasureText(productionFilterButton.Text, productionFilterButton.Font).Width + 44);
+        productionActionsButton.Height = altura;
+        productionActionsButton.Width = Math.Max(productionActionsButton.Width, TextRenderer.MeasureText(productionActionsButton.Text, productionActionsButton.Font).Width + 44);
+
+        // Alinha à direita: [busca] [Filtros] [Enviar] — todos ancorados à direita (acompanham o resize).
+        int direita = productionReadingsPanel.ClientSize.Width - margemDir;
+        PosicionarADireita(productionActionsButton, ref direita, y, gap);
+        PosicionarADireita(productionFilterButton, ref direita, y, gap);
+        PosicionarADireita(productionSearchPanel, ref direita, y, gap);
+    }
+
+    private static void PosicionarADireita(Control controle, ref int direita, int y, int gap)
+    {
+        controle.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        controle.Location = new Point(direita - controle.Width, y);
+        direita = controle.Left - gap;
+    }
+
+    private void AjustarColunasGridRecebimento()
+    {
+        Font fonteHeader = productionDataGridView.ColumnHeadersDefaultCellStyle.Font ?? productionDataGridView.Font;
+
+        foreach (DataGridViewColumn coluna in productionDataGridView.Columns)
+        {
+            if (!coluna.Visible || coluna.AutoSizeMode == DataGridViewAutoSizeColumnMode.Fill)
+            {
+                continue; // a coluna "Descrição" (Fill) permanece elástica e cede a largura.
+            }
+
+            // Largura mínima para o cabeçalho 2.0x caber (texto medido + folga p/ borda/ordenação).
+            int larguraHeader = TextRenderer.MeasureText(coluna.HeaderText, fonteHeader).Width + 32;
+            if (larguraHeader > coluna.Width)
+            {
+                coluna.Width = larguraHeader;
+            }
+        }
+
+        // "Descrição do Material" deixa de dominar: menor peso de preenchimento (encolhe, mas continua a maior).
+        if (productionProductColumn.AutoSizeMode == DataGridViewAutoSizeColumnMode.Fill)
+        {
+            productionProductColumn.FillWeight = 120F;
+        }
+    }
+
+    private static void HarmonizarConteudoCard(Control card)
+    {
+        void Reflow()
+        {
+            const int margem = 16;
+            const int gap = 4;
+            int largura = card.ClientSize.Width;
+            int altura = card.ClientSize.Height;
+            if (largura <= 0 || altura <= 0)
+            {
+                return;
+            }
+
+            Control? icone = null;
+            List<Control> conteudo = [];
+            foreach (Control filho in card.Controls)
+            {
+                if (filho.Name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    icone = filho;
+                }
+                else
+                {
+                    conteudo.Add(filho);
+                }
+            }
+            if (conteudo.Count == 0)
+            {
+                return;
+            }
+
+            conteudo.Sort((a, b) => a.Top.CompareTo(b.Top));
+
+            // Chip de ícone (RoundedPanel vermelho-claro) vira "resquício" visual nos cards — oculta.
+            if (icone is not null)
+            {
+                icone.Visible = false;
+            }
+
+            int larguraUtil = largura - (margem * 2);
+
+            // Empilha legenda + valor(es): largura útil (sem cortar horizontal) e altura preferida (sem cortar embaixo).
+            int total = 0;
+            int[] alturas = new int[conteudo.Count];
+            for (int i = 0; i < conteudo.Count; i++)
+            {
+                Control c = conteudo[i];
+                c.Left = margem;
+                if (c.Width < larguraUtil)
+                {
+                    c.Width = larguraUtil;
+                }
+                int preferida = c.PreferredSize.Height;
+                if (preferida > c.Height)
+                {
+                    c.Height = preferida;
+                }
+                alturas[i] = c.Height;
+                total += c.Height + gap;
+            }
+            total -= gap;
+
+            // Centraliza o grupo verticalmente na caixa.
+            int y = Math.Max(margem, (altura - total) / 2);
+            for (int i = 0; i < conteudo.Count; i++)
+            {
+                conteudo[i].Top = y;
+                y += alturas[i] + gap;
+            }
+        }
+
+        card.Resize += (_, _) => Reflow();
+        Reflow();
+    }
+
+    // Painel lateral com fonte 2.0x: alarga a coluna e o conteúdo, aumenta a altura do botão Iniciar Leitura e
+    // reempilha os itens (todos são absolutos, sem Anchor). Só CRESCE larguras/alturas — empurra o texto pra dentro.
+    private const int LarguraPainelLateralRecebimento = 320;
+    private const int MargemPainelLateralRecebimento = 18;
+    private const int AlturaBotaoLateralRecebimento = 64;
+
+    private void AjustarPainelLateralRecebimento()
+    {
+        // (1) Alarga a coluna do painel lateral (coluna 1 ABSOLUTA de tableLayoutPanel2).
+        if (tableLayoutPanel2.ColumnStyles.Count > 1 &&
+            tableLayoutPanel2.ColumnStyles[1].SizeType == SizeType.Absolute &&
+            tableLayoutPanel2.ColumnStyles[1].Width < LarguraPainelLateralRecebimento)
+        {
+            tableLayoutPanel2.ColumnStyles[1].Width = LarguraPainelLateralRecebimento;
+        }
+
+        int larguraUtil = LarguraPainelLateralRecebimento - (MargemPainelLateralRecebimento * 2);
+
+        void Alargar(Control c)
+        {
+            c.Left = MargemPainelLateralRecebimento;
+            if (c.Width < larguraUtil)
+            {
+                c.Width = larguraUtil;
+            }
+        }
+
+        // (2) Alarga títulos/cards e empurra pra dentro; alarga os rótulos internos (valores) dos cards.
+        Alargar(sideStatusTitleLabel);
+        Alargar(statusCard);
+        Alargar(groupBox4);
+        AlargarFilhos(statusCard);
+        AlargarFilhos(groupBox4);
+
+        // (3a) Card de STATUS (vermelho): valor + ícone na linha de cima, dica logo abaixo — sem sobrepor/cortar.
+        statusCardIcon.Top = 12;
+        statusCardIcon.Height = Math.Max(statusCardIcon.Height, statusCardIcon.PreferredSize.Height);
+        statusValueLabel.Top = 12;
+        statusValueLabel.Left = statusCardIcon.Right + 8;
+        statusValueLabel.Height = Math.Max(statusValueLabel.Height, statusValueLabel.PreferredSize.Height);
+        statusHintLabel.Left = 13;
+        statusHintLabel.Width = statusCard.ClientSize.Width - statusHintLabel.Left - 8;
+        statusHintLabel.Height = Math.Max(statusHintLabel.Height, statusHintLabel.PreferredSize.Height);
+        statusHintLabel.Top = Math.Max(statusCardIcon.Bottom, statusValueLabel.Bottom) + 8;
+
+        // (3b) Alinha o bloco "Qtde Total" IGUAL ao "Peso" (centralizado): espelha Left/Width/Anchor dos rótulos.
+        boxesCaptionLabel.Anchor = packagesCaptionLabel.Anchor;
+        boxesCaptionLabel.Left = packagesCaptionLabel.Left;
+        boxesCaptionLabel.Width = packagesCaptionLabel.Width;
+        boxesCounterLabel.Anchor = packagesCounterLabel.Anchor;
+        boxesCounterLabel.Left = packagesCounterLabel.Left;
+        boxesCounterLabel.Width = packagesCounterLabel.Width;
+
+        // (3c) Centraliza VERTICALMENTE o par legenda+valor em cada metade (Qtde e Peso), inclusive ao redimensionar.
+        CentralizarVerticalmente(weightSummaryForecastPanel, boxesCaptionLabel, boxesCounterLabel);
+        CentralizarVerticalmente(weightSummaryUsedPanel, packagesCaptionLabel, packagesCounterLabel);
+
+        // (3d) Cresce a altura dos cards para o conteúdo 2.0x (pela base dos filhos já reempilhados/ampliados).
+        statusCard.Height = Math.Max(statusCard.Height, FundoDosFilhos(statusCard) + 14);
+        groupBox4.Height = Math.Max(groupBox4.Height, FundoDosFilhos(groupBox4) + 14);
+
+        // (4) Botões maiores (cabem "INICIAR LEITURA" 2.0x) e na largura do painel.
+        foreach (Control botao in new Control[] { iniciarLeituraButton, lerEtiquetaButton, leituraManualButton })
+        {
+            botao.Left = MargemPainelLateralRecebimento;
+            botao.Width = larguraUtil;
+            botao.Height = AlturaBotaoLateralRecebimento;
+        }
+
+        // (5) Reempilha verticalmente. Os 3 botões são pré-empilhados SEMPRE (mesmo ocultos): "Iniciar/Parar
+        // Leitura" começa visível, mas "Ler Etiqueta"/"Digitar Peso" só aparecem após iniciar — se não fossem
+        // posicionados aqui, surgiriam no lugar antigo e sobrepunham. A troca de estado só altera Visible.
+        int y = 16;
+        sideStatusTitleLabel.Top = y; y = sideStatusTitleLabel.Bottom + 8;
+        statusCard.Top = y;           y = statusCard.Bottom + 12;
+        groupBox4.Top = y;            y = groupBox4.Bottom + 16;
+        iniciarLeituraButton.Top = y; y = iniciarLeituraButton.Bottom + 10;
+        lerEtiquetaButton.Top = y;    y = lerEtiquetaButton.Bottom + 10;
+        leituraManualButton.Top = y;
+    }
+
+    private static void AlargarFilhos(Control pai)
+    {
+        int largura = pai.ClientSize.Width;
+        foreach (Control filho in pai.Controls)
+        {
+            int disponivel = largura - filho.Left - 8;
+            if (disponivel > filho.Width)
+            {
+                filho.Width = disponivel;
+            }
+        }
+    }
+
+    private static int FundoDosFilhos(Control pai)
+    {
+        int fundo = 0;
+        foreach (Control filho in pai.Controls)
+        {
+            fundo = Math.Max(fundo, filho.Bottom);
+        }
+        return fundo;
+    }
+
+    // Centraliza verticalmente o par (legenda em cima, valor embaixo) dentro do painel — reaplica no resize.
+    private static void CentralizarVerticalmente(Control painel, Control legenda, Control valor)
+    {
+        void Reposicionar()
+        {
+            const int espaco = 2;
+            int total = legenda.Height + espaco + valor.Height;
+            int topo = Math.Max(0, (painel.ClientSize.Height - total) / 2);
+            legenda.Top = topo;
+            valor.Top = legenda.Bottom + espaco;
+        }
+
+        painel.Resize += (_, _) => Reposicionar();
+        Reposicionar();
+    }
+
+    // Tinge a imagem inteiramente de BRANCO preservando o canal alfa (silhueta branca) — usado para o logo
+    // FugaPET aparecer em branco sobre o cabeçalho laranja, em vez de cinza.
+    private static Image TingirDeBranco(Image origem)
+    {
+        Bitmap destino = new(origem.Width, origem.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using Graphics grafico = Graphics.FromImage(destino);
+        System.Drawing.Imaging.ColorMatrix matriz = new(new[]
+        {
+            new float[] { 0, 0, 0, 0, 0 },
+            new float[] { 0, 0, 0, 0, 0 },
+            new float[] { 0, 0, 0, 0, 0 },
+            new float[] { 0, 0, 0, 1, 0 },
+            new float[] { 1, 1, 1, 0, 1 }
+        });
+        using System.Drawing.Imaging.ImageAttributes atributos = new();
+        atributos.SetColorMatrix(matriz);
+        grafico.DrawImage(
+            origem,
+            new Rectangle(0, 0, destino.Width, destino.Height),
+            0, 0, origem.Width, origem.Height,
+            GraphicsUnit.Pixel,
+            atributos);
+        return destino;
     }
 
     private static DadosLoteEntrada? SolicitarDadosLotePadrao(IWin32Window owner, ModoEntradaMaterial modoEntrada)
@@ -356,9 +806,9 @@ public partial class ProcessoEntradaProdutoForm : Form
         maximizeWindowLabel.Click += (_, _) => ToggleWindowState();
         closeWindowLabel.Click += (_, _) => Close();
 
-        ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(36, 46, 61));
-        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(184, 18, 32));
+        ConfigureTitleButtonHover(minimizeWindowLabel, Color.FromArgb(160, 55, 5));
+        ConfigureTitleButtonHover(maximizeWindowLabel, Color.FromArgb(160, 55, 5));
+        ConfigureTitleButtonHover(closeWindowLabel, Color.FromArgb(160, 55, 5));
     }
 
     private void AtualizarEstadoVisualLocal(EstadoVisualLocalEntrada estado, string detalhe)
@@ -379,7 +829,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         (string texto, Color cor) = estado switch
         {
             EstadoVisualIntegracaoSap.LiberadoParaEnvio =>
-                ("SAP HML: PENDENTE", Color.FromArgb(34, 197, 94)),
+                ("SAP HML: LIBERADO PARA ENVIO", Color.FromArgb(34, 197, 94)),
             EstadoVisualIntegracaoSap.Enviando =>
                 ("SAP HML: ENVIANDO", Color.FromArgb(59, 130, 246)),
             EstadoVisualIntegracaoSap.Enviado =>
@@ -389,7 +839,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             EstadoVisualIntegracaoSap.Parcial =>
                 ("SAP HML: PARCIAL", Color.FromArgb(249, 115, 22)),
             EstadoVisualIntegracaoSap.AguardandoGravacaoLocal =>
-                ("SAP HML: AGUARDANDO", Color.FromArgb(250, 204, 21)),
+                ("SAP HML: AGUARDANDO GRAVAÇÃO LOCAL", Color.FromArgb(250, 204, 21)),
             _ =>
                 ("SAP HML: BLOQUEADO", Color.FromArgb(239, 68, 68))
         };
@@ -572,9 +1022,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     private void ConfigurarBuscaFiltroEstadoVazioEntrada()
     {
-        productionSearchTextBox.PlaceholderText = _modoEntrada == global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.Quimico
-            ? "Pesquisar itens de químicos..."
-            : "Pesquisar itens de matéria-prima...";
+        productionSearchTextBox.PlaceholderText = _configuracaoTela.PlaceholderPesquisa;
         productionSearchTextBox.MaxLength = 120;
         productionSearchTextBox.TextChanged += (_, _) => AplicarFiltroItensPedido();
 
@@ -996,6 +1444,25 @@ public partial class ProcessoEntradaProdutoForm : Form
             AtualizarEstadoVisualIntegracaoSap(
                 EstadoVisualIntegracaoSap.LiberadoParaEnvio,
                 "envio não confirmado");
+            return;
+        }
+
+        // 12G-B: a habilitação da escrita SAP 101 é DETALHE INTERNO do envio — a confirmação acima é a única
+        // ação do operador. Valida HABILITAR_ESCRITA_SAP, executa auditoria durável fail-closed e arma a
+        // capability (one-shot). Falha de permissão/auditoria => ZERO POST. O writer consome antes do POST.
+        ResultadoOperacao habilitacaoEscrita =
+            await _habilitacaoEscritaSap.HabilitarParaEnvioAsync(_fechamentoTelaCts.Token);
+        if (!habilitacaoEscrita.Sucesso)
+        {
+            statusLabel.Text = habilitacaoEscrita.Mensagem;
+            AtualizarEstadoVisualIntegracaoSap(
+                EstadoVisualIntegracaoSap.Falha,
+                habilitacaoEscrita.Mensagem);
+            MessageBox.Show(
+                habilitacaoEscrita.Mensagem,
+                "Envio SAP HML indisponível",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
@@ -1514,6 +1981,10 @@ public partial class ProcessoEntradaProdutoForm : Form
     private const string MensagemAguardarLeituraBalanca =
         "Aguarde a conclusão da leitura da balança antes de parar a operação.";
 
+    // GATE 106A: Parar sem NENHUMA leitura válida na operação = cancelamento da tentativa em memória.
+    internal const string MensagemPesagemEncerradaSemLeituras =
+        "Pesagem encerrada sem leituras. Nenhum lançamento foi gerado.";
+
     // §6/§12: nenhuma nova pesagem/lote enquanto persistindo ou aguardando o retry da gravação local.
     private bool PesagemBloqueadaNoFluxoLotes => _finalizandoPesagem || _lotesFinalizadosAguardandoPersistencia;
 
@@ -1597,6 +2068,18 @@ public partial class ProcessoEntradaProdutoForm : Form
         AtualizarControlesFluxoLotes(); // §3: reflete "persistência em andamento" imediatamente.
         try
         {
+            // GATE 106A: ZERO pesagens válidas em TODA a operação (não apenas no lote selecionado) e nenhum
+            // peso visual inconsistente ⇒ o Parar é CANCELAMENTO da tentativa em memória, não finalização.
+            // Encerra ANTES de qualquer montagem de árvore, persistência local, lançamento ou SAP.
+            // Retry pendente nunca entra aqui (a árvore já finalizada possui pesagens válidas).
+            if (!_lotesFinalizadosAguardandoPersistencia
+                && OperacaoSemQualquerPesagemValida()
+                && !ExistePesoVisualSemLeituraRastreavel())
+            {
+                CancelarOperacaoSemLeiturasEmMemoria();
+                return;
+            }
+
             // §5: reentrante — na primeira passada valida e finaliza; no retry reconhece a árvore já finalizada.
             if (!GarantirLotesProntosParaPersistencia())
             {
@@ -1683,6 +2166,42 @@ public partial class ProcessoEntradaProdutoForm : Form
             : $"{motivoSeguro} {MensagemRetryPersistenciaLotes}";
 
         AtualizarEstadoVisualLocal(EstadoVisualLocalEntrada.Pendente, detalhe);
+    }
+
+    /// <summary>
+    /// GATE 106A: true quando a operação corrente NÃO possui NENHUMA pesagem válida — somando TODOS os itens
+    /// e TODOS os lotes (ativos e já finalizados em memória). O escopo é GLOBAL de propósito: uma leitura
+    /// válida em qualquer outro item/lote impede o cancelamento e preserva o fluxo normal de validação.
+    /// internal para teste direto (InternalsVisibleTo).
+    /// </summary>
+    internal bool OperacaoSemQualquerPesagemValida()
+    {
+        EstadoOperacaoEntradaProdutoLotes estado = _controller.ObterEstadoOperacaoComLotes();
+
+        return estado.Itens
+            .SelectMany(item => item.Lotes)
+            .Sum(lote => lote.QuantidadePesagensValidas) <= 0;
+    }
+
+    /// <summary>
+    /// GATE 106A: cancela a tentativa de pesagem SOMENTE em memória. Descarta a operação/lotes temporários
+    /// (não há pesagem válida nem lançamento persistido, logo nada de persistido é cancelado), encerra a
+    /// leitura e devolve a tela ao estado "leitura não iniciada" — mantendo pedido e itens carregados para
+    /// uma nova tentativa. NÃO cria peso 0, NÃO monta árvore, NÃO persiste, NÃO gera código de lançamento e
+    /// NÃO toca SAP. <c>_codigoLancamentoPersistido</c> não é alterado: nada foi gravado aqui e um lançamento
+    /// legítimo de uma sessão anterior não pode ser descartado.
+    /// </summary>
+    private void CancelarOperacaoSemLeiturasEmMemoria()
+    {
+        _controller.LimparOperacaoComLotes();
+        _isProductionStarted = false;
+        _lotesFinalizadosAguardandoPersistencia = false;
+        UpdateProductionState(false);
+
+        AtualizarEstadoVisualLocal(
+            EstadoVisualLocalEntrada.Pendente,
+            "pesagem encerrada sem leituras");
+        statusLabel.Text = MensagemPesagemEncerradaSemLeituras;
     }
 
     // §5: garante que a árvore esteja pronta para persistir, de forma REENTRANTE.
@@ -2509,7 +3028,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         };
 
         Button cancelButton = CreateDialogButton("Cancelar", Color.FromArgb(55, 60, 69), DialogResult.Cancel);
-        Button deleteButton = CreateDialogButton("Excluir", Color.FromArgb(184, 18, 32), DialogResult.OK);
+        Button deleteButton = CreateDialogButton("Excluir", Color.FromArgb(200, 78, 10), DialogResult.OK);
         cancelButton.Margin = new Padding(0, 0, 10, 0);
 
         buttonsPanel.Controls.Add(cancelButton);
@@ -2565,7 +3084,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         };
 
         Button noButton = CreateDialogButton("Nao", Color.FromArgb(55, 60, 69), DialogResult.No);
-        Button yesButton = CreateDialogButton("Sim", Color.FromArgb(184, 18, 32), DialogResult.Yes);
+        Button yesButton = CreateDialogButton("Sim", Color.FromArgb(200, 78, 10), DialogResult.Yes);
         noButton.Margin = new Padding(0, 0, 10, 0);
 
         buttonsPanel.Controls.Add(noButton);
@@ -2787,7 +3306,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         UpdateStatusCardState(started);
         UpdateTitleBarLockState(started);
         iniciarLeituraButton.BaseBackColor = started
-            ? Color.FromArgb(212, 37, 49)
+            ? Color.FromArgb(250, 105, 26)
             : podeAlternarLeitura ? ReadingStatusActiveColor : ActionDisabledColor;
         iniciarLeituraButton.BaseForeColor = Color.White;
         iniciarLeituraButton.IconFontFamily = "Segoe MDL2 Assets";
@@ -2979,7 +3498,17 @@ public partial class ProcessoEntradaProdutoForm : Form
                 ImpressaoEntradaServico.MontarEtiquetaPorPesagem(itemPersistido, pesagem, expirationDateTextBox.Text));
 
         string itemPedido = GetCellValue(row, "productionCodeColumn");
-        using PesagemMultiplaItemForm form = new(
+
+        // 054: EXCLUIR PESAGEM — só oferece o callback (e o menu) com a permissão EXATA EXCLUIR_PESAGEM.
+        bool excluiuAlguma = false;
+        Func<EntradaProdutoPesagem, Task<bool>>? excluirPesagem = null;
+        if (PossuiPermissaoEntrada(PermissoesSistema.Acoes.ExcluirPesagem))
+        {
+            excluirPesagem = pesagem => ConfirmarEExcluirPesagemPersistidaAsync(
+                pesagem, itemPedido, sucesso => excluiuAlguma = excluiuAlguma || sucesso);
+        }
+
+        using (PesagemMultiplaItemForm form = new(
             _balancaLeituraServico,
             itemPedido,
             tara,
@@ -2987,8 +3516,18 @@ public partial class ProcessoEntradaProdutoForm : Form
             pesagens,
             imprimirPesagemAsync: null,
             reimprimirPesagemAsync: reimprimirPesagem,
-            somenteConsulta: true);
-        form.ShowDialog(this);
+            somenteConsulta: true,
+            excluirPesagemAsync: excluirPesagem))
+        {
+            form.ShowDialog(this);
+        }
+
+        if (excluiuAlguma)
+        {
+            await ReidratarAposExclusaoPesagemAsync();
+            return;
+        }
+
         statusLabel.Text = $"Pesagens do item {itemPedido}. Total: {itemPersistido.PesoLiquidoTotalKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))} kg.";
     }
 
@@ -3032,7 +3571,18 @@ public partial class ProcessoEntradaProdutoForm : Form
         IReadOnlyList<EntradaProdutoPesagemEmMemoria> pesagensAtuais =
             _controller.ObterPesagensLoteAtivoOperacaoComLotes(codigoItem);
 
-        using PesagemMultiplaItemForm form = new(
+        // 058: EXCLUIR PESAGEM também no fluxo do lote ativo em memória. As pesagens recuperadas já estão
+        // persistidas (carregam PK); o callback só é criado com a permissão EXATA EXCLUIR_PESAGEM. A janela
+        // ignora automaticamente pesagens sem PK (em memória pura). Sucesso => reidrata sem restart.
+        bool excluiuAlguma = false;
+        Func<EntradaProdutoPesagem, Task<bool>>? excluirPesagem = null;
+        if (PossuiPermissaoEntrada(PermissoesSistema.Acoes.ExcluirPesagem))
+        {
+            excluirPesagem = pesagem => ConfirmarEExcluirPesagemPersistidaAsync(
+                pesagem, itemPedido, sucesso => excluiuAlguma = excluiuAlguma || sucesso);
+        }
+
+        using (PesagemMultiplaItemForm form = new(
             _balancaLeituraServico,
             itemPedido,
             tara,
@@ -3051,9 +3601,17 @@ public partial class ProcessoEntradaProdutoForm : Form
                 DateTimeOffset.Now)),
             codigoLocalPesagem => Task.FromResult(_controller.CancelarPesagemOperacaoComLotes(codigoItem, codigoLocalPesagem)),
             imprimirPesagemAsync: null,
-            reimprimirPesagemAsync: null);
+            reimprimirPesagemAsync: null,
+            excluirPesagemAsync: excluirPesagem))
+        {
+            form.ShowDialog(this);
+        }
 
-        form.ShowDialog(this);
+        if (excluiuAlguma)
+        {
+            await ReidratarAposExclusaoPesagemAsync();
+            return;
+        }
 
         DataGridViewRow linhaAlvo = LocalizarLinhaProducaoPorItemId(itemId) ?? linhaItem;
         linhaAlvo.Tag = tara;
@@ -3477,7 +4035,7 @@ public partial class ProcessoEntradaProdutoForm : Form
         };
 
         Button cancelButton = CreateDialogButton("Cancelar", Color.FromArgb(55, 60, 69), DialogResult.Cancel);
-        Button okButton = CreateDialogButton("OK", Color.FromArgb(184, 18, 32), DialogResult.OK);
+        Button okButton = CreateDialogButton("OK", Color.FromArgb(200, 78, 10), DialogResult.OK);
         cancelButton.Margin = new Padding(0, 0, 10, 0);
 
         buttonsPanel.Controls.Add(cancelButton);
@@ -3635,7 +4193,11 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         pedidoComboBox.TextUpdate += PedidoComboBox_TextUpdate;
         pedidoComboBox.SelectedIndexChanged += PedidoComboBox_SelectedIndexChanged;
-        pedidoComboBox.Validated += PedidoComboBox_Validated;
+        // GATE 07: contrato de disparo determinístico — Enter (KeyDown) + saída do campo (Leave). Substitui
+        // Validated (comprovadamente não confiável em runtime para Tab). Idempotência garantida por
+        // AtualizarDadosPedidoSelecionadoAsync (PedidoJaCarregado + troca de CancellationTokenSource + gate).
+        pedidoComboBox.KeyDown += PedidoComboBox_KeyDown;
+        pedidoComboBox.Leave += PedidoComboBox_Leave;
         productionOrderShadowPanel.Resize += (_, _) => AjustarLarguraComboPedido();
         AtualizarDisponibilidadeInicioLeitura();
     }
@@ -3683,7 +4245,25 @@ public partial class ProcessoEntradaProdutoForm : Form
         AtualizarDisponibilidadeInicioLeitura();
     }
 
-    private async void PedidoComboBox_Validated(object? sender, EventArgs e)
+    // GATE 07: Enter dispara a carga do pedido digitado. Handled/SuppressKeyPress evitam beep e ação dupla.
+    private async void PedidoComboBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+
+        _consultaPedidoTask = AtualizarDadosPedidoSelecionadoAsync();
+        await _consultaPedidoTask;
+        AtualizarDisponibilidadeInicioLeitura();
+    }
+
+    // GATE 07: saída do campo (Tab/clique fora) dispara a carga. Idempotente com Enter/seleção via
+    // PedidoJaCarregado + troca de CancellationTokenSource em AtualizarDadosPedidoSelecionadoAsync.
+    private async void PedidoComboBox_Leave(object? sender, EventArgs e)
     {
         _consultaPedidoTask = AtualizarDadosPedidoSelecionadoAsync();
         await _consultaPedidoTask;
@@ -3757,9 +4337,13 @@ public partial class ProcessoEntradaProdutoForm : Form
                 statusLabel.Text = resultado.Mensagem;
                 if (PodeAtualizarTela())
                 {
+                    // GATE 105D: falha de CONSULTA (técnica ou não encontrado) usa o título de APLICAÇÃO do
+                    // cenário — nunca "Pedido de Compra não liberado". A tela não conhece HTTP/exceções.
                     MessageBox.Show(
                         resultado.Mensagem,
-                        "Consulta de pedido",
+                        string.IsNullOrWhiteSpace(resultado.TituloFalha)
+                            ? "Consulta de pedido"
+                            : resultado.TituloFalha,
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
                 }
@@ -3783,14 +4367,23 @@ public partial class ProcessoEntradaProdutoForm : Form
             {
                 _numeroPedidoCarregado = string.Empty;
                 LimparDadosPedidoSelecionado();
-                string mensagemBloqueio = MontarMensagemPedidoNaoLiberado(resultado);
+                // GATE 105D: status INDETERMINADO tem título/mensagem próprios (não afirma "não liberado").
+                // Só um status funcional REAL (03/04/08/liberação não concluída) usa o texto de não liberado.
+                bool statusIndeterminado =
+                    resultado.CenarioFalhaSap == CenarioFalhaConsultaSap.StatusNegocioDesconhecido;
+                string mensagemBloqueio = statusIndeterminado
+                    ? resultado.Mensagem
+                    : MontarMensagemPedidoNaoLiberado(resultado);
+                string tituloBloqueio = statusIndeterminado && !string.IsNullOrWhiteSpace(resultado.TituloFalha)
+                    ? resultado.TituloFalha
+                    : "Pedido de Compra não liberado";
                 statusLabel.Text = resultado.MotivoBloqueioLiberacao;
                 AtualizarDisponibilidadeInicioLeitura();
                 if (PodeAtualizarTela())
                 {
                     MessageBox.Show(
                         mensagemBloqueio,
-                        "Pedido de Compra não liberado",
+                        tituloBloqueio,
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
                 }
@@ -3834,6 +4427,7 @@ public partial class ProcessoEntradaProdutoForm : Form
             }
 
             PreencherItensPedidoCompra(resultado.ItensAutorizados);
+            await RehidratarLancamentoLocalPersistidoAsync(numeroPedido);
             _numeroPedidoCarregado = numeroPedido;
             statusLabel.Text = resultado.ItensOcultados > 0
                 ? $"{resultado.Mensagem} {resultado.ItensOcultados} item(ns) fora do centro/deposito autorizado nao exibido(s)."
@@ -3994,6 +4588,148 @@ public partial class ProcessoEntradaProdutoForm : Form
             "aguardando gravação local");
         productionActionsButton.Enabled = false;
         AplicarFiltroItensPedido();
+    }
+
+    // 054: §7 confirmação + chamada de exclusão da pesagem PERSISTIDA (backend revalida tudo na transação).
+    private async Task<bool> ConfirmarEExcluirPesagemPersistidaAsync(
+        EntradaProdutoPesagem pesagem, string itemPedido, Action<bool> registrarResultado)
+    {
+        if (pesagem.CodigoEntradaProdutoPesagem is not long codigo || codigo <= 0)
+        {
+            return false;
+        }
+
+        string lote = pesagem.CodigoEntradaProdutoLote?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-";
+        string pesoLiquido = pesagem.PesoLiquidoKg.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        DialogResult confirmacao = MessageBox.Show(
+            "Excluir esta pesagem local?" + Environment.NewLine + Environment.NewLine
+            + $"Pedido: {_numeroPedidoCarregado}" + Environment.NewLine
+            + $"Item: {itemPedido}" + Environment.NewLine
+            + $"Lote: {lote}" + Environment.NewLine
+            + $"Pesagem: {codigo}" + Environment.NewLine
+            + $"Peso líquido: {pesoLiquido} kg" + Environment.NewLine + Environment.NewLine
+            + "Nenhuma operação será executada no SAP.",
+            "Excluir pesagem",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirmacao != DialogResult.Yes)
+        {
+            return false;
+        }
+
+        ResultadoExclusaoPesagem resultado;
+        try
+        {
+            resultado = await _controller.ExcluirPesagemLocalAsync(codigo, _fechamentoTelaCts.Token);
+        }
+        catch (OperationCanceledException) when (_fechamentoTelaCts.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        statusLabel.Text = resultado.Mensagem;
+        if (!resultado.Sucesso)
+        {
+            MessageBox.Show(resultado.Mensagem, "Excluir pesagem", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        registrarResultado(true);
+        return true;
+    }
+
+    // 054/§18: pós-sucesso sem restart — descarta estado em memória e força recarregar a MESMA PO (pesagens
+    // persistidas ativas), recalcula peso/elegibilidade e reidrata. Árvore vazia/cancelada => sem lançamento elegível.
+    private async Task ReidratarAposExclusaoPesagemAsync()
+    {
+        _leiturasPorItem.Clear();
+        _codigoLancamentoPersistido = null;
+        _numeroPedidoCarregado = null;
+        await AtualizarDadosPedidoSelecionadoAsync();
+    }
+
+    // 12G-D: após carregar um PO, reconhece um lançamento local FINALIZADO_LOCAL/ERRO_SAP já persistido
+    // (restart) — reidrata _codigoLancamentoPersistido, projeta o peso por item na grade e reavalia a
+    // prontidão para habilitar o botão ORIGINAL de envio. Read-only: não cria pesagem/lançamento nem altera dados.
+    private async Task RehidratarLancamentoLocalPersistidoAsync(string numeroPedido)
+    {
+        if (_codigoLancamentoPersistido is not null
+            || string.IsNullOrWhiteSpace(numeroPedido)
+            || _itensPedidoCarregados.Count == 0)
+        {
+            return;
+        }
+
+        long? codigo;
+        try
+        {
+            codigo = await _controller.RecuperarCodigoLancamentoLocalPorPedidoAsync(
+                numeroPedido, _fechamentoTelaCts.Token);
+        }
+        catch (OperationCanceledException) when (_fechamentoTelaCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            // Reidratação é best-effort: falha de leitura não bloqueia a tela nem cria dados.
+            return;
+        }
+
+        if (codigo is not long codigoLancamento || codigoLancamento <= 0)
+        {
+            return;
+        }
+
+        _codigoLancamentoPersistido = codigoLancamento;
+
+        try
+        {
+            var itensPersistidos = await _controller.ListarItensPersistidosParaEnvioAsync(
+                codigoLancamento, _fechamentoTelaCts.Token);
+            Dictionary<string, decimal> pesoPorItem = itensPersistidos
+                .GroupBy(item => NormalizarNumeroItem(item.NumeroItem))
+                .ToDictionary(grupo => grupo.Key, grupo => grupo.Sum(item => item.PesoLiquidoKg));
+
+            foreach (DataGridViewRow row in productionDataGridView.Rows)
+            {
+                if (row.IsNewRow)
+                {
+                    continue;
+                }
+
+                string numeroItem = NormalizarNumeroItem(GetCellValue(row, "productionNumeroItemColumn"));
+                if (pesoPorItem.TryGetValue(numeroItem, out decimal peso) && peso > 0m)
+                {
+                    row.Cells["productionPesoLidoColumn"].Value =
+                        peso.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+                }
+            }
+
+            UpdateProductionCounters();
+        }
+        catch (OperationCanceledException) when (_fechamentoTelaCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            // O peso exibido é cosmético; o envio usa o lançamento persistido no banco.
+        }
+
+        AtualizarEstadoVisualLocal(
+            EstadoVisualLocalEntrada.Gravado,
+            $"lançamento {codigoLancamento} recuperado do banco");
+        await AtualizarProntidaoEnvioSapAsync();
+    }
+
+    private static string NormalizarNumeroItem(string? valor)
+    {
+        string texto = valor?.Trim() ?? string.Empty;
+        return int.TryParse(texto, out int numero)
+            ? numero.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : texto;
     }
 
     private void AplicarFiltroItensPedido()

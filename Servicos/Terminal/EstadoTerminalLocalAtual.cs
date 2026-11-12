@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Servicos.Terminal;
+namespace FugaPET_Dev.Servicos.Terminal;
 
 public static class EstadoTerminalLocalAtual
 {

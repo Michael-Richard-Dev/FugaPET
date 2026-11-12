@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Tela.Teste;
+namespace FugaPET_Dev.Tela.Teste;
 
 partial class TesteZebraForm
 {
@@ -137,7 +137,7 @@ partial class TesteZebraForm
         // 
         // printTextButton
         // 
-        printTextButton.BackColor = Color.FromArgb(45, 49, 56);
+        printTextButton.BackColor = Color.FromArgb(200, 78, 10);
         printTextButton.FlatAppearance.BorderSize = 0;
         printTextButton.FlatStyle = FlatStyle.Flat;
         printTextButton.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);
@@ -153,7 +153,7 @@ partial class TesteZebraForm
         // 
         // printTestButton
         // 
-        printTestButton.BackColor = Color.FromArgb(184, 18, 32);
+        printTestButton.BackColor = Color.FromArgb(200, 78, 10);
         printTestButton.FlatAppearance.BorderSize = 0;
         printTestButton.FlatStyle = FlatStyle.Flat;
         printTestButton.Font = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point, 0);

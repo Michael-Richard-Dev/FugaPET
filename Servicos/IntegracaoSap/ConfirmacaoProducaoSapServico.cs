@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
@@ -71,7 +71,7 @@ public sealed class ConfirmacaoProducaoSapServico : IConfirmacaoProducaoSapClien
         return new ResultadoEnvioConfirmacaoProducao
         {
             Sucesso = true,
-            Mensagem = "Envio por Confirmação de Produção pronto para execução."
+            Mensagem = "Envio por ConfirmaÃ§Ã£o de ProduÃ§Ã£o pronto para execuÃ§Ã£o."
         };
     }
 
@@ -158,3 +158,4 @@ public sealed class ConfirmacaoProducaoSapServico : IConfirmacaoProducaoSapClien
             CancellationToken.None);
     }
 }
+

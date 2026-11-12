@@ -1,9 +1,11 @@
-using FugaPET_Dev.AcessoDados.Repositorio;
+﻿using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
+using FugaPET_Dev.Modelo.Ambiente;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Servicos.Ambiente;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Servicos.Seguranca;
@@ -59,9 +61,6 @@ public sealed class ProdutoAcabadoController
         _paletePayloadBuilder = paletePayloadBuilder ?? new ProdutoAcabadoPaletePayloadBuilder();
         // PersistÃªncia produtiva real quando o banco estÃ¡ habilitado; senÃ£o fail-closed (nÃ£o finge banco).
         // Gateway SAP fail-closed por padrÃ£o (sem POST real). Testes injetam Service/fakes controlados.
-        _huService = huService ?? new ProdutoAcabadoHuService(
-            repositorio ?? FabricaProdutoAcabadoRepositorio.Criar(),
-            huSapServico ?? FabricaProdutoAcabadoHandlingUnitSapServico.Criar());
         _normaEmbalagemSapServico = normaEmbalagemSapServico ?? FabricaProdutoAcabadoNormaEmbalagemSapServico.Criar();
 
         // ConfiguraÃ§Ã£o para o gate do pipeline: injetÃ¡vel nos testes; em runtime lÃª env/arquivo (gate default false).
@@ -72,6 +71,18 @@ public sealed class ProdutoAcabadoController
         IProdutoAcabadoPipelineStore store = pipelineStore
             ?? new ProdutoAcabadoPipelinePostgresStore(FabricaProdutoAcabadoPipeline045Executor.Criar());
         _pipeline045Operacoes = store as IProdutoAcabadoPipeline045Operacoes;
+
+        // GATE 113J (§2/§3): o HuService passa a ser composto DEPOIS da configuraÃ§Ã£o/store, porque no modo
+        // PIPELINE_045 ele recebe o EARLY BINDING do fluxo 045 (executado na finalizaÃ§Ã£o local, com a caixa
+        // em FINALIZADA_LOCAL). No modo HU_ONLY o binding Ã© null e a finalizaÃ§Ã£o cria ZERO linhas 045 â€”
+        // comportamento histÃ³rico preservado. A reordenaÃ§Ã£o Ã© segura: configuraÃ§Ã£o e store nÃ£o dependem
+        // do HuService; sÃ³ a composiÃ§Ã£o do pipeline depende, e ela continua por Ãºltimo.
+        _huService = huService ?? new ProdutoAcabadoHuService(
+            repositorio ?? FabricaProdutoAcabadoRepositorio.Criar(),
+            huSapServico ?? FabricaProdutoAcabadoHandlingUnitSapServico.Criar(),
+            requestBuilder: null,
+            estabelecerBindingPipeline045: MontarBindingPipeline045(_configuracaoSap, _pipeline045Operacoes));
+
         _composicaoPipeline = FabricaProdutoAcabadoIntegracaoSapOrquestrador.Compor(
             _configuracaoSap, _huService, store);
 
@@ -112,6 +123,71 @@ public sealed class ProdutoAcabadoController
     /// <summary>REV4-Â§15: gateway INT012 composto no runtime, mas envio real permanece governado por gate prÃ³prio.</summary>
     public bool PaleteInt012EnvioAutorizado => _paleteInt012Gateway.EnvioAutorizado;
 
+    /// <summary>
+    /// GATE 113J (§2/§3): devolve o EARLY BINDING do fluxo 045 SOMENTE no modo PIPELINE_045 — gate ligado E
+    /// operações 045 com persistência definitiva. Fora desse modo devolve null, e a finalização de caixa
+    /// permanece HU_ONLY com ZERO linhas 045. Exposto internamente para teste do critério de composição.
+    /// </summary>
+    internal static Func<long, long, string, CancellationToken, Task<bool>>? MontarBindingPipeline045(
+        ConfiguracaoSap configuracao,
+        IProdutoAcabadoPipeline045Operacoes? operacoes)
+    {
+        ArgumentNullException.ThrowIfNull(configuracao);
+
+        if (!configuracao.ProdutoAcabadoPipelineHabilitado
+            || operacoes is null
+            || !operacoes.SuportaPersistenciaDefinitiva)
+        {
+            return null;
+        }
+
+        return (codigo, usuario, terminal, ct) => operacoes.IniciarFluxoAsync(
+            codigo, usuario, terminal, origem: "EARLY_BINDING_FINALIZADA_LOCAL", ct);
+    }
+
+    /// <summary>
+    /// GATE 113J (§6) + 113M (B2): estado do vínculo 045 da caixa. NÃO depende do gate do pipeline — o
+    /// binding 045 é persistente e IRREVERSÍVEL, então uma caixa com etapas 045 nunca volta a ser tratada
+    /// como HU-only, inclusive após restart/erro/timeout com o runtime em modo HU_ONLY.
+    ///
+    /// 113M (B2): a AUSÊNCIA de consulta deixou de ser confundida com AUSÊNCIA DE VÍNCULO. Operações 045
+    /// nulas, sem persistência definitiva, ou exceção de leitura ⇒ <see cref="EstadoVinculo045.ConsultaIndisponivel"/>,
+    /// que BLOQUEIA a HU direta (fail-closed) — antes retornava false e liberava o envio.
+    /// ZERO etapas materialmente consultadas continuam significando HU-only legítimo (113G).
+    /// </summary>
+    public async Task<EstadoVinculo045> ConsultarVinculoPipeline045Async(
+        long codigoCaixa, CancellationToken cancellationToken = default)
+    {
+        if (_pipeline045Operacoes is null || !_pipeline045Operacoes.SuportaPersistenciaDefinitiva)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] 113M: consulta do vinculo 045 da caixa {codigoCaixa} INDISPONIVEL "
+                + "(operacoes 045 ausentes ou sem persistencia definitiva); HU direta bloqueada.");
+            return EstadoVinculo045.ConsultaIndisponivel;
+        }
+
+        try
+        {
+            IReadOnlyList<Linha045> etapas =
+                await _pipeline045Operacoes.LerEstadoEtapasAsync(codigoCaixa, cancellationToken);
+            return etapas.Count > 0 ? EstadoVinculo045.ComVinculo : EstadoVinculo045.SemVinculo;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] 113M: consulta do vinculo 045 da caixa {codigoCaixa} falhou "
+                + $"({ex.GetType().Name}); tratando como CONSULTA_INDISPONIVEL (fail-closed).");
+            return EstadoVinculo045.ConsultaIndisponivel;
+        }
+    }
+
+    /// <summary>
+    /// GATE 113M (B2): true quando o envio HU DIRETO deve ser bloqueado. Bloqueia COM_VINCULO (pertence ao
+    /// pipeline) e CONSULTA_INDISPONIVEL (não se pode comprovar a ausência de vínculo). Puro e testável.
+    /// </summary>
+    internal static bool BloqueiaHuDireta(EstadoVinculo045 estado)
+        => estado is EstadoVinculo045.ComVinculo or EstadoVinculo045.ConsultaIndisponivel;
+
     public async Task<ResultadoBloqueioPipeline045> VerificarBloqueioPipeline045Async(long codigoCaixa, CancellationToken cancellationToken = default)
     {
         if (!PipelinePaGateHabilitado || _pipeline045Operacoes is null || !_pipeline045Operacoes.SuportaPersistenciaDefinitiva)
@@ -127,8 +203,21 @@ public sealed class ProdutoAcabadoController
         catch (Exception ex)
         {
             return ResultadoBloqueioPipeline045.CriarBloqueio(
-                $"NÃ£o foi possÃ­vel consultar o estado 045 da caixa ({ex.GetType().Name}). NÃ£o tente enviar novamente atÃ© reconciliaÃ§Ã£o.");
+                $"Não foi possível consultar o estado 045 da caixa ({ex.GetType().Name}). Não tente enviar novamente até reconciliação.");
         }
+
+        return AvaliarBloqueioPipeline045(linhas);
+    }
+
+    /// <summary>
+    /// GATE 117G: decisão PRE-POST do pipeline 045. PENDENTE só é liberado quando a linha é materialmente
+    /// virgem. Qualquer evidência de tentativa/claim/HTTP/documento/request/response/erro/reconciliação mantém
+    /// o bloqueio fail-closed. correlation_id NÃO é evidência de execução: o early binding já o materializa
+    /// antes da primeira tentativa.
+    /// </summary>
+    internal static ResultadoBloqueioPipeline045 AvaliarBloqueioPipeline045(IReadOnlyList<Linha045> linhas)
+    {
+        ArgumentNullException.ThrowIfNull(linhas);
 
         Linha045? bloqueante = linhas.FirstOrDefault(LinhaPipeline045BloqueiaEnvio);
         if (bloqueante is null)
@@ -136,10 +225,10 @@ public sealed class ProdutoAcabadoController
             return ResultadoBloqueioPipeline045.Liberado;
         }
 
-        string etapa = PrimeiroTexto(bloqueante, "etapa", "codigo_etapa", "tipo_etapa") ?? "?";
+        string etapa = PrimeiroTexto(bloqueante, "etapa_sap", "etapa", "codigo_etapa", "tipo_etapa") ?? "?";
         string status = PrimeiroTexto(bloqueante, "status_etapa", "status", "status_movimento", "status_pipeline") ?? "?";
         return ResultadoBloqueioPipeline045.CriarBloqueio(
-            $"Envio interrompido em estado que exige reconciliaÃ§Ã£o. Etapa {etapa} estÃ¡ em {status}. NÃ£o tente enviar novamente.");
+            $"Envio interrompido em estado que exige reconciliação. Etapa {etapa} está em {status}. Não tente enviar novamente.");
     }
 
     private static bool LinhaPipeline045BloqueiaEnvio(Linha045 linha)
@@ -147,11 +236,90 @@ public sealed class ProdutoAcabadoController
         string? status = PrimeiroTexto(linha, "status_etapa", "status", "status_movimento", "status_pipeline");
         if (string.IsNullOrWhiteSpace(status))
         {
-            return false;
+            return true; // estado ilegível/incompatível => fail-closed
         }
 
         string normalizado = status.Trim().ToUpperInvariant();
-        return normalizado is not ("CONFIRMADO" or "CONFIRMADO_SAP" or "CONCLUIDO" or "CONCLUÍDO" or "CANCELADO" or "CANCELADA");
+
+        if (normalizado is "CONFIRMADO" or "CONFIRMADO_SAP" or "CONCLUIDO" or "CONCLUÍDO" or "CANCELADO" or "CANCELADA")
+        {
+            return false;
+        }
+
+        if (normalizado == "PENDENTE")
+        {
+            return !LinhaPipeline045PendenteVirgem(linha);
+        }
+
+        // PROCESSANDO / ERRO / INDETERMINADO / TIMEOUT / estado desconhecido:
+        // preserva o comportamento anterior de bloqueio e a proteção contra retry cego.
+        return true;
+    }
+
+    private static bool LinhaPipeline045PendenteVirgem(Linha045 linha)
+    {
+        int tentativa = linha.ObterInt("numero_tentativa") ?? 0;
+        if (tentativa != 0)
+        {
+            return false;
+        }
+
+        if (TemValorPipeline045(
+            linha,
+            "lease_obtido_em",
+            "lease_expira_em",
+            "recovery_lease_obtido_em",
+            "recovery_lease_expira_em",
+            "material_document",
+            "material_document_year",
+            "http_status",
+            "iniciado_em",
+            "confirmado_em",
+            "falhou_em",
+            "indeterminado_em",
+            "request_sanitizado",
+            "response_sanitizado",
+            "erro_sanitizado",
+            "reconciliado_em"))
+        {
+            return false;
+        }
+
+        string? statusReconciliacao = PrimeiroTexto(linha, "status_reconciliacao");
+        if (!string.IsNullOrWhiteSpace(statusReconciliacao)
+            && !string.Equals(statusReconciliacao.Trim(), "NAO_NECESSARIA", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string? podeReprocessarTexto = PrimeiroTexto(linha, "pode_reprocessar");
+        if (bool.TryParse(podeReprocessarTexto, out bool podeReprocessar) && podeReprocessar)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TemValorPipeline045(Linha045 linha, params string[] colunas)
+    {
+        foreach (string coluna in colunas)
+        {
+            object? valor = linha.Bruto(coluna);
+            if (valor is null || valor is DBNull)
+            {
+                continue;
+            }
+
+            if (valor is string texto && string.IsNullOrWhiteSpace(texto))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static string? PrimeiroTexto(Linha045 linha, params string[] colunas)
@@ -167,7 +335,6 @@ public sealed class ProdutoAcabadoController
 
         return null;
     }
-
     public async Task<ResultadoPaleteInt012> EnviarPaleteInt012Async(
         ProdutoAcabadoPalete palete,
         CancellationToken cancellationToken = default)
@@ -255,6 +422,75 @@ public sealed class ProdutoAcabadoController
 
         return await _composicaoPipeline.Orquestrador.ExecutarAsync(
             origem.CodigoCaixa, comandos.Comando261, comandos.Comando101, usuario, terminal, cancellationToken);
+    }
+
+    /// <summary>
+    /// GATE 118B (§5): releitura FRESCA da OP no SAP (STEP 1 item, STEP 2 componentes) + validacao
+    /// (§5 STEP 3) + calculo do alocador cumulativo (STEP 4). NAO envia nada: devolve os DELTAS por
+    /// componente para que o chamador monte a origem do pipeline (STEP 5). Nenhum snapshot atomico e
+    /// alegado; a consistencia cruzada entre as duas leituras e verificada pelo alocador.
+    /// Qualquer indisponibilidade/indeterminacao => Bloqueado com ZERO itens (nenhum POST possivel).
+    /// </summary>
+    public async Task<Resultado261Cumulativo> CalcularAlocacao261FrescaAsync(
+        ProdutoAcabadoCaixa caixa,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(caixa);
+
+        string numeroOrdem = caixa.NumeroOrdemProducao?.Trim() ?? string.Empty;
+        if (numeroOrdem.Length == 0)
+        {
+            return Resultado261Cumulativo.Bloqueado(
+                "Caixa sem OP: alocacao 261 bloqueada (nenhum POST).");
+        }
+
+        LeituraFrescaOrdem261 fresca =
+            await _productionOrderSapServico.ConsultarEstadoFresco261Async(numeroOrdem, cancellationToken);
+
+        if (!fresca.Disponivel || fresca.Item is null)
+        {
+            return Resultado261Cumulativo.Bloqueado(
+                string.IsNullOrWhiteSpace(fresca.Mensagem)
+                    ? "Releitura fresca da OP indisponivel: alocacao 261 bloqueada (nenhum POST)."
+                    : fresca.Mensagem);
+        }
+
+        // GATE 124E: acumulado REAL ja consumido, para o componente KG/PP05 — soma do peso liquido das
+        // caixas que JA fecharam o pipeline (CONFIRMADA_SAP), excluindo a corrente e as canceladas.
+        // GATE 124H: a leitura passou a ser a FOCAL SEM TERMINAL. O WithdrawnQuantity do SAP e
+        // cumulativo por componente (Reservation+ReservationItem) e NAO conhece terminal; o ledger
+        // anterior, particionado por terminal, comparava escopos diferentes e podia SUBCONSUMIR em
+        // silencio quando a mesma OP fosse produzida em mais de um terminal.
+        // Falha de leitura => null => o alocador BLOQUEIA o componente elegivel (nunca cai para
+        // teorico, nunca estima historico).
+        decimal? pesoConfirmadoAnterior = null;
+        try
+        {
+            IReadOnlyList<ProdutoAcabadoCaixa> caixasContexto =
+                await _huService.ListarConfirmadasPorContextoSemTerminalAsync(
+                    caixa.NumeroOrdemProducao, caixa.ItemOrdemProducao, caixa.Material, caixa.Lote,
+                    cancellationToken);
+
+            pesoConfirmadoAnterior = ProdutoAcabado261AllocatorCumulativo
+                .SomarPesoLiquidoConfirmadoAnterior(caixasContexto, caixa.CodigoProdutoAcabadoCaixa);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Acumulado real NAO comprovado: permanece null e o alocador bloqueia o KG/PP05.
+            pesoConfirmadoAnterior = null;
+        }
+
+        // GATE 118B-R4: a montagem da entrada e o SEAM UNICO compartilhado com os testes de wiring.
+        // NumeroOrdemItemFresco sai de fresca.Item.NumeroOrdem (OP retornada pelo SAP) e NAO de
+        // fresca.NumeroOrdemConsultada (eco da request) — eco tornava a checagem tautologica.
+        Entrada261Cumulativa entrada = ProdutoAcabado261AllocatorCumulativo.MontarEntrada(
+            fresca, caixa, numeroOrdem, pesoConfirmadoAnterior);
+
+        return ProdutoAcabado261AllocatorCumulativo.Calcular(entrada);
     }
 
     public bool SapSimulado => _productionOrderSapServico.EhSimulado;
@@ -436,7 +672,8 @@ public sealed class ProdutoAcabadoController
         string? materialEmbalagem = null,
         OrigemMaterialEmbalagemCaixa origemMaterialEmbalagem = OrigemMaterialEmbalagemCaixa.NaoInformada,
         string terminal = "",
-        long? codigoUsuario = null)
+        long? codigoUsuario = null,
+        long? codigoBalanca = null)
     {
         ArgumentNullException.ThrowIfNull(ordem);
         ArgumentNullException.ThrowIfNull(norma);
@@ -477,6 +714,8 @@ public sealed class ProdutoAcabadoController
             QuantidadeProdutos = norma.QuantidadeProdutosPorCaixa,
             UnidadeQuantidade = (norma.Unidade ?? string.Empty).Trim().ToUpperInvariant(),
             OrigemPesagem = origemPesagem,
+            CodigoBalanca = string.Equals(origemPesagem, "BALANCA", StringComparison.OrdinalIgnoreCase)
+                ? codigoBalanca : null,
             CorrelationId = Guid.NewGuid(),
             StatusIntegracao = StatusIntegracaoCaixa.FinalizadaLocal,
             Terminal = terminal ?? string.Empty,
@@ -497,7 +736,8 @@ public sealed class ProdutoAcabadoController
         string? materialEmbalagem = null,
         OrigemMaterialEmbalagemCaixa origemMaterialEmbalagem = OrigemMaterialEmbalagemCaixa.NaoInformada,
         string terminal = "",
-        long? codigoUsuario = null)
+        long? codigoUsuario = null,
+        long? codigoBalanca = null)
     {
         ProdutoAcabadoCaixa caixa = MontarCaixa(
             ordem,
@@ -509,7 +749,8 @@ public sealed class ProdutoAcabadoController
             materialEmbalagem,
             origemMaterialEmbalagem,
             terminal,
-            codigoUsuario);
+            codigoUsuario,
+            codigoBalanca);
         caixa.CodigoCaixaLocal = string.Empty;
         return caixa;
     }
@@ -741,7 +982,9 @@ public sealed class ProdutoAcabadoController
         long? codigoUsuario = null,
         string? materialEmbalagem = null,
         OrigemMaterialEmbalagemCaixa origemMaterialEmbalagem = OrigemMaterialEmbalagemCaixa.NaoInformada,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long? codigoBalanca = null,
+        Action<Servicos.Diagnostico.EtapaRegistroCaixa120E>? diagnostico = null)
     {
         ArgumentNullException.ThrowIfNull(ordem);
         ArgumentNullException.ThrowIfNull(norma);
@@ -750,12 +993,19 @@ public sealed class ProdutoAcabadoController
             return ResultadoFinalizacaoCaixa.Bloqueada("UsuÃ¡rio nÃ£o identificado para registrar a caixa.", null);
         }
 
+        diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.MONTAR_CAIXA);
+        if (string.Equals(origemPesagem.Trim(), "BALANCA", StringComparison.OrdinalIgnoreCase)
+            && codigoBalanca is not > 0)
+        {
+            throw new InvalidOperationException("Pesagem BALANCA exige codigo_balanca resolvido.");
+        }
+
         ProdutoAcabadoCaixa caixa = MontarCaixaSemIdentidadeSequencial(
             ordem, norma, pesoBrutoKg, taraKg, origemPesagem,
-            materialEmbalagem, origemMaterialEmbalagem, terminal, codigoUsuario);
+            materialEmbalagem, origemMaterialEmbalagem, terminal, codigoUsuario, codigoBalanca);
 
         ResultadoFinalizacaoHu resultado = await _huService.RegistrarEFinalizarCaixaAsync(
-            caixa, usuario, terminal, cancellationToken);
+            caixa, usuario, terminal, cancellationToken, diagnostico);
 
         return resultado.Sucesso && resultado.Caixa is not null
             ? ResultadoFinalizacaoCaixa.Ok(resultado.Caixa, resultado.RequestJson, EnvioHuAutorizado)
@@ -880,8 +1130,32 @@ public sealed class ProdutoAcabadoController
     public ResultadoRequestHandlingUnitCaixa GerarRequestHandlingUnitCaixa(ProdutoAcabadoCaixa caixa)
         => _requestBuilder.Montar(caixa);
 
+    /// <summary>
+    /// GATE 126V: resolve a tara FISICA do material de embalagem (configuracao operacional, por mandante +
+    /// centro + material) ANTES de montar o DTO e entrega o resultado ao builder. Preview e POST consomem
+    /// EXATAMENTE este mesmo payload (<see cref="EnviarPaleteInt012Async"/> chama este metodo).
+    /// </summary>
     public ResultadoPreviewProdutoAcabadoPalete GerarPreviewPalete(ProdutoAcabadoPalete palete)
-        => _paletePayloadBuilder.MontarPreview(palete);
+    {
+        ArgumentNullException.ThrowIfNull(palete);
+        return _paletePayloadBuilder.MontarPreview(palete, ResolverTaraFisicaEmbalagemPalete(palete));
+    }
+
+    /// <summary>
+    /// GATE 126V: resolucao PURA da tara fisica a partir da configuracao ja carregada. Nenhuma leitura de
+    /// hu_palete, nenhuma constante de peso no codigo. Ausencia/invalidez/ambiguidade ⇒ fail-closed.
+    /// </summary>
+    internal ResultadoTaraFisicaEmbalagem ResolverTaraFisicaEmbalagemPalete(ProdutoAcabadoPalete palete)
+    {
+        // GATE 126X: a identidade QAS110 vem da configuracao EFETIVAMENTE CARREGADA pelo runtime (perfil
+        // local + destino SAP validado pelo contrato de startup). Nao confirmada ⇒ sem tara ⇒ sem payload.
+        ResultadoIdentidadeQas110 identidade = ValidadorIdentidadeQas110.Resolver(_configuracaoSap);
+        return ResolvedorTaraFisicaEmbalagemPalete.Resolver(
+            _configuracaoSap.TarasFisicasEmbalagemPalete,
+            identidade.Identidade,
+            palete.Plant,
+            palete.PackagingMaterial);
+    }
 
     public Task<IReadOnlyList<TaraCadastro>> ListarTarasAtivasPorSetorAsync(
         long codigoSetor,
@@ -892,7 +1166,12 @@ public sealed class ProdutoAcabadoController
     {
         ItemOrdemProducaoSap? item = ordemSap.Itens.FirstOrDefault();
         decimal planejada = item?.QuantidadePrevista ?? ordemSap.QuantidadePrevista;
-        decimal entregue = item?.QuantidadeEntregue ?? 0m;
+
+        // GATE 118B: a producao JA recebida vem de MfgOrderItemGoodsReceiptQty em TRI-STATE.
+        // O campo antigo (MfgOrderItemActualDeliveryQty) NAO existe no contrato real e por isso valia
+        // sempre 0. Aqui o null e PRESERVADO ate a camada de exibicao; nenhuma decisao de envio usa
+        // este valor — o alocador 261 le o tri-state direto da leitura FRESCA.
+        decimal? recebida = item?.QuantidadeRecebidaSap;
 
         return new ProdutoAcabadoOrdem
         {
@@ -904,9 +1183,10 @@ public sealed class ProdutoAcabadoController
             Centro = PrimeiroTexto(item?.Centro, ordemSap.Centro),
             DepositoDestino = PrimeiroTexto(item?.Deposito, ordemSap.Deposito),
             QuantidadePlanejada = planejada,
-            QuantidadeEntregue = entregue,
-            QuantidadePendente = Math.Max(planejada - entregue, 0m),
-            Unidade = PrimeiroTexto(item?.Unidade, ordemSap.Unidade, "KG").ToUpperInvariant(),
+            QuantidadeRecebidaSap = recebida,
+            // Pendente so e calculavel quando o recebido e CONHECIDO; indeterminado => null.
+            QuantidadePendente = recebida is decimal r ? Math.Max(planejada - r, 0m) : null,
+            Unidade = PrimeiroTexto(item?.Unidade, ordemSap.Unidade).ToUpperInvariant(),
             Lote = PrimeiroTexto(item?.Lote, ordemSap.Lote),
             ItemOrdem = item?.ItemOrdem?.Trim() ?? string.Empty,
             Operacao = ordemSap.Operacoes.FirstOrDefault()?.Operacao ?? string.Empty,
@@ -1025,6 +1305,7 @@ public sealed record ResultadoEnvioCaixaHu(
             "Caixa preparada para reenvio (PRONTA_PARA_ENVIO). Nenhum POST executado; HU ainda nÃ£o confirmada.",
             null, caixa);
 }
+
 
 
 

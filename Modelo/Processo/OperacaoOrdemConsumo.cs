@@ -1,4 +1,4 @@
-namespace FugaPET_Dev.Modelo.Processo;
+﻿namespace FugaPET_Dev.Modelo.Processo;
 
 /// <summary>Operacao da Ordem de Producao exibida na Tela de Consumo (somente leitura).</summary>
 public sealed class OperacaoOrdemConsumo
@@ -12,3 +12,4 @@ public sealed class OperacaoOrdemConsumo
     public decimal QuantidadePrevista { get; set; }
     public string Unidade { get; set; } = string.Empty;
 }
+

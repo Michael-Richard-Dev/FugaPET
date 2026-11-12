@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Modelo.Banco;
+using FugaPET_Dev.Modelo.Banco;
 using FugaPET_Dev.Modelo.Status;
 using FugaPET_Dev.Servicos.Banco;
 

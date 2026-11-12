@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace FugaPET_Dev.AcessoDados.Banco;
 

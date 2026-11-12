@@ -4,6 +4,7 @@ namespace FugaPET_Dev.Servicos.Operacao;
 
 public sealed class BalancaLeituraConfiguracao
 {
+    public long CodigoBalanca { get; init; }
     public string PortaSerial { get; init; } = string.Empty;
     public int BaudRate { get; init; } = 4800;
     public int DataBits { get; init; } = 7;

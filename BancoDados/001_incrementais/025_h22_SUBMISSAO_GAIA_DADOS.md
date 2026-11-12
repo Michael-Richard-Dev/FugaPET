@@ -1,10 +1,10 @@
-# Submissao ao Gaia Dados - H22 (Endurecer Banco de Desenvolvimento V1.1)
+# Submissao ao Gaia Dados - H22 (Endurecer Banco de Homologacao V1.1)
 
 ## Status
 
 APROVADO pelo Gaia como plano de endurecimento (diretriz). Executar agora SOMENTE a Secao A
 (somente-leitura). A Secao B sera aplicada item a item, em incrementais separados ou na proxima
-baseline consolidada de desenvolvimento. Nenhum arquivo de baseline foi alterado nesta entrega.
+baseline consolidada de homologacao. Nenhum arquivo de baseline foi alterado nesta entrega.
 
 ## Parecer do Gaia (incorporado)
 
@@ -27,7 +27,7 @@ baseline consolidada de desenvolvimento. Nenhum arquivo de baseline foi alterado
 
 ## Artefato
 
-`025_h22_endurecimento_banco_desenvolvimento_PROPOSTA_GAIA.sql`
+`025_h22_endurecimento_banco_homologacao_PROPOSTA_GAIA.sql`
 
 - **Secao A**: validacoes somente-leitura (seguras pos-instalacao).
 - **Secao B**: mudancas estruturais propostas para o baseline, mantidas COMENTADAS
@@ -36,13 +36,13 @@ baseline consolidada de desenvolvimento. Nenhum arquivo de baseline foi alterado
 
 ## Objetivo
 
-Transformar a instalacao do banco de desenvolvimento V1.1 em algo mais seguro e validavel,
+Transformar a instalacao do banco de homologacao V1.1 em algo mais seguro e validavel,
 sem alterar o baseline diretamente: a proposta separa o que e validacao (segura) do que e
 mudanca estrutural (a ser aprovada e incorporada pelo Gaia).
 
 ## Resultado da execucao da Secao A (probe read-only, com ROLLBACK)
 
-Executada contra `fuga_jales_local_desenvolvimento` em 2026-06-20 via probe Npgsql somente-leitura
+Executada contra `fuga_jales_local_homologacao_v1_2` em 2026-06-20 via probe Npgsql somente-leitura
 (transacao + ROLLBACK; nenhum dado alterado).
 
 - **Sem EXCEPTION** (integridade OK): admin com BCrypt valido; no maximo um setor padrao ativo por
@@ -100,7 +100,7 @@ WARNING = postura de implantacao (nao aborta). EXCEPTION = integridade de schema
 
 ## Avaliacao: INTEGRACAO_SAP_ATIVA deve permanecer true no DEV?
 
-**Recomendacao: nao.** Padrao `false` no desenvolvimento. Justificativa:
+**Recomendacao: nao.** Padrao `false` no homologacao. Justificativa:
 
 - a config SAP hoje e compartilhada e aponta para producao (pendencia conhecida);
 - a escrita SAP ja e controlada e separada (C12) e a config malformada e bloqueada (C13);

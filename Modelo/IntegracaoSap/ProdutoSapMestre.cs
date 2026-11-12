@@ -1,4 +1,4 @@
-﻿namespace FugaPET_Dev.Modelo.IntegracaoSap;
+namespace FugaPET_Dev.Modelo.IntegracaoSap;
 
 /// <summary>
 /// Tarefa Consumo 22.9.1 (Ajuste 3): DTO cru do Product Master SAP (API_PRODUCT_SRV / A_Product).

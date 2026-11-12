@@ -138,7 +138,6 @@ public sealed class PaletizacaoControllerTests
     {
         string fonte = LerProjeto("AcessoDados", "Repositorio", "ProdutoAcabadoRepositorio.cs");
 
-        // As duas capabilities usam a projeção específica + hidratação restrita (nunca ColunasCaixa genérica).
         Assert.Contains("SELECT {ColunasCaixa047}", fonte, StringComparison.Ordinal);
         Assert.Contains("Hidratar047(leitor)", fonte, StringComparison.Ordinal);
         Assert.Contains("private static ProdutoAcabadoCaixa Hidratar047(", fonte, StringComparison.Ordinal);
@@ -156,7 +155,6 @@ public sealed class PaletizacaoControllerTests
             Assert.Contains(coluna, projecao, StringComparison.Ordinal);
         }
 
-        // Nenhuma coluna que NÃO pertence ao RETURNS TABLE das capabilities 047 pode estar na projeção.
         string[] naoRetornadas =
         [
             "item_ordem_producao", "material_embalagem", "origem_material_embalagem", "quantidade",
@@ -222,6 +220,7 @@ public sealed class PaletizacaoControllerTests
             => Task.FromResult(ResultadoConsultaOrdemProducaoSap.NaoConfigurado("Fake sem consulta SAP."));
     }
 }
+
 
 
 

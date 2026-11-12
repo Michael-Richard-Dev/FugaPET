@@ -1,4 +1,4 @@
-﻿using FugaPET_Dev.Tela.Controls;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela;
 
@@ -67,10 +67,11 @@ partial class LoginForm
         // 
         // rootTableLayoutPanel
         // 
-        rootTableLayoutPanel.BackColor = Color.FromArgb(7, 15, 28);
-        rootTableLayoutPanel.CenterColor = Color.FromArgb(34, 50, 72);
+        rootTableLayoutPanel.BackColor = Color.FromArgb(143, 52, 5);
+        rootTableLayoutPanel.CenterColor = Color.FromArgb(250, 105, 26);
         rootTableLayoutPanel.Controls.Add(loginPanel);
         rootTableLayoutPanel.Dock = DockStyle.Fill;
+        rootTableLayoutPanel.EdgeColor = Color.FromArgb(143, 52, 5);
         rootTableLayoutPanel.Location = new Point(0, 0);
         rootTableLayoutPanel.Name = "rootTableLayoutPanel";
         rootTableLayoutPanel.Size = new Size(920, 560);
@@ -104,11 +105,11 @@ partial class LoginForm
         // logoHeaderPanel
         // 
         logoHeaderPanel.BackColor = Color.Transparent;
-        logoHeaderPanel.BorderColor = Color.FromArgb(17, 24, 39);
+        logoHeaderPanel.BorderColor = Color.FromArgb(255, 255, 255);
         logoHeaderPanel.BorderRadius = 10;
         logoHeaderPanel.Controls.Add(logoSaLabel);
         logoHeaderPanel.Controls.Add(logoPictureBox);
-        logoHeaderPanel.FillColor = Color.FromArgb(17, 24, 39);
+        logoHeaderPanel.FillColor = Color.FromArgb(255, 255, 255);
         logoHeaderPanel.Location = new Point(26, 24);
         logoHeaderPanel.Name = "logoHeaderPanel";
         logoHeaderPanel.ShadowBlur = 0;
@@ -263,7 +264,7 @@ partial class LoginForm
         // 
         // enterButton
         // 
-        enterButton.CorPreenchimento = Color.FromArgb(229, 27, 43);
+        enterButton.CorPreenchimento = Color.FromArgb(200, 78, 10);
         enterButton.FlatAppearance.BorderSize = 0;
         enterButton.FlatStyle = FlatStyle.Flat;
         enterButton.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold, GraphicsUnit.Point, 0);
@@ -295,7 +296,7 @@ partial class LoginForm
         // messageLabel
         // 
         messageLabel.Font = new Font("Segoe UI", 8.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-        messageLabel.ForeColor = Color.FromArgb(184, 18, 32);
+        messageLabel.ForeColor = Color.FromArgb(200, 78, 10);
         messageLabel.Location = new Point(52, 379);
         messageLabel.Name = "messageLabel";
         messageLabel.Size = new Size(336, 16);
@@ -342,7 +343,6 @@ partial class LoginForm
         ResumeLayout(false);
     }
 }
-
 
 
 

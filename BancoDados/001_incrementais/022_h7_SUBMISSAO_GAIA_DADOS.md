@@ -2,8 +2,8 @@
 
 ## Status
 
-Aprovado pelo Gaia Dados para desenvolvimento como incremental documental e modelo de
-referencia. O script nao foi executado e nao deve ser aplicado sobre o banco desenvolvimento
+Aprovado pelo Gaia Dados para homologacao como incremental documental e modelo de
+referencia. O script nao foi executado e nao deve ser aplicado sobre o banco homologacao
 V1.1 atual, pois o H7 ja esta incorporado.
 
 ## Artefato
@@ -12,7 +12,7 @@ V1.1 atual, pois o H7 ja esta incorporado.
 
 ## Contexto
 
-O baseline consolidado de desenvolvimento V1.1 ja possui o H7, mas nao havia um incremental
+O baseline consolidado de homologacao V1.1 ja possui o H7, mas nao havia um incremental
 separado no repositorio. Esta proposta formaliza o modelo para auditoria e eventual aplicacao
 somente em ambiente que ainda nao possua os objetos.
 
@@ -31,7 +31,7 @@ somente em ambiente que ainda nao possua os objetos.
 
 ## Precondicao
 
-O script interrompe a execucao se qualquer tabela H7 ja existir. No banco de desenvolvimento
+O script interrompe a execucao se qualquer tabela H7 ja existir. No banco de homologacao
 informado pelo projeto, o modelo ja esta presente. A expectativa atual e revisao documental,
 nao reaplicacao.
 
@@ -62,6 +62,6 @@ nao reaplicacao.
 
 ## Execucao
 
-Nao executar no banco desenvolvimento V1.1 atual. Em eventual ambiente sem H7, a aplicacao
+Nao executar no banco homologacao V1.1 atual. Em eventual ambiente sem H7, a aplicacao
 pertence ao usuario responsavel/Gaia Dados. Depois da aplicacao autorizada, realizar probe
 somente leitura antes de afirmar o resultado.
