@@ -10,6 +10,13 @@
 -- dono; o grant; e a ausencia de linhas.
 --
 --   SOMENTE LEITURA. NAO DML. NAO DDL. NAO SAP.
+--
+-- JANELA DE VALIDADE: esta validacao exige as duas tabelas VAZIAS, porque o 057 nao
+-- carrega dado nenhum. Logo ela so passa ANTES do incremento 058, que e quem povoa
+-- as tabelas com a configuracao copiada do Q. Rodada depois do 058, ela falha em
+-- "operacao_resultado_perfil tem 7 linhas, esperado 0" -- e isso e o comportamento
+-- correto dela, nao um defeito. Para reconferir a ESTRUTURA depois do 058, use a
+-- validacao do 058, que compara conteudo, ou compare os catalogos dos dois bancos.
 -- ============================================================
 
 BEGIN TRANSACTION READ ONLY;
@@ -100,7 +107,7 @@ BEGIN
     END LOOP;
 
     IF v_falhas <> '' THEN
-        RAISE EXCEPTION '057 VALIDACAO: contrato de colunas divergiu. MIGRATION_057_VALID=NAO%s%s', chr(10), v_falhas;
+        RAISE EXCEPTION '057 VALIDACAO: contrato de colunas divergiu. MIGRATION_057_VALID=NAO%', chr(10) || v_falhas;
     END IF;
     RAISE NOTICE 'COLUNAS=22 conferidas (posicao, tipo, nulidade, identity, default)';
 
