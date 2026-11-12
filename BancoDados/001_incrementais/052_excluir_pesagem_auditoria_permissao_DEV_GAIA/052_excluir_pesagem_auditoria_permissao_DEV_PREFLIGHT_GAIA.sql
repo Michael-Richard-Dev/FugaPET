@@ -15,6 +15,15 @@
 --       de modo que a renomeacao faria a guarda abortar sempre. No DEV o proprietario
 --       e o proprio principal que aplica, e isso ja e verificado pela guarda
 --       current_user = 'postgres' que permanece intacta logo acima.
+--   A verificacao da massa 2/2/2/2 foi REBAIXADA de BLOQUEANTE para DIAGNOSTICO.
+--       No Q ela abortava o preflight exigindo lancamento 2, item 2, lote 2 e pesagem 2
+--       com pedido 4500000005, material 1000111, lote 123456789, 9.950 kg e status
+--       FINALIZADO_LOCAL. Essa e a massa de teste do banco de homologacao do Q; ela nao
+--       existe no DEV. A verificacao e coleta de evidencia do antes/depois da exclusao de
+--       pesagem, nao guarda de seguranca, e semear o registro seria inventar um
+--       recebimento. Hoje ela emite NOTICE. O pacote 054 desta mesma familia ja faz essa
+--       distincao explicitamente ("DIAGNOSTICO; FALHA NAO bloqueia a PROPOSTA").
+--       Nenhuma guarda de seguranca foi afrouxada.
 -- Delta de estrutura, post-checks, REVOKE ALL e GRANT EXECUTE identicos ao original.
 -- O nome do gate Q no cabecalho e mantido de proposito: registra a procedencia.
 -- ATENCAO: este pacote faz CREATE OR REPLACE de
@@ -303,8 +312,20 @@ BEGIN
        AND lo.codigo_entrada_produto_lote = 2
        AND p.codigo_entrada_produto_pesagem = 2;
 
+    -- PORT DEV: DIAGNOSTICO; FALHA NAO bloqueia a PROPOSTA.
+    -- Na linha Q esta verificacao ABORTAVA o preflight. Ela nao e guarda de seguranca: e
+    -- coleta de evidencia sobre o registro 2/2/2/2 do banco de homologacao do Q (pedido
+    -- 4500000005, material 1000111, lote 123456789, 9.950 kg), usada para comparar o antes
+    -- e o depois da exclusao de pesagem. Essa massa nao existe no DEV, e semea-la seria
+    -- inventar um recebimento com peso especifico so para satisfazer um preflight.
+    -- Mesmo tratamento que o 054 da ao seu RESULT_PROFILE_NORMALIZED_CONTRACT_PRE.
+    -- As guardas de seguranca seguem BLOQUEANTES: banco, principal administrativo, papeis,
+    -- existencia de objetos, ausencia de DELETE no runtime e contagem de permissoes.
     IF v_count <> 1 OR COALESCE(v_ok,false) = false THEN
-        RAISE EXCEPTION '052 PREFLIGHT ABORTADO: massa 2/2/2/2 divergiu. count=%, ok=%', v_count, v_ok;
+        RAISE NOTICE 'MASSA_2_2_2_2=AUSENTE_OU_DIVERGENTE (count=%, ok=%) -- DIAGNOSTICO; FALHA NAO bloqueia a PROPOSTA', v_count, v_ok;
+        RAISE NOTICE 'MASSA_2_2_2_2_ORIGEM=massa do banco de homologacao do Q; nao semeada no DEV';
+    ELSE
+        RAISE NOTICE 'MASSA_2_2_2_2=CONFORME';
     END IF;
 END $$;
 

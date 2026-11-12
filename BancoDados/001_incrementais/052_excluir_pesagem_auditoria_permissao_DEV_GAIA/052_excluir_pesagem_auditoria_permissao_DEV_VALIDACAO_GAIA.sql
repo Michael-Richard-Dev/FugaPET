@@ -542,9 +542,14 @@ BEGIN
        AND lo.codigo_entrada_produto_lote = 2
        AND p.codigo_entrada_produto_pesagem = 2;
 
+    -- PORT DEV: DIAGNOSTICO; FALHA NAO reprova a validacao. A massa 2/2/2/2 e do
+    -- banco de homologacao do Q e nao existe no DEV. A validacao pos-aplicacao nao tem
+    -- como provar nao-mutacao por si: essa prova e feita DENTRO da transacao da
+    -- PROPOSTA, pela assinatura das quatro tabelas de Entrada.
     IF v_mass <> 1 OR COALESCE(v_mass_ok, false) = false THEN
-        RAISE EXCEPTION
-            '052_VALIDACAO_FAIL mass_2_2_2_2';
+        RAISE NOTICE 'MASSA_2_2_2_2=AUSENTE_OU_DIVERGENTE (count=%, ok=%) -- DIAGNOSTICO', v_mass, v_mass_ok;
+    ELSE
+        RAISE NOTICE 'MASSA_2_2_2_2=CONFORME';
     END IF;
 
     SELECT last_value
@@ -568,7 +573,10 @@ SELECT
     'SIM'::text AS sap_guard_function,
     'NAO'::text AS delete_privilege_granted,
     'NAO'::text AS outbox_payload_exposed,
-    'NAO'::text AS massa_2_2_2_2_changed,
+    -- PORT DEV: a massa 2/2/2/2 do Q nao existe no DEV, logo esta coluna nao afirma
+    -- mais nada sobre ela. A nao-mutacao de dado operacional e comprovada DENTRO da
+    -- transacao da PROPOSTA, pela assinatura md5 das quatro tabelas de Entrada.
+    'DIAGNOSTICO_NAO_AVALIADO'::text AS massa_2_2_2_2_changed,
     0::integer AS db_write,
     0::integer AS sap_write;
 

@@ -4,6 +4,15 @@
 --   schema   homologacao                         -> desenvolvimento
 --   fugapet_q_app   -> fugapet_dev_app  (existe no DEV, rolsuper=false rolcanlogin=true)
 --   fugapet_q_owner -> postgres         (no DEV tudo pertence a postgres; nao ha owner dedicado)
+--   A verificacao da massa 2/2/2/2 foi REBAIXADA de BLOQUEANTE para DIAGNOSTICO, pela
+--   mesma razao registrada no 052: e a massa de teste do banco de homologacao do Q
+--   (lancamento 2, item 2, lote 2, pesagem 2; pedido 4500000005, material 1000111,
+--   lote 123456789, 9.950 kg, FINALIZADO_LOCAL) e nao existe no DEV. Semea-la seria
+--   inventar um recebimento. No lugar do papel de GUARDA que ela cumpria no post-check
+--   da PROPOSTA, entrou uma assinatura md5 das QUATRO tabelas de Entrada, capturada
+--   antes do INSERT e comparada depois: ela prova a mesma propriedade -- "o 053 nao
+--   altera dado operacional" -- com qualquer conteudo do banco e sobre TODAS as linhas.
+--   Nenhuma guarda de seguranca foi afrouxada.
 -- Delta de estrutura, guardas e post-checks preservados. O nome do gate Q no cabecalho
 -- e mantido de proposito: registra a procedencia do pacote.
 -- ============================================================

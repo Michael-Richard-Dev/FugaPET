@@ -4,6 +4,15 @@
 --   schema   homologacao                         -> desenvolvimento
 --   fugapet_q_app   -> fugapet_dev_app  (existe no DEV, rolsuper=false rolcanlogin=true)
 --   fugapet_q_owner -> postgres         (no DEV tudo pertence a postgres; nao ha owner dedicado)
+--   A verificacao da massa 2/2/2/2 foi REBAIXADA de BLOQUEANTE para DIAGNOSTICO, pela
+--   mesma razao registrada no 052: e a massa de teste do banco de homologacao do Q
+--   (lancamento 2, item 2, lote 2, pesagem 2; pedido 4500000005, material 1000111,
+--   lote 123456789, 9.950 kg, FINALIZADO_LOCAL) e nao existe no DEV. Semea-la seria
+--   inventar um recebimento. No lugar do papel de GUARDA que ela cumpria no post-check
+--   da PROPOSTA, entrou uma assinatura md5 das QUATRO tabelas de Entrada, capturada
+--   antes do INSERT e comparada depois: ela prova a mesma propriedade -- "o 053 nao
+--   altera dado operacional" -- com qualquer conteudo do banco e sobre TODAS as linhas.
+--   Nenhuma guarda de seguranca foi afrouxada.
 -- Delta de estrutura, guardas e post-checks preservados. O nome do gate Q no cabecalho
 -- e mantido de proposito: registra a procedencia do pacote.
 -- ============================================================
@@ -109,7 +118,8 @@ DECLARE
     v_active_link_count bigint;
     v_duplicate_link_count bigint;
     v_admin_effective bigint;
-    v_fdomingos_effective bigint;
+    v_effective_total bigint;
+    v_eligible bigint;
     v_mass bigint;
     v_mass_ok boolean;
 BEGIN
@@ -233,15 +243,54 @@ BEGIN
     )
     SELECT
         count(*) FILTER (WHERE login_usuario = 'admin'),
-        count(*) FILTER (WHERE login_usuario = 'f.domingos')
-      INTO v_admin_effective, v_fdomingos_effective
+        count(*)
+      INTO v_admin_effective, v_effective_total
       FROM effective;
 
-    IF v_admin_effective <> 1 OR v_fdomingos_effective <> 1 THEN
+    -- PORT DEV: o original exigia efetividade para os logins 'admin' e 'f.domingos'.
+    -- 'f.domingos' e usuario do ambiente do Q e NAO existe nesta linha, cujos usuarios
+    -- sao 'admin' e 'feliped'. NAO presumi que sejam a mesma pessoa: trocar um login
+    -- hardcoded por outro seria uma inferencia de identidade sem evidencia. Em vez
+    -- disso a guarda passou a verificar a PROPRIEDADE que o check buscava -- "o grant
+    -- chega a TODOS os usuarios reais elegiveis" -- que vale em qualquer ambiente e e
+    -- mais forte que duas assercoes pontuais. 'admin' segue exigido explicitamente.
+    -- Guarda BLOQUEANTE.
+    SELECT count(*)
+      INTO v_eligible
+      FROM desenvolvimento.usuario u
+      JOIN desenvolvimento.usuario_perfil up
+        ON up.codigo_usuario = u.codigo_usuario
+       AND up.situacao_usuario_perfil = true
+      JOIN desenvolvimento.perfil_acesso pa
+        ON pa.codigo_perfil_acesso = up.codigo_perfil_acesso
+       AND pa.situacao_perfil_acesso = true
+     WHERE u.situacao_usuario = true
+       AND u.bloqueado_usuario = false
+       AND pa.nome_perfil_acesso IN (
+           'Administrador',
+           'Supervisor de Produção',
+           'Operador de Balança',
+           'Consulta'
+       );
+
+    IF v_admin_effective <> 1 THEN
         RAISE EXCEPTION
-            '053 VALIDACAO: efetividade admin=% f.domingos=%, esperado 1/1',
-            v_admin_effective, v_fdomingos_effective;
+            '053 VALIDACAO: permissao nao efetiva para o login admin (efetividade=%).',
+            v_admin_effective;
     END IF;
+
+    IF v_eligible < 1 THEN
+        RAISE EXCEPTION
+            '053 VALIDACAO: nenhum usuario elegivel ativo e desbloqueado; o grant nao teria efeito.';
+    END IF;
+
+    IF v_effective_total <> v_eligible THEN
+        RAISE EXCEPTION
+            '053 VALIDACAO: apenas % de % usuarios elegiveis ficaram com a permissao efetiva.',
+            v_effective_total, v_eligible;
+    END IF;
+
+    RAISE NOTICE 'EFETIVIDADE=%/% usuarios elegiveis (admin incluido)', v_effective_total, v_eligible;
 
     SELECT
         count(*),
@@ -268,8 +317,12 @@ BEGIN
        AND lo.codigo_entrada_produto_lote = 2
        AND p.codigo_entrada_produto_pesagem = 2;
 
+    -- PORT DEV: DIAGNOSTICO; FALHA NAO bloqueia. A massa 2/2/2/2 e do banco de
+    -- homologacao do Q e nao existe no DEV. Mesma decisao registrada no 052.
     IF v_mass <> 1 OR COALESCE(v_mass_ok, false) = false THEN
-        RAISE EXCEPTION '053 VALIDACAO: massa 2/2/2/2 divergiu';
+        RAISE NOTICE 'MASSA_2_2_2_2=AUSENTE_OU_DIVERGENTE (count=%, ok=%) -- DIAGNOSTICO', v_mass, v_mass_ok;
+    ELSE
+        RAISE NOTICE 'MASSA_2_2_2_2=CONFORME';
     END IF;
 END
 $check$;
@@ -280,8 +333,13 @@ SELECT
     4::integer AS permission_profile_link_count,
     0::integer AS duplicate_link_count,
     'SIM'::text AS admin_effective,
-    'SIM'::text AS f_domingos_effective,
-    'NAO'::text AS massa_2_2_2_2_changed,
+    -- PORT DEV: 'f.domingos' nao existe nesta linha. A coluna passa a reportar a
+    -- propriedade verificada: todos os usuarios elegiveis ficaram efetivos.
+    'SIM'::text AS todos_elegiveis_effective,
+    -- PORT DEV: a massa 2/2/2/2 do Q nao existe no DEV, logo esta coluna nao afirma mais
+    -- nada sobre ela. A nao-mutacao de dado operacional e comprovada DENTRO da transacao
+    -- da PROPOSTA, pela assinatura md5 das quatro tabelas de Entrada.
+    'DIAGNOSTICO_NAO_AVALIADO'::text AS massa_2_2_2_2_changed,
     0::integer AS db_write,
     0::integer AS sap_write;
 

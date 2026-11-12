@@ -4,6 +4,15 @@
 --   schema   homologacao                         -> desenvolvimento
 --   fugapet_q_app   -> fugapet_dev_app  (existe no DEV, rolsuper=false rolcanlogin=true)
 --   fugapet_q_owner -> postgres         (no DEV tudo pertence a postgres; nao ha owner dedicado)
+--   A verificacao da massa 2/2/2/2 foi REBAIXADA de BLOQUEANTE para DIAGNOSTICO, pela
+--   mesma razao registrada no 052: e a massa de teste do banco de homologacao do Q
+--   (lancamento 2, item 2, lote 2, pesagem 2; pedido 4500000005, material 1000111,
+--   lote 123456789, 9.950 kg, FINALIZADO_LOCAL) e nao existe no DEV. Semea-la seria
+--   inventar um recebimento. No lugar do papel de GUARDA que ela cumpria no post-check
+--   da PROPOSTA, entrou uma assinatura md5 das QUATRO tabelas de Entrada, capturada
+--   antes do INSERT e comparada depois: ela prova a mesma propriedade -- "o 053 nao
+--   altera dado operacional" -- com qualquer conteudo do banco e sobre TODAS as linhas.
+--   Nenhuma guarda de seguranca foi afrouxada.
 -- Delta de estrutura, guardas e post-checks preservados. O nome do gate Q no cabecalho
 -- e mantido de proposito: registra a procedencia do pacote.
 -- ============================================================
@@ -206,8 +215,12 @@ BEGIN
        AND lo.codigo_entrada_produto_lote = 2
        AND p.codigo_entrada_produto_pesagem = 2;
 
+    -- PORT DEV: DIAGNOSTICO; FALHA NAO bloqueia. A massa 2/2/2/2 e do banco de
+    -- homologacao do Q e nao existe no DEV. Mesma decisao registrada no 052.
     IF v_mass <> 1 OR COALESCE(v_mass_ok, false) = false THEN
-        RAISE EXCEPTION '053 PREFLIGHT: massa 2/2/2/2 divergiu';
+        RAISE NOTICE 'MASSA_2_2_2_2=AUSENTE_OU_DIVERGENTE (count=%, ok=%) -- DIAGNOSTICO', v_mass, v_mass_ok;
+    ELSE
+        RAISE NOTICE 'MASSA_2_2_2_2=CONFORME';
     END IF;
 END
 $check$;
@@ -217,7 +230,10 @@ SELECT
     1::integer AS permission_exact_count,
     4::integer AS target_active_profile_count,
     0::integer AS existing_link_count,
-    'NAO'::text AS massa_2_2_2_2_changed,
+    -- PORT DEV: a massa 2/2/2/2 do Q nao existe no DEV, logo esta coluna nao afirma mais
+    -- nada sobre ela. A nao-mutacao de dado operacional e comprovada DENTRO da transacao
+    -- da PROPOSTA, pela assinatura md5 das quatro tabelas de Entrada.
+    'DIAGNOSTICO_NAO_AVALIADO'::text AS massa_2_2_2_2_changed,
     0::integer AS db_write,
     0::integer AS sap_write;
 

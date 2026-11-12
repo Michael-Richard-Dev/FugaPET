@@ -250,12 +250,41 @@ BEGIN
        AND lo.codigo_entrada_produto_lote = 2
        AND p.codigo_entrada_produto_pesagem = 2;
 
+    -- PORT DEV: DIAGNOSTICO; FALHA NAO bloqueia. Justificativa no cabecalho do
+    -- PREFLIGHT: a massa 2/2/2/2 e do banco de homologacao do Q e nao existe no DEV.
     IF v_mass_count <> 1 OR COALESCE(v_mass_ok, false) = false THEN
-        RAISE EXCEPTION
-            '052 ABORTADO: massa operacional 2/2/2/2 divergiu. count=%, ok=%',
-            v_mass_count,
-            v_mass_ok;
+        RAISE NOTICE 'MASSA_2_2_2_2=AUSENTE_OU_DIVERGENTE (count=%, ok=%) -- DIAGNOSTICO; FALHA NAO bloqueia', v_mass_count, v_mass_ok;
+    ELSE
+        RAISE NOTICE 'MASSA_2_2_2_2=CONFORME';
     END IF;
+
+    -- PORT DEV: guarda de NAO-MUTACAO, em substituicao ao papel que a massa 2/2/2/2
+    -- cumpria no Q. Assinatura das QUATRO tabelas de Entrada ANTES de qualquer DDL. O
+    -- post-check compara com ESTA assinatura, nao com os literais do Q. A propriedade
+    -- protegida continua sendo "a migration nao alterou dado operacional", e agora ela
+    -- vale com qualquer conteudo do banco, inclusive vazio, e cobre TODAS as linhas das
+    -- quatro tabelas, nao apenas a 2/2/2/2. Esta guarda e BLOQUEANTE.
+    PERFORM set_config(
+        'fugapet052.assinatura_dryrun',
+        (
+            SELECT COALESCE(md5(string_agg(x.linha, E'\n' ORDER BY x.linha)), 'VAZIO')
+              FROM (
+                    SELECT 'L:' || l::text AS linha
+                      FROM desenvolvimento.entrada_produto_lancamento l
+                    UNION ALL
+                    SELECT 'I:' || i::text
+                      FROM desenvolvimento.entrada_produto_item i
+                    UNION ALL
+                    SELECT 'O:' || lo::text
+                      FROM desenvolvimento.entrada_produto_lote lo
+                    UNION ALL
+                    SELECT 'P:' || p::text
+                      FROM desenvolvimento.entrada_produto_pesagem p
+                   ) x
+        ),
+        true
+    );
+    RAISE NOTICE 'ASSINATURA_ENTRADA_ANTES=%', current_setting('fugapet052.assinatura_dryrun');
 END $$;
 
 -- ============================================================
@@ -854,10 +883,38 @@ BEGIN
        AND lo.codigo_entrada_produto_lote = 2
        AND p.codigo_entrada_produto_pesagem = 2;
 
+    -- PORT DEV: o check original comparava com os literais da massa do Q. Aqui ele e
+    -- diagnostico, e a guarda BLOQUEANTE de nao-mutacao esta logo abaixo.
     IF v_mass_count <> 1 OR COALESCE(v_mass_ok, false) = false THEN
-        RAISE EXCEPTION
-            '052 ABORTADO: massa 2/2/2/2 alterada dentro da migration.';
+        RAISE NOTICE 'MASSA_2_2_2_2=AUSENTE_OU_DIVERGENTE no post-check -- DIAGNOSTICO';
     END IF;
+
+    IF current_setting('fugapet052.assinatura_dryrun', true) IS NULL THEN
+        RAISE EXCEPTION
+            '052 ABORTADO: assinatura de entrada ausente; a guarda de nao-mutacao nao pode ser comprovada. Fail-closed.';
+    END IF;
+
+    IF current_setting('fugapet052.assinatura_dryrun', true) <> (
+            SELECT COALESCE(md5(string_agg(x.linha, E'\n' ORDER BY x.linha)), 'VAZIO')
+              FROM (
+                    SELECT 'L:' || l::text AS linha
+                      FROM desenvolvimento.entrada_produto_lancamento l
+                    UNION ALL
+                    SELECT 'I:' || i::text
+                      FROM desenvolvimento.entrada_produto_item i
+                    UNION ALL
+                    SELECT 'O:' || lo::text
+                      FROM desenvolvimento.entrada_produto_lote lo
+                    UNION ALL
+                    SELECT 'P:' || p::text
+                      FROM desenvolvimento.entrada_produto_pesagem p
+                   ) x
+       ) THEN
+        RAISE EXCEPTION
+            '052 ABORTADO: dado operacional de Entrada foi alterado (assinatura das quatro tabelas mudou).';
+    END IF;
+
+    RAISE NOTICE 'DADO_OPERACIONAL_ENTRADA=INALTERADO';
 END $$;
 
 
