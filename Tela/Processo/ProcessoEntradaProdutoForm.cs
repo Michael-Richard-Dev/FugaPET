@@ -840,6 +840,23 @@ public partial class ProcessoEntradaProdutoForm : Form
                 ("SAP HML: PARCIAL", Color.FromArgb(249, 115, 22)),
             EstadoVisualIntegracaoSap.AguardandoGravacaoLocal =>
                 ("SAP HML: AGUARDANDO GRAVAÇÃO LOCAL", Color.FromArgb(250, 204, 21)),
+            // O diagnóstico já distingue SEIS motivos de bloqueio; antes todos caíam no
+            // genérico abaixo e o operador não tinha como saber qual era. O motivo
+            // detalhado continua no tooltip do chip — mas o tooltip do BOTÃO nunca
+            // aparece, porque o botão está desabilitado e no WinForms controle
+            // desabilitado não dispara evento de mouse. Daí nomear cada estado aqui.
+            EstadoVisualIntegracaoSap.BloqueadoAmbiente =>
+                ("SAP HML: AMBIENTE NÃO LIBERADO", Color.FromArgb(239, 68, 68)),
+            EstadoVisualIntegracaoSap.BloqueadoSemPermissao =>
+                ("SAP HML: SEM PERMISSÃO", Color.FromArgb(239, 68, 68)),
+            EstadoVisualIntegracaoSap.BloqueadoIntegracaoInativa =>
+                ("SAP HML: INTEGRAÇÃO INATIVA", Color.FromArgb(239, 68, 68)),
+            EstadoVisualIntegracaoSap.BloqueadoSapNaoConfigurado =>
+                ("SAP HML: SAP NÃO CONFIGURADO", Color.FromArgb(239, 68, 68)),
+            EstadoVisualIntegracaoSap.BloqueadoEscritaDesabilitada =>
+                ("SAP HML: ESCRITA DESABILITADA", Color.FromArgb(239, 68, 68)),
+            EstadoVisualIntegracaoSap.BloqueadoSemItens =>
+                ("SAP HML: SEM ITENS ELEGÍVEIS", Color.FromArgb(249, 115, 22)),
             _ =>
                 ("SAP HML: BLOQUEADO", Color.FromArgb(239, 68, 68))
         };

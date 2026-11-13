@@ -118,7 +118,9 @@ public sealed class EntradaProdutoController
         Impressao = new ImpressaoEntradaServico(ImpressoraEtiqueta);
         AutorizacaoCentroDeposito = autorizacaoCentroDeposito ?? throw new ArgumentNullException(nameof(autorizacaoCentroDeposito));
         Tara = taraController ?? throw new ArgumentNullException(nameof(taraController));
-        _ehAmbienteHomologacao = ehAmbienteHomologacao ?? AmbienteIntegracaoSap.EhHomologacao;
+        // A regra do envio de peso deixou de ser so o nome do banco: e homologacao OU
+        // liberacao explicita do ambiente (FUGAPET_SAP_ENVIO_PESO_LIBERADO), fail-closed.
+        _ehAmbienteHomologacao = ehAmbienteHomologacao ?? AmbienteIntegracaoSap.EnvioPesoPermitido;
         _carregarItensParaEnvio = carregarItensParaEnvio
             ?? ((codigoLancamento, cancellationToken) =>
                 EntradaProduto.ListarItensParaEnvioSapAsync(codigoLancamento, cancellationToken));
@@ -297,7 +299,7 @@ public sealed class EntradaProdutoController
         string? motivoBloqueio = codigoLancamento is not long id || id <= 0
             ? "Finalize e grave o lançamento local antes do envio."
             : !ambienteHomologacao
-                ? "O ambiente atual não é homologação."
+                ? "Envio de peso não liberado neste ambiente."
                 : !usuarioTemPermissao
                     ? "Usuário sem permissão ENVIAR_SAP."
                     : !integracao.AmbienteOperacional

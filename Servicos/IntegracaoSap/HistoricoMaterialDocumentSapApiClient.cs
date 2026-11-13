@@ -35,7 +35,15 @@ public static class HistoricoMaterialDocumentSapApiClient
         /// <summary>Vinculo DOCUMENTAL do estorno. Sem ele, o estorno nao e correlacionado por suposicao.</summary>
         public const string ReversedMaterialDocument = "ReversedMaterialDocument";
         public const string ReversedMaterialDocumentItem = "ReversedMaterialDocumentItem";
-        public const string IsReversalMovement = "IsReversalMovement";
+
+        // NAO acrescentar "IsReversalMovement" aqui nem ao $select. A entidade
+        // A_MaterialDocumentItem do SAP desta instalacao NAO expoe essa propriedade, e o Gateway
+        // responde 404 ao $select INTEIRO quando um unico nome e desconhecido. O servico traduzia
+        // isso em FalhaConsulta, o P5 bloqueava por "historico nao conclusivo" e a tela dizia
+        // "nao foi possivel comprovar" -- ou seja, um campo inexistente impedia QUALQUER envio 101
+        // da Entrada. O campo tambem nunca foi lido por codigo algum: a deteccao de estorno usa
+        // GoodsMovementType=102 e o vinculo documental Reversed*. Verificado campo a campo contra
+        // o SAP em 13/11/2026: os dez abaixo respondem 200; IsReversalMovement responde 404.
     }
 
     private static readonly string[] _selecionados =
@@ -43,7 +51,7 @@ public static class HistoricoMaterialDocumentSapApiClient
         Campos.PurchaseOrder, Campos.PurchaseOrderItem, Campos.Material, Campos.Plant,
         Campos.GoodsMovementType, Campos.MaterialDocument, Campos.MaterialDocumentItem,
         Campos.MaterialDocumentYear, Campos.ReversedMaterialDocument,
-        Campos.ReversedMaterialDocumentItem, Campos.IsReversalMovement
+        Campos.ReversedMaterialDocumentItem
     ];
 
     /// <summary>

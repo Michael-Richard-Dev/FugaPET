@@ -173,8 +173,8 @@ public sealed class EvidenciaRecebimentoLocalServico : IEvidenciaRecebimentoLoca
             SELECT pi.codigo_sap_pedido_compra_item, pi.numero_item,
                    pi.codigo_produto, pi.status_cache, pi.sincronizado_em,
                    pi.quantidade_pedida, pi.quantidade_recebida, pi.quantidade_pendente
-            FROM homologacao.sap_pedido_compra pc
-            JOIN homologacao.sap_pedido_compra_item pi
+            FROM sap_pedido_compra pc
+            JOIN sap_pedido_compra_item pi
               ON pi.codigo_sap_pedido_compra = pc.codigo_sap_pedido_compra
             JOIN p ON btrim(pc.numero_pedido) = p.numero_pedido
             WHERE pi.numero_item ~ '^[[:space:]]*[0-9]{1,5}[[:space:]]*$'
@@ -190,8 +190,8 @@ public sealed class EvidenciaRecebimentoLocalServico : IEvidenciaRecebimentoLoca
                    i.material, i.status_item, i.situacao_entrada_produto_item,
                    i.codigo_sap_pedido_compra_item, i.documento_material_item,
                    i.quantidade_recebida AS item_quantidade_recebida
-            FROM homologacao.entrada_produto_lancamento l
-            JOIN homologacao.entrada_produto_item i
+            FROM entrada_produto_lancamento l
+            JOIN entrada_produto_item i
               ON i.codigo_entrada_produto_lancamento=l.codigo_entrada_produto_lancamento
             CROSS JOIN p
             WHERE btrim(l.numero_pedido)=p.numero_pedido
@@ -205,11 +205,11 @@ public sealed class EvidenciaRecebimentoLocalServico : IEvidenciaRecebimentoLoca
               )
         ), cabecalho_sem_item AS MATERIALIZED (
             SELECT l.codigo_entrada_produto_lancamento
-            FROM homologacao.entrada_produto_lancamento l
+            FROM entrada_produto_lancamento l
             CROSS JOIN p
             WHERE btrim(l.numero_pedido)=p.numero_pedido
               AND NOT EXISTS (
-                SELECT 1 FROM homologacao.entrada_produto_item i
+                SELECT 1 FROM entrada_produto_item i
                 WHERE i.codigo_entrada_produto_lancamento=l.codigo_entrada_produto_lancamento
               )
         )
@@ -254,7 +254,7 @@ public sealed class EvidenciaRecebimentoLocalServico : IEvidenciaRecebimentoLoca
             FALSE AS prova_negativa_sap
         FROM p
         LEFT JOIN local_item li ON TRUE
-        LEFT JOIN homologacao.entrada_produto_lote lote
+        LEFT JOIN entrada_produto_lote lote
             ON lote.codigo_entrada_produto_item=li.item_id
         ORDER BY li.lancamento_id NULLS FIRST, li.item_id NULLS FIRST,
                  lote.codigo_entrada_produto_lote NULLS FIRST;

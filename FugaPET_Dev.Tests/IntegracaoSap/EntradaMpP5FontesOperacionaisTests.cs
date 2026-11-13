@@ -115,6 +115,52 @@ public sealed class EntradaMpP5FontesOperacionaisTests
         Assert.Contains("@lancamento", sql, StringComparison.Ordinal);
     }
 
+    // As duas fontes LOCAIS do P5 nao podem qualificar esquema. A norma do projeto e resolver pelo
+    // search_path da conexao (ver §3/§13 em ProdutoAcabadoHandlingUnitCaixaTests), e aqui ela deixou
+    // de valer: as consultas cravavam "homologacao.", o que no DEV — esquema "desenvolvimento" —
+    // apontava para um esquema inexistente. As fontes resolviam INDISPONIVEL, o avaliador bloqueava
+    // por falta de evidencia, e a tela acusava "nao foi possivel comprovar", escondendo a causa real.
+    // Um esquema cravado aqui nao e detalhe de estilo: e envio impossivel em qualquer ambiente cujo
+    // esquema tenha outro nome.
+    // O $select do historico e tudo-ou-nada: o Gateway responde 404 ao select INTEIRO se um unico
+    // nome for desconhecido pela entidade. "IsReversalMovement" nao existe em A_MaterialDocumentItem
+    // nesta instalacao (verificado campo a campo contra o SAP), e so por estar na lista derrubava a
+    // consulta, levando o P5 a bloquear todo envio 101 por "historico nao conclusivo". O campo
+    // tampouco era lido: o estorno se reconhece por GoodsMovementType=102 e pelo vinculo Reversed*.
+    [Fact]
+    public void SelectDoHistorico_NaoPedeCampoInexistenteNaEntidade()
+    {
+        Uri url = FugaPET_Dev.Servicos.IntegracaoSap.HistoricoMaterialDocumentSapApiClient.MontarUrlHistoricoPorPedido(
+            new Uri("https://exemplo.invalido/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/"),
+            "4500002441",
+            "110");
+
+        string decodificada = Uri.UnescapeDataString(url.ToString());
+
+        Assert.DoesNotContain("IsReversalMovement", decodificada, StringComparison.Ordinal);
+
+        // O vinculo documental do estorno continua sendo pedido: remover o campo inexistente nao
+        // pode ter enfraquecido a deteccao de estorno.
+        Assert.Contains("ReversedMaterialDocument", decodificada, StringComparison.Ordinal);
+        Assert.Contains("ReversedMaterialDocumentItem", decodificada, StringComparison.Ordinal);
+        Assert.Contains("GoodsMovementType", decodificada, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FontesLocaisDoP5_NaoQualificamEsquema()
+    {
+        foreach ((string nome, string sql) in new[]
+                 {
+                     ("ConsultaD2", EvidenciaRecebimentoLocalServico.ConsultaD2),
+                     ("Tabela de exclusividade", ExclusividadeItemPedidoDuravelServico.Tabela),
+                 })
+        {
+            Assert.DoesNotContain("homologacao.", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("desenvolvimento.", sql, StringComparison.OrdinalIgnoreCase);
+            Assert.False(string.IsNullOrWhiteSpace(sql), nome + " vazia");
+        }
+    }
+
     // ---------------------------------------------------------------- atestação
 
     [Fact]

@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using FugaPET_Dev.Modelo.Entrada;
 using FugaPET_Dev.Servicos.Entrada;
 
@@ -31,6 +33,20 @@ public sealed class HistoricoMaterialDocumentSapServico : IHistoricoMaterialDocu
     private readonly string? _centroEsperado;
     private readonly Action<string>? _registrarDiagnostico;
 
+    /// <summary>
+    /// Cabecalho Basic, no MESMO formato dos demais clientes SAP do projeto
+    /// (<c>MaterialDocumentSapApiClient</c>, <c>ConsumoMaterialSap261ApiClient</c>).
+    /// <para>
+    /// Sem ele o GET saia ANONIMO: o ICF do SAP nao responde 401, responde 302 redirecionando para
+    /// a tela de logon, e <c>AllowAutoRedirect=false</c> (correto) transformava isso em
+    /// "consulta do historico devolveu HTTP 302". O servico exigia Usuario e Senha para se declarar
+    /// <see cref="Disponivel"/> e entao nunca os usava, de modo que o historico NUNCA era lido e o
+    /// P5 bloqueava todo envio 101 da Entrada por "historico nao conclusivo".
+    /// </para>
+    /// Nunca e registrado em log, diagnostico ou mensagem de erro.
+    /// </summary>
+    private readonly AuthenticationHeaderValue? _autorizacao;
+
     public HistoricoMaterialDocumentSapServico(
         ConfiguracaoSap configuracao,
         string? materialEsperado = null,
@@ -44,6 +60,24 @@ public sealed class HistoricoMaterialDocumentSapServico : IHistoricoMaterialDocu
         _registrarDiagnostico = registrarDiagnostico;
         _sapClient = (configuracao.SapClient ?? string.Empty).Trim();
         _fabricaHttpClient = fabricaHttpClient ?? (() => FabricaHttpClientSap.Criar(configuracao));
+
+        // AUTH_HEADER: falha na montagem deixa _autorizacao nula, e Disponivel ja exige credenciais
+        // nao vazias — o pedido anonimo nunca chega a ser emitido como se fosse autenticado.
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(configuracao.Usuario)
+                && !string.IsNullOrWhiteSpace(configuracao.Senha))
+            {
+                _autorizacao = new AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(
+                        Encoding.UTF8.GetBytes($"{configuracao.Usuario}:{configuracao.Senha}")));
+            }
+        }
+        catch (Exception)
+        {
+            _autorizacao = null;
+        }
 
         // Destino validado pelo MESMO contrato das demais integracoes (https + allowlist + sem credencial
         // na URL). Invalido ⇒ servico indisponivel (nunca "sem historico").
@@ -60,6 +94,7 @@ public sealed class HistoricoMaterialDocumentSapServico : IHistoricoMaterialDocu
         }
 
         Disponivel = _baseUri is not null
+            && _autorizacao is not null
             && _sapClient.Length > 0
             && !string.IsNullOrWhiteSpace(configuracao.Usuario)
             && !string.IsNullOrWhiteSpace(configuracao.Senha)
@@ -166,8 +201,11 @@ public sealed class HistoricoMaterialDocumentSapServico : IHistoricoMaterialDocu
             $"paginacao do historico excedeu o teto de {MaxPaginas} paginas; leitura nao concluida");
     }
 
-    /// <summary>Somente GET: qualquer outro metodo e rejeitado LOCALMENTE antes de qualquer SendAsync.</summary>
-    private static HttpRequestMessage CriarRequisicaoGet(Uri destino)
+    /// <summary>
+    /// Somente GET: qualquer outro metodo e rejeitado LOCALMENTE antes de qualquer SendAsync.
+    /// Leva o Basic e o Accept JSON — sem o Basic o SAP devolve 302 para a tela de logon.
+    /// </summary>
+    private HttpRequestMessage CriarRequisicaoGet(Uri destino)
     {
         HttpRequestMessage requisicao = new(HttpMethod.Get, destino);
         if (requisicao.Method != HttpMethod.Get)
@@ -175,6 +213,8 @@ public sealed class HistoricoMaterialDocumentSapServico : IHistoricoMaterialDocu
             throw new InvalidOperationException("Consulta de historico aceita exclusivamente GET.");
         }
 
+        requisicao.Headers.Authorization = _autorizacao;
+        requisicao.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return requisicao;
     }
 

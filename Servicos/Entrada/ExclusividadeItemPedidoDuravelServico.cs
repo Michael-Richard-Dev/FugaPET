@@ -6,7 +6,7 @@ namespace FugaPET_Dev.Servicos.Entrada;
 
 /// <summary>
 /// P5/056: exclusividade DURAVEL por pedido+item, apoiada na chave primaria de
-/// <c>homologacao.entrada_mp_p5_exclusividade_item_pedido</c>.
+/// <c>entrada_mp_p5_exclusividade_item_pedido</c> (esquema resolvido pelo search_path).
 /// <para>
 /// A garantia vem do banco, nao do processo: o INSERT concorrente de um segundo lancamento
 /// para o mesmo pedido+item viola a chave primaria e perde. Isso vale entre lancamentos,
@@ -23,7 +23,15 @@ namespace FugaPET_Dev.Servicos.Entrada;
 /// </summary>
 public sealed class ExclusividadeItemPedidoDuravelServico : IExclusividadeItemPedidoServico
 {
-    public const string Tabela = "homologacao.entrada_mp_p5_exclusividade_item_pedido";
+    /// <summary>
+    /// Nome SEM esquema, de proposito. A norma do projeto (ver §3/§13 nos testes do repositorio
+    /// de Handling Unit) e nao qualificar esquema: quem resolve e o <c>search_path</c> da conexao,
+    /// alimentado por <c>configuracao.banco.json</c>. Cravar "homologacao." tornava este servico
+    /// estruturalmente impossivel no DEV, cujo esquema e "desenvolvimento" — a tabela existe, mas
+    /// a consulta procurava num esquema que nem sequer existe naquele banco, resolvia como
+    /// INDISPONIVEL e o P5 bloqueava todo envio, para sempre, com a mensagem de "sem evidencia".
+    /// </summary>
+    public const string Tabela = "entrada_mp_p5_exclusividade_item_pedido";
 
     private readonly IFabricaConexaoBanco _fabrica;
     private readonly Action<string>? _registrarDiagnostico;
