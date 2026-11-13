@@ -95,7 +95,7 @@ public sealed class MaterialDocumentSapApiClient
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requisicao);
-        if (Entrada.P5.BloqueioP5R7.ExigeP5(requisicao))
+        if (Entrada.P5.BloqueioP5R7.Bloqueia(requisicao))
             return ResultadoMaterialDocumentSap.Falha(null, Entrada.P5.BloqueioP5R7.Mensagem);
         if (requisicao.Itens.Count == 0)
         {
@@ -208,6 +208,11 @@ public sealed class MaterialDocumentSapApiClient
                 ["EntryUnit"] = item.EntryUnit
             };
 
+            // Line-ID da posicao DENTRO da requisicao. Sem ele o SAP recusa com HTTP 400
+            // MM_IM_ODATA_API_MDOC/027 "Provide Line-Ids when using Business Context
+            // MaterialDocumentItem". Precisa estar AQUI, na allowlist: preencher so a propriedade do
+            // DTO nao faz o campo viajar, como o comentario dos campos ZZ1 ja avisava.
+            AdicionarSePreenchido(itemJson, "MaterialDocumentLine", item.MaterialDocumentLine);
             AdicionarSePreenchido(itemJson, "GoodsMovementRefDocType", item.GoodsMovementRefDocType);
             AdicionarSePreenchido(itemJson, "PurchaseOrder", item.PurchaseOrder);
             AdicionarSePreenchido(itemJson, "PurchaseOrderItem", item.PurchaseOrderItem);

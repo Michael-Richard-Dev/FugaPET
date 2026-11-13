@@ -22,6 +22,22 @@ public sealed record MaterialDocumentSapItemRequest
     public string GoodsMovementType { get; init; } = "101";
 
     /// <summary>
+    /// MaterialDocumentLine (Edm.String MaxLength=6) — identificador da LINHA dentro do documento.
+    /// <para>
+    /// Sem ele o SAP recusa o POST com HTTP 400
+    /// <c>MM_IM_ODATA_API_MDOC/027 — "Provide Line-Ids when using Business Context
+    /// MaterialDocumentItem"</c>: ao postar itens pelo contexto de negocio MaterialDocumentItem, cada
+    /// posicao precisa de uma linha propria. Nome confirmado na $metadata da instalacao, nao inferido.
+    /// </para>
+    /// <para>
+    /// Numeracao sequencial a partir de 1, na ordem em que as posicoes entram no payload. NAO e o
+    /// <c>MaterialDocumentItem</c>, que o SAP gera; e so a identidade da linha DENTRO da requisicao.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("MaterialDocumentLine")]
+    public string? MaterialDocumentLine { get; init; }
+
+    /// <summary>
     /// GoodsMovementRefDocType â€” tipo do documento de referencia do movimento. "B" = Pedido de Compra.
     /// Obrigatorio para o SAP aceitar PurchaseOrder/PurchaseOrderItem no movimento 101 (sem ele,
     /// retorna "Property PURCHASEORDER is not supported for GoodsMovementType 101").

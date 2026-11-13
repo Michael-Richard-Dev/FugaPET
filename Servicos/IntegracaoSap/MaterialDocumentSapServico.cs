@@ -63,7 +63,7 @@ public sealed class MaterialDocumentSapServico : IMaterialDocumentSapServico
         ArgumentNullException.ThrowIfNull(requisicao);
         requisicao = requisicao with { Itens = requisicao.Itens.ToArray() };
         Guid correlationId = Guid.NewGuid();
-        if (Entrada.P5.BloqueioP5R7.ExigeP5(requisicao))
+        if (Entrada.P5.BloqueioP5R7.Bloqueia(requisicao))
             return ResultadoMaterialDocumentSap.Falha(null, Entrada.P5.BloqueioP5R7.Mensagem) with { PostTentado = false };
         Stopwatch cronometro = Stopwatch.StartNew();
 

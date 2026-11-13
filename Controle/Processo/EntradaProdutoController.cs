@@ -1341,7 +1341,8 @@ public sealed class EntradaProdutoController
     /// Demais ... comportamento LEGADO (quantidade = peso liquido), SEM campos customizados.
     /// </summary>
     internal static MaterialDocumentSapItemRequest MontarItemMaterialDocument(
-        string numeroPedido, EntradaProdutoItemEnvioSap item, bool comLote, ResultadoAlocacao101 alocacao)
+        string numeroPedido, EntradaProdutoItemEnvioSap item, bool comLote, ResultadoAlocacao101 alocacao,
+        int linha = 1)
         => new()
         {
             Material = item.Material!.Trim(),
@@ -1349,6 +1350,9 @@ public sealed class EntradaProdutoController
             StorageLocation = item.Deposito!.Trim(),
             GoodsMovementType = "101",
             GoodsMovementRefDocType = "B", // referencia = Pedido de Compra (exigido pelo SAP no 101)
+            // Line-ID exigido pelo SAP ao postar via contexto de negocio MaterialDocumentItem
+            // (MM_IM_ODATA_API_MDOC/027). Sequencial dentro da requisicao, a partir de 1.
+            MaterialDocumentLine = linha.ToString(CultureInfo.InvariantCulture),
             QuantityInEntryUnit = alocacao.QuantidadePadrao,
             EntryUnit = alocacao.UnidadePadrao,
             Zz1PesoEntradaMmi = alocacao.PesoLiquidoCustomizado,

@@ -107,7 +107,7 @@ internal static class PreparadorPayloadMaterialDocumentEntrada
 
                     posicoes.Add(new EntradaProdutoPosicaoMaterialDocument(
                         Servicos.Entrada.P5.ClassificacaoMaterialDocumentP5.Registrar(
-                            EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, lote, comLote: true, alocacao),
+                            EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, lote, comLote: true, alocacao, posicoes.Count + 1),
                             produtosPorMaterial[material]),
                         [lote.CodigoEntradaProdutoLote]));
                 }
@@ -138,7 +138,7 @@ internal static class PreparadorPayloadMaterialDocumentEntrada
 
                     posicoes.Add(new EntradaProdutoPosicaoMaterialDocument(
                         Servicos.Entrada.P5.ClassificacaoMaterialDocumentP5.Registrar(
-                            EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, representante, comLote: false, alocacao),
+                            EntradaProdutoController.MontarItemMaterialDocument(numeroPedido, representante, comLote: false, alocacao, posicoes.Count + 1),
                             produtosPorMaterial[material]),
                         codigosLotes));
                 }

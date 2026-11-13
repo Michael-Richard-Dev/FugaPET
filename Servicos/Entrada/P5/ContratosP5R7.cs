@@ -2,12 +2,58 @@ using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.Entrada.P5;
 
+/// <summary>
+/// Portao do envio 101 enquanto o backend R7 nao esta ligado ao fluxo.
+/// <para>
+/// O R7 seria a protecao DURAVEL em volta do envio — reserva, confirmacao de fronteira, retorno
+/// tardio e recuperacao, em funcoes de banco. Ele foi projetado e programado, mas NUNCA foi ligado
+/// ao caminho do envio (nenhum chamador de <see cref="CoordenadorP5R7"/> fora desta pasta) e suas
+/// funcoes nao existem em banco algum. Por isso o portao existe.
+/// </para>
+/// <para>
+/// O que NAO fica desprotegido ao liberar, e vale registrar: o proprio EntradaProdutoController ja
+/// faz reserva ATOMICA do lancamento, aborta quando ele ja esta CONFIRMADO_SAP/CANCELADO, revalida
+/// o snapshot apos a reserva, e trata resultado INDETERMINADO (timeout, HTTP 5xx, 2xx sem
+/// documento) mantendo o lancamento reservado com "reconciliacao obrigatoria; nao reenviar". O R7
+/// tornaria isso duravel no banco, mas a defesa contra duplo lancamento da quantidade integral do
+/// pedido nao depende apenas dele.
+/// </para>
+/// <para>
+/// LIBERACAO EXPLICITA: por decisao registrada do usuario em 13/11/2026, o portao passou a aceitar
+/// abertura declarada POR AMBIENTE, em vez de ser removido do fonte — remove-lo abriria o envio em
+/// TODOS os ambientes de uma vez, sem ninguem pedir. FAIL-CLOSED: ausente, vazia ou nao-booleana
+/// significa BLOQUEADO; so o literal "true" libera. Lida no escopo Process, como os demais gates.
+/// </para>
+/// </summary>
 internal static class BloqueioP5R7
 {
-    internal static bool MutacoesHomologadas => false;
+    /// <summary>Variavel que declara a liberacao deste ambiente. Fail-closed.</summary>
+    internal const string VariavelLiberacao = "FUGAPET_SAP_P5_R7_LIBERADO";
+
+    /// <summary>
+    /// True quando o ambiente declarou explicitamente a liberacao. Antes desta mudanca era
+    /// <c>=> false</c> fixo e, pior, NAO era consultada por nenhum dos tres pontos que aplicavam o
+    /// bloqueio: o portao era incondicional e esta bandeira, decorativa.
+    /// </summary>
+    internal static bool MutacoesHomologadas => MutacoesLiberadas(
+        variavel => Environment.GetEnvironmentVariable(
+            variavel, EnvironmentVariableTarget.Process));
+
+    internal static bool MutacoesLiberadas(Func<string, string?> obterVariavel)
+        => bool.TryParse(obterVariavel(VariavelLiberacao)?.Trim(), out bool liberado) && liberado;
+
     internal const string Mensagem = "P5 R7 bloqueado: dependências e segurança não homologadas.";
+
+    /// <summary>Classificacao: este pedido exige o percurso P5? Nao decide sozinho o bloqueio.</summary>
     internal static bool ExigeP5(MaterialDocumentSapRequest request)
         => request.Itens.Any(ClassificacaoMaterialDocumentP5.Bloqueia);
+
+    /// <summary>
+    /// Decisao efetiva do portao: exige P5 E o ambiente nao declarou liberacao. E esta que os tres
+    /// pontos de aplicacao consultam.
+    /// </summary>
+    internal static bool Bloqueia(MaterialDocumentSapRequest request)
+        => ExigeP5(request) && !MutacoesHomologadas;
 }
 
 internal sealed record ChaveP5
