@@ -195,6 +195,209 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
         Assert.Contains("QTDE. CX.:", zpl, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// GATE 126D: o defeito real de 16/11/2026. O campo de barras levava ^FB, que e bloco de TEXTO:
+    /// a impressora compos o numero como texto e NAO gerou barra nenhuma — saiu moldura vazia com o
+    /// codigo em letra miuda. Os testes antigos nao pegaram porque conferiam o ^BCN e o ^FD, que
+    /// continuavam presentes e corretos. Este olha o que importa: o que ha ENTRE eles.
+    /// </summary>
+    [Fact]
+    public void CampoDeBarras_NaoUsaBlocoDeTexto()
+    {
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaPaleteProdutoAcabado(
+            ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+                Palete(Caixa(1, "022 26", 10m, 20)), 17747, "TERMINAL_TI_TESTE"));
+
+        int inicio = zpl.IndexOf("^BCN", StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "o ZPL precisa ter o campo Code128 do palete");
+
+        int fim = zpl.IndexOf("^FS", inicio, StringComparison.Ordinal);
+        Assert.True(fim > inicio, "o campo de barras precisa ser encerrado com ^FS");
+
+        string campoDeBarras = zpl[inicio..fim];
+        Assert.DoesNotContain("^FB", campoDeBarras, StringComparison.Ordinal);
+        Assert.Contains("^FD2000017747", campoDeBarras, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Sem ^FB nao ha centralizacao nativa, entao a posicao e calculada. O codigo precisa comecar
+    /// DENTRO da moldura: comecar antes dela seria impresso por cima do desenho, e comecar depois
+    /// jogaria as barras para fora da etiqueta.
+    /// </summary>
+    [Fact]
+    public void CodigoDeBarras_ComecaDentroDaMoldura()
+    {
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaPaleteProdutoAcabado(
+            ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+                Palete(Caixa(1, "022 26", 10m, 20)), 17747, "TERMINAL_TI_TESTE"));
+
+        // A moldura e desenhada por ^GB; o campo de barras vem logo depois, com origem propria.
+        int origemBarras = int.Parse(
+            zpl[(zpl.IndexOf("^FO", zpl.IndexOf("^BCN", StringComparison.Ordinal) - 60, StringComparison.Ordinal) + 3)..]
+               .Split(',')[0],
+            System.Globalization.CultureInfo.InvariantCulture);
+
+        const int XMoldura = 170;        // Margem(30) + 140
+        const int LarguraMoldura = 499;  // Util(779) - 280
+
+        Assert.InRange(origemBarras, XMoldura, XMoldura + LarguraMoldura);
+    }
+
+    [Theory]
+    // 10 digitos em subconjunto C: start + 5 simbolos + verificador = 7 x 11, mais stop de 13 = 90
+    // modulos; a 3 pontos por modulo, 270 pontos.
+    [InlineData("2000017747", 3, 270)]
+    [InlineData("2000017747", 1, 90)]
+    // Quantidade impar de digitos gasta um simbolo a mais.
+    [InlineData("200001774", 3, 270)]
+    [InlineData("", 3, 0)]
+    public void LarguraEstimadaDoCode128(string dados, int modulo, int esperado)
+        => Assert.Equal(esperado, ServicoImpressoraZebra.EstimarLarguraCode128Dots(dados, modulo));
+
+    /// <summary>
+    /// Estimativa maior que a moldura nao pode empurrar o codigo para a esquerda da etiqueta: nesse
+    /// caso ele comeca na borda da moldura, e no maximo invade a direita, onde ainda ha papel.
+    /// </summary>
+    [Fact]
+    public void CentralizacaoNaoJogaOCodigoParaForaQuandoNaoCabe()
+    {
+        const int XMoldura = 170;
+        Assert.Equal(XMoldura, ServicoImpressoraZebra.CentralizarBarras(
+            new string('9', 400), ServicoImpressoraZebra.ModuloBarrasPalete, XMoldura, 499));
+
+        int centralizado = ServicoImpressoraZebra.CentralizarBarras(
+            "2000017747", ServicoImpressoraZebra.ModuloBarrasPalete, XMoldura, 499);
+        Assert.True(centralizado > XMoldura, "um codigo que cabe deve ser deslocado para o centro");
+        Assert.True(centralizado + 270 <= XMoldura + 499, "o codigo centralizado nao pode passar da moldura");
+    }
+
+    /// <summary>
+    /// GATE 126E: com descricao vinda do SAP, ela e o titulo grande da etiqueta — a linha que o
+    /// conferente le de longe. Era o que faltava frente ao modelo impresso.
+    /// </summary>
+    [Fact]
+    public void TituloDaEtiqueta_UsaADescricaoQuandoHa()
+    {
+        DadosEtiquetaPaleteProdutoAcabado e = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, "022 26", 10m, 20)), 17747, "TERMINAL_TI_TESTE",
+            "OSSO NO 9\" GALINHA 12X1PCS KIND FULL - TARGET");
+
+        Assert.Equal("OSSO NO 9\" GALINHA 12X1PCS KIND FULL - TARGET", e.DescricaoMaterial);
+
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaPaleteProdutoAcabado(e);
+        Assert.Contains("OSSO NO 9", zpl, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// GATE 126E: sem descricao — SAP fora do ar, material sem texto cadastrado, integracao
+    /// desligada — a etiqueta continua saindo com o CODIGO no titulo. O comportamento anterior e
+    /// preservado de proposito: trocar etiqueta incompleta por nenhuma etiqueta seria pior.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TituloDaEtiqueta_CaiNoCodigoQuandoNaoHaDescricao(string? descricao)
+    {
+        DadosEtiquetaPaleteProdutoAcabado e = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, "022 26", 10m, 20)), 17747, "TERMINAL_TI_TESTE", descricao);
+
+        Assert.Equal(string.Empty, e.DescricaoMaterial);
+
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaPaleteProdutoAcabado(e);
+        Assert.Contains("4000316", zpl, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// GATE 126E: material vazio nao chega a consultar o SAP. Este teste NAO faz rede: comprova o
+    /// curto-circuito, que e o unico caminho deterministico sem depender de integracao configurada.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task DescricaoParaEtiqueta_MaterialVazioDevolveVazioSemConsultar(string? material)
+    {
+        var controller = new Controle.Processo.ProdutoAcabadoController();
+        Assert.Equal(string.Empty, await controller.ObterDescricaoMaterialParaEtiquetaAsync(material));
+    }
+
+    /// <summary>
+    /// GATE 126F: com as datas vindas do cadastro de lote do SAP, a linha do lote deixa de sair
+    /// "NAO INFORMADA" e passa a trazer fabricacao e validade, como no modelo impresso.
+    /// </summary>
+    [Fact]
+    public void LinhaDoLote_UsaAsDatasDoSapQuandoHa()
+    {
+        var datas = new Dictionary<string, Modelo.IntegracaoSap.LoteSapDatas>
+        {
+            ["61008561F"] = new("4000316", "61008561F",
+                new DateTime(2026, 8, 21, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2028, 3, 18, 0, 0, 0, DateTimeKind.Utc))
+        };
+
+        DadosEtiquetaPaleteProdutoAcabado e = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, "61008561F", 10m, 20)), 17747, "T", null, datas);
+
+        LinhaLoteEtiquetaPalete linha = Assert.Single(e.Lotes);
+        Assert.Equal("21/08/2026", linha.DataFabricacao);
+        Assert.Equal("18/03/2028", linha.DataVencimento);
+    }
+
+    /// <summary>
+    /// GATE 126F: o lote da caixa e digitado/lido no chao de fabrica; o do SAP vem do cadastro.
+    /// Diferenca de caixa ou espaco em volta nao pode apagar a data em silencio.
+    /// </summary>
+    [Theory]
+    [InlineData("61008561f")]
+    [InlineData(" 61008561F ")]
+    public void LinhaDoLote_CasaOLoteSemDiferenciarCaixaOuEspaco(string loteNaCaixa)
+    {
+        var datas = new Dictionary<string, Modelo.IntegracaoSap.LoteSapDatas>
+        {
+            ["61008561F"] = new("4000316", "61008561F",
+                new DateTime(2026, 8, 21, 0, 0, 0, DateTimeKind.Utc), null)
+        };
+
+        DadosEtiquetaPaleteProdutoAcabado e = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, loteNaCaixa, 10m, 20)), 17747, "T", null, datas);
+
+        LinhaLoteEtiquetaPalete linha = Assert.Single(e.Lotes);
+        Assert.Equal("21/08/2026", linha.DataFabricacao);
+        // Validade nula no cadastro continua declarada como ausente, nunca deduzida da fabricacao.
+        Assert.Equal(ImpressaoPaleteProdutoAcabadoServico.NaoInformada, linha.DataVencimento);
+    }
+
+    /// <summary>
+    /// GATE 126F: sem mapa (SAP fora do ar, integracao desligada) ou com lote que o SAP nao
+    /// devolveu, a etiqueta continua saindo com "NAO INFORMADA" na linha — comportamento anterior
+    /// preservado de proposito.
+    /// </summary>
+    [Fact]
+    public void LinhaDoLote_SemDadosDoSapSegueNaoInformada()
+    {
+        DadosEtiquetaPaleteProdutoAcabado semMapa = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, "61008561F", 10m, 20)), 17747, "T", null, null);
+
+        LinhaLoteEtiquetaPalete linhaSemMapa = Assert.Single(semMapa.Lotes);
+        Assert.Equal(ImpressaoPaleteProdutoAcabadoServico.NaoInformada, linhaSemMapa.DataFabricacao);
+        Assert.Equal(ImpressaoPaleteProdutoAcabadoServico.NaoInformada, linhaSemMapa.DataVencimento);
+
+        var outroLote = new Dictionary<string, Modelo.IntegracaoSap.LoteSapDatas>
+        {
+            ["LOTE-QUE-NAO-E-DESTE-PALETE"] = new("4000316", "LOTE-QUE-NAO-E-DESTE-PALETE",
+                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2028, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+        };
+
+        DadosEtiquetaPaleteProdutoAcabado naoCasou = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, "61008561F", 10m, 20)), 17747, "T", null, outroLote);
+
+        LinhaLoteEtiquetaPalete linhaNaoCasou = Assert.Single(naoCasou.Lotes);
+        Assert.Equal(ImpressaoPaleteProdutoAcabadoServico.NaoInformada, linhaNaoCasou.DataFabricacao);
+        Assert.Equal(ImpressaoPaleteProdutoAcabadoServico.NaoInformada, linhaNaoCasou.DataVencimento);
+    }
+
     [Fact]
     public void AlturaDaEtiquetaCresceComAQuantidadeDeLotes()
     {

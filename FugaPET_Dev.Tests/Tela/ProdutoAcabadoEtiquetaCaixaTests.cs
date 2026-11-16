@@ -218,6 +218,43 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
             $"as barras ocupam ate x={x + alturaBarras} numa etiqueta de {largura} dots");
     }
 
+    /// <summary>
+    /// GATE 126J: a origem da barra era cravada no RODAPE (`altura - P(0.07)`), entao o curso do
+    /// Code128 — que varia com o tamanho do dado — deixava a barra pendurada embaixo, fora da
+    /// estrutura da etiqueta. Apontado pelo operador em 16/11/2026.
+    /// <para>
+    /// Agora o TOPO e ancorado no topo da grade de dados (P(0,72) = 146 dots a 203 dpi). Consequencia
+    /// que o teste fixa: um codigo mais CURTO termina mais em cima, nunca mais embaixo.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("CX-1001951-0004")]
+    [InlineData("CX-1000403-0001")]
+    [InlineData("CX-1-1")]
+    public void Zpl_CodigoDeBarras_AncoradoNoTopoDaGrade_NaoNoRodape(string codigoLocal)
+    {
+        const int TopoDaGrade = 146;   // P(0,72) a 203 dpi
+        const int OrigemAntigaNoRodape = 386;   // altura(400) - P(0,07)
+
+        ProdutoAcabadoCaixa caixa = CaixaConfirmada();
+        caixa.CodigoCaixaLocal = codigoLocal;
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
+
+        int fo = zpl.LastIndexOf("^FO", zpl.IndexOf("^BCB", StringComparison.Ordinal), StringComparison.Ordinal);
+        string cabecalho = zpl[fo..zpl.IndexOf("^FD", fo, StringComparison.Ordinal)];
+        string[] origem = Entre(cabecalho, "^FO", "^BY").Split(',');
+        int y = int.Parse(origem[1]);
+        int modulo = int.Parse(Entre(cabecalho, "^BY", "^BC"));
+
+        int comprimento = ((11 * (codigoLocal.Length + 2)) + 13) * modulo;
+        int topo = y - comprimento;
+
+        Assert.Equal(TopoDaGrade, topo);
+        Assert.True(y < OrigemAntigaNoRodape,
+            $"a origem y={y} continua no rodape; deveria ter subido para acompanhar a grade");
+    }
+
     private static string Entre(string texto, string inicio, string fim)
     {
         int i = texto.IndexOf(inicio, StringComparison.Ordinal) + inicio.Length;

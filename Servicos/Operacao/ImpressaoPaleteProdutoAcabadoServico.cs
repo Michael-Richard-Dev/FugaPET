@@ -1,6 +1,7 @@
 using System.Globalization;
 using FugaPET_Dev.Modelo;
 using FugaPET_Dev.Modelo.Processo;
+using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.Operacao;
 
@@ -38,10 +39,14 @@ public sealed class ImpressaoPaleteProdutoAcabadoServico
     }
 
     public Task ImprimirPaleteAsync(
-        ProdutoAcabadoPalete palete, long codigoPalete, string terminal, string? descricaoMaterial = null)
+        ProdutoAcabadoPalete palete,
+        long codigoPalete,
+        string terminal,
+        string? descricaoMaterial = null,
+        IReadOnlyDictionary<string, LoteSapDatas>? datasPorLote = null)
     {
         DadosEtiquetaPaleteProdutoAcabado etiqueta =
-            CriarEtiqueta(palete, codigoPalete, terminal, descricaoMaterial);
+            CriarEtiqueta(palete, codigoPalete, terminal, descricaoMaterial, datasPorLote);
         return _impressoraEtiquetaServico.ImprimirEtiquetaPaleteProdutoAcabadoAsync(etiqueta);
     }
 
@@ -73,7 +78,11 @@ public sealed class ImpressaoPaleteProdutoAcabadoServico
     /// preservando a ordem em que os lotes aparecem no palete.
     /// </summary>
     public static DadosEtiquetaPaleteProdutoAcabado CriarEtiqueta(
-        ProdutoAcabadoPalete palete, long codigoPalete, string terminal, string? descricaoMaterial = null)
+        ProdutoAcabadoPalete palete,
+        long codigoPalete,
+        string terminal,
+        string? descricaoMaterial = null,
+        IReadOnlyDictionary<string, LoteSapDatas>? datasPorLote = null)
     {
         ArgumentNullException.ThrowIfNull(palete);
 
@@ -82,9 +91,12 @@ public sealed class ImpressaoPaleteProdutoAcabadoServico
             .GroupBy(c => (c.Lote ?? string.Empty).Trim())
             .Select(g => new LinhaLoteEtiquetaPalete(
                 Lote: g.Key.Length == 0 ? "SEM LOTE" : g.Key,
-                // Sem origem no Produto Acabado — declarado, nunca deduzido.
-                DataFabricacao: NaoInformada,
-                DataVencimento: NaoInformada,
+                // GATE 126F: as datas vem do cadastro de LOTE do SAP (API_BATCH_SRV). Lote ausente
+                // do mapa, ou com a data nula no SAP, continua "NAO INFORMADA" — declarado, nunca
+                // deduzido. Data de validade errada numa etiqueta de expedicao e pior que etiqueta
+                // sem data.
+                DataFabricacao: FormatarDataLote(datasPorLote, g.Key, d => d.DataFabricacao),
+                DataVencimento: FormatarDataLote(datasPorLote, g.Key, d => d.DataVencimento),
                 QuantidadeCaixas: g.Count()))
             .ToArray();
 
@@ -119,6 +131,37 @@ public sealed class ImpressaoPaleteProdutoAcabadoServico
     }
 
     public const string NaoInformada = "NAO INFORMADA";
+
+    /// <summary>
+    /// GATE 126F: data de um lote, no formato do modelo impresso (dd/MM/yyyy). Mapa ausente, lote
+    /// que nao veio do SAP, ou data nula no cadastro, resultam em "NAO INFORMADA".
+    /// <para>
+    /// A comparacao do lote e normalizada (sem espacos, sem diferenciar caixa) porque o lote na
+    /// caixa e digitado/lido no chao de fabrica e o do SAP vem do cadastro: "61008561f" e
+    /// "61008561F " sao o mesmo lote, e tratar como diferentes apagaria a data silenciosamente.
+    /// </para>
+    /// </summary>
+    internal static string FormatarDataLote(
+        IReadOnlyDictionary<string, LoteSapDatas>? datasPorLote,
+        string? lote,
+        Func<LoteSapDatas, DateTime?> escolher)
+    {
+        if (datasPorLote is null || datasPorLote.Count == 0)
+        {
+            return NaoInformada;
+        }
+
+        string chave = LoteSapDatas.NormalizarLote(lote);
+        if (chave.Length == 0 || !datasPorLote.TryGetValue(chave, out LoteSapDatas? datas))
+        {
+            return NaoInformada;
+        }
+
+        DateTime? data = escolher(datas);
+        return data is { } valor
+            ? valor.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
+            : NaoInformada;
+    }
 
     /// <summary>
     /// Peso como no modelo impresso: vírgula decimal, sem unidade, até três casas, com os zeros à

@@ -245,6 +245,37 @@ public sealed class ConfiguracaoSap
     }
 
     /// <summary>
+    /// GATE 126F: URL base efetiva do servico de LOTES (API_BATCH_SRV), usada para ler as datas de
+    /// fabricacao e validade que vao na etiqueta do palete. Sem campo proprio configurado, deriva de
+    /// MaterialDocumentBaseUrl (e, em ultimo caso, de BaseUrl), trocando o segmento API_*_SRV e
+    /// mantendo host e caminho — o mesmo mecanismo ja usado pelo Product Master.
+    /// <para>
+    /// A colecao do servico chama-se <c>Batch</c>, NAO <c>A_Batch</c>: verificado em 16/11/2026 contra
+    /// o documento de servico do proprio DEV110, depois de um 404 com "Resource not found for the
+    /// segment 'A_Batch'".
+    /// </para>
+    /// </summary>
+    public string BatchBaseUrlEfetiva
+    {
+        get
+        {
+            string derivadoDoMaterialDocument = DerivarUrlServicoSap(MaterialDocumentBaseUrl, "API_BATCH_SRV");
+            return !string.IsNullOrWhiteSpace(derivadoDoMaterialDocument)
+                ? derivadoDoMaterialDocument
+                : DerivarUrlServicoSap(BaseUrl, "API_BATCH_SRV");
+        }
+    }
+
+    /// <summary>
+    /// GATE 126F: True quando ha URL (derivada) do servico de lotes mais credenciais e allowlist.
+    /// </summary>
+    public bool BatchConfigurado =>
+        !string.IsNullOrWhiteSpace(BatchBaseUrlEfetiva)
+        && !string.IsNullOrWhiteSpace(Usuario)
+        && !string.IsNullOrWhiteSpace(Senha)
+        && HostsPermitidos.Count > 0;
+
+    /// <summary>
     /// True quando, alem das credenciais + allowlist, ha URL (derivada) do servico de Product Master
     /// (API_PRODUCT_SRV) para o GET da descricao do componente na Tela de Consumo.
     /// </summary>

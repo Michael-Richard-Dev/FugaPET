@@ -109,6 +109,121 @@ public sealed class ProdutoAcabadoController
         }
     }
 
+    // ============================ Descricao do material para a ETIQUETA ============================
+
+    // GATE 126E: criado sob demanda e reaproveitado. A fabrica nunca lanca: configuracao ausente ou
+    // malformada devolve uma implementacao que responde null, entao a etiqueta segue saindo.
+    private readonly Lazy<IProductDescriptionSapServico> _descricaoProdutoSap =
+        new(FabricaProductDescriptionSapServico.Criar);
+
+    /// <summary>
+    /// GATE 126E: descricao do material para a ETIQUETA, em melhor esforco. Le A_ProductDescription
+    /// pelo servico ja existente (o mesmo que a tela de Consumo usa), escolhendo o idioma PT quando ha.
+    /// <para>
+    /// BEST-EFFORT POR DECISAO, nao por descuido: a etiqueta e impressa na gravacao do palete, que e
+    /// efeito local. SAP indisponivel, material sem descricao cadastrada ou integracao desligada
+    /// devolvem vazio e a etiqueta sai com o CODIGO do material, como saia antes. Falhar a impressao
+    /// por causa do texto seria trocar uma etiqueta incompleta por nenhuma etiqueta.
+    /// </para>
+    /// <para>
+    /// Nunca propaga excecao e nunca inventa texto: sem resposta utilizavel, devolve string vazia.
+    /// </para>
+    /// </summary>
+    public async Task<string> ObterDescricaoMaterialParaEtiquetaAsync(
+        string? material, CancellationToken cancellationToken = default)
+    {
+        string codigo = (material ?? string.Empty).Trim();
+        if (codigo.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            ProdutoSapMestre? mestre = await _descricaoProdutoSap.Value
+                .ObterDescricaoAsync(codigo, cancellationToken);
+            return (mestre?.DescricaoProdutoSap ?? string.Empty).Trim();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] Descricao do material {codigo} nao obtida ({ex.GetType().Name}); "
+                + "a etiqueta sai com o codigo.");
+            return string.Empty;
+        }
+    }
+
+    // GATE 126F: servico de lotes, criado sob demanda. A URL e DERIVADA da que ja esta configurada
+    // (troca do segmento API_*_SRV), entao nao exige cadastro novo no configuracao.sap.json.
+    private readonly Lazy<IBatchSapServico> _lotesSap =
+        new(() => new BatchSapServico(CarregarConfiguracaoSapSeguro()));
+
+    /// <summary>
+    /// GATE 126F: datas de fabricacao e validade dos lotes do palete, para a ETIQUETA, em melhor
+    /// esforco. Le API_BATCH_SRV (colecao <c>Batch</c>), um lote por consulta.
+    /// <para>
+    /// BEST-EFFORT PELO MESMO MOTIVO DA DESCRICAO: a etiqueta sai na gravacao do palete, que e efeito
+    /// local. Lote sem datas no cadastro, SAP fora do ar ou integracao desligada resultam em lote
+    /// AUSENTE do mapa, e a linha correspondente sai "NAO INFORMADA" — como saia antes. Nenhuma data
+    /// e deduzida: uma validade errada na etiqueta de expedicao e pior que etiqueta sem validade.
+    /// </para>
+    /// <para>
+    /// Consulta em SERIE e nao em paralelo: um palete tem poucos lotes distintos, e disparar
+    /// requisicoes concorrentes contra o SAP para ganhar milissegundos na impressao nao se paga.
+    /// Lotes repetidos sao consultados UMA vez.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, LoteSapDatas>> ObterDatasDeLotesParaEtiquetaAsync(
+        string? material,
+        IEnumerable<string?> lotes,
+        CancellationToken cancellationToken = default)
+    {
+        Dictionary<string, LoteSapDatas> mapa = [];
+
+        string codigoMaterial = (material ?? string.Empty).Trim();
+        if (codigoMaterial.Length == 0 || lotes is null)
+        {
+            return mapa;
+        }
+
+        HashSet<string> jaConsultados = [];
+        foreach (string? lote in lotes)
+        {
+            string chave = LoteSapDatas.NormalizarLote(lote);
+            if (chave.Length == 0 || !jaConsultados.Add(chave))
+            {
+                continue;
+            }
+
+            try
+            {
+                LoteSapDatas? datas = await _lotesSap.Value
+                    .ObterDatasAsync(codigoMaterial, (lote ?? string.Empty).Trim(), cancellationToken);
+
+                if (datas is not null)
+                {
+                    mapa[chave] = datas;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[ProdutoAcabado] Datas do lote nao obtidas ({ex.GetType().Name}); "
+                    + "a linha sai NAO INFORMADA.");
+            }
+        }
+
+        return mapa;
+    }
+
     // ============================ Pipeline PA (261 â†’ 101 â†’ HU) â€” REV4 ============================
 
     /// <summary>REV4-Â§4: true quando o gate FUGAPET_SAP_PA_PIPELINE_ENABLED estÃ¡ ligado (independe de store/disponibilidade).</summary>
@@ -1096,7 +1211,15 @@ public sealed class ProdutoAcabadoController
         ProdutoAcabadoCaixa? caixa = await _huService.ObterPorCodigoAsync(codigoProdutoAcabadoCaixa, cancellationToken);
         return cancelada
             ? ResultadoEnvioCaixaHu.Bloqueado("Caixa cancelada.", caixa)
-            : ResultadoEnvioCaixaHu.Bloqueado("Cancelamento nÃ£o aplicado (estado nÃ£o elegÃ­vel).", caixa);
+            // INC-063: o banco devolve apenas true/false, entao a mensagem enumera as causas
+            // possiveis em vez de afirmar uma. A de MOVIMENTO SAP CONFIRMADO vem primeiro porque
+            // e a unica que exige acao fora do sistema: cancelar por cima de um 261 ja lancado
+            // deixa consumo orfao no SAP e trava toda caixa seguinte da OP em reconciliacao.
+            : ResultadoEnvioCaixaHu.Bloqueado(
+                "Cancelamento não aplicado. Possíveis causas: a caixa tem movimento SAP confirmado "
+                + "(261 ou 101) e exige ESTORNO no SAP antes de ser cancelada; já possui HU criada; "
+                + "o estado não permite cancelamento; ou o terminal não confere.",
+                caixa);
     }
 
     public Task<ProdutoAcabadoCaixa?> ObterCaixaAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default)

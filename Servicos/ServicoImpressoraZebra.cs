@@ -241,7 +241,19 @@ public sealed class ServicoImpressoraZebra
         // Em ^BCB o desenho sobe a partir da origem, entao a origem fica embaixo e o curso corre para
         // cima dentro da etiqueta. Leva o codigo local da caixa: identificador real, que o sistema le.
         // Nao e o numero do modelo (1919015), cuja origem ainda nao foi definida.
-        int baseBarra = altura - P(0.07);
+        //
+        // GATE 126J: a origem era `altura - P(0.07)`, isto e, colada no RODAPE. Como o curso do
+        // Code128 depende do tamanho do dado, a barra subia so ate onde desse e ficava pendurada
+        // embaixo, fora da estrutura da etiqueta — foi o que o operador apontou em 16/11/2026.
+        //
+        // Agora o TOPO da barra e ancorado no topo da grade de dados: a origem passa a ser calculada
+        // a partir do curso estimado. Assim a barra acompanha a estrutura em vez de o rodape, e um
+        // codigo mais curto termina mais em cima, nunca mais embaixo.
+        int topoGrade = P(0.72);
+        int cursoBarra = EstimarLarguraCode128Dots(codigoBarras, ModuloBarrasCaixa);
+        int baseBarra = cursoBarra > 0 && topoGrade + cursoBarra <= altura - P(0.03)
+            ? topoGrade + cursoBarra
+            : altura - P(0.07);   // dado longo demais para a grade: mantem o comportamento anterior
         zpl.Append($"^FO{faixaX},{baseBarra}^BY1^BCB,{faixaLargura},N,N,N^FD{Z(codigoBarras)}^FS\n");
 
         // Leitura humana e HU ocupam o espaco livre abaixo dos pesos, sem invadir a faixa da barra.
@@ -549,8 +561,13 @@ public sealed class ServicoImpressoraZebra
            .Append($"^FO{Margem},{TopoMoldura - 14}^GB{Util},0,3^FS\n")
            // Moldura do codigo de barras, com a leitura humana abaixo das barras.
            .Append($"^FO{Margem + 140},{TopoMoldura}^GB{Util - 280},{AlturaMoldura},3^FS\n")
-           .Append($"^FO{Margem + 140},{TopoMoldura + 26}^BY3^BCN,120,Y,N,N"
-                 + $"^FB{Util - 280},1,0,C^FD{Z(codigoBarras)}^FS\n")
+           // GATE 126D: o campo de barras NAO leva ^FB. ^FB e bloco de TEXTO; aplicado a um ^BC, o
+           // dado e composto como texto e NENHUMA barra e gerada -- foi o que saiu impresso em
+           // 16/11/2026: moldura vazia com o numero em letra miuda. A etiqueta de CAIXA, que sempre
+           // funcionou, usa ^BCB sem ^FB. Como ZPL nao centraliza codigo de barras, a posicao e
+           // calculada a partir da largura estimada do Code128.
+           .Append($"^FO{CentralizarBarras(codigoBarras, ModuloBarrasPalete, Margem + 140, Util - 280)},"
+                 + $"{TopoMoldura + 26}^BY{ModuloBarrasPalete}^BCN,120,Y,N,N^FD{Z(codigoBarras)}^FS\n")
            // Totais, com os mesmos rotulos do modelo.
            .Append($"^FO{Margem},{topoTotais}^A0N,32,32^FDQt Cx./Sacos: {Z(etiqueta.QuantidadeCaixas)}"
                  + $"    Qt Pct/PC: {Z(etiqueta.QuantidadeProdutos)}"
@@ -579,6 +596,72 @@ public sealed class ServicoImpressoraZebra
         zpl.Append("^XZ");
 
         return zpl.ToString();
+    }
+
+    /// <summary>Largura do modulo (^BY) do codigo de barras do palete, em pontos.</summary>
+    internal const int ModuloBarrasPalete = 3;
+
+    /// <summary>
+    /// Largura do modulo (^BY) do codigo de barras da CAIXA, em pontos. Menor que a do palete porque
+    /// a etiqueta 8x5 tem pouca largura e o codigo local chega a 15 caracteres.
+    /// </summary>
+    internal const int ModuloBarrasCaixa = 1;
+
+    /// <summary>
+    /// GATE 126D: largura ESTIMADA de um Code128 em pontos. Serve para centralizar o codigo dentro
+    /// da moldura, ja que ZPL nao tem centralizacao para campo de barras (^FB vale so para texto).
+    /// <para>
+    /// A conta segue a codificacao do Code128: start + simbolos de dado + digito verificador valem
+    /// 11 modulos cada, e o stop vale 13. Em subconjunto C cada simbolo carrega DOIS digitos; um
+    /// dado com quantidade impar de caracteres, ou nao numerico, gasta um simbolo por caractere.
+    /// </para>
+    /// <para>
+    /// E ESTIMATIVA, nao medida: a impressora escolhe os subconjuntos sozinha, entao o resultado
+    /// pode ficar alguns pontos fora do centro exato. Isso e aceitavel para posicionar; o que nao
+    /// seria aceitavel e o codigo nascer fora da moldura, e por isso o retorno e preso ao intervalo
+    /// da moldura antes de ser usado.
+    /// </para>
+    /// </summary>
+    internal static int EstimarLarguraCode128Dots(string dados, int larguraModulo)
+    {
+        if (string.IsNullOrEmpty(dados) || larguraModulo <= 0)
+        {
+            return 0;
+        }
+
+        bool somenteDigitos = true;
+        foreach (char c in dados)
+        {
+            if (!char.IsAsciiDigit(c))
+            {
+                somenteDigitos = false;
+                break;
+            }
+        }
+
+        int simbolosDados = somenteDigitos
+            ? (dados.Length / 2) + (dados.Length % 2)   // subconjunto C: 2 digitos por simbolo
+            : dados.Length;                              // demais: 1 caractere por simbolo
+
+        // start + dados + verificador, a 11 modulos cada, mais o stop de 13 modulos.
+        int modulos = (11 * (1 + simbolosDados + 1)) + 13;
+        return modulos * larguraModulo;
+    }
+
+    /// <summary>
+    /// Posicao X que centraliza o codigo de barras dentro da moldura. Quando a estimativa excede a
+    /// moldura, devolve a borda esquerda dela: melhor o codigo comecar alinhado e eventualmente
+    /// invadir a direita do que comecar fora da etiqueta, onde nao seria impresso.
+    /// </summary>
+    internal static int CentralizarBarras(string dados, int larguraModulo, int xMoldura, int larguraMoldura)
+    {
+        int larguraBarras = EstimarLarguraCode128Dots(dados, larguraModulo);
+        if (larguraBarras <= 0 || larguraBarras >= larguraMoldura)
+        {
+            return xMoldura;
+        }
+
+        return xMoldura + ((larguraMoldura - larguraBarras) / 2);
     }
 
     private static string Z(string text)
