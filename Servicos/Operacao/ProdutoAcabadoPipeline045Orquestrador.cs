@@ -374,7 +374,13 @@ public sealed class ProdutoAcabadoPipeline045Orquestrador
     /// <summary>Nome da etapa 045 tolerando as variações de coluna já toleradas no Controller.</summary>
     private static string? NomeEtapa045(Linha045 linha)
     {
-        foreach (string coluna in new[] { "etapa", "codigo_etapa", "tipo_etapa" })
+        // GATE 126B: "etapa_sap" é o nome da COLUNA REAL da tabela hu_caixa_etapa_sap; as outras três
+        // são apelidos que a view runtime pode ou não expor. Ler só os apelidos tornava o pipeline
+        // refém da definição da view: no DEV110 ela não tinha "etapa", então NomeEtapa045 devolvia null
+        // para TODAS as linhas e Vinculo045Valido reprovava com "etapas=2; 261=nao; 101=nao" — duas
+        // etapas encontradas e nenhuma reconhecida. Incluir o nome real fecha essa classe de falha em
+        // qualquer ambiente, independentemente de a view trazer o apelido.
+        foreach (string coluna in new[] { "etapa", "etapa_sap", "codigo_etapa", "tipo_etapa" })
         {
             string? valor = linha.ObterTexto(coluna);
             if (!string.IsNullOrWhiteSpace(valor))

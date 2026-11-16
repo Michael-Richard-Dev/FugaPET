@@ -262,6 +262,61 @@ public sealed class PaPipelineEarlyBinding113JTests
     private static IReadOnlyList<Linha045> Etapas(params string[] nomes)
         => [.. nomes.Select(n => new Linha045(new Dictionary<string, object?> { ["etapa"] = n }))];
 
+    /// <summary>
+    /// GATE 126B: a view runtime do DEV110 NAO expunha o apelido "etapa" — servia apenas a coluna real
+    /// "etapa_sap". Este helper reproduz essa linha exatamente como ela chegava ao orquestrador.
+    /// </summary>
+    private static IReadOnlyList<Linha045> EtapasSomenteColunaReal(params string[] nomes)
+        => [.. nomes.Select(n => new Linha045(new Dictionary<string, object?> { ["etapa_sap"] = n }))];
+
+    // GATE 126B: o caso real do DEV110 em 16/11/2026. Sem o apelido, NomeEtapa045 devolvia null para
+    // TODAS as linhas e o envio morria com "etapas=2; 261=nao; 101=nao" — duas etapas achadas e nenhuma
+    // reconhecida. Ler a coluna real torna o pipeline independente da definicao da view.
+    [Fact]
+    public void G_VinculoCompletoSoComEtapaSap_Valido()
+    {
+        Assert.True(ProdutoAcabadoPipeline045Orquestrador.Vinculo045Valido(
+            EtapasSomenteColunaReal("261", "101"), out string m));
+        Assert.Equal(string.Empty, m);
+
+        Assert.True(ProdutoAcabadoPipeline045Orquestrador.Vinculo045Valido(
+            EtapasSomenteColunaReal("101", "261"), out _));
+    }
+
+    // A tolerancia e so para o NOME da coluna: o criterio 261+101 continua valendo igual.
+    [Theory]
+    [InlineData("261")]
+    [InlineData("261", "261")]
+    [InlineData("999", "888")]
+    public void H_SoComEtapaSap_VinculoInconsistenteSegueFailClosed(params string[] nomes)
+    {
+        Assert.False(ProdutoAcabadoPipeline045Orquestrador.Vinculo045Valido(
+            EtapasSomenteColunaReal(nomes), out string m));
+        Assert.Contains("045", m, StringComparison.Ordinal);
+    }
+
+    // Quando a view traz os dois, "etapa" continua tendo precedencia — o QAS110 nao muda de comportamento.
+    [Fact]
+    public void I_ComOsDoisNomes_EtapaTemPrecedencia()
+    {
+        IReadOnlyList<Linha045> linhas =
+        [
+            new(new Dictionary<string, object?> { ["etapa"] = "261", ["etapa_sap"] = "261" }),
+            new(new Dictionary<string, object?> { ["etapa"] = "101", ["etapa_sap"] = "101" })
+        ];
+
+        Assert.True(ProdutoAcabadoPipeline045Orquestrador.Vinculo045Valido(linhas, out _));
+
+        // Apelido vazio NAO deve mascarar a coluna real: string em branco nao conta como nome.
+        IReadOnlyList<Linha045> apelidoVazio =
+        [
+            new(new Dictionary<string, object?> { ["etapa"] = "", ["etapa_sap"] = "261" }),
+            new(new Dictionary<string, object?> { ["etapa"] = "", ["etapa_sap"] = "101" })
+        ];
+
+        Assert.True(ProdutoAcabadoPipeline045Orquestrador.Vinculo045Valido(apelidoVazio, out _));
+    }
+
     [Fact] // D) vínculo completo ⇒ válido (e o envio NÃO recria o fluxo: ver teste de sequência do 045).
     public void D_VinculoCompleto_Valido()
     {

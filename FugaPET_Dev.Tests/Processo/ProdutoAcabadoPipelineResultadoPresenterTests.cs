@@ -177,6 +177,45 @@ public sealed class ProdutoAcabadoPipelineResultadoPresenterTests
         Assert.Contains("[REMOVIDO]", msg.Mensagem, StringComparison.Ordinal);
     }
 
+    // GATE 126A: o pipeline para ANTES do 261 (vinculo 045 invalido) e devolve o snapshot VAZIO que
+    // criou na entrada. O ramo do 261 lia esse vazio e exibia "Etapa 261 nao realizada" com a linha
+    // "Mensagem:" em branco, escondendo o motivo. Este e o caso real observado no DEV110 em 16/11/2026.
+    [Fact]
+    public void Bloqueada_ComSnapshotVazio_MostraMotivoRealEmVezDeEtapa261()
+    {
+        const string motivo = "Vínculo 045 inconsistente (etapas=1; 261=sim; 101=nao). "
+            + "Esperado exatamente 261 + 101. Envio bloqueado; nenhum POST executado.";
+
+        ApresentacaoResultadoPipelineProdutoAcabado msg = ProdutoAcabadoPipelineResultadoPresenter.Construir(
+            ResultadoComSnapshot(
+                EtapaPipelineProdutoAcabado.Bloqueada,
+                new ProdutoAcabadoPipelineSnapshot { CodigoProdutoAcabadoCaixa = 1370 },
+                motivo));
+
+        Assert.Contains("Vínculo 045 inconsistente", msg.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("261=sim; 101=nao", msg.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Etapa: 261", msg.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Etapa 261 não realizada", msg.Titulo, StringComparison.Ordinal);
+        Assert.DoesNotContain("Mensagem: \n", msg.Mensagem, StringComparison.Ordinal);
+    }
+
+    // A falha de CONSULTA do vinculo tambem para em Bloqueada e nao pode ser lida como erro do 261.
+    [Fact]
+    public void Bloqueada_PorConsultaIndeterminada_NaoAtribuiFalhaAo261()
+    {
+        const string motivo = "Não foi possível consultar o vínculo 045 da caixa (NpgsqlException). "
+            + "Nenhum POST executado.";
+
+        ApresentacaoResultadoPipelineProdutoAcabado msg = ProdutoAcabadoPipelineResultadoPresenter.Construir(
+            ResultadoComSnapshot(
+                EtapaPipelineProdutoAcabado.Bloqueada,
+                new ProdutoAcabadoPipelineSnapshot { CodigoProdutoAcabadoCaixa = 1370 },
+                motivo));
+
+        Assert.Contains("consultar o vínculo 045", msg.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Etapa: 261", msg.Mensagem, StringComparison.Ordinal);
+    }
+
     private static ResultadoPipelineProdutoAcabado ResultadoComSnapshot(EtapaPipelineProdutoAcabado etapa, ProdutoAcabadoPipelineSnapshot snapshot, string mensagem = "resultado")
         => new(false, etapa, mensagem, snapshot);
 

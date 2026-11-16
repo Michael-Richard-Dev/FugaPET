@@ -29,9 +29,15 @@ public static class ProdutoAcabadoPipelineResultadoPresenter
         ArgumentNullException.ThrowIfNull(resultado);
 
         ProdutoAcabadoPipelineSnapshot? s = resultado.Snapshot;
-        if (s is null)
+
+        // GATE 126A: quando o pipeline para em Bloqueada, NENHUMA etapa foi tentada e o snapshot vem
+        // VAZIO (zero HTTP, zero mensagem por etapa). Cair no ramo do 261 nesse caso produzia
+        // "Etapa 261 não realizada / ERRO LOCAL / Mensagem:" em branco e DESCARTAVA resultado.Mensagem,
+        // que é onde está o motivo real (vínculo 045 inválido, consulta indeterminada, pipeline
+        // indisponível). O operador ficava sem causa e o diagnóstico, sem rastro.
+        if (s is null || resultado.UltimaEtapa == EtapaPipelineProdutoAcabado.Bloqueada)
         {
-            return ConstruirSemSnapshot(resultado);
+            return ConstruirBloqueioAntesDasEtapas(resultado);
         }
 
         if (s.Estado261 != EstadoMovimentoSap.Confirmado)
@@ -70,7 +76,7 @@ public static class ProdutoAcabadoPipelineResultadoPresenter
         return ConstruirSucesso(s);
     }
 
-    private static ApresentacaoResultadoPipelineProdutoAcabado ConstruirSemSnapshot(ResultadoPipelineProdutoAcabado resultado)
+    private static ApresentacaoResultadoPipelineProdutoAcabado ConstruirBloqueioAntesDasEtapas(ResultadoPipelineProdutoAcabado resultado)
     {
         string mensagem = Sanitizar(resultado.Mensagem);
         bool indeterminado = ContemIndeterminado(mensagem);
