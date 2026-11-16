@@ -585,7 +585,20 @@ public sealed class PaletizacaoForm : Form
 
         try
         {
-            await _impressaoPalete.ImprimirPaleteAsync(palete, codigo, terminal);
+            // GATE 126E: a descricao do material e BEST-EFFORT e vem ANTES da impressao. Falha ou
+            // ausencia devolve vazio, e a etiqueta sai com o codigo do material — nunca deixa de sair.
+            string material = palete.Caixas
+                .Select(c => (c.Material ?? string.Empty).Trim())
+                .FirstOrDefault(m => m.Length > 0) ?? string.Empty;
+            string descricao = await _controller.ObterDescricaoMaterialParaEtiquetaAsync(material);
+
+            // GATE 126F: datas por lote, tambem best-effort. Lote que o SAP nao devolver sai
+            // "NAO INFORMADA" na sua linha, sem impedir a impressao das demais.
+            IReadOnlyDictionary<string, Modelo.IntegracaoSap.LoteSapDatas> datasPorLote =
+                await _controller.ObterDatasDeLotesParaEtiquetaAsync(
+                    material, palete.Caixas.Select(c => c.Lote));
+
+            await _impressaoPalete.ImprimirPaleteAsync(palete, codigo, terminal, descricao, datasPorLote);
             statusLabel.Text += " Etiqueta do palete impressa.";
         }
         catch (Exception ex)
@@ -651,10 +664,23 @@ public sealed class PaletizacaoForm : Form
             {
                 await RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe());
             }
+            else
+            {
+                // GATE 126K: a barra de status CORTA a mensagem. Quando o INT012 recusa, a causa vem
+                // na resposta do SAP e pode passar de 300 caracteres — foi o caso do
+                // ZPP_CREATEHU/003 "Dados embalagem nao encontrado!" em 16/11/2026, que so pode ser
+                // lido indo ao banco. Falha o operador precisa LER inteira, entao vai em dialogo.
+                ExibirFalhaEnvioPalete(apresentacao, resultado.Estado);
+            }
         }
         catch (Exception ex)
         {
-            statusLabel.Text = $"{ProdutoAcabadoPaleteEnvioPresenter.ParaExcecao(palete.CodigoPaleteLocal).Mensagem} ({ex.GetType().Name})";
+            ApresentacaoEnvioPaleteInt012 falha =
+                ProdutoAcabadoPaleteEnvioPresenter.ParaExcecao(palete.CodigoPaleteLocal);
+            statusLabel.Text = $"{falha.Mensagem} ({ex.GetType().Name})";
+            ExibirFalhaEnvioPalete(
+                falha with { Mensagem = $"{falha.Mensagem}\r\n\r\nExcecao: {ex.GetType().Name}" },
+                EstadoPaleteInt012.IndeterminadoTimeout);
         }
         finally
         {
@@ -662,6 +688,24 @@ public sealed class PaletizacaoForm : Form
             enviarSapButton.Enabled = true;
             gravarPaleteButton.Enabled = true;
         }
+    }
+
+    /// <summary>
+    /// GATE 126K: apresenta a falha do envio INT012 em diálogo, com o texto INTEIRO.
+    /// <para>
+    /// O ícone separa o que exige reconciliação do que é recusa limpa: indeterminado é AVISO, porque
+    /// o POST pode ter chegado e um reenvio cego duplicaria; os demais são ERRO, porque nada foi
+    /// criado do lado do SAP. A barra de status continua com o resumo, para quem só passa o olho.
+    /// </para>
+    /// </summary>
+    private static void ExibirFalhaEnvioPalete(
+        ApresentacaoEnvioPaleteInt012 apresentacao, EstadoPaleteInt012 estado)
+    {
+        MessageBoxIcon icone = estado == EstadoPaleteInt012.IndeterminadoTimeout
+            ? MessageBoxIcon.Warning
+            : MessageBoxIcon.Error;
+
+        MessageBox.Show(apresentacao.Mensagem, apresentacao.Titulo, MessageBoxButtons.OK, icone);
     }
 
     // GATE 047-AB: reload por TERMINAL ao abrir. SOMENTE leitura via Controller (Form não acessa banco/SAP direto);

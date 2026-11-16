@@ -43,13 +43,20 @@ public static class ValidadorIdentidadeQas110
                 "a configuracao carregada nao foi reconhecida com perfil local Q.");
         }
 
-        // Contrato de destino REUTILIZADO do validador de inicializacao (sem duplicacao).
-        ResultadoValidacaoAmbienteQ destino = ValidadorAmbienteQ.ValidarDestinoSapQ(configuracaoSap);
+        // GATE 126G: o destino passou a ser validado como DECLARADO pela propria instalacao, e nao
+        // mais cravado no host do Q. O que se exige continua sendo um destino INEQUIVOCO — todas as
+        // URLs efetivas no mesmo host e porta, allowlist com exatamente esse host, mandante de 3
+        // digitos. Ambiente misturado segue bloqueado; o que deixou de ser bloqueado e a instalacao
+        // que aponta, sem ambiguidade, para um SAP que nao e o do Q.
+        //
+        // O caminho de ARRANQUE do Q (ValidadorAmbienteQ.ValidarDestinoSapQ) NAO foi tocado: la o
+        // host do Q continua obrigatorio.
+        ResultadoValidacaoAmbienteQ destino = ValidadorAmbienteQ.ValidarDestinoSapDeclarado(configuracaoSap);
         if (!destino.Valido)
         {
             return ResultadoIdentidadeQas110.Bloqueada(
                 CenarioIdentidadeQas110.DestinoNaoQ,
-                "destino SAP nao corresponde ao Q autorizado: " + destino.Mensagem);
+                "destino SAP nao e inequivoco: " + destino.Mensagem);
         }
 
         if (!RotaCpiConsistente(configuracaoSap, out string motivoCpi))
@@ -59,10 +66,12 @@ public static class ValidadorIdentidadeQas110
                 "rota CPI/INT012 inconsistente com a propria allowlist: " + motivoCpi);
         }
 
+        // A identidade carrega o destino COMPROVADO, nao constantes do Q: e ele que distingue uma
+        // instalacao da outra quando o mandante coincide.
+        (string host, int porta) = ValidadorAmbienteQ.ObterDestinoEfetivo(configuracaoSap);
+
         return ResultadoIdentidadeQas110.Ok(IdentidadeAmbienteQas110.Emitir(
-            configuracaoSap.SapClient.Trim(),
-            ValidadorAmbienteQ.SapHostEsperado,
-            ValidadorAmbienteQ.SapPortaEsperada));
+            configuracaoSap.SapClient.Trim(), host, porta));
     }
 
     /// <summary>

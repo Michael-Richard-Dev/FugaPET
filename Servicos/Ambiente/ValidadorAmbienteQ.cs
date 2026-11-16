@@ -185,6 +185,110 @@ public static class ValidadorAmbienteQ
     /// </summary>
     public const string SapHostDesenvolvimento = "vhfufds4ci.sap.fugacouros.com.br";
 
+    /// <summary>
+    /// GATE 126G: destino SAP INEQUIVOCO, sem nomear ambiente. Prova que a instalacao aponta para UM
+    /// unico sistema SAP declarado por ela mesma — o que a <see cref="ValidarDestinoSapQ"/> provava
+    /// apenas para o Q, por host cravado.
+    /// <para>
+    /// POR QUE EXISTE: a chave da tara fisica do palete e (mandante, centro, material de embalagem), e
+    /// o mandante 110 e usado TANTO no Q QUANTO no DS. Sem um discriminante, a mesma chave valeria em
+    /// dois sistemas diferentes. A versao anterior resolvia isso exigindo o host do Q, o que tornava a
+    /// tara inalcancavel em qualquer outra instalacao, inclusive no DEV110.
+    /// </para>
+    /// <para>
+    /// A GARANTIA QUE PERMANECE, e e a que importa: ambiente MISTURADO ou mal declarado continua
+    /// bloqueado. Exige, cumulativamente:
+    /// <list type="number">
+    /// <item>ao menos UMA URL SAP efetiva — allowlist e perfil nao substituem destino real;</item>
+    /// <item>TODAS as URLs efetivas em https, no MESMO host e na MESMA porta (igualdade exata, nunca
+    ///   substring): Q + DS juntos nunca e ambiente valido;</item>
+    /// <item>allowlist com EXATAMENTE esse host e mais nenhum — allowlist larga reabriria a ambiguidade
+    ///   que este contrato existe para fechar;</item>
+    /// <item>sap-client presente com exatamente 3 digitos.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// O QUE MUDA EM RELACAO AO CONTRATO ANTERIOR, dito sem rodeio: a identidade deixa de significar
+    /// "este runtime esta no QAS110" e passa a significar "este runtime aponta, sem ambiguidade, para o
+    /// sistema que ele mesmo declarou". A instalacao passa a responder por qual sistema e o seu — o que
+    /// ja era verdade para o banco, a allowlist e as credenciais.
+    /// </para>
+    /// </summary>
+    public static ResultadoValidacaoAmbienteQ ValidarDestinoSapDeclarado(ConfiguracaoSap configuracao)
+    {
+        ArgumentNullException.ThrowIfNull(configuracao);
+
+        string[] urlsEfetivas = [.. ObterUrlsSap(configuracao)];
+        if (urlsEfetivas.Length == 0)
+        {
+            return ResultadoValidacaoAmbienteQ.Bloqueado(
+                "Destino SAP bloqueado: nenhuma URL SAP efetiva configurada. Allowlist, perfil e "
+                + "sap-client nao substituem um destino SAP real.");
+        }
+
+        string? host = null;
+        int porta = 0;
+        foreach (string url in urlsEfetivas)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+                || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return ResultadoValidacaoAmbienteQ.Bloqueado(
+                    "Destino SAP bloqueado: ha URL SAP efetiva que nao e https absoluta.");
+            }
+
+            if (host is null)
+            {
+                host = uri.Host;
+                porta = uri.Port;
+                continue;
+            }
+
+            if (!string.Equals(uri.Host, host, StringComparison.OrdinalIgnoreCase) || uri.Port != porta)
+            {
+                return ResultadoValidacaoAmbienteQ.Bloqueado(
+                    "Destino SAP bloqueado: as URLs SAP efetivas apontam para sistemas DIFERENTES. "
+                    + "Um ambiente misturado nunca e destino valido.");
+            }
+        }
+
+        bool allowlistExata = configuracao.HostsPermitidos.Count == 1
+            && string.Equals(configuracao.HostsPermitidos[0], host, StringComparison.OrdinalIgnoreCase);
+
+        if (!allowlistExata)
+        {
+            return ResultadoValidacaoAmbienteQ.Bloqueado(
+                "Destino SAP bloqueado: a allowlist SAP deve conter exatamente o host do destino "
+                + "efetivo, e mais nenhum.");
+        }
+
+        string sapClient = configuracao.SapClient.Trim();
+        if (sapClient.Length != 3 || !sapClient.All(char.IsDigit))
+        {
+            return ResultadoValidacaoAmbienteQ.Bloqueado(
+                "Destino SAP bloqueado: sap-client ausente ou invalido.");
+        }
+
+        return ResultadoValidacaoAmbienteQ.Ok();
+    }
+
+    /// <summary>
+    /// GATE 126G: host e porta do destino SAP efetivo, para a identidade carregar o que foi COMPROVADO
+    /// em vez de constantes. Chamar somente apos <see cref="ValidarDestinoSapDeclarado"/> aprovar.
+    /// </summary>
+    internal static (string Host, int Porta) ObterDestinoEfetivo(ConfiguracaoSap configuracao)
+    {
+        foreach (string url in ObterUrlsSap(configuracao))
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
+            {
+                return (uri.Host, uri.Port);
+            }
+        }
+
+        return (string.Empty, 0);
+    }
+
     public static ResultadoValidacaoAmbienteQ ValidarBanco(ConfiguracaoBancoPostgreSql configuracao)
     {
         if (string.IsNullOrWhiteSpace(configuracao.Servidor)

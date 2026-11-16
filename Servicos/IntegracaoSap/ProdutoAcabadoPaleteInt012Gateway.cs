@@ -95,7 +95,15 @@ public sealed class ProdutoAcabadoPaleteInt012Gateway : IProdutoAcabadoPaleteInt
 
             if (status is < 200 or > 299)
             {
-                return ResultadoPaleteInt012.ErroHttp($"INT012 retornou HTTP {status}.", status);
+                // GATE 126H: o corpo da resposta era LIDO e DESCARTADO, e so o status chegava ao
+                // operador. Num 500 do CPI isso nao diz nada: a causa esta no corpo, e sem ela a
+                // unica saida e adivinhar. Vai sanitizado e truncado.
+                string detalhe = ResumirCorpoErro(corpo);
+                return ResultadoPaleteInt012.ErroHttp(
+                    detalhe.Length == 0
+                        ? $"INT012 retornou HTTP {status}."
+                        : $"INT012 retornou HTTP {status}. Resposta: {detalhe}",
+                    status);
             }
 
             return PaleteInt012ResponseParser.Parsear(corpo, status);
@@ -128,5 +136,45 @@ public sealed class ProdutoAcabadoPaleteInt012Gateway : IProdutoAcabadoPaleteInt
         // Basic Auth — NUNCA logar Authorization/senha.
         string token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_usuario}:{_senha}"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Basic", token);
+    }
+
+    /// <summary>Tamanho maximo do trecho da resposta levado a mensagem operacional.</summary>
+    internal const int LimiteCorpoErro = 400;
+
+    /// <summary>
+    /// GATE 126H: resumo SANITIZADO do corpo de uma resposta nao-2xx do INT012, para que o operador
+    /// veja a causa em vez de apenas "HTTP 500".
+    /// <para>
+    /// A resposta vem de um servico externo e NAO e confiavel: pode ser enorme, pode vir em uma
+    /// linha so, e pode ecoar o que mandamos — inclusive cabecalhos. Por isso o texto e achatado,
+    /// tem os campos sensiveis redigidos e e truncado. O corpo NUNCA e tratado como instrucao, so
+    /// como texto de diagnostico.
+    /// </para>
+    /// </summary>
+    internal static string ResumirCorpoErro(string? corpo)
+    {
+        if (string.IsNullOrWhiteSpace(corpo))
+        {
+            return string.Empty;
+        }
+
+        // Achata quebras de linha e espacos repetidos: a mensagem vai para uma linha de status.
+        string texto = System.Text.RegularExpressions.Regex.Replace(corpo.Trim(), @"\s+", " ");
+
+        // ORDEM IMPORTA: o esquema Basic/Bearer vem PRIMEIRO. Se a redacao de chave-valor rodasse
+        // antes, ela consumiria apenas a palavra "Bearer" em `Authorization=Bearer <token>` (o valor
+        // termina no espaco) e o token sobreviveria — foi o que um teste pegou.
+        texto = System.Text.RegularExpressions.Regex.Replace(
+            texto, "(?i)\\b(Basic|Bearer)\\s+[A-Za-z0-9+/=._-]{8,}", "$1 [REDIGIDO]");
+
+        // Redige valores de campos sensiveis, caso o servico ecoe o que recebeu.
+        texto = System.Text.RegularExpressions.Regex.Replace(
+            texto,
+            "(?i)(\"?(authorization|cookie|set-cookie|x-csrf-token|password|senha|client_secret|access_token)\"?\\s*[:=]\\s*)(\"[^\"]*\"|[^,;}\\s]+)",
+            "$1\"[REDIGIDO]\"");
+
+        return texto.Length <= LimiteCorpoErro
+            ? texto
+            : texto[..LimiteCorpoErro] + "... (truncado)";
     }
 }

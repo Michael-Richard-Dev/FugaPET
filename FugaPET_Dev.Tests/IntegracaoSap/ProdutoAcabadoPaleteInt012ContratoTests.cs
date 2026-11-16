@@ -537,21 +537,66 @@ public sealed class ProdutoAcabadoPaleteInt012ContratoTests
         Assert.Equal("KG", preview.Payload.WeightUnit);
     }
 
-    [Fact] // 126X-T2: DS com mandante 110 e o MESMO bloco de tara => BLOQUEADO (defeito do 126W)
-    public void X2_DsComMandante110_EMesmoBlocoDeTara_Bloqueado()
+    /// <summary>
+    /// GATE 126G (era 126X-T2): CONTRATO ALTERADO POR DECISAO DO USUARIO em 16/11/2026, para liberar o
+    /// envio do palete no DEV110.
+    /// <para>
+    /// ANTES: destino DS era bloqueado, porque a identidade exigia o host do Q cravado.
+    /// AGORA: a identidade exige um destino INEQUIVOCO declarado pela propria instalacao, e o DS
+    /// passa — carregando o host do DS, nao o do Q.
+    /// </para>
+    /// <para>
+    /// O que NAO mudou e esta coberto logo abaixo: ambiente MISTURADO segue bloqueado, allowlist
+    /// larga segue bloqueada, e o arranque do Q continua recusando o DS.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void X2_DsComMandante110_DestinoInequivoco_ResolveComIdentidadeDoProprioDs()
     {
         ConfiguracaoSap ds = ConfigDsMandante110(MapeamentoAprovado());
 
         ResultadoIdentidadeQas110 ident = ValidadorIdentidadeQas110.Resolver(ds);
+        Assert.True(ident.Confirmada, ident.Mensagem);
+
+        // A identidade carrega o destino COMPROVADO: o host do DS, jamais o do Q.
+        Assert.Equal(ValidadorAmbienteQ.SapHostDesenvolvimento, ident.Identidade!.HostSap);
+        Assert.NotEqual(ValidadorAmbienteQ.SapHostEsperado, ident.Identidade.HostSap);
+        Assert.Equal(MandanteQ, ident.Identidade.SapClient);
+
+        ResultadoTaraFisicaEmbalagem tara = ResolvedorTaraFisicaEmbalagemPalete.Resolver(
+            ds.TarasFisicasEmbalagemPalete, ident.Identidade, CentroQ, MaterialPalete);
+        Assert.True(tara.Disponivel, tara.Mensagem);
+        Assert.Equal(1.000m, tara.PesoKg);
+
+        // O arranque do Q NAO foi afrouxado: para ele, DS continua nao sendo ambiente Q.
+        Assert.False(ValidadorAmbienteQ.ValidarDestinoSapQ(ds).Valido);
+    }
+
+    /// <summary>
+    /// GATE 126G: a garantia que o 126X realmente protegia — Q e DS JUNTOS — continua fechada. Este
+    /// e o caso que importa: nao e "qual host", e sim "um so sistema, sem ambiguidade".
+    /// </summary>
+    [Fact]
+    public void X2b_AmbienteMisturado_ContinuaBloqueado()
+    {
+        ConfiguracaoSap misturado = new()
+        {
+            PerfilLocalQ = true,
+            BaseUrl = UrlQ("API_PURCHASEORDER_SRV"),
+            MaterialDocumentBaseUrl = UrlDs("API_MATERIAL_DOCUMENT_SRV"),
+            SapClient = MandanteQ,
+            HostsPermitidos = [ValidadorAmbienteQ.SapHostEsperado],
+            TarasFisicasEmbalagemPalete = MapeamentoAprovado()
+        };
+
+        ResultadoIdentidadeQas110 ident = ValidadorIdentidadeQas110.Resolver(misturado);
         Assert.False(ident.Confirmada);
         Assert.Equal(CenarioIdentidadeQas110.DestinoNaoQ, ident.Cenario);
         Assert.Null(ident.Identidade);
 
-        // Mesmo mandante (110) e mesmo mapeamento: a tara NAO resolve.
         ResultadoTaraFisicaEmbalagem tara = ResolvedorTaraFisicaEmbalagemPalete.Resolver(
-            ds.TarasFisicasEmbalagemPalete, ident.Identidade, CentroQ, MaterialPalete);
+            misturado.TarasFisicasEmbalagemPalete, ident.Identidade, CentroQ, MaterialPalete);
         Assert.False(tara.Disponivel);
-        Assert.Null(tara.PesoKg);
 
         ResultadoPreviewProdutoAcabadoPalete preview =
             new ProdutoAcabadoPaletePayloadBuilder().MontarPreview(PaletePiloto1(), tara);
@@ -571,11 +616,22 @@ public sealed class ProdutoAcabadoPaleteInt012ContratoTests
             HostsPermitidos = []
         }).Cenario);
 
-        // porta divergente
+        // GATE 126G: a porta deixou de ser cravada em 44300 — ela faz parte do destino DECLARADO.
+        // No lugar, o caso que agora importa: allowlist LARGA. Permitir um host alem do destino
+        // efetivo reabriria a ambiguidade que este contrato existe para fechar.
         Assert.Equal(CenarioIdentidadeQas110.DestinoNaoQ, ValidadorIdentidadeQas110.Resolver(new ConfiguracaoSap
         {
             PerfilLocalQ = true,
-            BaseUrl = $"https://{ValidadorAmbienteQ.SapHostEsperado}:8443/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
+            BaseUrl = UrlQ("API_MATERIAL_DOCUMENT_SRV"),
+            SapClient = MandanteQ,
+            HostsPermitidos = [ValidadorAmbienteQ.SapHostEsperado, ValidadorAmbienteQ.SapHostDesenvolvimento]
+        }).Cenario);
+
+        // URL que nao e https absoluta
+        Assert.Equal(CenarioIdentidadeQas110.DestinoNaoQ, ValidadorIdentidadeQas110.Resolver(new ConfiguracaoSap
+        {
+            PerfilLocalQ = true,
+            BaseUrl = $"http://{ValidadorAmbienteQ.SapHostEsperado}:44300/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",
             SapClient = MandanteQ,
             HostsPermitidos = [ValidadorAmbienteQ.SapHostEsperado]
         }).Cenario);
@@ -594,14 +650,27 @@ public sealed class ProdutoAcabadoPaleteInt012ContratoTests
             ValidadorIdentidadeQas110.Resolver(null).Cenario);
     }
 
-    [Fact] // 126X-T4: perfil Q declarado + destino SAP DS => BLOQUEADO (perfil nao basta)
-    public void X4_PerfilQComDestinoDs_Bloqueado()
+    /// <summary>
+    /// GATE 126G (era 126X-T4): o perfil declarado continua NAO BASTANDO — o que mudou e que o
+    /// destino que ele acompanha nao precisa mais ser o do Q. Sem destino valido, o perfil sozinho
+    /// segue sem produzir identidade; e sem perfil, destino valido tambem nao produz (ver X5).
+    /// </summary>
+    [Fact]
+    public void X4_PerfilQSozinho_SemDestino_ContinuaBloqueado()
     {
-        ConfiguracaoSap cfg = ConfigDsMandante110();
-        Assert.True(cfg.PerfilLocalQ); // o perfil ESTA declarado Q
-        ResultadoIdentidadeQas110 ident = ValidadorIdentidadeQas110.Resolver(cfg);
+        ConfiguracaoSap semDestino = new()
+        {
+            PerfilLocalQ = true,
+            SapClient = MandanteQ,
+            HostsPermitidos = [ValidadorAmbienteQ.SapHostDesenvolvimento]
+        };
+
+        ResultadoIdentidadeQas110 ident = ValidadorIdentidadeQas110.Resolver(semDestino);
         Assert.False(ident.Confirmada);
         Assert.Equal(CenarioIdentidadeQas110.DestinoNaoQ, ident.Cenario);
+
+        // Com destino DS inequivoco, o MESMO perfil passa: a diferenca e o destino, nao o perfil.
+        Assert.True(ValidadorIdentidadeQas110.Resolver(ConfigDsMandante110()).Confirmada);
     }
 
     [Fact] // 126X-T5: destino Q porem SEM perfil reconhecido pelo contrato real => BLOQUEADO
@@ -842,25 +911,37 @@ public sealed class ProdutoAcabadoPaleteInt012ContratoTests
         Assert.False(ValidadorAmbienteQ.ValidarDestinoSapQ(ConfigDestino(baseUrl: "/sap/opu/odata")).Valido);
     }
 
-    [Fact] // 126AA-T7: DS com mandante 110 e perfil Q => BLOQUEADO (reconfirma o 126X apos o 126AA)
-    public void AA7_DsComMandante110EPerfilQ_Bloqueado()
+    /// <summary>
+    /// GATE 126G (era 126AA-T7): os DOIS contratos convivem e isso e o ponto.
+    /// O ARRANQUE do Q (ValidarDestinoSapQ) continua exigindo o host do Q e recusando o DS;
+    /// a IDENTIDADE para a tara passou a aceitar qualquer destino inequivoco declarado.
+    /// </summary>
+    [Fact]
+    public void AA7_ArranqueDoQSegueRecusandoDs_MasIdentidadeAceitaDestinoDeclarado()
     {
         ConfiguracaoSap ds = ConfigDsMandante110(MapeamentoAprovado());
         Assert.True(ds.PerfilLocalQ);
         Assert.Equal(MandanteQ, ds.SapClient);
 
+        // Arranque do Q: INTACTO.
         Assert.False(ValidadorAmbienteQ.ValidarDestinoSapQ(ds).Valido);
-        Assert.Equal(CenarioIdentidadeQas110.DestinoNaoQ, ValidadorIdentidadeQas110.Resolver(ds).Cenario);
+
+        // Identidade para a tara: aceita, com o host do proprio DS.
+        ResultadoIdentidadeQas110 ident = ValidadorIdentidadeQas110.Resolver(ds);
+        Assert.True(ident.Confirmada, ident.Mensagem);
+        Assert.Equal(ValidadorAmbienteQ.SapHostDesenvolvimento, ident.Identidade!.HostSap);
     }
 
     [Fact] // 126AA-T8: identidade nao validada => tara indisponivel e payload bloqueado
     public void AA8_IdentidadeNaoValidada_TaraIndisponivel_SemPayload()
     {
+        // GATE 126G: ConfigDsMandante110 SAIU desta lista — um DS inequivoco agora produz identidade
+        // (ver X2). Os dois casos que restam sao os que continuam, e devem continuar, bloqueados:
+        // destino ausente e destino MISTURADO.
         foreach (ConfiguracaoSap cfg in new[]
         {
             ConfigDestino(), // sem URL
-            ConfigDestino(baseUrl: UrlQ("API_MATERIAL_DOCUMENT_SRV"), purchaseOrderBaseUrl: UrlDs("API_PURCHASEORDER_SRV")),
-            ConfigDsMandante110()
+            ConfigDestino(baseUrl: UrlQ("API_MATERIAL_DOCUMENT_SRV"), purchaseOrderBaseUrl: UrlDs("API_PURCHASEORDER_SRV"))
         })
         {
             ResultadoIdentidadeQas110 ident = ValidadorIdentidadeQas110.Resolver(cfg);
