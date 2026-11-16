@@ -1,4 +1,7 @@
 {
+  "ambiente": {
+    "perfil": "Q"
+  },
   "sap": {
     "base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata4/sap/api_purchaseorder_2/srvd_a2x/sap/purchaseorder/0001",
     "material_document_base_url": "https://vhfufds4ci.sap.fugacouros.com.br:44300/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/",

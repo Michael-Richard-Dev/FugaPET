@@ -555,4 +555,73 @@ public sealed class DirectExeAutoConfigQ120GTests
         Assert.True(perfil.EhQ);
         Assert.Equal("CONFIG_LOCAL", perfil.Origem);
     }
+
+    /// <summary>
+    /// GATE 126C: o configuracao.sap.json implantado e gravado pelo PowerShell do Windows e sai com BOM
+    /// UTF-8. JsonDocument.Parse(string) LANCA quando o BOM sobra no texto, entao o caminho real
+    /// (CarregarDoArquivo, que le o arquivo do disco) precisa engolir o BOM — e nao apenas o
+    /// Interpretar, que recebe um JsonElement ja parseado. Sem este teste, um arquivo perfeitamente
+    /// valido aos olhos humanos resultaria em perfil NaoDefinido e a norma de embalagem ficaria
+    /// silenciosamente desligada no duplo clique.
+    /// </summary>
+    [Fact]
+    public void CarregarDoArquivo_ComBomUtf8_ReconheceOPerfilQ()
+    {
+        string caminho = Path.Combine(Path.GetTempPath(), $"fugapet_perfil_bom_{Guid.NewGuid():N}.json");
+        const string conteudo = """
+            {
+                "ambiente":  {
+                                  "perfil":  "Q"
+                              },
+                "sap":  {
+                            "sap_client":  "110"
+                        }
+            }
+            """;
+
+        try
+        {
+            File.WriteAllText(caminho, conteudo, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            // Garante que o arquivo REALMENTE comeca com BOM: sem isso o teste nao exercita nada.
+            byte[] bytes = File.ReadAllBytes(caminho);
+            Assert.True(bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF,
+                "o arquivo de teste precisa comecar com BOM UTF-8");
+
+            PerfilAmbienteLocal perfil = PerfilAmbienteLocal.CarregarDoArquivo(caminho);
+
+            Assert.True(perfil.EhQ);
+            Assert.Equal("CONFIG_LOCAL", perfil.Origem);
+            Assert.True(DefaultsPerfilQ.Packaging(perfil));
+        }
+        finally
+        {
+            File.Delete(caminho);
+        }
+    }
+
+    /// <summary>
+    /// GATE 126C: a secao "ambiente" convive com "sap" na raiz. Perfil ausente continua fail-closed —
+    /// era o estado do DEV110 antes de 16/11/2026, e e por isso que a norma so ligava pelo atalho.
+    /// </summary>
+    [Fact]
+    public void CarregarDoArquivo_SemSecaoAmbiente_NaoConcedePackaging()
+    {
+        string caminho = Path.Combine(Path.GetTempPath(), $"fugapet_perfil_sem_{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(caminho, """{ "sap": { "sap_client": "110" } }""",
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+            PerfilAmbienteLocal perfil = PerfilAmbienteLocal.CarregarDoArquivo(caminho);
+
+            Assert.False(perfil.EhQ);
+            Assert.False(DefaultsPerfilQ.Packaging(perfil));
+        }
+        finally
+        {
+            File.Delete(caminho);
+        }
+    }
 }
