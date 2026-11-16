@@ -639,12 +639,17 @@ public sealed class PaletizacaoForm : Form
         }
         ProdutoAcabadoPalete palete = _paletesFormados[row.Index];
 
-        // MVP: RASCUNHO ingressa no fluxo normal. ENVIADO_SAP / INDETERMINADO / CONFIRMADO_SAP NÃO produzem segundo
-        // POST normal (contrato de recovery/reconciliação preservado; nenhuma chamada ao Controller/orquestrador).
+        // GATE 126L: a regra antiga era "so RASCUNHO", o que varria o ERRO_SAP junto e deixava o
+        // palete sem saida depois de uma recusa do SAP — no dia a dia, erro de cadastro corrigido
+        // exige reenviar. Agora quem decide e o estado PERSISTIDO, avaliado pelo Controller:
+        // enviar, liberar (com confirmacao) ou bloquear. ENVIADO_SAP, INDETERMINADO e CONFIRMADO_SAP
+        // continuam sem segundo POST.
         if (!string.Equals((palete.StatusSap ?? string.Empty).Trim(), "RASCUNHO", StringComparison.OrdinalIgnoreCase))
         {
-            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal} em '{palete.StatusSap}': não elegível para novo envio normal (recovery/reconciliação preserva o contrato).";
-            return;
+            if (!await TentarLiberarReenvioAsync(palete))
+            {
+                return;
+            }
         }
 
         _enviandoPalete = true;
@@ -688,6 +693,91 @@ public sealed class PaletizacaoForm : Form
             enviarSapButton.Enabled = true;
             gravarPaleteButton.Enabled = true;
         }
+    }
+
+    /// <summary>
+    /// GATE 126L: decide, para um palete que NÃO está em RASCUNHO, se o envio segue. Devolve true
+    /// somente quando o palete pode ir ao SAP agora.
+    /// <para>
+    /// Três desfechos: já liberado segue direto; recusa COMPROVADA abre confirmação e, no sim,
+    /// libera e segue; qualquer outro caso mostra o motivo e para. A liberação é decisão humana
+    /// registrada em auditoria — nunca automática, para não virar retry cego em laço.
+    /// </para>
+    /// </summary>
+    private async Task<bool> TentarLiberarReenvioAsync(ProdutoAcabadoPalete palete)
+    {
+        if (palete.CodigoHuPalete is not long codigo || codigo <= 0)
+        {
+            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal} sem código persistido: envio não avaliado.";
+            return false;
+        }
+
+        AvaliacaoReenvioPalete avaliacao;
+        try
+        {
+            avaliacao = await _controller.AvaliarReenvioPaleteAsync(codigo);
+        }
+        catch (Exception ex)
+        {
+            statusLabel.Text = DescreverFalha("Falha ao avaliar o reenvio do palete", ex);
+            return false;
+        }
+
+        if (avaliacao.Situacao == SituacaoReenvioPalete.PodeEnviar)
+        {
+            return true;
+        }
+
+        if (avaliacao.Situacao != SituacaoReenvioPalete.PodeLiberar)
+        {
+            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal}: {avaliacao.Motivo}";
+            MessageBox.Show(avaliacao.Motivo, "Produto Acabado — Palete INT012",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        DialogResult confirmacao = MessageBox.Show(
+            $"{avaliacao.Motivo}\r\n\r\nLiberar o palete {palete.CodigoPaleteLocal} para NOVO ENVIO ao SAP?\r\n"
+            + "A liberação fica registrada com seu usuário e terminal.",
+            "Produto Acabado — Liberar novo envio",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirmacao != DialogResult.Yes)
+        {
+            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal}: liberação cancelada pelo operador.";
+            return false;
+        }
+
+        long usuario = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario ?? 0;
+        if (usuario <= 0)
+        {
+            statusLabel.Text = "Usuário não identificado: liberação não executada.";
+            return false;
+        }
+
+        string terminal = EstadoTerminalLocalAtual.ObterContextoAtualizado()?.NomeTerminal ?? string.Empty;
+        ResultadoRecoveryPalete resultado;
+        try
+        {
+            resultado = await _controller.LiberarReenvioPaleteAsync(codigo, usuario, terminal);
+        }
+        catch (Exception ex)
+        {
+            statusLabel.Text = DescreverFalha("Falha ao liberar o reenvio do palete", ex);
+            return false;
+        }
+
+        if (!resultado.ReprocessamentoLiberado)
+        {
+            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal}: {resultado.Mensagem}";
+            MessageBox.Show(resultado.Mensagem, "Produto Acabado — Palete INT012",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        statusLabel.Text = $"Palete {palete.CodigoPaleteLocal} liberado para novo envio. Enviando...";
+        return true;
     }
 
     /// <summary>

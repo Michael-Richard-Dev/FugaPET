@@ -94,7 +94,123 @@ public sealed class ProdutoAcabadoController
         _paleteInt012Orquestrador = store is IProdutoAcabadoPipeline045Operacoes opsPalete && opsPalete.SuportaPersistenciaDefinitiva
             ? new ProdutoAcabadoPaleteInt012Orquestrador(opsPalete, _paleteInt012Gateway)
             : null;
+
+        // GATE 126L: as MESMAS operacoes 045, para avaliar e liberar o reenvio de palete. Sem segunda
+        // arquitetura: e o mesmo servico de recovery que o orquestrador ja usa como guarda.
+        _opsPalete = store as IProdutoAcabadoPipeline045Operacoes;
+        _recoveryPalete = _opsPalete is not null && _opsPalete.SuportaPersistenciaDefinitiva
+            ? new ProdutoAcabadoPaleteRecoveryServico(_opsPalete)
+            : null;
     }
+
+    private readonly IProdutoAcabadoPipeline045Operacoes? _opsPalete;
+    private readonly ProdutoAcabadoPaleteRecoveryServico? _recoveryPalete;
+
+    /// <summary>
+    /// GATE 126L: diz o que o operador pode fazer com um palete que nao foi confirmado — enviar,
+    /// liberar o reprocessamento, ou nada. Decide pelo estado PERSISTIDO, nunca pelo que a grid
+    /// mostra, e NAO escreve nada.
+    /// </summary>
+    public async Task<AvaliacaoReenvioPalete> AvaliarReenvioPaleteAsync(
+        long codigoPalete, CancellationToken cancellationToken = default)
+    {
+        if (codigoPalete <= 0 || _opsPalete is null)
+        {
+            return new(SituacaoReenvioPalete.Bloqueado, AvaliadorReenvioPalete.MotivoEstadoNaoComprovado);
+        }
+
+        try
+        {
+            IReadOnlyList<Linha045> linhas = await _opsPalete.LerEstadoPaleteAsync(codigoPalete, cancellationToken);
+            if (linhas.Count == 0)
+            {
+                return new(SituacaoReenvioPalete.Bloqueado, AvaliadorReenvioPalete.MotivoEstadoNaoComprovado);
+            }
+
+            Linha045 estado = linhas[0];
+            return AvaliadorReenvioPalete.Avaliar(
+                estado.ObterTexto("status_hu_palete"),
+                estado.Bruto("pode_reprocessar") is bool reproc && reproc,
+                estado.ObterTexto("handling_unit_external_id"),
+                estado.ObterTexto("hu_palete"),
+                estado.ObterInt("status_http"),
+                // A prova pode estar na resposta bruta OU na mensagem sanitizada, que carrega o corpo
+                // desde o GATE 126H. As duas sao concatenadas para nao depender de qual foi gravada.
+                estado.ObterTexto("payload_response") + " " + estado.ObterTexto("erro_sanitizado"));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] Avaliacao de reenvio do palete {codigoPalete} falhou ({ex.GetType().Name}).");
+            return new(SituacaoReenvioPalete.Bloqueado, AvaliadorReenvioPalete.MotivoEstadoNaoComprovado);
+        }
+    }
+
+    /// <summary>
+    /// GATE 126L: libera o reprocessamento de um palete cuja recusa pelo SAP esta COMPROVADA.
+    /// <para>
+    /// Reavalia o estado ANTES de liberar — a tela pode estar desatualizada, e liberar com base no
+    /// que a grid mostra seria decidir por um retrato velho. So prossegue com veredito
+    /// <c>PodeLiberar</c>, e delega ao fluxo de reconciliacao existente, que registra a evidencia e
+    /// a auditoria. Nao envia nada: o POST continua sendo uma acao separada.
+    /// </para>
+    /// </summary>
+    public async Task<ResultadoRecoveryPalete> LiberarReenvioPaleteAsync(
+        long codigoPalete, long usuario, string terminal, CancellationToken cancellationToken = default)
+    {
+        if (_recoveryPalete is null)
+        {
+            return ResultadoRecoveryPalete.Bloqueado(
+                PendenciaPalete.Indeterminado, "Persistencia de palete indisponivel: liberacao nao executada.");
+        }
+
+        AvaliacaoReenvioPalete avaliacao = await AvaliarReenvioPaleteAsync(codigoPalete, cancellationToken);
+        if (avaliacao.Situacao != SituacaoReenvioPalete.PodeLiberar)
+        {
+            return ResultadoRecoveryPalete.Bloqueado(PendenciaPalete.Indeterminado, avaliacao.Motivo);
+        }
+
+        // GATE 126L: NAO passa por ReconciliarAsync. Verificado contra o banco em 16/11/2026: as tres
+        // ramificacoes de fn_pa_045_palete_registrar_reconciliacao exigem status INDETERMINADO_TIMEOUT
+        // — ela existe para o caso em que o resultado do POST e desconhecido. Um palete em ERRO_SAP
+        // tem resultado CONHECIDO (o SAP recusou), e a primitiva certa para ele e a liberacao direta,
+        // do tipo DECISAO_OPERACIONAL_FORMAL, que e justamente a decisao humana registrada que o
+        // operador acabou de tomar no dialogo.
+        ResultadoClaim045 recovery = await _opsPalete!.AdquirirRecoveryPaleteAsync(
+            codigoPalete, usuario, terminal, cancellationToken);
+        if (!recovery.Obtido)
+        {
+            return ResultadoRecoveryPalete.Bloqueado(
+                PendenciaPalete.PendenteLiberacao,
+                "Nao foi possivel assumir o controle do palete para liberar: ha uma operacao recente "
+                + "em curso sobre ele. Aguarde ate cinco minutos e tente novamente.");
+        }
+
+        bool liberado = await _opsPalete.LiberarReprocessamentoPaleteAsync(
+            codigoPalete,
+            TipoLiberacaoDecisaoOperacional,
+            "Recusa do SAP comprovada na resposta (Status E sem UC gerada); reenvio liberado pelo operador.",
+            usuario,
+            terminal,
+            cancellationToken);
+
+        return liberado
+            ? new ResultadoRecoveryPalete(true, PendenciaPalete.PendenteLiberacao, true, false, true,
+                "Reprocessamento liberado: o palete pode ser enviado novamente.")
+            : ResultadoRecoveryPalete.Bloqueado(
+                PendenciaPalete.PendenteLiberacao,
+                "O banco recusou a liberacao do reprocessamento. Nenhum envio foi feito.");
+    }
+
+    /// <summary>
+    /// Tipo de liberacao aceito pelo banco para a decisao humana registrada (o outro,
+    /// POS_RECONCILIACAO_NAO_ENCONTRADO, exige reconciliacao previa e so serve ao caso indeterminado).
+    /// </summary>
+    internal const string TipoLiberacaoDecisaoOperacional = "DECISAO_OPERACIONAL_FORMAL";
 
     private static ConfiguracaoSap CarregarConfiguracaoSapSeguro()
     {

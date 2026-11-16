@@ -154,7 +154,8 @@ public sealed class ProdutoAcabadoPaleteRecovery122CTests
         Assert.True(r.ReconciliacaoRegistrada);
         Assert.False(r.ReprocessamentoLiberado);           // confirmado no SAP NÃO reprocessa
         Assert.Equal(0, ops.LiberacoesSolicitadas);
-        Assert.Equal("CONFIRMADO_NO_SAP", ops.UltimoResultadoReconciliacao);
+        // GATE 126L: valor REAL aceito pelo banco (antes "CONFIRMADO_NO_SAP", que a funcao recusa).
+        Assert.Equal("CONFIRMADO_EXISTE", ops.UltimoResultadoReconciliacao);
         Assert.Equal("300000999", ops.UltimoHuPaiReconciliacao);
     }
 
@@ -171,7 +172,8 @@ public sealed class ProdutoAcabadoPaleteRecovery122CTests
         Assert.True(r.Sucesso);
         Assert.True(r.ReconciliacaoRegistrada);
         Assert.True(r.ReprocessamentoLiberado);
-        Assert.Equal("NAO_EXECUTADO_NO_SAP", ops.UltimoResultadoReconciliacao);
+        // GATE 126L: valor REAL aceito pelo banco (antes "NAO_EXECUTADO_NO_SAP", que a funcao recusa).
+        Assert.Equal("CONFIRMADO_NAO_EXISTE", ops.UltimoResultadoReconciliacao);
         Assert.Equal(
             ProdutoAcabadoPaleteRecoveryServico.TipoLiberacaoAusenciaComprovada,
             ops.UltimoTipoLiberacao);
@@ -192,7 +194,8 @@ public sealed class ProdutoAcabadoPaleteRecovery122CTests
         Assert.True(r.ReconciliacaoRegistrada);
         Assert.False(r.ReprocessamentoLiberado);
         Assert.Equal(0, ops.LiberacoesSolicitadas);
-        Assert.Equal("INDETERMINADO", ops.UltimoResultadoReconciliacao);
+        // GATE 126L: valor REAL aceito pelo banco (antes "INDETERMINADO", que a funcao recusa).
+        Assert.Equal("DIVERGENTE", ops.UltimoResultadoReconciliacao);
         Assert.Equal(ProdutoAcabadoPaleteRecoveryServico.MotivoVeredictoIndeterminado, r.Mensagem);
     }
 

@@ -21,7 +21,18 @@ public enum PendenciaPalete
     ConfirmadoNoSap = 4,
 
     /// <summary>CANCELADO: terminal. Novo envio PROIBIDO.</summary>
-    Cancelado = 5
+    Cancelado = 5,
+
+    /// <summary>
+    /// GATE 126L: ERRO_SAP ou BLOQUEADO com reprocessamento JA LIBERADO (pode_reprocessar=true).
+    /// Envio permitido.
+    /// <para>
+    /// Valor proprio em vez de reaproveitar <see cref="Limpo"/>: "limpo" significa nunca enviado, e
+    /// este palete JA foi — a distincao importa para quem le o diagnostico. A liberacao e sempre
+    /// explicita e registrada em auditoria; aqui so se constata que ela ocorreu.
+    /// </para>
+    /// </summary>
+    LiberadoParaReenvio = 6
 }
 
 /// <summary>
@@ -104,7 +115,17 @@ public sealed class ProdutoAcabadoPaleteRecoveryServico
         "Liberacao de reprocessamento NEGADA pelo banco apos reconciliacao: bloqueio mantido. Nenhum POST.";
 
     /// <summary>Tipo de liberacao registrado quando a ausencia no SAP e comprovada.</summary>
-    public const string TipoLiberacaoAusenciaComprovada = "RECONCILIADO_AUSENTE_NO_SAP";
+    /// <summary>
+    /// GATE 126L: era "RECONCILIADO_AUSENTE_NO_SAP", valor que fn_pa_045_palete_liberar_reprocessamento
+    /// RECUSA — ela aceita apenas POS_RECONCILIACAO_NAO_ENCONTRADO e DECISAO_OPERACIONAL_FORMAL, e
+    /// levantava PA045_PALETE_LIBERACAO_INVALIDA. Este caminho vem DEPOIS de uma reconciliacao que
+    /// comprovou ausencia, entao o tipo correto e o primeiro.
+    /// <para>
+    /// O erro nunca apareceu porque nenhum codigo de producao chamava este servico: ele era exercitado
+    /// so com operacoes falsas, que aceitavam qualquer string.
+    /// </para>
+    /// </summary>
+    public const string TipoLiberacaoAusenciaComprovada = "POS_RECONCILIACAO_NAO_ENCONTRADO";
 
     private readonly IProdutoAcabadoPipeline045Operacoes _ops;
 
@@ -123,11 +144,20 @@ public sealed class ProdutoAcabadoPaleteRecoveryServico
         }
 
         string status = estado[0].ObterTexto("status_hu_palete")?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        // GATE 126L: o status sozinho nao basta. A funcao de claim do banco aceita ERRO_SAP e
+        // BLOQUEADO quando pode_reprocessar=true, e e assim que a liberacao explicita se manifesta.
+        // Classificar so pelo status mantinha o palete bloqueado DEPOIS de liberado: o banco
+        // deixava enviar e a camada C# nao.
+        bool liberado = estado[0].Bruto("pode_reprocessar") is bool reproc && reproc;
+
         return status switch
         {
             "RASCUNHO" => PendenciaPalete.Limpo,
             "ENVIADO_SAP" => PendenciaPalete.PendenteReconciliacao,
+            "ERRO_SAP" when liberado => PendenciaPalete.LiberadoParaReenvio,
             "ERRO_SAP" => PendenciaPalete.PendenteLiberacao,
+            "BLOQUEADO" when liberado => PendenciaPalete.LiberadoParaReenvio,
             "CONFIRMADO_SAP" => PendenciaPalete.ConfirmadoNoSap,
             "CANCELADO" => PendenciaPalete.Cancelado,
             _ => PendenciaPalete.Indeterminado
@@ -135,7 +165,12 @@ public sealed class ProdutoAcabadoPaleteRecoveryServico
     }
 
     /// <summary>Somente RASCUNHO autoriza um POST. Todo o resto bloqueia — inclusive o indeterminado.</summary>
-    internal static bool EnvioPermitido(PendenciaPalete pendencia) => pendencia == PendenciaPalete.Limpo;
+    /// <summary>
+    /// GATE 126L: dois estados autorizam o envio — nunca enviado, e liberado explicitamente apos
+    /// recusa. Todo o resto bloqueia, inclusive indeterminado e falha de leitura.
+    /// </summary>
+    internal static bool EnvioPermitido(PendenciaPalete pendencia)
+        => pendencia is PendenciaPalete.Limpo or PendenciaPalete.LiberadoParaReenvio;
 
     /// <summary>Mensagem objetiva do bloqueio, por pendencia.</summary>
     internal static string MensagemBloqueio(PendenciaPalete pendencia) => pendencia switch
@@ -234,11 +269,16 @@ public sealed class ProdutoAcabadoPaleteRecoveryServico
             return ResultadoRecoveryPalete.Bloqueado(pendencia, MotivoRecoveryNaoAdquirido);
         }
 
+        // GATE 126L: os tres valores sao os que fn_pa_045_palete_registrar_reconciliacao ACEITA.
+        // Antes eram "CONFIRMADO_NO_SAP", "NAO_EXECUTADO_NO_SAP" e "INDETERMINADO", nenhum deles
+        // reconhecido pelo banco: a funcao levantava PA045_PALETE_RECONCILIACAO_INVALIDA antes de
+        // qualquer efeito. Como nenhum codigo de producao chamava este servico, o erro so existia
+        // contra o banco real — as operacoes falsas dos testes aceitavam qualquer string.
         string resultadoTexto = veredicto switch
         {
-            VeredictoReconciliacaoPalete.ConfirmadoNoSap => "CONFIRMADO_NO_SAP",
-            VeredictoReconciliacaoPalete.NaoExecutadoNoSap => "NAO_EXECUTADO_NO_SAP",
-            _ => "INDETERMINADO"
+            VeredictoReconciliacaoPalete.ConfirmadoNoSap => "CONFIRMADO_EXISTE",
+            VeredictoReconciliacaoPalete.NaoExecutadoNoSap => "CONFIRMADO_NAO_EXISTE",
+            _ => "DIVERGENTE"
         };
 
         bool registrada = await _ops.RegistrarReconciliacaoPaleteAsync(

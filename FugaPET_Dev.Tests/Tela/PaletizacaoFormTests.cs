@@ -117,7 +117,18 @@ public sealed class PaletizacaoFormTests
         Assert.Contains("_enviandoPalete = true;", f, StringComparison.Ordinal);
         Assert.Contains("enviarSapButton.Enabled = false;", f, StringComparison.Ordinal);
         Assert.Contains("\"RASCUNHO\"", f, StringComparison.Ordinal);
-        Assert.Contains("não elegível para novo envio normal", f, StringComparison.Ordinal);
+
+        // GATE 126L: a recusa seca "nao elegivel para novo envio normal" saiu. Quem nao esta em
+        // RASCUNHO passa pela avaliacao do estado PERSISTIDO, que pode liberar o reenvio apos
+        // confirmacao do operador. O que NAO pode voltar e a Form decidir sozinha: a avaliacao e a
+        // liberacao sao do Controller.
+        Assert.Contains("TentarLiberarReenvioAsync(palete)", f, StringComparison.Ordinal);
+        Assert.Contains("_controller.AvaliarReenvioPaleteAsync(codigo)", f, StringComparison.Ordinal);
+        Assert.Contains("_controller.LiberarReenvioPaleteAsync(codigo, usuario, terminal)", f, StringComparison.Ordinal);
+
+        // A liberacao NUNCA e automatica: exige confirmacao explicita, com o padrao no NAO.
+        Assert.Contains("MessageBoxDefaultButton.Button2", f, StringComparison.Ordinal);
+        Assert.Contains("Liberar novo envio", f, StringComparison.Ordinal);
         Assert.Contains("EstadoPaleteInt012.Confirmado", f, StringComparison.Ordinal);
         Assert.Contains("RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe())", f, StringComparison.Ordinal);
         Assert.Contains("ProdutoAcabadoPaleteEnvioPresenter.Construir(palete.CodigoPaleteLocal, resultado)", f, StringComparison.Ordinal);
