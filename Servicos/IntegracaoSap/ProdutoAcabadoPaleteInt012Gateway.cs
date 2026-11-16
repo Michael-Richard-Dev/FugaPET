@@ -10,6 +10,19 @@ public interface IProdutoAcabadoPaleteInt012Gateway
 {
     bool EnvioAutorizado { get; }
     Task<ResultadoPaleteInt012> EnviarPaleteAsync(ProdutoAcabadoPaleteRequest requisicao, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// GATE 126N: endpoint REAL para onde este gateway posta, SEM credencial, para a auditoria.
+    /// <para>
+    /// Ate 16/11/2026 a auditoria gravava um literal cravado com o segmento QS4_110, enquanto o POST
+    /// ia para onde a configuracao mandava. Quando o DEV110 passou a postar na rota do QAS por um
+    /// defeito da fabrica, o banco registrou exatamente o endpoint errado — e a pista que teria
+    /// apontado a causa em minutos ficou invisivel por horas. Rotulo de auditoria que nao e medido
+    /// nao e auditoria.
+    /// </para>
+    /// <para>Membro default para nao quebrar implementacoes de teste que nao se importam com isso.</para>
+    /// </summary>
+    string EndpointDescrito => string.Empty;
 }
 
 /// <summary>
@@ -63,6 +76,9 @@ public sealed class ProdutoAcabadoPaleteInt012Gateway : IProdutoAcabadoPaleteInt
 
     public bool EnvioAutorizado { get; }
 
+    /// <summary>GATE 126N: o destino efetivo, sem credencial (a validacao ja proibe userinfo na URL).</summary>
+    public string EndpointDescrito => _destino?.AbsoluteUri ?? string.Empty;
+
     public async Task<ResultadoPaleteInt012> EnviarPaleteAsync(ProdutoAcabadoPaleteRequest requisicao, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(requisicao);
@@ -86,8 +102,16 @@ public sealed class ProdutoAcabadoPaleteInt012Gateway : IProdutoAcabadoPaleteInt
         {
             using HttpRequestMessage req = new(HttpMethod.Post, _destino);
             AplicarBasicAuth(req);
-            req.Content = new StringContent(
-                JsonSerializer.Serialize(requisicao), Encoding.UTF8, "application/json");
+            // GATE 126M: Content-Type SEM o parametro charset. StringContent(.., Encoding.UTF8, ..)
+            // monta "application/json; charset=utf-8", e gateways OData do SAP costumam recusar esse
+            // parametro. O corpo continua sendo UTF-8 nos bytes — o que sai e so o rotulo.
+            //
+            // POR QUE SUSPEITAMOS DELE: em 16/11/2026 o MESMO corpo, na MESMA URL, voltou 500 com
+            // ZPP_CREATEHU/003 "Dados embalagem nao encontrado!" pelo aplicativo e 200 com Status "S"
+            // pelo Postman, que nao manda charset. O payload foi conferido contra o documento INT012
+            // e contra o JSON persistido: identicos. Resta a diferenca de cabecalho.
+            req.Content = new StringContent(JsonSerializer.Serialize(requisicao), Encoding.UTF8);
+            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
             using HttpResponseMessage resp = await http.SendAsync(req, cancellationToken); // UM POST, sem retry
             int status = (int)resp.StatusCode;

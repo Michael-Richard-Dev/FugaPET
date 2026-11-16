@@ -8,8 +8,23 @@ namespace FugaPET_Dev.Servicos.IntegracaoSap;
 /// </summary>
 public static class FabricaProdutoAcabadoPaleteInt012Gateway
 {
-    /// <summary>Path confirmado do INT012 (CPI) — anexado à base configurada.</summary>
-    public const string EndpointPath = "/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
+    /// <summary>
+    /// GATE 126N: path do INT012 usado SOMENTE como referência de documentação.
+    /// <para>
+    /// ELE NÃO É MAIS ANEXADO À BASE. Até 16/11/2026 a fábrica descartava o caminho configurado e
+    /// colava este literal, que carrega o segmento <c>QS4_110</c> — a rota do QAS110. Consequência:
+    /// o DEV110 postava palete na rota do QAS, e o SAP respondia
+    /// "ZPP_CREATEHU/003 Dados embalagem não encontrado!", porque material e HUs não são os mesmos lá.
+    /// A URL configurada para o DEV110, sem o segmento de sistema, nunca era usada: só o host dela.
+    /// </para>
+    /// <para>
+    /// Comprovado por eliminação: o MESMO corpo, com os MESMOS cabeçalhos e as MESMAS credenciais,
+    /// retornou 200 e criou a UC quando enviado à rota configurada, e 500 quando enviado pelo
+    /// aplicativo. A rota era a única variável restante.
+    /// </para>
+    /// </summary>
+    public const string EndpointPathReferencia =
+        "/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
 
     public static IProdutoAcabadoPaleteInt012Gateway Criar(
         ConfiguracaoSap configuracao,
@@ -39,6 +54,16 @@ public static class FabricaProdutoAcabadoPaleteInt012Gateway
             timeout: TimeSpan.FromSeconds(configuracao.TimeoutSegundos));
     }
 
+    /// <summary>
+    /// GATE 126N: o endpoint é o que está CONFIGURADO, com o caminho preservado. Cada instalação
+    /// aponta para a sua rota no CPI — o DEV110 para a sem segmento de sistema, as linhas Q para a
+    /// com <c>QS4_110</c>.
+    /// <para>
+    /// Base sem caminho próprio devolve VAZIO, e o gateway nasce fail-closed. Antes a fábrica
+    /// adivinhava o caminho; adivinhar rota de escrita foi exatamente o que fez o DEV110 postar no
+    /// QAS. Preferimos não enviar a enviar para o sistema errado.
+    /// </para>
+    /// </summary>
     internal static string MontarEndpoint(string? baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl) || !Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri))
@@ -46,7 +71,13 @@ public static class FabricaProdutoAcabadoPaleteInt012Gateway
             return string.Empty;
         }
 
-        // Usa somente esquema://host (path da base é ignorado) + o path INT012 confirmado.
-        return $"{uri.Scheme}://{uri.Authority}{EndpointPath}";
+        // Caminho ausente ("/" ou vazio) nao identifica a rota INT012: nao se completa por conta propria.
+        string caminho = uri.AbsolutePath;
+        if (caminho.Length <= 1)
+        {
+            return string.Empty;
+        }
+
+        return uri.AbsoluteUri;
     }
 }

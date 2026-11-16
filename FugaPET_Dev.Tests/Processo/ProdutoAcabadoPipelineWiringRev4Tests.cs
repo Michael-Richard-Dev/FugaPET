@@ -515,8 +515,12 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
         HandlingUnitItems = [new() { HandlingUnit = "300010001" }]
     };
 
-    private const string CpiBase = "https://cpi.exemplo.local/base";
-    private const string EndpointCpi = "https://cpi.exemplo.local/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
+    // GATE 126N: a base do CPI JA E o endpoint — o caminho configurado e preservado, nao substituido
+    // por um literal. Antes estas duas constantes eram diferentes, porque a fabrica descartava o
+    // caminho e colava a rota do QAS110; foi esse descarte que fez o DEV110 postar no QAS.
+    private const string CpiBase =
+        "https://cpi.exemplo.local/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload";
+    private const string EndpointCpi = CpiBase;
 
 
     [Fact]

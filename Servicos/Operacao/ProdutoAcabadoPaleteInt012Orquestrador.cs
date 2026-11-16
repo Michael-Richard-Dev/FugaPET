@@ -20,7 +20,15 @@ public sealed record ResultadoPalete045(bool Executou, EstadoPaleteInt012 Estado
 /// </summary>
 public sealed class ProdutoAcabadoPaleteInt012Orquestrador
 {
-    private const string EndpointPalete = FabricaProdutoAcabadoPaleteInt012Gateway.EndpointPath;
+    /// <summary>
+    /// GATE 126N: endpoint gravado na AUDITORIA. Vem do proprio gateway, nao de um literal: era um
+    /// literal com o segmento QS4_110, e por isso o banco registrava a rota do QAS enquanto o POST
+    /// ia para outro lugar. Gateway sem destino comprovado grava o rotulo abaixo, nunca um palpite.
+    /// </summary>
+    private string EndpointPalete =>
+        string.IsNullOrWhiteSpace(_gateway.EndpointDescrito)
+            ? "LOCAL://int012/endpoint-nao-configurado"
+            : _gateway.EndpointDescrito;
 
     private readonly IProdutoAcabadoPipeline045Operacoes _ops;
     private readonly IProdutoAcabadoPaleteInt012Gateway _gateway;

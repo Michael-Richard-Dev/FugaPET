@@ -262,10 +262,42 @@ public sealed class ProdutoAcabadoPipelineSapTests
         Assert.False(gw.EnvioAutorizado); // PalletWriteHabilitado default false â‡’ fail-closed
     }
 
+    /// <summary>
+    /// GATE 126N: CONTRATO INVERTIDO em 16/11/2026. Este teste afirmava que a fabrica DESCARTA o
+    /// caminho configurado e cola um literal com o segmento QS4_110 — ou seja, fixava o defeito.
+    /// Era por isso que o DEV110 postava palete na rota do QAS110 e recebia
+    /// "ZPP_CREATEHU/003 Dados embalagem nao encontrado!": material e HUs nao sao os mesmos la.
+    /// O endpoint agora e o CONFIGURADO, com o caminho preservado.
+    /// </summary>
+    [Theory]
+    [InlineData("https://cpi.exemplo.local/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload")]
+    [InlineData("https://cpi.exemplo.local/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload")]
+    public void Int012_Factory_PreservaOCaminhoConfigurado(string configurado)
+        => Assert.Equal(configurado,
+            FabricaProdutoAcabadoPaleteInt012Gateway.MontarEndpoint(configurado), StringComparer.Ordinal);
+
+    /// <summary>
+    /// A rota de uma instalacao NAO pode vazar para outra: o caminho do QAS nao pode aparecer num
+    /// endpoint montado a partir da base do DEV.
+    /// </summary>
     [Fact]
-    public void Int012_Factory_EndpointPathConfirmado()
-        => Assert.EndsWith("/http/QS4_110/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload",
-            FabricaProdutoAcabadoPaleteInt012Gateway.MontarEndpoint("https://cpi.exemplo.local/qualquer"), StringComparison.Ordinal);
+    public void Int012_Factory_NaoInjetaRotaDeOutroAmbiente()
+        => Assert.DoesNotContain("QS4_110",
+            FabricaProdutoAcabadoPaleteInt012Gateway.MontarEndpoint(
+                "https://cpi.exemplo.local/http/pesagem/handling_unit/CreateHUInput/1111/SAP__self.processHandlingUnitPayload"),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// Base sem caminho proprio NAO e completada por adivinhacao: devolve vazio e o gateway nasce
+    /// fail-closed. Adivinhar rota de ESCRITA foi a causa do defeito.
+    /// </summary>
+    [Theory]
+    [InlineData("https://cpi.exemplo.local")]
+    [InlineData("https://cpi.exemplo.local/")]
+    [InlineData("")]
+    [InlineData("nao e uri")]
+    public void Int012_Factory_SemCaminhoNaoAdivinha(string baseUrl)
+        => Assert.Equal(string.Empty, FabricaProdutoAcabadoPaleteInt012Gateway.MontarEndpoint(baseUrl));
 
     private static string CaminhoProjeto(params string[] partes)
     {
