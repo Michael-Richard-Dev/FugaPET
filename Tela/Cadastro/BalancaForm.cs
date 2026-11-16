@@ -9,6 +9,7 @@ using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Tela.Comum;
+using FugaPET_Dev.Tela.Processo;
 using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela.Cadastro;
@@ -47,6 +48,13 @@ public partial class BalancaForm : Form
 
         InitializeComponent();
         IconeJanelaHelper.AplicarIconePadrao(this);
+
+        // GATE 127A: esta tela nascia com o logo Fuga Couros. A ESCALA de fonte nao entra aqui: ao
+        // contrario de Setor/Cargo, esta tela tem motor proprio (AjustarEscalaFontes), que recalcula
+        // toda fonte a cada Resize e apagaria qualquer escala aplicada no construtor. O alinhamento
+        // tipografico com a tela de Recebimento foi feito DENTRO daquele motor.
+        IdentidadeVisualFugaPet.AplicarNoCabecalho(companyLogoPictureBox, headerDividerLabel);
+
         ConfigurarRodape();
         ConfigurarEventos();
         ConfigurarCombos();
@@ -692,6 +700,11 @@ public partial class BalancaForm : Form
     {
         AjustarEscalaFontes();
         AjustarBotoesLayout();
+
+        // GATE 127A: com a fonte no corpo das telas principais, caixas dimensionadas para a fonte
+        // antiga cortariam o texto. A adaptacao so CRESCE (monotonica), entao reexecutar a cada
+        // Resize converge em vez de oscilar.
+        LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(contentLayout);
     }
 
     // Mesma logica de escala de fonte do SetorForm/CargoForm (Math.Clamp por tipo de controle),
@@ -704,47 +717,51 @@ public partial class BalancaForm : Form
         _escalaLista = csLista;
 
         // Card da lista (esquerda)
-        DefinirFonte(balancasTitleLabel, 8.5f, csLista, 8.5f, 12f, FontStyle.Bold);
-        DefinirFonte(novoBalancaTextLabel, 7.5f, csLista, 7.5f, 10.5f, FontStyle.Bold);
-        DefinirFonte(searchTextBox, 9f, csLista, 9f, 12f, FontStyle.Regular);
-        float tamanhoIconeBusca = Math.Clamp(11f * csLista, 11f, 14f);
+        DefinirFonte(balancasTitleLabel, 8.5f, csLista, 8.5f, FontStyle.Bold);
+        DefinirFonte(novoBalancaTextLabel, 7.5f, csLista, 7.5f, FontStyle.Bold);
+        DefinirFonte(searchTextBox, 9f, csLista, 9f, FontStyle.Regular);
+        // GATE 127B: glifo e ICONE, nao texto — cresce ate o teto comum e para, para nao dominar o cartao.
+        float tamanhoIconeBusca = Math.Clamp(
+            11f * LegibilidadeRecebimentoMercadoria.Escala * Math.Min(csLista, 1f),
+            11f,
+            IdentidadeVisualFugaPet.TetoFonteIcone);
         if (Math.Abs(searchIconLabel.Font.Size - tamanhoIconeBusca) > 0.05f)
         {
             searchIconLabel.Font = new Font("Segoe MDL2 Assets", tamanhoIconeBusca);
         }
-        DefinirFonte(listaNomeHeaderLabel, 7.5f, csLista, 7.5f, 10.5f, FontStyle.Bold);
-        DefinirFonte(listaDetalhesHeaderLabel, 7.5f, csLista, 7.5f, 10.5f, FontStyle.Bold);
-        DefinirFonte(listaSituacaoHeaderLabel, 7.5f, csLista, 7.5f, 10.5f, FontStyle.Bold);
-        DefinirFonte(quantidadeBalancasLabel, 8.5f, csLista, 8.5f, 11f, FontStyle.Regular);
+        DefinirFonte(listaNomeHeaderLabel, 7.5f, csLista, 7.5f, FontStyle.Bold);
+        DefinirFonte(listaDetalhesHeaderLabel, 7.5f, csLista, 7.5f, FontStyle.Bold);
+        DefinirFonte(listaSituacaoHeaderLabel, 7.5f, csLista, 7.5f, FontStyle.Bold);
+        DefinirFonte(quantidadeBalancasLabel, 8.5f, csLista, 8.5f, FontStyle.Regular);
 
         // Card de dados (centro)
-        DefinirFonte(dadosTitleLabel, 8.5f, csDados, 9f, 12.5f, FontStyle.Bold);
+        DefinirFonte(dadosTitleLabel, 8.5f, csDados, 9f, FontStyle.Bold);
         foreach (Label secao in new[] { identificacaoSectionLabel, conexaoSectionLabel, parametrosSeriaisSectionLabel, observacaoSectionLabel })
-            DefinirFonte(secao, 8f, csDados, 8.5f, 11f, FontStyle.Bold);
+            DefinirFonte(secao, 8f, csDados, 8.5f, FontStyle.Bold);
         foreach (Label rotulo in new[]
         {
             nomeBalancaLabel, setorLabel, identificacaoLocalLabel, situacaoLabel, tipoConexaoLabel,
             enderecoIpLabel, portaTcpLabel, portaSerialLabel, baudRateLabel, dataBitsLabel,
             paridadeLabel, stopBitsLabel, flowControlLabel, protocoloLabel
         })
-            DefinirFonte(rotulo, 7.75f, csDados, 8.5f, 11f, FontStyle.Bold);
+            DefinirFonte(rotulo, 7.75f, csDados, 8.5f, FontStyle.Bold);
         foreach (Control campo in new Control[]
         {
             nomeBalancaTextBox, setorComboBox, identificacaoLocalTextBox, situacaoTextBox, tipoConexaoComboBox,
             enderecoIpTextBox, portaTcpTextBox, portaSerialTextBox, baudRateTextBox, dataBitsTextBox,
             paridadeComboBox, stopBitsComboBox, flowControlComboBox, protocoloTextBox, observacaoTextBox
         })
-            DefinirFonte(campo, 9f, csDados, 9f, 12f, FontStyle.Regular);
-        DefinirFonte(manualWarningLabel, 8.5f, csDados, 8.5f, 11f, FontStyle.Bold);
+            DefinirFonte(campo, 9f, csDados, 9f, FontStyle.Regular);
+        DefinirFonte(manualWarningLabel, 8.5f, csDados, 8.5f, FontStyle.Bold);
 
         // Card de resumo (direita)
-        DefinirFonte(resumoTitleLabel, 8.5f, csResumo, 9f, 12.5f, FontStyle.Bold);
+        DefinirFonte(resumoTitleLabel, 8.5f, csResumo, 9f, FontStyle.Bold);
         foreach (Label legenda in new[] { resumoNomeLabel, resumoSetorLabel, resumoConexaoLabel, resumoSituacaoLabel })
-            DefinirFonte(legenda, 8.5f, csResumo, 8.5f, 11.5f, FontStyle.Regular);
+            DefinirFonte(legenda, 8.5f, csResumo, 8.5f, FontStyle.Regular);
         foreach (Label valor in new[] { resumoNomeValueLabel, resumoSetorValueLabel, resumoConexaoValueLabel, resumoSituacaoValueLabel })
-            DefinirFonte(valor, 8.5f, csResumo, 8.5f, 12f, FontStyle.Bold);
+            DefinirFonte(valor, 8.5f, csResumo, 8.5f, FontStyle.Bold);
         foreach (Button botao in new[] { salvarButton, salvarAlteracoesButton, alterarSituacaoButton })
-            DefinirFonte(botao, 8f, csResumo, 8f, 11f, FontStyle.Bold);
+            DefinirFonte(botao, 8f, csResumo, 8f, FontStyle.Bold);
     }
 
     private static float CalcularEscala(Control card, float baseLargura, float baseAltura)
@@ -756,9 +773,24 @@ public partial class BalancaForm : Form
     // Largura do badge de Situacao das linhas, escalada com a lista (usada na linha e no cabecalho).
     private int LarguraBadgeSituacao() => Math.Max(64, (int)Math.Round(64 * _escalaLista));
 
-    private static void DefinirFonte(Control controle, float tamanhoBase, float escala, float minimo, float maximo, FontStyle estilo)
+    /// <summary>
+    /// GATE 127A — corpo final de um controle de conteudo desta tela.
+    /// <para>
+    /// O ALVO e o mesmo das telas ja alinhadas (Setor, Cargo, Recebimento): o tamanho base vezes
+    /// <see cref="LegibilidadeRecebimentoMercadoria.Escala"/>. Antes o teto era ~12pt, e era por isso
+    /// que esta tela parecia ter "fonte menor" que as principais.
+    /// </para>
+    /// <para>
+    /// O fator do cartao so REDUZ, nunca amplia: numa janela pequena o texto encolhe em vez de ser
+    /// cortado, e numa janela grande ele para no alvo em vez de crescer sem limite. O piso continua
+    /// sendo o <paramref name="minimo"/> pedido por quem chama.
+    /// </para>
+    /// </summary>
+    private static void DefinirFonte(Control controle, float tamanhoBase, float escala, float minimo, FontStyle estilo)
     {
-        float tamanho = Math.Clamp(tamanhoBase * escala, minimo, maximo);
+        float alvo = tamanhoBase * LegibilidadeRecebimentoMercadoria.Escala;
+        float piso = Math.Max(minimo, tamanhoBase);
+        float tamanho = Math.Clamp(alvo * Math.Min(escala, 1f), piso, alvo);
         if (Math.Abs(controle.Font.Size - tamanho) < 0.05f && controle.Font.Style == estilo)
         {
             return;
