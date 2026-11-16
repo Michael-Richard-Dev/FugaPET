@@ -52,6 +52,25 @@ public partial class SetorForm : Form
         _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
         global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
+
+        // GATE 127A: identidade e legibilidade no padrao das telas principais. A tela exibia o logo
+        // Fuga Couros e fonte menor que a de Recebimento de Mercadoria.
+        //
+        // A escala recebe o contentPanel, NAO o formulario: barra de titulo e rodape sao comuns a
+        // todas as telas e ficam no tamanho padrao, como ja acontece na Recebimento. E os tres
+        // Layout*Card sao reexecutados DEPOIS, porque calculam geometria a partir do texto — sem
+        // isso, o conteudo cresceria dentro de caixas dimensionadas para a fonte antiga.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarEscalaDeConteudo(
+            contentPanel,
+            () =>
+            {
+                LayoutProfilesCard();
+                LayoutDetailsCard();
+                LayoutSummaryCard();
+            });
+
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";

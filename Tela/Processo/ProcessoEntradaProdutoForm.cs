@@ -240,10 +240,10 @@ public partial class ProcessoEntradaProdutoForm : Form
         // §4 Identidade FugaPET (substitui o branding local Fuga Couros pelo logo FugaPET aprovado). O logo é
         // renderizado em BRANCO sobre o laranja (não cinza), preservando a transparência; a barrinha divisória
         // do cabeçalho também vai a branco.
-        companyLogoPictureBox.Image = CarregarLogoFugaPetBranco();
-        companyLogoPictureBox.Tag = "FUGAPET_LOGO";
-        logoSaLabel.ForeColor = Color.White;
-        headerDividerLabel.BackColor = Color.White;
+        // GATE 127A: o mesmo helper usado pelas demais telas. O trecho era privado daqui, e por isso
+        // nenhuma outra tela tinha a identidade FugaPET.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel, logoSaLabel);
 
         // §5 Ícone do título: fundo LARANJA FugaPET + desenho de TRAÇOS BRANCOS (asset aprovado). Sem vermelho/rosa.
         headerTitleIconPanel.BackColor = Color.Transparent;
@@ -292,20 +292,8 @@ public partial class ProcessoEntradaProdutoForm : Form
         PerformLayout();
     }
 
-    private static Image CarregarLogoFugaPetBranco()
-    {
-        string caminho = Path.Combine(
-            AppContext.BaseDirectory,
-            "Servicos\\image\\FugaPet branco sem fundo.png");
-
-        if (!File.Exists(caminho))
-        {
-            return global::FugaPET_Dev.Properties.Resources.fuga_2026_logo;
-        }
-
-        using Image imagem = Image.FromFile(caminho);
-        return new Bitmap(imagem);
-    }
+    // GATE 127A: CarregarLogoFugaPetBranco foi promovido a IdentidadeVisualFugaPet.CarregarLogoBranco,
+    // em Tela/Comum. A copia privada daqui foi removida para nao haver duas verdades sobre o asset.
 
     private static Bitmap ExtrairTracosBrancos(Bitmap origem)
     {

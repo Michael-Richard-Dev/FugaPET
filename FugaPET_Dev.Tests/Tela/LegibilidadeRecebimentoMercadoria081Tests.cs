@@ -45,6 +45,30 @@ public sealed class LegibilidadeRecebimentoMercadoria081Tests
         throw new FileNotFoundException(arquivo);
     }
 
+    /// <summary>GATE 127A: le um arquivo de Tela/Comum, onde vive a identidade compartilhada.</summary>
+    private static string LerComum(string arquivo)
+    {
+        string raiz = AppContext.BaseDirectory;
+        for (int i = 0; i < 9; i++)
+        {
+            foreach (string cand in new[]
+            {
+                Path.Combine(raiz, "Tela", "Comum", arquivo),
+                Path.Combine(raiz, "FugaPet_HML", "Tela", "Comum", arquivo)
+            })
+            {
+                if (File.Exists(cand))
+                {
+                    return File.ReadAllText(cand);
+                }
+            }
+
+            raiz = Path.GetFullPath(Path.Combine(raiz, ".."));
+        }
+
+        throw new FileNotFoundException($"Fonte nao encontrado: Tela/Comum/{arquivo}");
+    }
+
     private static string FonteTela() => Ler("ProcessoEntradaProdutoForm.cs");
     private static string FonteDesigner() => Ler("ProcessoEntradaProdutoForm.Designer.cs");
     private static string FonteHelper() => Ler("LegibilidadeRecebimentoMercadoria.cs");
@@ -166,11 +190,62 @@ public sealed class LegibilidadeRecebimentoMercadoria081Tests
     {
         string src = FonteTela();
         Assert.Contains("if (_modoEntrada != global::FugaPET_Dev.Modelo.Processo.ModoEntradaMaterial.RecebimentoMercadoria)", src, StringComparison.Ordinal);
-        Assert.Contains("CarregarLogoFugaPetBranco()", src, StringComparison.Ordinal);
-        Assert.Contains("Servicos\\\\image\\\\FugaPet branco sem fundo.png", src, StringComparison.Ordinal);
-        Assert.Contains("headerDividerLabel.BackColor = Color.White;", src, StringComparison.Ordinal);
         Assert.Contains("_controller.ConsultarPedidoAsync(numeroPedido, _modoEntrada", src, StringComparison.Ordinal);
+
+        // GATE 127A: o branding continua sendo aplicado, mas pelo HELPER compartilhado. Este teste
+        // afirmava a copia PRIVADA desta tela (CarregarLogoFugaPetBranco e o caminho do asset), o
+        // que prendia o codigo aqui — e foi justamente por isso que nenhuma outra tela tinha a
+        // identidade FugaPET. Agora verifica a CHAMADA aqui e o CONTEUDO la.
+        Assert.Contains("IdentidadeVisualFugaPet.AplicarNoCabecalho(", src, StringComparison.Ordinal);
+        Assert.Contains("companyLogoPictureBox, headerDividerLabel, logoSaLabel", src, StringComparison.Ordinal);
+        Assert.DoesNotContain("CarregarLogoFugaPetBranco()", src, StringComparison.Ordinal);
+
+        string helper = LerComum("IdentidadeVisualFugaPet.cs");
+        Assert.Contains("Servicos\\\\image\\\\FugaPet branco sem fundo.png", helper, StringComparison.Ordinal);
+        Assert.Contains("divisor.BackColor = Color.White;", helper, StringComparison.Ordinal);
+        Assert.Contains("FUGAPET_LOGO", helper, StringComparison.Ordinal);
+
+        // Asset ausente NAO pode deixar a tela sem logo nenhum.
+        Assert.Contains("Resources.fuga_2026_logo", helper, StringComparison.Ordinal);
     }
+
+    // GATE 127B: glifo de fonte-símbolo é ÍCONE, não texto. Dobrá-lo levava os 14/16/18pt dos cartões de
+    // cadastro a 28/32/36pt e estourava as caixas (defeito visto na tela de Setor). Cresce até o teto do
+    // padrão aprovado e para. Texto comum no mesmo painel continua dobrando.
+    [Fact]
+    public void Icone_CresceAteOTeto_TextoComumContinuaDobrando()
+        => ExecutarEmSta(() =>
+        {
+            using Panel raiz = new() { Size = new Size(400, 300) };
+            Label glifoGrande = new() { Font = new Font("Segoe MDL2 Assets", 18F), AutoSize = false, Size = new Size(40, 40) };
+            Label glifoMedio = new() { Font = new Font("Segoe MDL2 Assets", 14F), AutoSize = false, Size = new Size(40, 40) };
+            Label glifoPequeno = new() { Font = new Font("Segoe UI Symbol", 8F, FontStyle.Bold), AutoSize = false, Size = new Size(40, 40) };
+            Label texto = new() { Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), AutoSize = false, Size = new Size(200, 24) };
+            raiz.Controls.AddRange([glifoGrande, glifoMedio, glifoPequeno, texto]);
+
+            global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarEscalaDeConteudo(raiz);
+
+            float teto = global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.TetoFonteIcone;
+            Assert.Equal(teto, glifoGrande.Font.Size, 3);   // 18 -> 18 (não 36)
+            Assert.Equal(teto, glifoMedio.Font.Size, 3);    // 14 -> 18 (não 28)
+            Assert.Equal(16F, glifoPequeno.Font.Size, 3);   // 8 -> 16: abaixo do teto, dobra normal
+            Assert.Equal(17F, texto.Font.Size, 3);          // texto comum dobra
+            // o estilo do glifo é preservado (negrito do check mark).
+            Assert.Equal(FontStyle.Bold, glifoPequeno.Font.Style);
+        });
+
+    [Fact] // Um ícone já acima do teto não ENCOLHE: seria regressão de legibilidade na tela que o escolheu.
+    public void Icone_AcimaDoTeto_NaoEncolhe()
+        => ExecutarEmSta(() =>
+        {
+            using Panel raiz = new() { Size = new Size(200, 200) };
+            Label glifo = new() { Font = new Font("Segoe MDL2 Assets", 24F), AutoSize = false, Size = new Size(60, 60) };
+            raiz.Controls.Add(glifo);
+
+            global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarEscalaDeConteudo(raiz);
+
+            Assert.Equal(24F, glifo.Font.Size, 3);
+        });
 
     [Fact] // Ícone do recebimento mantém somente os traços brancos, sem fundo colorido.
     public void Tela_IconeRecebimentoSomenteBranco_SemFundoColorido()
