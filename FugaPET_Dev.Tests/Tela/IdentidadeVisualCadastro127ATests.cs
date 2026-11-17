@@ -27,6 +27,7 @@ public sealed class IdentidadeVisualCadastro127ATests
         "SetorForm.cs",
         "CargoForm.cs",
         "TipoTaraForm.cs",
+        "TaraForm.cs",
         "BalancaForm.cs"
     ];
 
@@ -40,7 +41,8 @@ public sealed class IdentidadeVisualCadastro127ATests
     [
         "SetorForm.cs",
         "CargoForm.cs",
-        "TipoTaraForm.cs"
+        "TipoTaraForm.cs",
+        "TaraForm.cs"
     ];
 
     private static string LerCadastro(string arquivo)
@@ -109,6 +111,26 @@ public sealed class IdentidadeVisualCadastro127ATests
         {
             Assert.Contains(layout, continuacao, StringComparison.Ordinal);
         }
+    }
+
+    // GATE 127A — a tela de Tara cria controles em TEMPO DE EXECUCAO (campo de tamanho e mensagem de
+    // estado vazio). A escala percorre a arvore de controles existente: aplicada antes da criacao,
+    // esses dois nascem na fonte antiga e ficam visivelmente menores que o resto do cartao. Nenhuma
+    // outra tela de cadastro tem esse problema, entao a ordem aqui e facil de desfazer num refactor.
+    [Fact]
+    public void Tara_EscalaVemDepoisDosControlesCriadosEmRuntime()
+    {
+        string src = LerCadastro("TaraForm.cs");
+
+        int iCampo = src.IndexOf("CriarCampoTamanhoRuntime();", StringComparison.Ordinal);
+        int iMensagem = src.IndexOf("CriarMensagemEstadoVazioRuntime();", StringComparison.Ordinal);
+        int iEscala = src.IndexOf("AplicarEscalaDeConteudo(", StringComparison.Ordinal);
+
+        Assert.True(iCampo >= 0, "CriarCampoTamanhoRuntime sumiu — reavaliar a ordem desta tela");
+        Assert.True(iMensagem >= 0, "CriarMensagemEstadoVazioRuntime sumiu — reavaliar a ordem desta tela");
+        Assert.True(
+            iEscala > iCampo && iEscala > iMensagem,
+            "a escala precisa vir DEPOIS dos controles criados em runtime, senao eles ficam na fonte antiga");
     }
 
     // GATE 127A — a tela de Balanca tem motor de fonte PROPRIO, que recalcula tudo a cada Resize. Uma

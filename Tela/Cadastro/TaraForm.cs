@@ -82,6 +82,28 @@ public partial class TaraForm : Form
         CriarCampoTamanhoRuntime();
         CriarMensagemEstadoVazioRuntime();
 
+        // GATE 127A/127B: esta tela nascia com o logo Fuga Couros e fonte menor que a de Recebimento
+        // de Mercadoria.
+        //
+        // A ORDEM IMPORTA AQUI: diferente das demais telas de cadastro, esta cria controles em tempo
+        // de execucao (campo de tamanho e mensagem de estado vazio). Aplicar a escala antes deles os
+        // deixaria na fonte antiga, visivelmente menores que o resto do cartao. Por isso a chamada
+        // vem DEPOIS da criacao, e nao junto do logo.
+        //
+        // A escala recebe o contentPanel, NAO o formulario: barra de titulo e rodape sao comuns a
+        // todas as telas. Os Layout*Card sao reexecutados depois, porque calculam geometria a partir
+        // do texto.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarEscalaDeConteudo(
+            contentPanel,
+            () =>
+            {
+                LayoutProfilesCard();
+                LayoutDetailsCard();
+                LayoutSummaryCard();
+            });
+
         profilesCard.Resize += (_, _) => LayoutProfilesCard();
         detailsCard.Resize += (_, _) => LayoutDetailsCard();
         summaryCard.Resize += (_, _) => LayoutSummaryCard();
