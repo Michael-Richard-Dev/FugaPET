@@ -96,6 +96,35 @@ public sealed class CadastroUsuarioLista128ATests
             Assert.True(marcadores.Count >= 20, $"marcador cobre {marcadores.Count} linhas");
         });
 
+    // GATE 128A — GarantirLinhasDeUsuario CLONA a primeira linha, entao toda linha criada em runtime
+    // tem de sair com a MESMA tipografia e altura do modelo. Vale para a fonte atual e valeria para
+    // uma fonte ampliada, se um dia esta tela receber a escala (hoje nao recebe: ver
+    // Usuario_RecebeLogoMasNaoAEscalaCompartilhada). Sem isso a lista ficaria com as quatro
+    // primeiras linhas num tamanho e as demais noutro — o que nao quebra nada, so fica feio.
+    [Fact]
+    public void Lista_LinhasNovasNascemComATipografiaDaTela()
+        => ExecutarEmSta(() =>
+        {
+            using CadastroUsuarioForm form = new();
+
+            Label modeloLogin = Campo<Label>(form, "profileRow1LoginLabel");
+            Panel modeloLinha = Campo<Panel>(form, "profileRow1Panel");
+            float corpoModelo = modeloLogin.Font.Size;
+            int alturaModelo = modeloLinha.Height;
+
+            GarantirLinhas(form, 12);
+
+            var linhas = Campo<System.Collections.IList>(form, "_linhasUsuario");
+            object ultima = linhas[linhas.Count - 1]!;
+
+            // Tupla nomeada: os nomes existem so em tempo de compilacao; por reflexao sao Item1..ItemN.
+            Panel linhaNova = (Panel)ultima.GetType().GetField("Item1")!.GetValue(ultima)!;
+            Label loginNovo = (Label)ultima.GetType().GetField("Item2")!.GetValue(ultima)!;
+
+            Assert.Equal(corpoModelo, loginNovo.Font.Size, 2);
+            Assert.Equal(alturaModelo, linhaNova.Height);
+        });
+
     // As linhas sao empilhadas sem sobreposicao nem buraco: cada uma comeca onde a anterior termina.
     [Fact]
     public void Lista_EmpilhaLinhasSemSobreposicao()

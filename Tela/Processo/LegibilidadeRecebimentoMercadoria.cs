@@ -136,6 +136,26 @@ public static class LegibilidadeRecebimentoMercadoria
         if (controle is Label or Button or CheckBox or TextBox && !controle.AutoSize)
         {
             int necessario = controle.PreferredSize.Height;
+
+            // GATE 127C — rotulo que QUEBRA LINHA. PreferredSize mede como se a largura fosse infinita
+            // e devolve a altura de UMA linha; com a fonte ampliada a mensagem passa a ocupar duas ou
+            // mais e seria CORTADA, sem o controle "parecer" pequeno. A medicao abaixo respeita a
+            // largura real do controle. Descoberto na tela de Consumo de Material, onde a orientacao
+            // de status precisava de 120px e o rotulo tinha 28.
+            if (controle is Label && controle.Width > 0 && !string.IsNullOrEmpty(controle.Text))
+            {
+                int comQuebraDeLinha = TextRenderer.MeasureText(
+                    controle.Text,
+                    controle.Font,
+                    new Size(controle.Width, int.MaxValue),
+                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+
+                if (comQuebraDeLinha > necessario)
+                {
+                    necessario = comQuebraDeLinha;
+                }
+            }
+
             if (controle.Height < necessario)
             {
                 controle.MinimumSize = new Size(controle.MinimumSize.Width, necessario);

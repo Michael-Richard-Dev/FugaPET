@@ -214,6 +214,22 @@ public partial class ProcessoConsumoMaterialForm : Form
         ConfigurarCausesValidacaoOperacional();
         UpdateProductionCounters();
         LimparDadosOrdem();
+
+        // GATE 127A: identidade FugaPET no cabecalho. SOMENTE o logo.
+        //
+        // A ESCALA DE FONTE NAO ENTRA AQUI, e isso e deliberado. A tela de Recebimento aguenta a
+        // fonte 2x porque recebeu trabalho DEDICADO de layout — metodos que alargam a coluna do
+        // painel lateral, redimensionam as colunas da grade, reempilham a toolbar e recalculam o
+        // orcamento de altura. Esta tela nao tem nada disso: a geometria e fixa, e a adaptacao
+        // compartilhada so cresce ALTURAS, nunca larguras.
+        //
+        // Aplicar a escala aqui foi tentado em 17/11/2026 e reprovado na conferencia visual: os
+        // rotulos se sobrepunham, os cabecalhos da grade viravam "O ...", e o painel lateral
+        // cortava o texto. Antes de tentar de novo, esta tela precisa do mesmo tratamento de
+        // largura que a de Recebimento tem.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel, logoSaLabel);
+
         KeyPreview = true;
         Shown += ProcessoProdutoAcabadoForm_Shown;
         FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
@@ -3271,11 +3287,33 @@ public partial class ProcessoConsumoMaterialForm : Form
         // GATE 102K-J: a mensagem completa tem duas frases. Em uma única linha o Label (AutoSize) crescia
         // horizontalmente e era CLIPADO pela borda do card (só "Consumo já pesado e salvo." ficava visível).
         // Config determinística de 2 linhas dentro do card (183px): AutoSize off, sem ellipse, altura p/ 2 linhas.
+        // GATE 127C: o 165x28 que estava cravado aqui foi medido para a fonte ANTIGA. Com a tipografia
+        // no padrao das telas principais a mesma mensagem ocupa mais linhas e seria cortada — e sem o
+        // controle "parecer" pequeno, porque o texto simplesmente some abaixo da borda. O tamanho passa
+        // a ser DERIVADO da largura do card e da fonte vigente, entao serve a qualquer escala.
         statusHintLabel.AutoSize = false;
         statusHintLabel.AutoEllipsis = false;
-        statusHintLabel.Size = new Size(165, 28);
         statusHintLabel.TextAlign = ContentAlignment.TopLeft;
         statusHintLabel.Text = "Consumo já pesado e salvo." + Environment.NewLine + "Aguardando envio ao SAP.";
+
+        const int margemLateralDoCard = 18;
+        const int margemInferiorDoCard = 8;
+
+        int larguraHint = Math.Max(120, statusCard.Width - margemLateralDoCard);
+        int alturaHint = TextRenderer.MeasureText(
+            statusHintLabel.Text,
+            statusHintLabel.Font,
+            new Size(larguraHint, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+
+        statusHintLabel.Size = new Size(larguraHint, Math.Max(28, alturaHint));
+
+        // O card so CRESCE: encolher aqui mexeria no layout aprovado das demais situacoes.
+        int alturaNecessariaDoCard = statusHintLabel.Bottom + margemInferiorDoCard;
+        if (statusCard.Height < alturaNecessariaDoCard)
+        {
+            statusCard.Height = alturaNecessariaDoCard;
+        }
         statusHintLabel.ForeColor = Color.FromArgb(98, 108, 124);
         statusCard.Invalidate(true);
         statusCardIcon.Invalidate();

@@ -61,6 +61,20 @@ public partial class CadastroUsuarioForm : Form
         LayoutSummaryCard();
         ApplyProfilesFilter();
         ConectarAcoesCadastro();
+
+        // GATE 127A: identidade FugaPET no cabecalho. SOMENTE o logo.
+        //
+        // A ESCALA DE FONTE NAO ENTRA AQUI, e isso e deliberado. Foi tentada em 17/11/2026 e
+        // reprovada na conferencia visual: o cartao de dados tem geometria fixa, entao com a fonte
+        // ampliada o botao "Novo Usuario" estourava, os campos desciam e eram cortados pela borda
+        // do cartao (Cargo, Setor, Perfil e Situacao sumiam da tela) e os selos de situacao se
+        // desencontravam das linhas da lista.
+        //
+        // E o mesmo limite da tela de Consumo de Material: a adaptacao compartilhada so cresce
+        // ALTURAS, nunca LARGURAS, e so a tela de Recebimento tem o ajuste de largura sob medida que
+        // a fonte 2x exige. Antes de tentar de novo aqui, esta tela precisa desse mesmo trabalho.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
         FormClosed += (_, _) =>
         {
             _selecaoUsuarioCts?.Cancel();

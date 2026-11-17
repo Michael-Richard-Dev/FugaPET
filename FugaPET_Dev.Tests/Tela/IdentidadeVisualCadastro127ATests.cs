@@ -7,7 +7,7 @@ using FugaPET_Dev.Tela.Processo;
 namespace FugaPET_Dev.Tests.Tela;
 
 /// <summary>
-/// GATE 127A — identidade visual FugaPET nas telas de CADASTRO.
+/// GATE 127A — identidade visual FugaPET nas telas promovidas ao padrao.
 /// <para>
 /// POR QUE EXISTE: ate 16/11/2026 so a tela de Recebimento de Mercadoria trocava o logo Fuga Couros pelo
 /// FugaPET e ampliava a fonte; o codigo vivia PRIVADO nela. As telas de cadastro exibiam o logo antigo em
@@ -21,14 +21,19 @@ namespace FugaPET_Dev.Tests.Tela;
 /// </summary>
 public sealed class IdentidadeVisualCadastro127ATests
 {
-    /// <summary>Toda tela de cadastro ja promovida ao padrao visual exibe o logo FugaPET.</summary>
+    /// <summary>
+    /// Toda tela ja promovida ao padrao visual exibe o logo FugaPET. O caminho traz a PASTA porque a
+    /// promocao saiu de Cadastro e alcancou Processo.
+    /// </summary>
     public static TheoryData<string> TelasPromovidas() =>
     [
-        "SetorForm.cs",
-        "CargoForm.cs",
-        "TipoTaraForm.cs",
-        "TaraForm.cs",
-        "BalancaForm.cs"
+        "Cadastro/SetorForm.cs",
+        "Cadastro/CargoForm.cs",
+        "Cadastro/TipoTaraForm.cs",
+        "Cadastro/TaraForm.cs",
+        "Cadastro/CadastroUsuarioForm.cs",
+        "Cadastro/BalancaForm.cs",
+        "Processo/ProcessoConsumoMaterialForm.cs"
     ];
 
     /// <summary>
@@ -39,21 +44,24 @@ public sealed class IdentidadeVisualCadastro127ATests
     /// </summary>
     public static TheoryData<string> TelasComCartoesRecalculados() =>
     [
-        "SetorForm.cs",
-        "CargoForm.cs",
-        "TipoTaraForm.cs",
-        "TaraForm.cs"
+        "Cadastro/SetorForm.cs",
+        "Cadastro/CargoForm.cs",
+        "Cadastro/TipoTaraForm.cs",
+        "Cadastro/TaraForm.cs"
     ];
 
-    private static string LerCadastro(string arquivo)
+    /// <summary><paramref name="caminhoRelativo"/> no formato "Pasta/Arquivo.cs" dentro de Tela/.</summary>
+    private static string LerCadastro(string caminhoRelativo)
     {
+        string[] partes = caminhoRelativo.Split('/');
         string raiz = AppContext.BaseDirectory;
+
         for (int i = 0; i < 9; i++)
         {
             foreach (string cand in new[]
             {
-                Path.Combine(raiz, "Tela", "Cadastro", arquivo),
-                Path.Combine(raiz, "FugaPet_HML", "Tela", "Cadastro", arquivo)
+                Path.Combine([raiz, "Tela", .. partes]),
+                Path.Combine([raiz, "FugaPet_HML", "Tela", .. partes])
             })
             {
                 if (File.Exists(cand))
@@ -65,7 +73,7 @@ public sealed class IdentidadeVisualCadastro127ATests
             raiz = Path.GetFullPath(Path.Combine(raiz, ".."));
         }
 
-        throw new FileNotFoundException($"Fonte nao encontrado: Tela/Cadastro/{arquivo}");
+        throw new FileNotFoundException($"Fonte nao encontrado: Tela/{caminhoRelativo}");
     }
 
     [Theory]
@@ -120,7 +128,7 @@ public sealed class IdentidadeVisualCadastro127ATests
     [Fact]
     public void Tara_EscalaVemDepoisDosControlesCriadosEmRuntime()
     {
-        string src = LerCadastro("TaraForm.cs");
+        string src = LerCadastro("Cadastro/TaraForm.cs");
 
         int iCampo = src.IndexOf("CriarCampoTamanhoRuntime();", StringComparison.Ordinal);
         int iMensagem = src.IndexOf("CriarMensagemEstadoVazioRuntime();", StringComparison.Ordinal);
@@ -131,6 +139,42 @@ public sealed class IdentidadeVisualCadastro127ATests
         Assert.True(
             iEscala > iCampo && iEscala > iMensagem,
             "a escala precisa vir DEPOIS dos controles criados em runtime, senao eles ficam na fonte antiga");
+    }
+
+    // GATE 127A — Cadastro de Usuario recebe o logo, mas NAO a escala de fonte compartilhada.
+    //
+    // Tentada em 17/11/2026 e reprovada na conferencia visual: o botao "Novo Usuario" estourava, os
+    // campos do cartao de dados eram cortados pela borda (Cargo, Setor, Perfil e Situacao sumiam) e
+    // os selos de situacao se desencontravam das linhas. Mesmo limite da tela de Consumo.
+    //
+    // Quando esta tela ganhar o ajuste de LARGURA que a de Recebimento tem, troque este teste pelos
+    // de escala — nao o apague em silencio.
+    [Fact]
+    public void Usuario_RecebeLogoMasNaoAEscalaCompartilhada()
+    {
+        string src = LerCadastro("Cadastro/CadastroUsuarioForm.cs");
+
+        Assert.Contains("IdentidadeVisualFugaPet.AplicarNoCabecalho(", src, StringComparison.Ordinal);
+        Assert.DoesNotContain("AplicarEscalaDeConteudo(", src, StringComparison.Ordinal);
+    }
+
+    // GATE 127A — Consumo de Material recebe o logo, mas NAO a escala de fonte compartilhada.
+    //
+    // Nao e esquecimento. A escala foi aplicada em 17/11/2026 e REPROVADA na conferencia visual: os
+    // rotulos se sobrepunham, os cabecalhos da grade viravam "O ...", e o painel lateral cortava o
+    // texto. A tela de Recebimento aguenta 2x porque tem metodos dedicados que ajustam LARGURAS
+    // (painel lateral, colunas da grade, toolbar); a adaptacao compartilhada so cresce ALTURAS.
+    //
+    // Este teste existe para que ninguem re-adicione a escala aqui sem antes dar a esta tela o
+    // mesmo tratamento de largura. Quando esse trabalho for feito, troque este teste pelos de
+    // escala — nao o apague em silencio.
+    [Fact]
+    public void Consumo_RecebeLogoMasNaoAEscalaCompartilhada()
+    {
+        string src = LerCadastro("Processo/ProcessoConsumoMaterialForm.cs");
+
+        Assert.Contains("IdentidadeVisualFugaPet.AplicarNoCabecalho(", src, StringComparison.Ordinal);
+        Assert.DoesNotContain("AplicarEscalaDeConteudo(", src, StringComparison.Ordinal);
     }
 
     // GATE 127A — a tela de Balanca tem motor de fonte PROPRIO, que recalcula tudo a cada Resize. Uma
