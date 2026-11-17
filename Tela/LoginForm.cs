@@ -26,14 +26,62 @@ public partial class LoginForm : Form
         PerformLayout();
     }
 
+    private static int Arredondar(float valor) => (int)Math.Round(valor, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// GATE 129A — largura do texto mais largo do card, medida na fonte que cada rotulo REALMENTE tem
+    /// no momento (ja ampliada e ja renderizada no DPI da maquina). E isso que impede o corte.
+    /// </summary>
+    private int LarguraDoTextoMaisLargo()
+    {
+        Label[] textos = [titleLabel, subtitleLabel, userLabel, passwordLabel, messageLabel, versionLabel];
+        int maior = 0;
+
+        foreach (Label rotulo in textos)
+        {
+            if (string.IsNullOrWhiteSpace(rotulo.Text))
+            {
+                continue;
+            }
+
+            int largura = TextRenderer.MeasureText(rotulo.Text, rotulo.Font).Width;
+            if (largura > maior)
+            {
+                maior = largura;
+            }
+        }
+
+        // A mensagem de erro so aparece depois de uma tentativa, entao ela NAO esta no Text agora.
+        // Reservar a largura dela aqui evita o card "pular" de tamanho quando o erro aparece — e era
+        // justamente essa frase que tambem cortava no notebook.
+        int larguraMensagem = TextRenderer.MeasureText(
+            "Nao foi possivel concluir a operacao. Acione o suporte.", messageLabel.Font).Width;
+
+        return Math.Max(maior, larguraMensagem);
+    }
+
     // Reflow do card de login para a fonte 2.0x: empilha os elementos com altura preferida, cresce as caixas de
     // input (com o TextBox/ícone dentro) e os botões, alarga tudo e redimensiona o card central.
     private void AjustarCardLogin()
     {
-        const int margem = 44;
-        const int larguraCard = 600;
-        int larguraItem = larguraCard - (margem * 2);
-        int y = 28;
+        // GATE 129A — a largura do card NAO pode ser um numero de pixels cravado.
+        //
+        // Antes era `larguraCard = 600`, o que dava 512px de caixa para os rotulos. As FONTES
+        // acompanham o DPI da maquina; 512 pixels nao acompanham. Nesta estacao, a 100%, o titulo
+        // "Acesso ao Sistema" na fonte 2x ocupa 440 de 512 — passa com 14% de folga. Num notebook
+        // 2560x1600 a 150% o mesmo texto pede 660px, e o final da frase sumia: a tela mostrava
+        // "Acesso ao". Mesma causa para o subtitulo e para a mensagem de erro.
+        //
+        // Agora a caixa e DERIVADA do conteudo: parte do desenho original corrigido pelo DPI e
+        // cresce ate caber o texto mais largo. Isso se corrige sozinho em qualquer DPI e tambem se
+        // a escala de fonte mudar.
+        float fatorDpi = DeviceDpi / 96f;
+        int margem = Arredondar(44 * fatorDpi);
+        int larguraMinimaItem = Arredondar(512 * fatorDpi);
+
+        int larguraItem = Math.Max(larguraMinimaItem, LarguraDoTextoMaisLargo());
+        int larguraCard = larguraItem + (margem * 2);
+        int y = Arredondar(28 * fatorDpi);
 
         // Logo no topo, centralizado (mantém o tamanho da imagem).
         logoHeaderPanel.Left = (larguraCard - logoHeaderPanel.Width) / 2;
@@ -60,7 +108,7 @@ public partial class LoginForm : Form
         Faixa(exitButton, 52, 12);
         Faixa(versionLabel, 24, 0);
 
-        loginPanel.Size = new Size(larguraCard, y + 24);
+        loginPanel.Size = new Size(larguraCard, y + Arredondar(24 * fatorDpi));
 
         // Centraliza o card no container de forma explícita (o Anchor=None fica impreciso após crescer o card).
         Control host = loginPanel.Parent ?? this;
