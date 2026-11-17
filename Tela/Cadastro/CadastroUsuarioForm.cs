@@ -616,46 +616,127 @@ public partial class CadastroUsuarioForm : Form
         };
     }
 
+    /// <summary>
+    /// GATE 128A: linhas da lista de usuarios.
+    /// <para>
+    /// As quatro primeiras vem do Designer; as demais sao criadas em runtime, clonando a primeira.
+    /// Ate 17/11/2026 existiam SO as quatro fixas, entao a tela mostrava no maximo quatro usuarios
+    /// por mais que o banco tivesse — e a consulta sempre trouxe todos. Com a carga do cadastro do
+    /// QAS110 o DEV110 passou de 2 para 35 usuarios e o teto ficou evidente.
+    /// </para>
+    /// </summary>
+    private readonly List<(Panel RowPanel, Label LoginLabel, Label CargoLabel, Label StatusLabel)> _linhasUsuario = new();
+
+    /// <summary>Garante que existam ao menos <paramref name="quantidade"/> linhas na lista.</summary>
+    private void GarantirLinhasDeUsuario(int quantidade)
+    {
+        if (_linhasUsuario.Count == 0)
+        {
+            _linhasUsuario.Add((profileRow1Panel, profileRow1LoginLabel, profileRow1CargoLabel, profileRow1StatusLabel));
+            _linhasUsuario.Add((profileRow2Panel, profileRow2LoginLabel, profileRow2CargoLabel, profileRow2StatusLabel));
+            _linhasUsuario.Add((profileRow3Panel, profileRow3LoginLabel, profileRow3CargoLabel, profileRow3StatusLabel));
+            _linhasUsuario.Add((profileRow4Panel, profileRow4LoginLabel, profileRow4CargoLabel, profileRow4StatusLabel));
+        }
+
+        // A lista rola: sem isso, a partir da quinta linha o conteudo ficaria fora da area visivel.
+        profilesTablePanel.AutoScroll = true;
+
+        while (_linhasUsuario.Count < quantidade)
+        {
+            int indice = _linhasUsuario.Count;
+
+            Panel modelo = profileRow1Panel;
+            Panel linha = new()
+            {
+                Name = $"profileRow{indice + 1}Panel",
+                BackColor = modelo.BackColor,
+                Size = modelo.Size,
+                Location = new Point(modelo.Left, modelo.Top + (modelo.Height * indice))
+            };
+
+            Label login = ClonarRotulo(profileRow1LoginLabel, $"profileRow{indice + 1}LoginLabel");
+            Label cargo = ClonarRotulo(profileRow1CargoLabel, $"profileRow{indice + 1}CargoLabel");
+            Label status = ClonarRotulo(profileRow1StatusLabel, $"profileRow{indice + 1}StatusLabel");
+
+            // O status mora dentro de um painel arredondado proprio; o clone preserva essa estrutura.
+            Panel statusHospedeiro = new()
+            {
+                Name = $"profileRow{indice + 1}StatusPanel",
+                BackColor = profileRow1StatusPanel.BackColor,
+                Size = profileRow1StatusPanel.Size,
+                Location = profileRow1StatusPanel.Location
+            };
+            statusHospedeiro.Controls.Add(status);
+
+            linha.Controls.Add(login);
+            linha.Controls.Add(cargo);
+            linha.Controls.Add(statusHospedeiro);
+            profilesTablePanel.Controls.Add(linha);
+
+            _linhasUsuario.Add((linha, login, cargo, status));
+            _profileSearchRows.Add(new ProfileSearchRow(linha, login));
+            _userRowSelections.Add(new UserRowSelection(linha, linha.BackColor));
+            AttachRowSelectionHandlers(linha, linha);
+        }
+
+        EnsureRowSelectionMarkers();
+    }
+
+    private static Label ClonarRotulo(Label modelo, string nome) => new()
+    {
+        Name = nome,
+        AutoSize = modelo.AutoSize,
+        Font = modelo.Font,
+        ForeColor = modelo.ForeColor,
+        BackColor = modelo.BackColor,
+        Location = modelo.Location,
+        Size = modelo.Size,
+        TextAlign = modelo.TextAlign
+    };
+
     private async Task CarregarUsuariosAsync()
     {
         CancelarSelecaoUsuarioPendente();
         IReadOnlyList<UsuarioCadastro> usuarios = await _usuarioController.ListarAsync();
-        (Panel RowPanel, Label LoginLabel, Label CargoLabel, Label StatusLabel)[] linhas =
-        [
-            (profileRow1Panel, profileRow1LoginLabel, profileRow1CargoLabel, profileRow1StatusLabel),
-            (profileRow2Panel, profileRow2LoginLabel, profileRow2CargoLabel, profileRow2StatusLabel),
-            (profileRow3Panel, profileRow3LoginLabel, profileRow3CargoLabel, profileRow3StatusLabel),
-            (profileRow4Panel, profileRow4LoginLabel, profileRow4CargoLabel, profileRow4StatusLabel)
-        ];
+
+        GarantirLinhasDeUsuario(usuarios.Count);
 
         _idUsuarioPorLinha.Clear();
         _usuarioPorLinha.Clear();
         _userSummaryByRow.Clear();
 
-        for (int i = 0; i < linhas.Length; i++)
+        for (int i = 0; i < _linhasUsuario.Count; i++)
         {
-            if (i < usuarios.Count)
+            (Panel linha, Label rotuloLogin, Label rotuloCargo, Label rotuloStatus) = _linhasUsuario[i];
+
+            if (i >= usuarios.Count)
             {
-                UsuarioCadastro usuario = usuarios[i];
-                linhas[i].LoginLabel.Text = usuario.LoginUsuario;
-                linhas[i].CargoLabel.Text = "-";
-                linhas[i].StatusLabel.Text = usuario.SituacaoUsuario ? "Ativo" : "Inativo";
-                _idUsuarioPorLinha[linhas[i].RowPanel] = usuario.IdUsuario;
-                _usuarioPorLinha[linhas[i].RowPanel] = usuario;
-                _userSummaryByRow[linhas[i].RowPanel] = new UserSummaryData(
-                    usuario.NomeUsuario,
-                    usuario.LoginUsuario,
-                    usuario.SituacaoUsuario ? "Ativo" : "Inativo",
-                    "-",
-                    "-",
-                    DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
+                // Linha sobrando fica OCULTA, em vez de exibir "-": tracos sao ruido numa lista longa.
+                linha.Visible = false;
                 continue;
             }
 
-            linhas[i].LoginLabel.Text = "-";
-            linhas[i].CargoLabel.Text = "-";
-            linhas[i].StatusLabel.Text = "-";
+            UsuarioCadastro usuario = usuarios[i];
+            linha.Visible = true;
+            linha.Location = new Point(profileRow1Panel.Left, profileRow1Panel.Top + (profileRow1Panel.Height * i));
+            rotuloLogin.Text = usuario.LoginUsuario;
+            rotuloCargo.Text = "-";
+            rotuloStatus.Text = usuario.SituacaoUsuario ? "Ativo" : "Inativo";
+
+            _idUsuarioPorLinha[linha] = usuario.IdUsuario;
+            _usuarioPorLinha[linha] = usuario;
+            _userSummaryByRow[linha] = new UserSummaryData(
+                usuario.NomeUsuario,
+                usuario.LoginUsuario,
+                usuario.SituacaoUsuario ? "Ativo" : "Inativo",
+                "-",
+                "-",
+                DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
         }
+
+        profilesFooterLabel.Text = usuarios.Count == 1
+            ? "Mostrando 1 usuário cadastrado"
+            : $"Mostrando {usuarios.Count} usuários cadastrados";
     }
 
     private void EnsureFormCardTextBoxesEditable()
@@ -1199,13 +1280,15 @@ public partial class CadastroUsuarioForm : Form
 
     private void EnsureRowSelectionMarkers()
     {
-        if (_rowSelectionMarkers.Count > 0)
-        {
-            return;
-        }
-
         foreach (UserRowSelection row in _userRowSelections)
         {
+            // GATE 128A: antes este metodo saia no primeiro marcador existente, o que servia para as
+            // 4 linhas fixas do Designer mas deixaria sem marcador toda linha criada em runtime.
+            if (_rowSelectionMarkers.ContainsKey(row.RowPanel))
+            {
+                continue;
+            }
+
             Panel marker = new()
             {
                 Name = $"{row.RowPanel.Name}MarkerPanel",
