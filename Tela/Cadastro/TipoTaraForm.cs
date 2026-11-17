@@ -57,6 +57,22 @@ public partial class TipoTaraForm : Form
         _auditoriaServico = auditoriaServico ?? FabricaControladoresCadastro.CriarAuditoriaServico();
         InitializeComponent();
         global::FugaPET_Dev.Tela.Comum.IconeJanelaHelper.AplicarIconePadrao(this);
+
+        // GATE 127A/127B: esta tela nascia com o logo Fuga Couros e fonte menor que a de Recebimento
+        // de Mercadoria. A escala recebe o contentPanel, NAO o formulario: barra de titulo e rodape
+        // sao comuns a todas as telas e ficam no tamanho padrao. Os Layout*Card sao reexecutados
+        // DEPOIS, porque calculam geometria a partir do texto.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarEscalaDeConteudo(
+            contentPanel,
+            () =>
+            {
+                LayoutProfilesCard();
+                LayoutDetailsCard();
+                LayoutSummaryCard();
+            });
+
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";

@@ -26,6 +26,7 @@ public sealed class IdentidadeVisualCadastro127ATests
     [
         "SetorForm.cs",
         "CargoForm.cs",
+        "TipoTaraForm.cs",
         "BalancaForm.cs"
     ];
 
@@ -38,7 +39,8 @@ public sealed class IdentidadeVisualCadastro127ATests
     public static TheoryData<string> TelasComCartoesRecalculados() =>
     [
         "SetorForm.cs",
-        "CargoForm.cs"
+        "CargoForm.cs",
+        "TipoTaraForm.cs"
     ];
 
     private static string LerCadastro(string arquivo)
