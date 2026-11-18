@@ -171,8 +171,17 @@ public sealed class ExclusaoPesagemRepositorio : RepositorioBase, IExclusaoPesag
     private static async Task<EstadoLancamento> BloquearLancamentoAsync(
         NpgsqlConnection c, NpgsqlTransaction t, long codigoLancamento, CancellationToken ct)
     {
+        // ERRO_SAP entrou na lista em 18/11/2026, depois do pedido 4500000027 no QAS130: uma pesagem
+        // com quantidade absurda foi recusada pelo SAP, o lancamento ficou em ERRO_SAP e o operador
+        // nao conseguia nem concluir o envio nem desistir — a guarda so aceitava FINALIZADO_LOCAL.
+        //
+        // O que PROVA que nada foi lancado continua sendo as tres colunas nulas (documento,
+        // exercicio e data de envio), nao o status. Elas seguem exigidas; o status apenas deixa de
+        // ser um caminho sem volta. Reenviar a partir de ERRO_SAP ja era permitido (ver
+        // TentarReservarLancamentoParaEnvioSapAsync), entao impedir SO a exclusao era assimetrico:
+        // dava para insistir no erro, nao para abandona-lo.
         const string sql = """
-            SELECT (status_lancamento = 'FINALIZADO_LOCAL'
+            SELECT (status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
                     AND situacao_entrada_produto_lancamento = true
                     AND documento_material_sap IS NULL
                     AND exercicio_documento_material_sap IS NULL
@@ -190,8 +199,11 @@ public sealed class ExclusaoPesagemRepositorio : RepositorioBase, IExclusaoPesag
     private static async Task<bool> BloquearItemElegivelAsync(
         NpgsqlConnection c, NpgsqlTransaction t, long codigoItem, CancellationToken ct)
     {
+        // Mesmo motivo do lancamento: o item tambem cai em ERRO_SAP quando o envio falha, e de nada
+        // adianta liberar o lancamento se o item continuar travado. A prova de ausencia de
+        // lancamento no SAP aqui e o documento_material_item nulo, que segue exigido.
         const string sql = """
-            SELECT (status_item = 'FINALIZADO_LOCAL'
+            SELECT (status_item IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
                     AND situacao_entrada_produto_item = true
                     AND documento_material_item IS NULL) AS elegivel
               FROM entrada_produto_item
@@ -208,10 +220,19 @@ public sealed class ExclusaoPesagemRepositorio : RepositorioBase, IExclusaoPesag
         NpgsqlConnection c, NpgsqlTransaction t, long codigoLote, CancellationToken ct)
     {
         // Schema físico do lote NÃO possui coluna booleana de situação: o estado é o próprio status_lote
-        // (CHECK inclui 'CANCELADO'). 'FINALIZADO_LOCAL' já exclui qualquer estado SAP/cancelado — elegibilidade
-        // local equivalente ao contrato 054/055, sem introduzir um booleano inexistente no banco.
+        // (CHECK inclui 'CANCELADO'). Sem introduzir um booleano inexistente no banco.
+        //
+        // Ao admitir ERRO_SAP (18/11/2026, mesmo motivo do lancamento e do item), o status deixou de
+        // ser sozinho a prova de que nada foi lancado — 'FINALIZADO_LOCAL' excluia os estados SAP por
+        // tabela. Por isso as quatro colunas de rastro SAP do lote passaram a ser exigidas nulas aqui.
+        // Isso TAMBEM fecha um buraco anterior: um lote 'FINALIZADO_LOCAL' que ja tivesse documento ou
+        // data de envio gravados era aceito, e nao deveria.
         const string sql = """
-            SELECT (status_lote = 'FINALIZADO_LOCAL') AS elegivel,
+            SELECT (status_lote IN ('FINALIZADO_LOCAL', 'ERRO_SAP')
+                    AND documento_material_sap IS NULL
+                    AND exercicio_documento_material_sap IS NULL
+                    AND enviado_sap_em IS NULL
+                    AND confirmado_sap_em IS NULL) AS elegivel,
                    correlation_id
               FROM entrada_produto_lote
              WHERE codigo_entrada_produto_lote = @codigo

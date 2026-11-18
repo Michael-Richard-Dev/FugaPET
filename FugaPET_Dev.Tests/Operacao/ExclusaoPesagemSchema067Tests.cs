@@ -49,7 +49,7 @@ public sealed class ExclusaoPesagemSchema067Tests
     public void BloquearLote_UsaStatusFinalizadoLocal_SemSituacaoBooleana()
     {
         string corpo = Corpo(FonteRepositorio(), "BloquearLoteElegivelAsync(");
-        Assert.Contains("status_lote = 'FINALIZADO_LOCAL'", corpo, StringComparison.Ordinal);
+        Assert.Contains("status_lote IN ('FINALIZADO_LOCAL', 'ERRO_SAP')", corpo, StringComparison.Ordinal);
         Assert.Contains("correlation_id", corpo, StringComparison.Ordinal);   // guard SAP continua alimentado
         Assert.Contains("FOR UPDATE", corpo, StringComparison.Ordinal);       // locking preservado
         Assert.DoesNotContain("situacao_entrada_produto_lote", corpo, StringComparison.Ordinal);

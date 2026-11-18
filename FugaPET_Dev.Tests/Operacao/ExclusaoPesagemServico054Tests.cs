@@ -169,7 +169,7 @@ public sealed class ExclusaoPesagemServico054Tests
     public void Repositorio_PredicadoLancamentoBloqueiaSap()
     {
         string src = FonteRepositorio();
-        Assert.Contains("status_lancamento = 'FINALIZADO_LOCAL'", src, StringComparison.Ordinal);
+        Assert.Contains("status_lancamento IN ('FINALIZADO_LOCAL', 'ERRO_SAP')", src, StringComparison.Ordinal);
         Assert.Contains("documento_material_sap IS NULL", src, StringComparison.Ordinal);
         Assert.Contains("exercicio_documento_material_sap IS NULL", src, StringComparison.Ordinal);
         Assert.Contains("enviado_sap_em IS NULL", src, StringComparison.Ordinal);
