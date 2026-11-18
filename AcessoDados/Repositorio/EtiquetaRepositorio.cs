@@ -105,6 +105,14 @@ public class EtiquetaRepositorio : RepositorioBase
 
     public virtual async Task<int> ExcluirAsync(long codigoEtiqueta, CancellationToken cancellationToken = default)
     {
+        // DUAS tabelas de vinculo, e as duas precisam barrar a inativacao:
+        //
+        // - produto_etiqueta: estrutura antiga. Em 18/11/2026 ela esta VAZIA e nenhum codigo do
+        //   sistema escreve nela — so le. Ou seja, esta guarda nunca barrou nada ate hoje. Fica
+        //   porque, se um dia ela voltar a ser usada, continua valendo.
+        // - produto_etiqueta_vinculo: o vinculo REAL, gravado pela tela de Vinculo de Produto
+        //   (incremento 065). Sem ele aqui, dava para inativar uma etiqueta com produtos apontando
+        //   para ela, e a tela de vinculo passaria a exibir uma etiqueta que nao vale mais.
         const string sql = """
             UPDATE etiqueta
                SET situacao_etiqueta = false,
@@ -116,6 +124,12 @@ public class EtiquetaRepositorio : RepositorioBase
                      FROM produto_etiqueta pe
                     WHERE pe.codigo_etiqueta = @codigo_etiqueta
                       AND pe.situacao_produto_etiqueta = true
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM produto_etiqueta_vinculo pv
+                    WHERE pv.codigo_etiqueta = @codigo_etiqueta
+                      AND pv.situacao = true
                );
             """;
 
@@ -205,11 +219,19 @@ public class EtiquetaRepositorio : RepositorioBase
         long codigoEtiqueta,
         CancellationToken cancellationToken = default)
     {
+        // Soma as duas tabelas de vinculo, pelo mesmo motivo descrito em ExcluirAsync: a antiga
+        // (produto_etiqueta) esta vazia e sem quem a escreva, e a nova (produto_etiqueta_vinculo) e
+        // a que a tela de Vinculo de Produto grava. O pre-check tem de enxergar o que o UPDATE
+        // enxerga, senao a tela diz "pode inativar" e o banco recusa em silencio.
         const string sql = """
-            SELECT count(*)
-              FROM produto_etiqueta
-             WHERE codigo_etiqueta = @codigo_etiqueta
-               AND situacao_produto_etiqueta = true;
+            SELECT (SELECT count(*)
+                      FROM produto_etiqueta
+                     WHERE codigo_etiqueta = @codigo_etiqueta
+                       AND situacao_produto_etiqueta = true)
+                 + (SELECT count(*)
+                      FROM produto_etiqueta_vinculo
+                     WHERE codigo_etiqueta = @codigo_etiqueta
+                       AND situacao = true);
             """;
 
         await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
