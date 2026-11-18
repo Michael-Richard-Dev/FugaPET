@@ -3,6 +3,7 @@ using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Servicos.Auditoria;
 using FugaPET_Dev.Servicos.Cadastro;
+using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Controle;
@@ -88,6 +89,23 @@ public static class FabricaControladoresCadastro
         ModeloEtiquetaRepositorio modeloRepositorio = new(FabricaConexao.Value);
         EtiquetaServico servico = new(repositorio, modeloRepositorio, CriarAuditoriaServico());
         return new EtiquetaController(servico);
+    }
+
+    /// <summary>
+    /// Vinculo produto × etiqueta × processo. A composicao do catalogo SAP passa pela fabrica
+    /// propria dele, que e quem sabe escolher entre servico real, mock de demonstracao e estado de
+    /// configuracao invalida — a tela nunca decide isso.
+    /// </summary>
+    public static VinculoProdutoEtiquetaController CriarVinculoProdutoEtiquetaController()
+    {
+        VinculoProdutoEtiquetaRepositorio repositorio = new(FabricaConexao.Value);
+        EtiquetaRepositorio etiquetaRepositorio = new(FabricaConexao.Value);
+        VinculoProdutoEtiquetaServico servico = new(
+            repositorio,
+            etiquetaRepositorio,
+            FabricaCatalogoProdutoCentroSapServico.Criar(),
+            CriarAuditoriaServico());
+        return new VinculoProdutoEtiquetaController(servico);
     }
 
     public static CampoEtiquetaController CriarCampoEtiquetaController()

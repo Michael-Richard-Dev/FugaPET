@@ -9,16 +9,99 @@ public partial class CadastroForm : UserControl
     public event EventHandler? BalancaRequested;
     public event EventHandler? EtiquetaRequested;
     public event EventHandler? ModeloEtiquetaRequested;
+    public event EventHandler? VinculoProdutoEtiquetaRequested;
 
     public CadastroForm()
     {
         InitializeComponent();
+        CriarCartaoVinculoProdutoEtiqueta();
         if (System.ComponentModel.LicenseManager.UsageMode != System.ComponentModel.LicenseUsageMode.Designtime)
         {
             AplicarFiltroPermissoes();
         }
         WireCardClickEvents();
     }
+
+    /// <summary>
+    /// Cartao do Vinculo de Produto e Etiqueta, montado EM TEMPO DE EXECUCAO a partir do cartao de
+    /// Etiqueta que ja existe.
+    /// <para>
+    /// Por que clonar em vez de desenhar no Designer: toda geometria vem LIDA do cartao vivo —
+    /// tamanho, margens, posicao e fonte de cada parte. Assim o cartao novo herda o que o DPI ja fez
+    /// com o antigo, em vez de trazer pixels cravados que quebram em outra resolucao; e, se o
+    /// desenho dos cartoes mudar, este acompanha sem ninguem lembrar de atualizar dois lugares.
+    /// </para>
+    /// </summary>
+    private void CriarCartaoVinculoProdutoEtiqueta()
+    {
+        Controls.RoundedPanel cartao = new()
+        {
+            BackColor = etiquetaCard.BackColor,
+            BorderColor = etiquetaCard.BorderColor,
+            Cursor = Cursors.Hand,
+            Margin = etiquetaCard.Margin,
+            Name = "vinculoProdutoEtiquetaCard",
+            ShadowBlur = etiquetaCard.ShadowBlur,
+            ShadowOffsetY = etiquetaCard.ShadowOffsetY,
+            Size = etiquetaCard.Size,
+        };
+
+        Controls.RoundedPanel icone = new()
+        {
+            BackColor = etiquetaIconPanel.BackColor,
+            BorderRadius = etiquetaIconPanel.BorderRadius,
+            Cursor = Cursors.Hand,
+            // Cor propria para o cartao nao virar copia visual do de Etiqueta: sao coisas diferentes.
+            FillColor = Color.FromArgb(254, 240, 221),
+            Location = etiquetaIconPanel.Location,
+            Size = etiquetaIconPanel.Size,
+        };
+
+        Label simboloIcone = new()
+        {
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            Dock = DockStyle.Fill,
+            Image = etiquetaIconLabel.Image,
+            TextAlign = ContentAlignment.MiddleCenter,
+        };
+        icone.Controls.Add(simboloIcone);
+
+        Label titulo = ClonarRotuloDoCartao(etiquetaTitleLabel, "Vínculo de Produto");
+        Label descricao = ClonarRotuloDoCartao(
+            etiquetaDescriptionLabel, "Produto acabado, etiqueta e processo de pesagem.");
+        Label situacao = ClonarRotuloDoCartao(etiquetaStatusLabel, "Disponível");
+        Label atalho = ClonarRotuloDoCartao(etiquetaShortcutLabel, "F8");
+        Label seta = ClonarRotuloDoCartao(etiquetaArrowLabel, etiquetaArrowLabel.Text);
+
+        cartao.Controls.AddRange([icone, titulo, descricao, situacao, atalho, seta]);
+        modulesFlowLayoutPanel.Controls.Add(cartao);
+
+        foreach (Control parte in new Control[] { cartao, icone, simboloIcone, titulo, descricao, situacao, atalho, seta })
+        {
+            parte.Click += OnVinculoProdutoEtiquetaClick;
+        }
+
+        _cartaoVinculoProdutoEtiqueta = cartao;
+    }
+
+    private Control? _cartaoVinculoProdutoEtiqueta;
+
+    /// <summary>Copia aparencia e geometria de um rotulo do cartao, trocando so o texto.</summary>
+    private static Label ClonarRotuloDoCartao(Label modelo, string texto) => new()
+    {
+        BackColor = modelo.BackColor,
+        Cursor = Cursors.Hand,
+        Font = modelo.Font,
+        ForeColor = modelo.ForeColor,
+        Location = modelo.Location,
+        Size = modelo.Size,
+        Text = texto,
+        TextAlign = modelo.TextAlign,
+    };
+
+    private void OnVinculoProdutoEtiquetaClick(object? sender, EventArgs e)
+        => VinculoProdutoEtiquetaRequested?.Invoke(this, EventArgs.Empty);
 
     private void AplicarFiltroPermissoes()
     {
@@ -56,6 +139,15 @@ public partial class CadastroForm : UserControl
             modeloEtiquetaCard,
             Servicos.Seguranca.PermissoesSistema.Modulos.Etiqueta,
             Servicos.Seguranca.PermissoesSistema.Rotinas.ModeloEtiqueta);
+
+        // Mesma permissao do cadastro de etiqueta: quem administra etiqueta decide este vinculo.
+        if (_cartaoVinculoProdutoEtiqueta is not null)
+        {
+            ConfigurarVisibilidadeCadastro(
+                _cartaoVinculoProdutoEtiqueta,
+                Servicos.Seguranca.PermissoesSistema.Modulos.Etiqueta,
+                Servicos.Seguranca.PermissoesSistema.Rotinas.Etiqueta);
+        }
     }
 
     private static void ConfigurarVisibilidadeCadastro(Control opcao, string modulo, string rotina)

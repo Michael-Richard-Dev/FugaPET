@@ -659,6 +659,9 @@ public partial class PainelInicialForm : Form
         _cadastroForm.EtiquetaRequested -= CadastroForm_EtiquetaRequested;
         _cadastroForm.EtiquetaRequested += CadastroForm_EtiquetaRequested;
 
+        _cadastroForm.VinculoProdutoEtiquetaRequested -= CadastroForm_VinculoProdutoEtiquetaRequested;
+        _cadastroForm.VinculoProdutoEtiquetaRequested += CadastroForm_VinculoProdutoEtiquetaRequested;
+
         contentScrollPanel.SuspendLayout();
         contentScrollPanel.Controls.Clear();
         contentScrollPanel.AutoScroll = false;
@@ -954,6 +957,32 @@ public partial class PainelInicialForm : Form
     {
         if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.Etiqueta, "Cadastro de Etiqueta")) return;
         using Cadastro.EtiquetaForm form = new();
+
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            NavigateToCadastro();
+        }
+    }
+
+    /// <summary>
+    /// Abre o vinculo de produto e etiqueta (centro 3007).
+    /// <para>
+    /// Entra por ETIQUETA/ETIQUETA, a mesma permissao do cadastro de etiqueta: quem administra
+    /// etiqueta e quem decide este vinculo. Criar rotina propria exigiria semear permissao no banco
+    /// antes de a tela abrir para alguem.
+    /// </para>
+    /// </summary>
+    private async void CadastroForm_VinculoProdutoEtiquetaRequested(object? sender, EventArgs e)
+    {
+        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.Etiqueta, "Vínculo de Produto e Etiqueta")) return;
+        using Cadastro.VinculoProdutoEtiquetaForm form = new();
 
         Hide();
 
@@ -1348,6 +1377,15 @@ public partial class PainelInicialForm : Form
             if (e.KeyCode == Keys.F7)
             {
                 CadastroForm_EtiquetaRequested(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
+
+            // F8 abre o Vinculo de Produto e Etiqueta. Entrada por tecla porque os cartoes da tela de
+            // Cadastro vivem no Designer; o cartao entra junto com a proxima rodada visual.
+            if (e.KeyCode == Keys.F8)
+            {
+                CadastroForm_VinculoProdutoEtiquetaRequested(this, EventArgs.Empty);
                 e.Handled = true;
                 return;
             }

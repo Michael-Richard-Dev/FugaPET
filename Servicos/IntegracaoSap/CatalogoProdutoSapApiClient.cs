@@ -20,10 +20,12 @@ public static class CatalogoProdutoSapApiClient
 {
     private const string EntidadeCentro = "A_ProductPlant";
     private const string EntidadeProduto = "A_Product";
+    private const string EntidadeDescricao = "A_ProductDescription";
 
     private const string SelectCentro = "Product,Plant,IsBatchManagementRequired";
     private const string SelectProduto =
         "Product,ProductType,BaseUnit,ProductGroup,CrossPlantStatus,IsMarkedForDeletion";
+    private const string SelectDescricao = "Product,Language,ProductDescription";
 
     /// <summary>
     /// Teto de codigos por consulta de dados mestres. O filtro vira uma cadeia de "Product eq 'X' or
@@ -192,6 +194,90 @@ public static class CatalogoProdutoSapApiClient
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// Descricoes de um LOTE de codigos:
+    /// <c>A_ProductDescription?$filter=(Product eq 'A' or ...) and Language eq 'PT'</c>.
+    /// <para>
+    /// Existe para a tela de vinculo nao ter de pedir descricao produto a produto. Sem o lote, listar
+    /// o centro sairia a uma chamada por material — dezenas de viagens para montar UMA tela.
+    /// </para>
+    /// </summary>
+    public static Uri MontarUrlDescricoesLote(
+        Uri baseUri, IReadOnlyList<string> codigos, string? idioma = null, string? sapClient = null)
+    {
+        ArgumentNullException.ThrowIfNull(baseUri);
+        ArgumentNullException.ThrowIfNull(codigos);
+
+        string[] limpos = [.. codigos
+            .Select(c => (c ?? string.Empty).Trim())
+            .Where(c => c.Length > 0)
+            .Distinct(StringComparer.Ordinal)];
+
+        if (limpos.Length == 0)
+        {
+            throw new ArgumentException("Nenhum codigo de produto informado.", nameof(codigos));
+        }
+        if (limpos.Length > TamanhoLoteCodigos)
+        {
+            throw new ArgumentException(
+                $"Lote de {limpos.Length} codigos excede o teto de {TamanhoLoteCodigos}.", nameof(codigos));
+        }
+
+        StringBuilder filtro = new("(");
+        for (int i = 0; i < limpos.Length; i++)
+        {
+            if (i > 0) filtro.Append(" or ");
+            filtro.Append("Product eq '").Append(Escapar(limpos[i])).Append('\'');
+        }
+        filtro.Append(')');
+
+        if (!string.IsNullOrWhiteSpace(idioma))
+        {
+            filtro.Append(" and Language eq '").Append(Escapar(idioma.Trim())).Append('\'');
+        }
+
+        return new Uri(
+            $"{Raiz(baseUri)}/{EntidadeDescricao}?$filter={Uri.EscapeDataString(filtro.ToString())}"
+            + $"&$select={Uri.EscapeDataString(SelectDescricao)}"
+            + $"&$format=json{Cliente(sapClient)}");
+    }
+
+    /// <summary>
+    /// Interpreta A_ProductDescription. Produto repetido (mais de um idioma) fica com a PRIMEIRA
+    /// descricao nao vazia; envelope invalido devolve dicionario vazio, e quem consome trata como
+    /// descricao ausente — nunca como produto sem nome.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> InterpretarDescricoes(string? corpoJson)
+    {
+        Dictionary<string, string> descricoes = new(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(corpoJson)) return descricoes;
+
+        try
+        {
+            using JsonDocument documento = JsonDocument.Parse(corpoJson);
+            if (!documento.RootElement.TryGetProperty("d", out JsonElement d)
+                || !d.TryGetProperty("results", out JsonElement results)
+                || results.ValueKind != JsonValueKind.Array)
+            {
+                return descricoes;
+            }
+
+            foreach (JsonElement item in results.EnumerateArray())
+            {
+                string produto = LerTexto(item, "Product");
+                string descricao = LerTexto(item, "ProductDescription");
+                if (produto.Length == 0 || descricao.Length == 0) continue;
+                descricoes.TryAdd(produto, descricao);
+            }
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        return descricoes;
     }
 
     /// <summary>Parte os codigos em lotes de <see cref="TamanhoLoteCodigos"/>, sem duplicatas.</summary>
