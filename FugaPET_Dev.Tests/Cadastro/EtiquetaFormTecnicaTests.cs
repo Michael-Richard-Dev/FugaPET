@@ -247,8 +247,8 @@ public sealed class EtiquetaFormTecnicaTests
     [Fact]
     public void Repositorio_InativacaoProtegeProdutoAtivoEReativacaoProtegeDuplicidade()
     {
-        Assert.Contains("FROM produto_etiqueta pe", Repositorio, StringComparison.Ordinal);
-        Assert.Contains("pe.situacao_produto_etiqueta = true", Repositorio, StringComparison.Ordinal);
+        Assert.Contains("FROM produto_etiqueta_vinculo pv", Repositorio, StringComparison.Ordinal);
+        Assert.Contains("pv.situacao = true", Repositorio, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS", Repositorio, StringComparison.Ordinal);
         Assert.Contains("upper(trim(outra.codigo_interno)) = upper(trim(etiqueta.codigo_interno))", Repositorio, StringComparison.Ordinal);
         Assert.DoesNotContain("campo_etiqueta", Repositorio, StringComparison.OrdinalIgnoreCase);

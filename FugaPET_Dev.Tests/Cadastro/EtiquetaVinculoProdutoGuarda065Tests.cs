@@ -24,14 +24,22 @@ public sealed class EtiquetaVinculoProdutoGuarda065Tests
         Assert.Contains("NOT EXISTS", metodo, StringComparison.Ordinal);
     }
 
-    /// <summary>A guarda antiga continua, para o caso de a tabela voltar a ser usada.</summary>
+    /// <summary>
+    /// A tabela ANTIGA saiu do codigo em 18/11/2026, por decisao do usuario: estava vazia, ninguem
+    /// escrevia nela, e no QAS110/QAS130 o papel de aplicacao nem tinha privilegio de leitura — a
+    /// consulta respondia "permission denied", de modo que inativar etiqueta ja falhava la.
+    /// <para>
+    /// Este teste impede que ela volte por distracao. A tabela segue existindo no banco; o que nao
+    /// pode voltar e a DEPENDENCIA do codigo nela.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Inativacao_MantemAGuardaAntiga()
+    public void Inativacao_NaoDependeMaisDaTabelaAntiga()
     {
         string metodo = Corpo("ExcluirAsync(");
 
-        Assert.Contains("FROM produto_etiqueta pe", metodo, StringComparison.Ordinal);
-        Assert.Contains("pe.situacao_produto_etiqueta = true", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM produto_etiqueta pe", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("situacao_produto_etiqueta", metodo, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -39,19 +47,27 @@ public sealed class EtiquetaVinculoProdutoGuarda065Tests
     /// menos, a tela diz que pode inativar e o banco recusa sem explicar.
     /// </summary>
     [Fact]
-    public void ResumoDeDependencias_ContaAsDuasTabelas()
+    public void ResumoDeDependencias_ContaAMesmaTabelaQueOUpdate()
     {
         string metodo = Corpo("ObterResumoDependenciasAtivasAsync(");
 
-        Assert.Contains("FROM produto_etiqueta\n", metodo, StringComparison.Ordinal);
         Assert.Contains("FROM produto_etiqueta_vinculo", metodo, StringComparison.Ordinal);
         Assert.Contains("situacao = true", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("situacao_produto_etiqueta", metodo, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Corpo do metodo, com as quebras de linha NORMALIZADAS.
+    /// <para>
+    /// A normalizacao importa: a arvore do DEV usa LF e as do QAS110/QAS130 usam CRLF. Sem ela, uma
+    /// assercao que inclua "\n" passa aqui e falha no porte — foi o que aconteceu em 18/11/2026.
+    /// </para>
+    /// </summary>
     private static string Corpo(string assinatura)
     {
         string fonte = File.ReadAllText(Path.Combine(
-            RaizProjeto(), "AcessoDados", "Repositorio", "EtiquetaRepositorio.cs"));
+            RaizProjeto(), "AcessoDados", "Repositorio", "EtiquetaRepositorio.cs"))
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
 
         int inicio = fonte.LastIndexOf(assinatura, StringComparison.Ordinal);
         Assert.True(inicio >= 0, $"metodo {assinatura} nao encontrado");

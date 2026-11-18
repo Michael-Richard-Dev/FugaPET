@@ -35,8 +35,11 @@ public sealed class EtiquetaRepositorioTests
         string metodo = ExtrairEntre(Repositorio, "public virtual async Task<int> ExcluirAsync", "public virtual Task<int> AtualizarAsync");
 
         Assert.Contains("AND NOT EXISTS", metodo, StringComparison.Ordinal);
-        Assert.Contains("FROM produto_etiqueta pe", metodo, StringComparison.Ordinal);
-        Assert.Contains("pe.situacao_produto_etiqueta = true", metodo, StringComparison.Ordinal);
+        // 18/11/2026: a guarda passou a olhar o vinculo REAL (produto_etiqueta_vinculo). A tabela
+        // antiga saiu do codigo — estava vazia, ninguem escrevia nela e o papel de aplicacao do Q
+        // nem tinha privilegio de leitura.
+        Assert.Contains("FROM produto_etiqueta_vinculo pv", metodo, StringComparison.Ordinal);
+        Assert.Contains("pv.situacao = true", metodo, StringComparison.Ordinal);
         Assert.Contains("@codigo_etiqueta", metodo, StringComparison.Ordinal);
     }
 
