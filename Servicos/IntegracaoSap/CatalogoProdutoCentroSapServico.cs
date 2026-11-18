@@ -140,6 +140,18 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
     /// <summary>
     /// Percorre as paginas de A_ProductPlant. Devolve null quando QUALQUER pagina veio ilegivel —
     /// uma lista parcial aqui viraria "produto nao existe no centro" na tela.
+    /// <para>
+    /// A paginacao e por <c>$skip</c>, nao por <c>__next</c>. Esta instalacao do Gateway nao devolve
+    /// o link de continuacao: manda exatamente o <c>$top</c> pedido e mais nada. Quem confia so no
+    /// link le a primeira pagina e para. Foi o que aconteceu em 18/11/2026 no mandante 130, onde o
+    /// centro 3007 tem 1521 materiais, os 200 primeiros sao ROH/VERP e a tela mostrava ZERO produto
+    /// acabado — relatando sucesso, que e o pior jeito de errar.
+    /// </para>
+    /// <para>
+    /// O criterio de fim e a PAGINA INCOMPLETA: pagina cheia significa que pode haver mais. Quando o
+    /// servico devolve o <c>__next</c>, ele tem precedencia, porque ai e a propria fonte dizendo
+    /// onde continuar.
+    /// </para>
     /// </summary>
     private async Task<IReadOnlyList<string>?> ListarCodigosDoCentroAsync(
         Uri baseUri, string plant, CancellationToken cancellationToken)
@@ -147,6 +159,7 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
         List<string> codigos = [];
         Uri? url = CatalogoProdutoSapApiClient.MontarUrlProdutosDoCentro(
             baseUri, plant, _configuracao.SapClient, TamanhoPagina);
+        int lidos = 0;
 
         for (int pagina = 0; pagina < MaximoPaginas && url is not null; pagina++)
         {
@@ -159,10 +172,30 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
             }
 
             codigos.AddRange(resultado.Itens.Select(i => i.Produto));
+            lidos += resultado.Itens.Count;
 
-            url = string.IsNullOrWhiteSpace(resultado.ProximaPagina)
-                ? null
-                : ValidadorUrlSap.ValidarDestino(new Uri(resultado.ProximaPagina!), baseUri, _configuracao.HostsPermitidos);
+            if (!string.IsNullOrWhiteSpace(resultado.ProximaPagina))
+            {
+                url = ValidadorUrlSap.ValidarDestino(
+                    new Uri(resultado.ProximaPagina!), baseUri, _configuracao.HostsPermitidos);
+            }
+            else if (resultado.Itens.Count == TamanhoPagina)
+            {
+                url = CatalogoProdutoSapApiClient.MontarUrlProdutosDoCentro(
+                    baseUri, plant, _configuracao.SapClient, TamanhoPagina, lidos);
+            }
+            else
+            {
+                url = null;
+            }
+        }
+
+        if (url is not null)
+        {
+            // Teto de paginas atingido com pagina ainda cheia: a lista esta INCOMPLETA. Devolver o
+            // que se tem seria apresentar um catalogo parcial como se fosse o catalogo.
+            RegistrarDiagnostico($"Centro {plant}: teto de {MaximoPaginas} paginas atingido com {lidos} materiais.");
+            return null;
         }
 
         return codigos.Distinct(StringComparer.Ordinal).ToArray();

@@ -41,7 +41,7 @@ public static class CatalogoProdutoSapApiClient
     /// a esquerda de centros como "0300".
     /// </summary>
     public static Uri MontarUrlProdutosDoCentro(
-        Uri baseUri, string centro, string? sapClient = null, int tamanhoPagina = 200)
+        Uri baseUri, string centro, string? sapClient = null, int tamanhoPagina = 200, int pular = 0)
     {
         ArgumentNullException.ThrowIfNull(baseUri);
         string plant = (centro ?? string.Empty).Trim();
@@ -53,12 +53,18 @@ public static class CatalogoProdutoSapApiClient
         {
             throw new ArgumentOutOfRangeException(nameof(tamanhoPagina));
         }
+        ArgumentOutOfRangeException.ThrowIfNegative(pular);
 
+        // $skip explicito: esta instalacao NAO devolve o link "__next" do OData V2 — manda
+        // exatamente o $top pedido e nada que indique continuacao. Quem pagina por "__next"
+        // sozinho le a PRIMEIRA pagina e conclui que acabou (medido em 18/11/2026 no mandante 130,
+        // onde o centro 3007 tem 1521 materiais e so os 200 primeiros apareciam).
         string filtro = Uri.EscapeDataString($"Plant eq '{Escapar(plant)}'");
+        string salto = pular > 0 ? $"&$skip={pular}" : string.Empty;
         return new Uri(
             $"{Raiz(baseUri)}/{EntidadeCentro}?$filter={filtro}"
             + $"&$select={Uri.EscapeDataString(SelectCentro)}"
-            + $"&$top={tamanhoPagina}&$format=json{Cliente(sapClient)}");
+            + $"&$top={tamanhoPagina}{salto}&$format=json{Cliente(sapClient)}");
     }
 
     /// <summary>
