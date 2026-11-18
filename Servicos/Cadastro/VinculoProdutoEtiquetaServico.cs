@@ -45,13 +45,13 @@ public sealed class VinculoProdutoEtiquetaServico
 
     private readonly VinculoProdutoEtiquetaRepositorio _repositorio;
     private readonly EtiquetaRepositorio _etiquetaRepositorio;
-    private readonly ICatalogoProdutoCentroSapServico _catalogo;
+    private readonly SincronizacaoCatalogoProdutoServico _catalogo;
     private readonly AuditoriaServico _auditoria;
 
     public VinculoProdutoEtiquetaServico(
         VinculoProdutoEtiquetaRepositorio repositorio,
         EtiquetaRepositorio etiquetaRepositorio,
-        ICatalogoProdutoCentroSapServico catalogo,
+        SincronizacaoCatalogoProdutoServico catalogo,
         AuditoriaServico auditoria)
     {
         _repositorio = repositorio ?? throw new ArgumentNullException(nameof(repositorio));
@@ -59,6 +59,18 @@ public sealed class VinculoProdutoEtiquetaServico
         _catalogo = catalogo ?? throw new ArgumentNullException(nameof(catalogo));
         _auditoria = auditoria ?? throw new ArgumentNullException(nameof(auditoria));
     }
+
+    /// <summary>
+    /// Traz do SAP o que o catalogo local ainda nao conhece. E o que o botao da tela aciona; a
+    /// listagem NUNCA chama o SAP sozinha.
+    /// </summary>
+    public Task<ResumoSincronizacaoCatalogo> SincronizarCatalogoAsync(
+        string centro, CancellationToken cancellationToken = default)
+        => _catalogo.SincronizarAsync(centro, cancellationToken);
+
+    public Task<DateTime?> ObterUltimaSincronizacaoAsync(
+        string centro, CancellationToken cancellationToken = default)
+        => _catalogo.ObterUltimaSincronizacaoAsync(centro, cancellationToken);
 
     /// <summary>
     /// Etiquetas que podem ser escolhidas: ATIVAS e do tipo da saida de produto acabado.
@@ -98,28 +110,26 @@ public sealed class VinculoProdutoEtiquetaServico
         Dictionary<string, (VinculoProdutoEtiqueta Vinculo, string NomeEtiqueta)> porProduto =
             gravados.ToDictionary(g => g.Vinculo.Produto, StringComparer.Ordinal);
 
-        ResultadoCatalogoProdutoCentro catalogo =
-            await _catalogo.ListarProdutosAcabadosAsync(alvo, cancellationToken);
+        // Le o ESPELHO local, nao o SAP. A ida ao SAP e do botao de sincronizar, e so dele: abrir a
+        // tela nao pode custar 51 chamadas de rede.
+        IReadOnlyList<ProdutoCatalogoLocal> catalogo = await _catalogo.ListarLocalAsync(alvo, cancellationToken);
 
         List<LinhaVinculoProduto> linhas = [];
         HashSet<string> vistos = new(StringComparer.Ordinal);
 
-        if (catalogo.Sucesso)
+        foreach (ProdutoCatalogoLocal produto in catalogo.Where(EhAcabadoPresente))
         {
-            foreach (ProdutoAcabadoDoCentro produto in catalogo.Produtos)
+            porProduto.TryGetValue(produto.Produto, out var gravado);
+            linhas.Add(new LinhaVinculoProduto
             {
-                porProduto.TryGetValue(produto.Produto, out var gravado);
-                linhas.Add(new LinhaVinculoProduto
-                {
-                    Produto = produto.Produto,
-                    DescricaoSap = produto.Descricao,
-                    TipoProdutoSap = produto.TipoMaterial,
-                    Vinculo = gravado.Vinculo,
-                    NomeEtiqueta = gravado.NomeEtiqueta ?? string.Empty,
-                    PresenteNoSap = true,
-                });
-                vistos.Add(produto.Produto);
-            }
+                Produto = produto.Produto,
+                DescricaoSap = produto.Descricao,
+                TipoProdutoSap = produto.TipoMaterial,
+                Vinculo = gravado.Vinculo,
+                NomeEtiqueta = gravado.NomeEtiqueta ?? string.Empty,
+                PresenteNoSap = true,
+            });
+            vistos.Add(produto.Produto);
         }
 
         // Vinculo gravado para produto que o catalogo nao trouxe. Pode ser produto retirado do centro
@@ -138,13 +148,33 @@ public sealed class VinculoProdutoEtiquetaServico
             });
         }
 
+        // Catalogo local vazio nao e erro: e um centro que ainda nao foi sincronizado. Dizer isso e
+        // melhor do que uma grade vazia sem explicacao.
+        bool temCatalogo = catalogo.Count > 0;
+
         return new ResultadoListagemVinculo
         {
             Linhas = [.. linhas.OrderBy(l => l.Produto, StringComparer.Ordinal)],
-            CatalogoDisponivel = catalogo.Sucesso,
-            MensagemCatalogo = catalogo.Sucesso ? string.Empty : catalogo.MensagemDiagnostico,
+            CatalogoDisponivel = temCatalogo,
+            MensagemCatalogo = temCatalogo
+                ? string.Empty
+                : "Catálogo local vazio para este centro. Use \"Atualizar do SAP\" para trazer os produtos.",
         };
     }
+
+    /// <summary>
+    /// O que a tela mostra: produto ACABADO que o SAP ainda lista no centro.
+    /// <para>
+    /// O catalogo local guarda TODOS os tipos de proposito — e assim que a sincronizacao sabe que ja
+    /// perguntou por um ROH e nunca mais pergunta. O filtro de exibicao fica aqui.
+    /// </para>
+    /// </summary>
+    private static bool EhAcabadoPresente(ProdutoCatalogoLocal produto)
+        => produto.PresenteNoSap
+           && string.Equals(
+               produto.TipoMaterial?.Trim(),
+               CatalogoProdutoCentroSapServico.TipoProdutoAcabado,
+               StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Grava a decisao de um produto.

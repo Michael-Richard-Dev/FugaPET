@@ -145,10 +145,12 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         _filtro.Margin = new Padding(0, Escalar(4), Escalar(16), 0);
         _filtro.TextChanged += (_, _) => AplicarFiltro();
 
+        // O botao SINCRONIZA; abrir a tela apenas LE o catalogo local. Era o contrario ate
+        // 18/11/2026, e abrir custava 51 consultas ao SAP.
         _atualizar.Text = "Atualizar do SAP (F5)";
         _atualizar.AutoSize = true;
         _atualizar.Margin = new Padding(0, Escalar(3), 0, 0);
-        _atualizar.Click += async (_, _) => await CarregarAsync();
+        _atualizar.Click += async (_, _) => await SincronizarAsync();
 
         faixa.Controls.AddRange([rotulo, _filtro, _atualizar]);
         return faixa;
@@ -290,10 +292,47 @@ public sealed class VinculoProdutoEtiquetaForm : Form
             ? ProcessoPesagemProduto.EnvioUnico
             : ProcessoPesagemProduto.CaixaACaixa;
 
+    /// <summary>
+    /// Busca no SAP o que o catalogo local ainda nao tem e recarrega a tela.
+    /// <para>
+    /// Separado de <see cref="CarregarAsync"/> de proposito: carregar le o banco e e instantaneo;
+    /// sincronizar vai a rede e pode demorar. Misturar os dois faria toda abertura pagar o preco da
+    /// rede, que e o que esta mudanca veio corrigir.
+    /// </para>
+    /// </summary>
+    private async Task SincronizarAsync()
+    {
+        _atualizar.Enabled = false;
+        UseWaitCursor = true;
+        _situacao.Text = "Consultando o SAP...";
+        try
+        {
+            Modelo.Cadastro.ResumoSincronizacaoCatalogo resumo =
+                await _controller.SincronizarCatalogoAsync(_centro);
+
+            await CarregarAsync();
+            _situacao.Text = $"{resumo.Mensagem}  {_situacao.Text}";
+
+            if (!resumo.Sucesso)
+            {
+                MessageBox.Show(this, resumo.Mensagem, "Atualizar do SAP",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        catch (Exception erro)
+        {
+            _situacao.Text = $"Não foi possível sincronizar: {erro.GetType().Name}.";
+        }
+        finally
+        {
+            UseWaitCursor = false;
+            _atualizar.Enabled = true;
+        }
+    }
+
     private async Task CarregarAsync()
     {
         UseWaitCursor = true;
-        _situacao.Text = "Consultando o SAP...";
         try
         {
             _etiquetasDisponiveis = await _controller.ListarEtiquetasDisponiveisAsync();
@@ -473,8 +512,9 @@ public sealed class VinculoProdutoEtiquetaForm : Form
     {
         if (e.KeyCode == Keys.F5)
         {
+            // F5 faz o mesmo que o botao: SINCRONIZA. O rotulo do botao promete isso.
             e.Handled = true;
-            await CarregarAsync();
+            await SincronizarAsync();
         }
         else if (e.KeyCode == Keys.Escape)
         {

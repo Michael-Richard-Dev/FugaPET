@@ -100,10 +100,17 @@ public static class FabricaControladoresCadastro
     {
         VinculoProdutoEtiquetaRepositorio repositorio = new(FabricaConexao.Value);
         EtiquetaRepositorio etiquetaRepositorio = new(FabricaConexao.Value);
+        CatalogoProdutoCentroRepositorio catalogoRepositorio = new(FabricaConexao.Value);
+
+        // A tela le do catalogo LOCAL; o SAP so e consultado pela sincronizacao, que o botao aciona.
+        SincronizacaoCatalogoProdutoServico sincronizacao = new(
+            catalogoRepositorio,
+            FabricaCatalogoProdutoCentroSapServico.Criar());
+
         VinculoProdutoEtiquetaServico servico = new(
             repositorio,
             etiquetaRepositorio,
-            FabricaCatalogoProdutoCentroSapServico.Criar(),
+            sincronizacao,
             CriarAuditoriaServico());
         return new VinculoProdutoEtiquetaController(servico);
     }

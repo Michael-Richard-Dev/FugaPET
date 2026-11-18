@@ -193,7 +193,9 @@ public sealed class VinculoProdutoEtiqueta065Tests
         ResultadoListagemVinculo resultado = await servico.ListarAsync("3007");
 
         Assert.False(resultado.CatalogoDisponivel);
-        Assert.Equal("SAP fora do ar", resultado.MensagemCatalogo);
+        // Desde o 066 a ausencia de dados e "catalogo local vazio", nao "SAP fora do ar": a tela nao
+        // consulta mais o SAP ao abrir, entao a rede nao tem como ser o motivo aqui.
+        Assert.Contains("Catálogo local vazio", resultado.MensagemCatalogo, StringComparison.Ordinal);
         LinhaVinculoProduto linha = Assert.Single(resultado.Linhas);
         Assert.Equal("4000548", linha.Produto);
         Assert.False(linha.PresenteNoSap);
@@ -257,6 +259,12 @@ public sealed class VinculoProdutoEtiqueta065Tests
 
     // ===================== montagem =====================
 
+    /// <summary>
+    /// Monta o servico com o catalogo LOCAL ja populado. Desde o incremento 066 a listagem le do
+    /// banco, nao do SAP: os produtos entram aqui como se uma sincronizacao ja os tivesse trazido.
+    /// O parametro <paramref name="catalogoFalha"/> virou "catalogo local vazio", que e como a
+    /// ausencia de dados se manifesta agora.
+    /// </summary>
     private static VinculoProdutoEtiquetaServico CriarServico(
         out RepositorioFalso repositorio,
         out EtiquetaRepositorioFalso etiquetas,
@@ -265,34 +273,64 @@ public sealed class VinculoProdutoEtiqueta065Tests
     {
         repositorio = new RepositorioFalso();
         etiquetas = new EtiquetaRepositorioFalso();
-        return new VinculoProdutoEtiquetaServico(
-            repositorio,
-            etiquetas,
-            new CatalogoFalso(produtos ?? [], catalogoFalha),
-            new AuditoriaServico(null!));
-    }
 
-    private sealed class CatalogoFalso : ICatalogoProdutoCentroSapServico
-    {
-        private readonly IReadOnlyList<ProdutoAcabadoDoCentro> _produtos;
-        private readonly string? _falha;
-
-        public CatalogoFalso(IReadOnlyList<ProdutoAcabadoDoCentro> produtos, string? falha)
+        CatalogoLocalFalso banco = new();
+        if (catalogoFalha is null)
         {
-            _produtos = produtos;
-            _falha = falha;
+            foreach (ProdutoAcabadoDoCentro produto in produtos ?? [])
+            {
+                banco.Linhas.Add(new ProdutoCatalogoLocal
+                {
+                    Centro = "3007",
+                    Produto = produto.Produto,
+                    Descricao = produto.Descricao,
+                    TipoMaterial = produto.TipoMaterial,
+                    MestreLidoEm = DateTime.UtcNow,
+                    PresenteNoSap = true,
+                });
+            }
         }
 
-        public bool Configurado => _falha is null;
+        SincronizacaoCatalogoProdutoServico sincronizacao = new(banco, new SapInutilizadoFalso());
+
+        return new VinculoProdutoEtiquetaServico(
+            repositorio, etiquetas, sincronizacao, new AuditoriaServico(null!));
+    }
+
+    /// <summary>Catalogo local em memoria; estes testes so LEEM dele.</summary>
+    private sealed class CatalogoLocalFalso : CatalogoProdutoCentroRepositorio
+    {
+        public CatalogoLocalFalso() : base(null!) { }
+
+        public List<ProdutoCatalogoLocal> Linhas { get; } = [];
+
+        public override Task<IReadOnlyList<ProdutoCatalogoLocal>> ListarPorCentroAsync(
+            string centro, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProdutoCatalogoLocal>>([.. Linhas]);
+    }
+
+    /// <summary>
+    /// O SAP nao deve ser tocado pela LISTAGEM. Qualquer chamada aqui e defeito, e por isso lanca
+    /// em vez de devolver vazio — falhar calado esconderia justamente a regressao que importa.
+    /// </summary>
+    private sealed class SapInutilizadoFalso : ICatalogoProdutoCentroSapServico
+    {
+        public bool Configurado => true;
 
         public Task<ResultadoCatalogoProdutoCentro> ListarProdutosAcabadosAsync(
             string centro, CancellationToken cancellationToken = default)
-            => Task.FromResult(_falha is null
-                ? ResultadoCatalogoProdutoCentro.Ok(_produtos)
-                : ResultadoCatalogoProdutoCentro.Falha(_falha));
+            => throw new InvalidOperationException("A listagem nao pode consultar o SAP.");
+
+        public Task<ResultadoCodigosCentro> ListarCodigosDoCentroAsync(
+            string centro, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("A listagem nao pode consultar o SAP.");
+
+        public Task<ResultadoCadastroProdutos> ObterCadastroAsync(
+            IReadOnlyList<string> codigos, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("A listagem nao pode consultar o SAP.");
     }
 
-    private sealed class RepositorioFalso : VinculoProdutoEtiquetaRepositorio
+        private sealed class RepositorioFalso : VinculoProdutoEtiquetaRepositorio
     {
         public RepositorioFalso() : base(null!) { }
 

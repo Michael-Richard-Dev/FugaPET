@@ -71,4 +71,12 @@ internal sealed class CatalogoProdutoCentroSapIndisponivelServico : ICatalogoPro
     public Task<ResultadoCatalogoProdutoCentro> ListarProdutosAcabadosAsync(
         string centro, CancellationToken cancellationToken = default)
         => Task.FromResult(ResultadoCatalogoProdutoCentro.Falha(_motivo));
+
+    public Task<ResultadoCodigosCentro> ListarCodigosDoCentroAsync(
+        string centro, CancellationToken cancellationToken = default)
+        => Task.FromResult(ResultadoCodigosCentro.Falha(_motivo, MotivoCatalogoIndisponivel.NaoConfigurado));
+
+    public Task<ResultadoCadastroProdutos> ObterCadastroAsync(
+        IReadOnlyList<string> codigos, CancellationToken cancellationToken = default)
+        => Task.FromResult(ResultadoCadastroProdutos.Falha(_motivo));
 }

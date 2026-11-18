@@ -4,13 +4,32 @@ using FugaPET_Dev.Modelo.IntegracaoSap;
 
 namespace FugaPET_Dev.Servicos.IntegracaoSap;
 
-/// <summary>Entrada unica da listagem de produtos ACABADOS de um centro. Somente leitura.</summary>
+/// <summary>Leitura do catalogo de produtos de um centro no SAP. Somente leitura.</summary>
 public interface ICatalogoProdutoCentroSapServico
 {
     bool Configurado { get; }
 
+    /// <summary>Tudo de uma vez: lista o centro, le o cadastro e filtra os acabados.</summary>
     Task<ResultadoCatalogoProdutoCentro> ListarProdutosAcabadosAsync(
         string centro, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// So os CODIGOS que o centro tem hoje. E a etapa que a sincronizacao refaz por inteiro, porque
+    /// e ela que revela o que entrou e o que saiu.
+    /// </summary>
+    Task<ResultadoCodigosCentro> ListarCodigosDoCentroAsync(
+        string centro, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cadastro de um conjunto especifico de materiais — TODOS os tipos, nao so os acabados.
+    /// <para>
+    /// Trazer tambem os que nao interessam a tela e proposital: e o que permite gravar "ja perguntei
+    /// por este e ele e ROH" e nunca mais perguntar. Filtrar antes de gravar faria a sincronizacao
+    /// repetir a pergunta para os mesmos materiais em toda rodada.
+    /// </para>
+    /// </summary>
+    Task<ResultadoCadastroProdutos> ObterCadastroAsync(
+        IReadOnlyList<string> codigos, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -67,15 +86,42 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
     public async Task<ResultadoCatalogoProdutoCentro> ListarProdutosAcabadosAsync(
         string centro, CancellationToken cancellationToken = default)
     {
+        ResultadoCodigosCentro codigos = await ListarCodigosDoCentroAsync(centro, cancellationToken);
+        if (!codigos.Sucesso)
+        {
+            return codigos.Motivo == MotivoCatalogoIndisponivel.NaoConfigurado
+                ? ResultadoCatalogoProdutoCentro.NaoConfigurado()
+                : ResultadoCatalogoProdutoCentro.Falha(codigos.MensagemDiagnostico);
+        }
+        if (codigos.Codigos.Count == 0)
+        {
+            return ResultadoCatalogoProdutoCentro.Ok([]);
+        }
+
+        ResultadoCadastroProdutos cadastro = await ObterCadastroAsync(codigos.Codigos, cancellationToken);
+        if (!cadastro.Sucesso)
+        {
+            return ResultadoCatalogoProdutoCentro.Falha(cadastro.MensagemDiagnostico);
+        }
+
+        return ResultadoCatalogoProdutoCentro.Ok(
+            [.. cadastro.Itens.Where(EhProdutoAcabado).OrderBy(p => p.Produto, StringComparer.Ordinal)]);
+    }
+
+    public async Task<ResultadoCodigosCentro> ListarCodigosDoCentroAsync(
+        string centro, CancellationToken cancellationToken = default)
+    {
         if (!Configurado)
         {
-            return ResultadoCatalogoProdutoCentro.NaoConfigurado();
+            return ResultadoCodigosCentro.Falha(
+                "Integração SAP não configurada nesta estação: usuário, senha ou URL de produto ausentes.",
+                MotivoCatalogoIndisponivel.NaoConfigurado);
         }
 
         string plant = (centro ?? string.Empty).Trim();
         if (plant.Length == 0)
         {
-            return ResultadoCatalogoProdutoCentro.Falha("Centro não informado.");
+            return ResultadoCodigosCentro.Falha("Centro não informado.", MotivoCatalogoIndisponivel.FalhaNaConsulta);
         }
 
         try
@@ -83,45 +129,14 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
             Uri baseUri = ValidadorUrlSap.ValidarBaseUrl(
                 _configuracao.ProductMasterBaseUrlEfetiva, _configuracao.HostsPermitidos);
 
-            IReadOnlyList<string>? codigos = await ListarCodigosDoCentroAsync(baseUri, plant, cancellationToken);
-            if (codigos is null)
-            {
-                return ResultadoCatalogoProdutoCentro.Falha(
-                    $"O SAP não devolveu a lista de materiais do centro {plant} de forma interpretável.");
-            }
-            if (codigos.Count == 0)
-            {
-                return ResultadoCatalogoProdutoCentro.Ok([]);
-            }
+            (IReadOnlyList<string>? codigos, int chamadas) =
+                await PercorrerCodigosDoCentroAsync(baseUri, plant, cancellationToken);
 
-            IReadOnlyList<ProdutoMestreSapCatalogo>? mestres = await ObterMestresAsync(baseUri, codigos, cancellationToken);
-            if (mestres is null)
-            {
-                return ResultadoCatalogoProdutoCentro.Falha(
-                    "O SAP não devolveu os dados mestres dos materiais de forma interpretável.");
-            }
-
-            List<ProdutoMestreSapCatalogo> acabados = [.. mestres.Where(EhProdutoAcabado)];
-            if (acabados.Count == 0)
-            {
-                return ResultadoCatalogoProdutoCentro.Ok([]);
-            }
-
-            IReadOnlyDictionary<string, string> descricoes =
-                await ObterDescricoesAsync(baseUri, [.. acabados.Select(m => m.Produto)], cancellationToken);
-
-            List<ProdutoAcabadoDoCentro> produtos = [.. acabados
-                .Select(m => new ProdutoAcabadoDoCentro
-                {
-                    Produto = m.Produto,
-                    Descricao = descricoes.TryGetValue(m.Produto, out string? d) ? d : null,
-                    TipoMaterial = m.TipoMaterial,
-                    UnidadeBase = m.UnidadeBase,
-                    MarcadoParaEliminacao = m.MarcadoParaEliminacao == true,
-                })
-                .OrderBy(p => p.Produto, StringComparer.Ordinal)];
-
-            return ResultadoCatalogoProdutoCentro.Ok(produtos);
+            return codigos is null
+                ? ResultadoCodigosCentro.Falha(
+                    $"O SAP não devolveu a lista de materiais do centro {plant} de forma interpretável.",
+                    MotivoCatalogoIndisponivel.FalhaNaConsulta, chamadas)
+                : ResultadoCodigosCentro.Ok(codigos, chamadas);
         }
         catch (OperationCanceledException)
         {
@@ -129,11 +144,69 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
         }
         catch (Exception erro)
         {
-            // Diagnostico SANITIZADO: so o tipo da excecao. Mensagem crua de HttpRequestException
-            // pode carregar URL interna, e isso vai parar na tela do operador.
             RegistrarDiagnostico($"Centro {plant}: {erro.GetType().Name}.");
-            return ResultadoCatalogoProdutoCentro.Falha(
-                $"Não foi possível consultar o SAP ({erro.GetType().Name}).");
+            return ResultadoCodigosCentro.Falha(
+                $"Não foi possível consultar o SAP ({erro.GetType().Name}).",
+                MotivoCatalogoIndisponivel.FalhaNaConsulta);
+        }
+    }
+
+    public async Task<ResultadoCadastroProdutos> ObterCadastroAsync(
+        IReadOnlyList<string> codigos, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(codigos);
+
+        if (!Configurado)
+        {
+            return ResultadoCadastroProdutos.Falha(
+                "Integração SAP não configurada nesta estação: usuário, senha ou URL de produto ausentes.");
+        }
+        if (codigos.Count == 0)
+        {
+            return ResultadoCadastroProdutos.Ok([], 0);
+        }
+
+        try
+        {
+            Uri baseUri = ValidadorUrlSap.ValidarBaseUrl(
+                _configuracao.ProductMasterBaseUrlEfetiva, _configuracao.HostsPermitidos);
+
+            (IReadOnlyList<ProdutoMestreSapCatalogo>? mestres, int chamadasMestre) =
+                await BuscarMestresAsync(baseUri, codigos, cancellationToken);
+
+            if (mestres is null)
+            {
+                return ResultadoCadastroProdutos.Falha(
+                    "O SAP não devolveu os dados mestres dos materiais de forma interpretável.", chamadasMestre);
+            }
+
+            // Descricao so faz sentido para o que a tela mostra; pedir para ROH e VERP seria gastar
+            // chamada com material que nunca vai aparecer na lista.
+            string[] acabados = [.. mestres.Where(EhProdutoAcabado).Select(m => m.Produto)];
+            (IReadOnlyDictionary<string, string> descricoes, int chamadasDescricao) =
+                acabados.Length == 0
+                    ? (new Dictionary<string, string>(StringComparer.Ordinal), 0)
+                    : await BuscarDescricoesAsync(baseUri, acabados, cancellationToken);
+
+            List<ProdutoAcabadoDoCentro> itens = [.. mestres.Select(m => new ProdutoAcabadoDoCentro
+            {
+                Produto = m.Produto,
+                Descricao = descricoes.TryGetValue(m.Produto, out string? d) ? d : null,
+                TipoMaterial = m.TipoMaterial,
+                UnidadeBase = m.UnidadeBase,
+                MarcadoParaEliminacao = m.MarcadoParaEliminacao == true,
+            })];
+
+            return ResultadoCadastroProdutos.Ok(itens, chamadasMestre + chamadasDescricao);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception erro)
+        {
+            RegistrarDiagnostico($"Cadastro de {codigos.Count} materiais: {erro.GetType().Name}.");
+            return ResultadoCadastroProdutos.Falha($"Não foi possível consultar o SAP ({erro.GetType().Name}).");
         }
     }
 
@@ -153,10 +226,11 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
     /// onde continuar.
     /// </para>
     /// </summary>
-    private async Task<IReadOnlyList<string>?> ListarCodigosDoCentroAsync(
+    private async Task<(IReadOnlyList<string>? Codigos, int Chamadas)> PercorrerCodigosDoCentroAsync(
         Uri baseUri, string plant, CancellationToken cancellationToken)
     {
         List<string> codigos = [];
+        int chamadas = 0;
         Uri? url = CatalogoProdutoSapApiClient.MontarUrlProdutosDoCentro(
             baseUri, plant, _configuracao.SapClient, TamanhoPagina);
         int lidos = 0;
@@ -164,11 +238,12 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
         for (int pagina = 0; pagina < MaximoPaginas && url is not null; pagina++)
         {
             string? corpo = await ObterJsonAsync(url, baseUri, cancellationToken);
+            chamadas++;
             PaginaCatalogoProdutoSap resultado = CatalogoProdutoSapApiClient.InterpretarPaginaDoCentro(corpo);
             if (!resultado.Valida)
             {
                 RegistrarDiagnostico($"Pagina {pagina} do centro {plant} invalida: {resultado.Motivo}.");
-                return null;
+                return (null, chamadas);
             }
 
             codigos.AddRange(resultado.Itens.Select(i => i.Produto));
@@ -195,20 +270,22 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
             // Teto de paginas atingido com pagina ainda cheia: a lista esta INCOMPLETA. Devolver o
             // que se tem seria apresentar um catalogo parcial como se fosse o catalogo.
             RegistrarDiagnostico($"Centro {plant}: teto de {MaximoPaginas} paginas atingido com {lidos} materiais.");
-            return null;
+            return (null, chamadas);
         }
 
-        return codigos.Distinct(StringComparer.Ordinal).ToArray();
+        return (codigos.Distinct(StringComparer.Ordinal).ToArray(), chamadas);
     }
 
-    private async Task<IReadOnlyList<ProdutoMestreSapCatalogo>?> ObterMestresAsync(
+    private async Task<(IReadOnlyList<ProdutoMestreSapCatalogo>? Mestres, int Chamadas)> BuscarMestresAsync(
         Uri baseUri, IReadOnlyList<string> codigos, CancellationToken cancellationToken)
     {
         List<ProdutoMestreSapCatalogo> mestres = [];
+        int chamadas = 0;
         foreach (IReadOnlyList<string> lote in CatalogoProdutoSapApiClient.PartirEmLotes(codigos))
         {
             Uri url = CatalogoProdutoSapApiClient.MontarUrlProdutosMestre(baseUri, lote, _configuracao.SapClient);
             string? corpo = await ObterJsonAsync(url, baseUri, cancellationToken);
+            chamadas++;
 
             IReadOnlyList<ProdutoMestreSapCatalogo> parcial =
                 CatalogoProdutoSapApiClient.InterpretarProdutosMestre(corpo);
@@ -218,13 +295,13 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
             if (parcial.Count == 0)
             {
                 RegistrarDiagnostico($"Lote de {lote.Count} materiais sem mestre interpretavel.");
-                return null;
+                return (null, chamadas);
             }
 
             mestres.AddRange(parcial);
         }
 
-        return mestres;
+        return (mestres, chamadas);
     }
 
     /// <summary>
@@ -232,27 +309,35 @@ public sealed class CatalogoProdutoCentroSapServico : ICatalogoProdutoCentroSapS
     /// listagem: um produto sem nome ainda pode ser vinculado pelo codigo, e barrar a tela inteira
     /// por causa do rotulo seria pior do que mostrar o codigo sozinho.
     /// </summary>
-    private async Task<IReadOnlyDictionary<string, string>> ObterDescricoesAsync(
+    private async Task<(IReadOnlyDictionary<string, string> Descricoes, int Chamadas)> BuscarDescricoesAsync(
         Uri baseUri, IReadOnlyList<string> codigos, CancellationToken cancellationToken)
     {
         Dictionary<string, string> todas = new(StringComparer.Ordinal);
+        int chamadas = 0;
         foreach (IReadOnlyList<string> lote in CatalogoProdutoSapApiClient.PartirEmLotes(codigos))
         {
             Uri url = CatalogoProdutoSapApiClient.MontarUrlDescricoesLote(
                 baseUri, lote, IdiomaDescricao, _configuracao.SapClient);
 
             string? corpo = await ObterJsonAsync(url, baseUri, cancellationToken);
+            chamadas++;
             foreach (KeyValuePair<string, string> item in CatalogoProdutoSapApiClient.InterpretarDescricoes(corpo))
             {
                 todas.TryAdd(item.Key, item.Value);
             }
         }
 
-        return todas;
+        return (todas, chamadas);
     }
 
     private static bool EhProdutoAcabado(ProdutoMestreSapCatalogo mestre)
-        => string.Equals(mestre.TipoMaterial?.Trim(), TipoProdutoAcabado, StringComparison.OrdinalIgnoreCase);
+        => EhProdutoAcabado(mestre.TipoMaterial);
+
+    private static bool EhProdutoAcabado(ProdutoAcabadoDoCentro produto)
+        => EhProdutoAcabado(produto.TipoMaterial);
+
+    private static bool EhProdutoAcabado(string? tipoMaterial)
+        => string.Equals(tipoMaterial?.Trim(), TipoProdutoAcabado, StringComparison.OrdinalIgnoreCase);
 
     private async Task<string?> ObterJsonAsync(Uri url, Uri baseUri, CancellationToken cancellationToken)
     {
