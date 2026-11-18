@@ -120,11 +120,25 @@ public sealed class ProdutoAcabadoUxHuSaldoTests
         Assert.Contains("RegraCentroPetProdutoAcabado.CentroPermitido(caixa.Centro)", metodo, StringComparison.Ordinal);
     }
 
-    // ===================== REGRA 1: barcodes verticais =====================
+    // ===================== REGRA 1: orientação do barcode da caixa =====================
 
-    // 16/17/18: ZPL usa barcode VERTICAL (^BCB) e NÃO permanece horizontal (^BCN).
+    /// <summary>
+    /// A regra ORIGINAL (16/17/18) exigia barcode VERTICAL (^BCB) na etiqueta da caixa, espelhando o
+    /// RDLC de referência. Ela foi REVOGADA em 18/11/2026, a pedido do operador: o leitor do chão de
+    /// fábrica não conseguia ler a barra.
+    /// <para>
+    /// Na vertical o curso do Code128 corre pela ALTURA da etiqueta, que tem só 400 pontos; com
+    /// módulo de 2 pontos — o mínimo legível, 0,25 mm — um código de 15 caracteres gasta 400 e não
+    /// cabe. Horizontal cabe nos 639 de largura. Ou seja: manter a vertical era manter o módulo de
+    /// 1 ponto, e era o módulo que impedia a leitura.
+    /// </para>
+    /// <para>
+    /// O RDLC continua vertical e continua sendo referência de LAYOUT, não de orientação da barra —
+    /// o teste <c>Rdlc8x5_AmbosBarcodes_Verticais</c> abaixo segue valendo para ele.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Zpl_Barcode_Vertical_SemRegressaoHorizontal()
+    public void Zpl_BarcodeDaCaixa_Vertical_ComModuloLegivel()
     {
         string zebra = LerFonte("Servicos", "ServicoImpressoraZebra.cs");
         int inicio = zebra.IndexOf("public string ConstruirZplEtiquetaCaixaProdutoAcabado(", StringComparison.Ordinal);

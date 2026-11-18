@@ -162,10 +162,13 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
 
         Assert.Contains("Lote: L-TESTE", zpl, StringComparison.Ordinal);
         Assert.Contains("SACO PET 25KG", zpl, StringComparison.Ordinal);
-        // Codigo de barras Code128 do codigo_caixa_local, VERTICAL (orientacao B).
+        // GATE 130B: o Code128 do codigo_caixa_local e VERTICAL (orientacao B) em MODO AUTOMATICO —
+        // e o modo automatico que comprime os trechos numericos e faz o simbolo caber na altura.
         Assert.Contains("^BCB,", zpl, StringComparison.Ordinal);
         Assert.Contains("^FDCX-1001951-0004^FS", zpl, StringComparison.Ordinal);
         Assert.DoesNotContain("^BCN", zpl, StringComparison.Ordinal);
+        // A HU deixou de ser texto solto e virou celula da grade, ao lado da validade.
+        Assert.Contains("HU SAP", zpl, StringComparison.Ordinal);
         // NAO usa os rotulos do layout de producao do Semi-Acabado.
         Assert.DoesNotContain("SAIDA ESTUFA", zpl, StringComparison.Ordinal);
     }
@@ -181,9 +184,9 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
     }
 
     /// <summary>
-    /// O codigo de barras precisa caber DENTRO da etiqueta. Em ^BCB o desenho sobe a partir da
-    /// origem, entao o comprimento do Code128 nao pode passar do topo, e a altura das barras nao
-    /// pode passar da largura. Este teste reproduz a conta que estourou na primeira versao.
+    /// O codigo de barras precisa caber DENTRO da etiqueta. Em ^BCB o simbolo DESCE a partir da
+    /// origem — medido na calibracao impressa em 18/11/2026, contra o que o codigo original dizia —
+    /// e as barras correm para a direita. Era essa inversao que jogava a barra na etiqueta seguinte.
     /// </summary>
     [Theory]
     [InlineData("CX-1001951-0004")]
@@ -196,63 +199,165 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
         string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
             ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
 
-        int largura = int.Parse(Entre(zpl, "^PW", "\n"));
-        int altura = int.Parse(Entre(zpl, "^LL", "\n"));
+        BarraCaixa barra = LerBarra(zpl, codigoLocal);
 
-        // ^FO x,y ... ^BY m ^BCB, alturaBarras
-        int fo = zpl.LastIndexOf("^FO", zpl.IndexOf("^BCB", StringComparison.Ordinal), StringComparison.Ordinal);
-        string cabecalho = zpl[fo..zpl.IndexOf("^FD", fo, StringComparison.Ordinal)];
-        string[] origem = Entre(cabecalho, "^FO", "^BY").Split(',');
-        int x = int.Parse(origem[0]), y = int.Parse(origem[1]);
-        int modulo = int.Parse(Entre(cabecalho, "^BY", "^BC"));
-        int alturaBarras = int.Parse(Entre(cabecalho, "^BCB,", ",").Trim(','));
-
-        // Code128 subset B: inicio + N simbolos + verificador + parada.
-        int modulos = (11 * (codigoLocal.Length + 2)) + 13;
-        int comprimento = modulos * modulo;
-
-        Assert.True(y - comprimento >= 0,
-            $"a barra sobe {comprimento} dots a partir de y={y} e passa do topo da etiqueta");
-        Assert.True(y <= altura, $"a origem y={y} esta fora da etiqueta de {altura} dots");
-        Assert.True(x + alturaBarras <= largura,
-            $"as barras ocupam ate x={x + alturaBarras} numa etiqueta de {largura} dots");
+        Assert.True(barra.Y + barra.Comprimento <= barra.Altura,
+            $"o simbolo desce {barra.Comprimento} dots a partir de y={barra.Y} e passa do rodape "
+            + $"({barra.Y + barra.Comprimento} numa etiqueta de {barra.Altura})");
+        Assert.True(barra.X + barra.AlturaBarras <= barra.Largura,
+            $"as barras vao ate x={barra.X + barra.AlturaBarras} numa etiqueta de {barra.Largura} dots");
     }
 
     /// <summary>
-    /// GATE 126J: a origem da barra era cravada no RODAPE (`altura - P(0.07)`), entao o curso do
-    /// Code128 — que varia com o tamanho do dado — deixava a barra pendurada embaixo, fora da
-    /// estrutura da etiqueta. Apontado pelo operador em 16/11/2026.
+    /// A barra nasce COLADA NO TOPO, como o operador pediu em 18/11/2026, e nao no rodape.
     /// <para>
-    /// Agora o TOPO e ancorado no topo da grade de dados (P(0,72) = 146 dots a 203 dpi). Consequencia
-    /// que o teste fixa: um codigo mais CURTO termina mais em cima, nunca mais embaixo.
+    /// Este teste falha contra a versao anterior, em que a origem era <c>altura - P(0,03)</c>: como o
+    /// simbolo desce, aquela origem jogava a barra inteira para fora, na etiqueta seguinte do rolo.
     /// </para>
+    /// </summary>
+    [Fact]
+    public void Zpl_CodigoDeBarras_NasceNoTopoDaEtiqueta()
+    {
+        string codigoLocal = "CX-1001951-0004";
+        ProdutoAcabadoCaixa caixa = CaixaConfirmada();
+        caixa.CodigoCaixaLocal = codigoLocal;
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
+
+        BarraCaixa barra = LerBarra(zpl, codigoLocal);
+
+        // Encostada no topo, mas com zona de silencio: o Code128 pede 10 modulos livres na ponta.
+        Assert.InRange(barra.Y, 2 * barra.Modulo, 20);
+    }
+
+    /// <summary>
+    /// A barra carrega o codigo SEM o prefixo <c>CX-</c>, e a leitura humana mostra o codigo INTEIRO.
+    /// Decisao do usuario em 18/11/2026: e o que faz o simbolo caber na vertical.
+    /// </summary>
+    [Fact]
+    public void Zpl_BarraCarregaCodigoSemPrefixo_MasTextoMostraInteiro()
+    {
+        ProdutoAcabadoCaixa caixa = CaixaConfirmada();
+        caixa.CodigoCaixaLocal = "CX-1001951-0004";
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
+
+        int campoBarra = zpl.IndexOf("^BCB", StringComparison.Ordinal);
+        string linhaBarra = zpl[campoBarra..zpl.IndexOf('\n', campoBarra)];
+
+        Assert.Contains("^FD1001951-0004^FS", linhaBarra, StringComparison.Ordinal);
+        Assert.DoesNotContain("CX-", linhaBarra, StringComparison.Ordinal);
+        // O codigo inteiro continua impresso para quem digita a mao.
+        Assert.Contains("^FDCX-1001951-0004^FS", zpl, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// O operador pediu, em 18/11/2026, barra VERTICAL medindo entre 4 e 4,5 cm — o que cabe nos 5 cm
+    /// de altura da etiqueta deixando margem. Este teste guarda essa faixa em pontos a 203 dpi.
     /// </summary>
     [Theory]
     [InlineData("CX-1001951-0004")]
     [InlineData("CX-1000403-0001")]
-    [InlineData("CX-1-1")]
-    public void Zpl_CodigoDeBarras_AncoradoNoTopoDaGrade_NaoNoRodape(string codigoLocal)
+    [InlineData("CX-1000403-9999")]
+    public void Zpl_CodigoDeBarras_MedeEntre4e45Centimetros(string codigoLocal)
     {
-        const int TopoDaGrade = 146;   // P(0,72) a 203 dpi
-        const int OrigemAntigaNoRodape = 386;   // altura(400) - P(0,07)
+        const int QuatroCm = 320;        // 40 mm a 203 dpi
+        const int QuatroVirgulaCincoCm = 360;
 
         ProdutoAcabadoCaixa caixa = CaixaConfirmada();
         caixa.CodigoCaixaLocal = codigoLocal;
         string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
             ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
 
+        BarraCaixa barra = LerBarra(zpl, codigoLocal);
+
+        Assert.InRange(barra.Comprimento, QuatroCm, QuatroVirgulaCincoCm);
+    }
+
+    /// <summary>
+    /// GATE 130A, apontado pelo operador em 18/11/2026: o leitor nao lia a barra da caixa.
+    /// <para>
+    /// A causa era o modulo de 1 ponto — 0,125 mm a 203 dpi, metade do minimo que um leitor de
+    /// Code128 resolve. Este teste fixa o piso de 2 pontos e a altura de barra, que sao as duas
+    /// grandezas de que a leitura depende. Falha contra a versao anterior.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("CX-1001951-0004")]
+    [InlineData("CX-1000403-0001")]
+    [InlineData("CX-1-1")]
+    public void Zpl_CodigoDeBarras_TemModuloLegivelPeloLeitor(string codigoLocal)
+    {
+        ProdutoAcabadoCaixa caixa = CaixaConfirmada();
+        caixa.CodigoCaixaLocal = codigoLocal;
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
+
+        BarraCaixa barra = LerBarra(zpl, codigoLocal);
+
+        Assert.True(barra.Modulo >= 2, $"modulo de {barra.Modulo} ponto: fino demais para o leitor");
+        Assert.True(barra.AlturaBarras >= 40, $"barras de {barra.AlturaBarras} dots: baixas demais para mirar");
+    }
+
+    /// <summary>
+    /// A faixa da barra e EXCLUSIVA dela: nenhum campo de texto da grade pode comecar dentro dela.
+    /// Foi o que estourou na primeira versao vertical, quando a barra invadia a coluna dos pesos.
+    /// </summary>
+    [Fact]
+    public void Zpl_FaixaDaBarra_NaoEInvadidaPorTexto()
+    {
+        string codigoLocal = "CX-1001951-0004";
+        ProdutoAcabadoCaixa caixa = CaixaConfirmada();
+        caixa.CodigoCaixaLocal = codigoLocal;
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
+
+        BarraCaixa barra = LerBarra(zpl, codigoLocal);
+
+        foreach (string linha in zpl.Split('\n'))
+        {
+            // So campos de texto e molduras; o proprio campo de barras e pulado.
+            if (!linha.StartsWith("^FO", StringComparison.Ordinal) || linha.Contains("^BC", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            int x = int.Parse(Entre(linha, "^FO", ",").Trim(','));
+            int fim = linha.Contains("^GB", StringComparison.Ordinal)
+                ? x + int.Parse(Entre(linha, "^GB", ",").Trim(','))
+                : linha.Contains("^FB", StringComparison.Ordinal)
+                    ? x + int.Parse(Entre(linha, "^FB", ",").Trim(','))
+                    : x;
+
+            Assert.True(fim <= barra.X,
+                $"campo termina em x={fim} e entra na faixa da barra, que comeca em {barra.X}: {linha}");
+        }
+    }
+
+    private readonly record struct BarraCaixa(
+        int X, int Y, int Modulo, int AlturaBarras, int Comprimento, int Largura, int Altura);
+
+    /// <summary>Le a geometria do campo de barras do ZPL: ^FO x,y ^BY m ^BCB,alturaBarras</summary>
+    private static BarraCaixa LerBarra(string zpl, string codigoLocal)
+    {
         int fo = zpl.LastIndexOf("^FO", zpl.IndexOf("^BCB", StringComparison.Ordinal), StringComparison.Ordinal);
         string cabecalho = zpl[fo..zpl.IndexOf("^FD", fo, StringComparison.Ordinal)];
         string[] origem = Entre(cabecalho, "^FO", "^BY").Split(',');
-        int y = int.Parse(origem[1]);
         int modulo = int.Parse(Entre(cabecalho, "^BY", "^BC"));
 
-        int comprimento = ((11 * (codigoLocal.Length + 2)) + 13) * modulo;
-        int topo = y - comprimento;
+        // GATE 130C: a calibracao de 18/11/2026 provou que o modo automatico NAO comprime nesta
+        // impressora, entao o subconjunto B puro e a conta certa — sobre o dado JA encurtado.
+        int comprimento = ServicoImpressoraZebra.EstimarLarguraCode128Dots(
+            ServicoImpressoraZebra.DadoDaBarraCaixa(codigoLocal), modulo);
 
-        Assert.Equal(TopoDaGrade, topo);
-        Assert.True(y < OrigemAntigaNoRodape,
-            $"a origem y={y} continua no rodape; deveria ter subido para acompanhar a grade");
+        return new BarraCaixa(
+            X: int.Parse(origem[0]),
+            Y: int.Parse(origem[1]),
+            Modulo: modulo,
+            AlturaBarras: int.Parse(Entre(cabecalho, "^BCB,", ",").Trim(',')),
+            Comprimento: comprimento,
+            Largura: int.Parse(Entre(zpl, "^PW", "\n")),
+            Altura: int.Parse(Entre(zpl, "^LL", "\n")));
     }
 
     private static string Entre(string texto, string inicio, string fim)
@@ -291,7 +396,9 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
         caixa.HandlingUnitExternalId = null;
         DadosEtiquetaCaixaProdutoAcabado e = ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa);
         string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(e);
-        Assert.Contains("HU: PENDENTE", zpl, StringComparison.Ordinal);
+        // GATE 130A: a HU virou celula da grade — rotulo "HU SAP" em cima, valor embaixo.
+        Assert.Contains("HU SAP", zpl, StringComparison.Ordinal);
+        Assert.Contains("PENDENTE", zpl, StringComparison.Ordinal);
     }
 
     // Rastreabilidade: reimpressão de caixa SEM identidade persistida é bloqueada (nunca imprime "no escuro").
