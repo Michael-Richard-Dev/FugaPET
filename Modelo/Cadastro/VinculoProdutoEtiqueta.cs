@@ -5,16 +5,20 @@ namespace FugaPET_Dev.Modelo.Cadastro;
 /// </summary>
 public enum ProcessoPesagemProduto
 {
-    /// <summary>Uma pesagem e um envio ao SAP por caixa. E o unico implementado hoje.</summary>
+    /// <summary>Pesa uma caixa, envia aquela caixa ao SAP, pesa a proxima. Um clique por caixa.</summary>
     CaixaACaixa,
 
     /// <summary>
-    /// Junta todas as caixas e faz UM envio ao SAP.
+    /// Pesa TODAS as caixas e envia num unico comando, ao final.
     /// <para>
-    /// <b>Cadastravel, nao executavel.</b> Em 18/11/2026 este caminho de envio ainda nao existe no
-    /// sistema. O usuario precisa poder marcar a intencao antes de a pesagem ficar pronta, e por
-    /// isso o valor e aceito — mas nada no runtime deve supor que marcar aqui habilita o envio.
-    /// Quem implementar a pesagem decide o que fazer com os produtos ja marcados.
+    /// UNICO E O COMANDO, NAO O DOCUMENTO. Cada caixa continua virando a sua propria Handling Unit no
+    /// SAP, uma por POST, exatamente como no caixa a caixa — o que muda e o momento: nada vai ao SAP
+    /// durante a pesagem, e um botao so percorre as pendentes no final.
+    /// </para>
+    /// <para>
+    /// E essa escolha que preserva a paletizacao: o palete e uma HU PAI sobre as HUs filhas e exige
+    /// caixa confirmada com HU real. Um envio que agrupasse as caixas num documento so deixaria o
+    /// palete sem filhas para agrupar.
     /// </para>
     /// </summary>
     EnvioUnico,

@@ -7,6 +7,7 @@ using FugaPET_Dev.Modelo.IntegracaoSap;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.Ambiente;
 using FugaPET_Dev.Servicos.IntegracaoSap;
+using FugaPET_Dev.Servicos.Processo;
 using FugaPET_Dev.Servicos.Operacao;
 using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Servicos.Terminal;
@@ -39,6 +40,11 @@ public sealed class ProdutoAcabadoController
     private readonly ProdutoAcabadoPaleteLocalPersistenteOrquestrador? _paleteLocalPersistenteOrquestrador;
     private readonly IProdutoAcabadoPipeline045Operacoes? _pipeline045Operacoes;
 
+    // Processo de pesagem do produto (vinculo 065): decide se a tela envia caixa a caixa ou em lote.
+    // Composto preguicosamente porque depende do banco de cadastro, que pode nao estar configurado em
+    // teste; neste caso a tela cai no comportamento historico, que e o de sempre.
+    private readonly Lazy<ProcessoPesagemProdutoServico?> _processoPesagemServico;
+
     public ProdutoAcabadoController()
         : this(FabricaProductionOrderSapServico.Criar())
     {
@@ -54,8 +60,29 @@ public sealed class ProdutoAcabadoController
         ProdutoAcabadoHuService? huService = null,
         ConfiguracaoSap? configuracaoSap = null,
         IProdutoAcabadoPipelineStore? pipelineStore = null,
-        IProdutoAcabadoPaleteInt012Gateway? paleteInt012Gateway = null)
+        IProdutoAcabadoPaleteInt012Gateway? paleteInt012Gateway = null,
+        ProcessoPesagemProdutoServico? processoPesagemServico = null)
     {
+        // Preguicoso de proposito: compor o servico exige o banco de cadastro, e a tela de Produto
+        // Acabado tem de abrir mesmo onde esse banco nao esta configurado. Falha na composicao vira
+        // "sem processo configurado", nao excecao na abertura da tela.
+        _processoPesagemServico = new Lazy<ProcessoPesagemProdutoServico?>(() =>
+        {
+            if (processoPesagemServico is not null)
+            {
+                return processoPesagemServico;
+            }
+
+            try
+            {
+                return FabricaControladoresCadastro.CriarProcessoPesagemProdutoServico();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        });
+
         _productionOrderSapServico = productionOrderSapServico ?? throw new ArgumentNullException(nameof(productionOrderSapServico));
         _taraController = taraController ?? FabricaControladoresCadastro.CriarTaraController();
         _paletePayloadBuilder = paletePayloadBuilder ?? new ProdutoAcabadoPaletePayloadBuilder();
@@ -1196,6 +1223,36 @@ public sealed class ProdutoAcabadoController
     // ============================ Caixa individual (Handling Unit) ============================
 
     /// <summary>Gateway autorizado a executar o POST real (fail-closed por padrÃ£o nesta frente).</summary>
+    /// <summary>
+    /// O processo de pesagem configurado para o produto, ou <c>null</c> quando nao ha vinculo (ou
+    /// quando o cadastro nao esta disponivel nesta execucao).
+    /// <para>
+    /// Os dois casos de nulo colapsam de proposito: para a pesagem, "nao configurado" e "nao consegui
+    /// perguntar" levam ao MESMO lugar — segue como sempre foi. Distinguir aqui so serviria para
+    /// inventar um erro que nao muda nada do que a tela faz.
+    /// </para>
+    /// </summary>
+    public async Task<ProcessoPesagemProduto?> ObterProcessoPesagemAsync(
+        string? centro, string? produto, CancellationToken cancellationToken = default)
+    {
+        ProcessoPesagemProdutoServico? servico = _processoPesagemServico.Value;
+        if (servico is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await servico.ObterProcessoAsync(centro, produto, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Banco fora do ar na consulta do vinculo nao pode derrubar a consulta da ordem: a pesagem
+            // segue no comportamento historico.
+            return null;
+        }
+    }
+
     public bool EnvioHuAutorizado => _huService.EnvioAutorizado;
 
     /// <summary>

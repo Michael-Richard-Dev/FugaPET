@@ -103,7 +103,7 @@ public sealed class ProdutoAcabadoHuBridge044045Tests
     [Fact]
     public void Form_RecarregaSnapshot_AposPipeline_EBloqueiaSeRecargaFalhar()
     {
-        string metodo = ExtrairMetodo(LerForm(), "private async Task SolicitarEnvioCaixaPipelineAsync()");
+        string metodo = ExtrairMetodo(LerForm(), "private async Task SolicitarEnvioCaixaPipelineAsync(");
         Assert.Contains("await _controller.ObterCaixaPorCodigoAsync(codigo)", metodo, StringComparison.Ordinal);
         Assert.Contains("SubstituirCaixaNoCache(snapshot)", metodo, StringComparison.Ordinal);
         // recarga null OU exceção ⇒ bloqueia reenvio local (nunca reabilita por objeto stale).

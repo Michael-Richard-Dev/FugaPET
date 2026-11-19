@@ -69,7 +69,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
     {
         string form = LerProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
         Assert.Contains("if (_controller.PipelinePaGateHabilitado)", form, StringComparison.Ordinal);
-        Assert.Contains("await SolicitarEnvioCaixaPipelineAsync();", form, StringComparison.Ordinal);
+        Assert.Contains("await SolicitarEnvioCaixaPipelineAsync(", form, StringComparison.Ordinal);
 
         // Pipeline habilitado â‡’ retorna ANTES do caminho HU-only (nunca HU direta com pipeline=true).
         int idxGate = form.IndexOf("if (_controller.PipelinePaGateHabilitado)", StringComparison.Ordinal);
@@ -90,7 +90,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
     public void Rev5_Form_NaoDefineCorrelationTecnica()
     {
         string form = LerProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        string metodo = ExtrairMetodo(form, "private async Task SolicitarEnvioCaixaPipelineAsync()");
+        string metodo = ExtrairMetodo(form, "private async Task SolicitarEnvioCaixaPipelineAsync(");
         Assert.DoesNotContain("CorrelationId =", metodo, StringComparison.Ordinal);
         Assert.Contains("Identidade técnica", metodo, StringComparison.Ordinal);
     }
@@ -362,7 +362,7 @@ public sealed class ProdutoAcabadoPipelineWiringRev4Tests
     public void Form_PreencheDatasPipelineComDataOperacionalDaCaixa()
     {
         string form = LerProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        string metodo = ExtrairMetodo(form, "private async Task SolicitarEnvioCaixaPipelineAsync()");
+        string metodo = ExtrairMetodo(form, "private async Task SolicitarEnvioCaixaPipelineAsync(");
         // GATE 118B: a origem passou a receber o resultado do alocador (leitura fresca + deltas).
         Assert.Contains("MontarOrigemPipelineRuntime(caixa, _ordemAtual, DateTime.UtcNow, alocacao)", metodo, StringComparison.Ordinal);
         Assert.Contains("await _controller.CalcularAlocacao261FrescaAsync(caixa)", metodo, StringComparison.Ordinal);

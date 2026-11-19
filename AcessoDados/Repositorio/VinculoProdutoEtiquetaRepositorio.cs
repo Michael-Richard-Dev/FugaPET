@@ -55,6 +55,38 @@ public class VinculoProdutoEtiquetaRepositorio : RepositorioBase
     }
 
     /// <summary>
+    /// O vinculo de UM produto do centro, ou <c>null</c> quando o produto nao foi configurado.
+    /// <para>
+    /// Existe para a PESAGEM, nao para o cadastro: a tela de Produto Acabado precisa saber por qual
+    /// processo o produto da ordem deve ser pesado, e carregar o centro inteiro para achar uma linha
+    /// seria desperdicio num caminho que roda a cada consulta de ordem.
+    /// </para>
+    /// <para>
+    /// O nome da etiqueta NAO vem junto de proposito: quem pergunta pelo processo nao imprime nada. A
+    /// listagem do cadastro continua sendo o lugar de resolver etiqueta.
+    /// </para>
+    /// </summary>
+    public virtual async Task<VinculoProdutoEtiqueta?> ObterPorProdutoAsync(
+        string centro, string produto, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT v.codigo_vinculo, v.centro, v.produto, v.descricao_produto, v.tipo_produto,
+                   v.codigo_etiqueta, v.sem_etiqueta, v.processo_pesagem, v.situacao,
+                   v.criado_em, v.criado_por, v.atualizado_em, v.atualizado_por
+              FROM produto_etiqueta_vinculo v
+             WHERE v.centro = @centro AND v.produto = @produto;
+            """;
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand comando = new(sql, conexao);
+        comando.Parameters.AddWithValue("@centro", centro);
+        comando.Parameters.AddWithValue("@produto", produto);
+
+        await using NpgsqlDataReader leitor = await comando.ExecuteReaderAsync(cancellationToken);
+        return await leitor.ReadAsync(cancellationToken) ? Ler(leitor) : null;
+    }
+
+    /// <summary>
     /// Grava a decisao do produto: insere, ou atualiza a que ja existia.
     /// <para>
     /// O <c>ON CONFLICT (centro, produto)</c> e o que materializa o "um pra um" sem corrida: dois

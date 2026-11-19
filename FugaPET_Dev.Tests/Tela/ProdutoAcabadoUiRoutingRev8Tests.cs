@@ -20,7 +20,7 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     {
         string form = Form();
         Assert.Contains("if (_controller.PipelinePaGateHabilitado)", form, StringComparison.Ordinal);
-        Assert.Contains("await SolicitarEnvioCaixaPipelineAsync();", form, StringComparison.Ordinal);
+        Assert.Contains("await SolicitarEnvioCaixaPipelineAsync(", form, StringComparison.Ordinal);
         int idxGate = form.IndexOf("if (_controller.PipelinePaGateHabilitado)", StringComparison.Ordinal);
         int idxHu = form.IndexOf("_controller.EnviarCaixaHandlingUnitAsync(", StringComparison.Ordinal);
         Assert.True(idxGate >= 0 && idxHu >= 0 && idxGate < idxHu, "roteamento do pipeline deve preceder o HU-only");
@@ -29,7 +29,7 @@ public sealed class ProdutoAcabadoUiRoutingRev8Tests
     [Fact]
     public void Caixa_PipelineHabilitadoIndisponivel_BloqueiaSemFallbackHu()
     {
-        string metodo = ExtrairMetodo(Form(), "private async Task SolicitarEnvioCaixaPipelineAsync()");
+        string metodo = ExtrairMetodo(Form(), "private async Task SolicitarEnvioCaixaPipelineAsync(");
         Assert.Contains("if (!_controller.PipelinePaDisponivel)", metodo, StringComparison.Ordinal);
         // Bloqueia exibindo o motivo e NÃO cai em HU-only dentro do caminho do pipeline.
         Assert.Contains("PipelinePaMotivo", metodo, StringComparison.Ordinal);
