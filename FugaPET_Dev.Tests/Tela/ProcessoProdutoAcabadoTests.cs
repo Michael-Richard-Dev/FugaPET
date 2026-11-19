@@ -471,10 +471,14 @@ public sealed class ProcessoProdutoAcabadoTests
         // §7/§11.C: guard explícito "uma caixa por vez" (não usa apenas Count+1 como autorização).
         string form = LerArquivoProjeto("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
 
+        // 068: a guarda passou a ser consultada por ExisteCaixaQueImpedeSeguir, que escolhe a regra pelo
+        // processo. ExisteCaixaAtiva continua existindo e continua sendo a regra do CAIXA A CAIXA — o
+        // que este teste protege (guarda explicita, nao Count+1) nao mudou de lugar, so de nome.
         Assert.Contains("private static readonly bool PrimeiraEntregaHu = true;", form, StringComparison.Ordinal);
-        Assert.Contains("if (PrimeiraEntregaHu && ExisteCaixaAtiva())", form, StringComparison.Ordinal);
+        Assert.Contains("if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir())", form, StringComparison.Ordinal);
         Assert.Contains("private bool ExisteCaixaAtiva()", form, StringComparison.Ordinal);
-        Assert.Contains("Confirme o envio ou cancele a caixa atual antes de pesar outra.", form, StringComparison.Ordinal);
+        Assert.Contains("private bool ExisteCaixaQueImpedeSeguir()", form, StringComparison.Ordinal);
+        Assert.Contains("Confirme ou cancele a caixa antes de", form, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -567,7 +571,8 @@ public sealed class ProcessoProdutoAcabadoTests
         Assert.Contains("_criarPaleteCard.Visible = false;", atualizar, StringComparison.Ordinal);
         Assert.Contains("paletesDataGridView.Visible = false;", atualizar, StringComparison.Ordinal);
 
-        Assert.Contains("bool caixaAtiva = ExisteCaixaAtiva();", atualizar, StringComparison.Ordinal);
+        // 068: mesma regra, consultada pelo seletor por processo.
+        Assert.Contains("bool caixaAtiva = ExisteCaixaQueImpedeSeguir();", atualizar, StringComparison.Ordinal);
         Assert.Contains("!caixaAtiva", atualizar, StringComparison.Ordinal);
         Assert.Contains("Keys.F5 or Keys.F9 or Keys.F12", teclas, StringComparison.Ordinal);
 

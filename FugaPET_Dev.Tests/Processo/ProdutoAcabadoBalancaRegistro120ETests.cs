@@ -101,6 +101,9 @@ public sealed class ProdutoAcabadoBalancaRegistro120ETests
             switch (metodo!.Name)
             {
                 case "ObterAtivaPorTerminalAsync":
+                // 068: o registro passou a perguntar pela caixa que BLOQUEIA, dado o processo. Sem este
+                // caso o proxy caía no default e abortava antes da pesagem, que é o que este teste mede.
+                case "ObterBloqueadoraPorTerminalAsync":
                     return Task.FromResult<ProdutoAcabadoCaixa?>(null);
                 case "RegistrarCaixaAsync":
                     var caixa = (ProdutoAcabadoCaixa)argumentos![0]!;

@@ -87,6 +87,17 @@ public interface IProdutoAcabadoRepositorio
     Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// A caixa do terminal que IMPEDE abrir outra, entre os status informados; nula se nenhuma impede.
+    /// <para>
+    /// Difere de <see cref="ObterAtivaPorTerminalAsync"/> na pergunta que faz: aquela devolve a ULTIMA
+    /// nao confirmada, esta devolve a que BLOQUEIA. No envio unico a ultima pendente e inofensiva, e
+    /// perguntar pela ultima esconderia uma caixa em ERRO_SAP de uma ordem anterior no mesmo terminal.
+    /// </para>
+    /// </summary>
+    Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(
+        string terminal, IReadOnlyList<string> statusQueImpedem, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lista (somente leitura) TODAS as caixas persistidas da OP+terminal, em qualquer estado (inclusive
     /// CONFIRMADA_SAP/CANCELADA), ordenadas por numero_caixa. Base da recuperação da grid após reabrir a tela.
     /// </summary>

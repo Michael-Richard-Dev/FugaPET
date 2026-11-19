@@ -1,6 +1,7 @@
 using FugaPET_Dev.AcessoDados.Repositorio;
 using FugaPET_Dev.Modelo.Processo;
 using FugaPET_Dev.Servicos.IntegracaoSap;
+using FugaPET_Dev.Servicos.Processo;
 
 namespace FugaPET_Dev.Servicos.Operacao;
 
@@ -84,13 +85,21 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
     {
         ArgumentNullException.ThrowIfNull(caixa);
 
+        // A pergunta depende do PROCESSO da caixa que está nascendo. No caixa a caixa impede qualquer
+        // caixa não confirmada, como sempre; no envio único acumular pendente É o processo, e só impede
+        // o que exige decisão humana. A regra mora em RegraBloqueioPesagemProdutoAcabado, uma vez só,
+        // para que serviço, tela e banco não possam divergir.
         diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.CONSULTAR_CAIXA_ATIVA);
-        ProdutoAcabadoCaixa? ativa = await _repositorio.ObterAtivaPorTerminalAsync(terminal, cancellationToken);
+        ProdutoAcabadoCaixa? ativa = await _repositorio.ObterBloqueadoraPorTerminalAsync(
+            terminal,
+            RegraBloqueioPesagemProdutoAcabado.StatusQueImpedemNoBanco(caixa.ProcessoPesagem),
+            cancellationToken);
         if (ativa is not null)
         {
             return ResultadoFinalizacaoHu.Bloqueado(
-                $"Já existe uma caixa ativa no terminal (status {MapeadorStatusHuCaixa.ParaTextoBanco(ativa.StatusIntegracao)}). "
-                + "Conclua ou cancele antes de registrar outra.", ativa);
+                $"A caixa {ativa.CodigoCaixaLocal} está em "
+                + $"{MapeadorStatusHuCaixa.ParaTextoBanco(ativa.StatusIntegracao)} neste terminal e precisa ser "
+                + "resolvida antes de registrar outra.", ativa);
         }
 
         diagnostico?.Invoke(Servicos.Diagnostico.EtapaRegistroCaixa120E.MONTAR_PREVIEW);

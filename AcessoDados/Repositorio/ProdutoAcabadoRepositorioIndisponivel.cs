@@ -80,6 +80,10 @@ public sealed class ProdutoAcabadoRepositorioIndisponivel : IProdutoAcabadoRepos
     public Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default)
         => throw Falha();
 
+    public Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(
+        string terminal, IReadOnlyList<string> statusQueImpedem, CancellationToken cancellationToken = default)
+        => throw Falha();
+
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorOrdemTerminalAsync(string numeroOrdemProducao, string terminal, CancellationToken cancellationToken = default)
         => throw Falha();
 

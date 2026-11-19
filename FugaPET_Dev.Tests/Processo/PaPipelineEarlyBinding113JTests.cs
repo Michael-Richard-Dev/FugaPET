@@ -82,6 +82,8 @@ public sealed class PaPipelineEarlyBinding113JTests
             => Task.FromResult<ProdutoAcabadoCaixa?>(Snapshot());
         public Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string t, CancellationToken ct = default)
             => Task.FromResult<ProdutoAcabadoCaixa?>(null);
+        public Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(string t, IReadOnlyList<string> s, CancellationToken ct = default)
+            => Task.FromResult<ProdutoAcabadoCaixa?>(null);
         public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorOrdemTerminalAsync(string o, string t, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<ProdutoAcabadoCaixa>>([]);
         public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorContextoAsync(string o, string i, string m, string l, string t, CancellationToken ct = default)

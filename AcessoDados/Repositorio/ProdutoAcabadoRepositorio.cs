@@ -56,12 +56,12 @@ public sealed class ProdutoAcabadoRepositorio : IProdutoAcabadoRepositorio
                 numero_ordem_producao, item_ordem_producao, correlation_id,
                 material, lote, centro, deposito, material_embalagem, origem_material_embalagem,
                 peso_bruto, peso_liquido, peso_tara, unidade_peso, quantidade, unidade_quantidade,
-                origem_pesagem, codigo_balanca, codigo_usuario, terminal
+                origem_pesagem, codigo_balanca, codigo_usuario, terminal, processo_pesagem
             ) VALUES (
                 @numero_op, @item_op, @correlation,
                 @material, @lote, @centro, @deposito, @material_emb, @origem_emb,
                 @peso_bruto, @peso_liquido, @peso_tara, @unidade_peso, @quantidade, @unidade_qtd,
-                @origem_pesagem, @codigo_balanca, @codigo_usuario, @terminal
+                @origem_pesagem, @codigo_balanca, @codigo_usuario, @terminal, @processo_pesagem
             )
             RETURNING {ColunasCaixa};
             """;
@@ -87,6 +87,12 @@ public sealed class ProdutoAcabadoRepositorio : IProdutoAcabadoRepositorio
         AdicionarBigintOuNulo(cmd, "codigo_balanca", caixa.CodigoBalanca);
         cmd.Parameters.AddWithValue("codigo_usuario", NpgsqlDbType.Bigint, usuario);
         cmd.Parameters.AddWithValue("terminal", NpgsqlDbType.Varchar, caixa.Terminal.Trim());
+        // 068: nulo quando o processo não foi resolvido. O banco trata nulo como caixa a caixa, que é a
+        // regra histórica — nunca se inventa 'CAIXA_A_CAIXA' aqui para não afirmar o que não se sabe.
+        cmd.Parameters.AddWithValue("processo_pesagem", NpgsqlDbType.Varchar,
+            caixa.ProcessoPesagem is Modelo.Cadastro.ProcessoPesagemProduto processo
+                ? Modelo.Cadastro.VinculoProdutoEtiqueta.TextoDoProcesso(processo)
+                : (object)DBNull.Value);
 
         await using NpgsqlDataReader leitor = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await leitor.ReadAsync(cancellationToken))
@@ -535,6 +541,35 @@ public sealed class ProdutoAcabadoRepositorio : IProdutoAcabadoRepositorio
         await using NpgsqlConnection con = await _fabricaConexao.CriarConexaoAbertaAsync(cancellationToken);
         await using NpgsqlCommand cmd = new(sql, con);
         cmd.Parameters.AddWithValue("t", NpgsqlDbType.Text, terminal ?? string.Empty);
+        await using NpgsqlDataReader leitor = await cmd.ExecuteReaderAsync(cancellationToken);
+        return await leitor.ReadAsync(cancellationToken) ? Hidratar(leitor) : null;
+    }
+
+    public async Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(
+        string terminal, IReadOnlyList<string> statusQueImpedem, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(statusQueImpedem);
+        if (statusQueImpedem.Count == 0)
+        {
+            // Lista vazia significa "nada impede". Consultar com ANY(ARRAY[]) devolveria nada de qualquer
+            // forma, mas sair aqui deixa a intencao explicita e evita uma ida ao banco por nada.
+            return null;
+        }
+
+        // Ordenado pela MAIS ANTIGA: havendo mais de uma impeditiva, o operador deve ver a que trava ha
+        // mais tempo, nao a ultima que apareceu.
+        string sql = $"""
+            SELECT {ColunasCaixa}
+              FROM hu_caixa
+             WHERE upper(btrim(terminal))=upper(btrim(@t))
+               AND status_hu_caixa = ANY(@status)
+             ORDER BY codigo_hu_caixa
+             LIMIT 1
+            """;
+        await using NpgsqlConnection con = await _fabricaConexao.CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand cmd = new(sql, con);
+        cmd.Parameters.AddWithValue("t", NpgsqlDbType.Text, terminal ?? string.Empty);
+        cmd.Parameters.AddWithValue("status", NpgsqlDbType.Array | NpgsqlDbType.Text, statusQueImpedem.ToArray());
         await using NpgsqlDataReader leitor = await cmd.ExecuteReaderAsync(cancellationToken);
         return await leitor.ReadAsync(cancellationToken) ? Hidratar(leitor) : null;
     }

@@ -1861,7 +1861,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
 
         // §4: com caixa ATIVA, não reiniciar a leitura — exige confirmar/cancelar a caixa atual antes.
-        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir())
         {
             AvisarCaixaAtivaPendente();
             return;
@@ -1970,13 +1970,11 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return false;
         }
 
-        // §7: UMA CAIXA POR VEZ. Cache local espelha o banco (a caixa ativa também é recuperada na abertura
-        // via ObterCaixaAtivaPorTerminalAsync). Exige confirmar/cancelar a caixa atual antes da próxima.
-        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        // §7: UMA CAIXA POR VEZ na balança. No caixa a caixa isso também exige integrar a anterior; no
+        // envio único, não — acumular pendente é o processo. A diferença mora em ExisteCaixaQueImpedeSeguir.
+        if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir())
         {
-            MessageBox.Show(
-                "Já existe uma caixa em andamento. Confirme o envio ou cancele a caixa atual antes de pesar outra.",
-                "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(MensagemDoBloqueio(), "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
@@ -2021,7 +2019,11 @@ public partial class ProcessoProdutoAcabadoForm : Form
                 {
                     etapaRegistro = etapa;
                     Servicos.Diagnostico.RegistroCaixaDiag120E.Registrar(etapa);
-                });
+                },
+                // 068: a caixa nasce carimbada com o processo da OP. Sem isto a coluna fica sempre nula
+                // e o índice do banco continua tratando toda caixa como caixa a caixa — ou seja, o envio
+                // único travaria na segunda caixa, que foi o defeito encontrado em 19/11/2026.
+                processoPesagem: _processoPesagemOp);
         }
         catch (Exception ex)
         {
@@ -2199,6 +2201,33 @@ public partial class ProcessoProdutoAcabadoForm : Form
             c.StatusIntegracao != StatusIntegracaoCaixa.ConfirmadaSap
             && c.StatusIntegracao != StatusIntegracaoCaixa.Cancelada);
 
+    /// <summary>
+    /// Existe caixa que IMPEDE seguir (pesar a próxima, trocar a OP, fechar a tela)?
+    /// <para>
+    /// <see cref="ExisteCaixaAtiva"/> junta duas regras que só pareciam uma enquanto existia um processo
+    /// só: <b>uma caixa por vez na balança</b>, que é física e vale sempre, e <b>não deixe caixa
+    /// finalizada sem integrar</b>, que é do caixa a caixa. O envio único existe justamente para
+    /// acumular caixas finalizadas e sem integrar — sob a regra antiga, a segunda caixa já era barrada,
+    /// e o processo ficava impossível de operar.
+    /// </para>
+    /// <para>
+    /// No envio único seguem impedindo apenas os estados que EXIGEM DECISÃO HUMANA: caixa aberta na
+    /// balança, envio em curso, resultado indeterminado, bloqueada e erro. Empilhar caixas sobre um
+    /// desses esconderia o problema em vez de resolvê-lo.
+    /// </para>
+    /// <para>
+    /// As pendentes acumuladas não se perdem ao fechar a tela: elas estão persistidas e voltam pela
+    /// recuperação na abertura. É o que permite liberar o fechamento sem criar uma armadilha — guarda
+    /// sem caminho de saída já prendeu a operação antes.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// A regra mora em <see cref="RegraBloqueioPesagemProdutoAcabado"/>, fora da tela, para poder ser
+    /// provada sem WinForms — foi a ausência dessa prova que deixou o travamento passar.
+    /// </remarks>
+    private bool ExisteCaixaQueImpedeSeguir()
+        => RegraBloqueioPesagemProdutoAcabado.ImpedeSeguir(_processoPesagemOp, _caixasPesadas);
+
     /// <summary>§3: oculta um controle de palete localizado por Name (o título é criado localmente).</summary>
     private void OcultarControlePaletePorNome(string nome)
     {
@@ -2233,7 +2262,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private bool ValidarPodePesar()
     {
         // §4: bloqueio preventivo — com caixa ativa pendente não abre pesagem (F9/F12/manual/balança).
-        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir())
         {
             AvisarCaixaAtivaPendente();
             return false;
@@ -2980,7 +3009,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         bool livre = !_operacaoEmAndamento;
         // §4: com caixa ATIVA (finalizada aguardando integração) a leitura NÃO pode reiniciar — apenas parar
         // uma leitura já em andamento. Bloqueio preventivo, não só dentro de RegistrarCaixaProdutoAcabado.
-        bool caixaAtiva = ExisteCaixaAtiva();
+        bool caixaAtiva = ExisteCaixaQueImpedeSeguir();
         bool podeAlternarLeitura = livre && _ordemAtual is not null && QuantidadePorCaixaValida() && !caixaAtiva;
         iniciarLeituraButton.PrimaryText = _leituraIniciada ? "PARAR LEITURA" : "INICIAR LEITURA";
         iniciarLeituraButton.IconGlyph = _leituraIniciada ? "\uE71A" : "\uE768";
@@ -3151,7 +3180,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private bool PodeFecharTela()
     {
         // §5: caixa ativa (só em memória nesta fase) NÃO pode ser descartada ao fechar/Escape.
-        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir())
         {
             AvisarCaixaAtivaPendente();
             return false;
@@ -3177,7 +3206,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
     /// </summary>
     private bool PodeTrocarOuLimparOp()
     {
-        if (PrimeiraEntregaHu && ExisteCaixaAtiva())
+        if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir())
         {
             AvisarCaixaAtivaPendente();
             return false;
@@ -3189,10 +3218,41 @@ public partial class ProcessoProdutoAcabadoForm : Form
     /// <summary>§5: aviso central de caixa ativa pendente (usado em pesagem, troca de OP e fechamento).</summary>
     private void AvisarCaixaAtivaPendente()
     {
-        const string mensagem =
-            "Existe uma caixa finalizada aguardando integração. Confirme ou cancele a caixa antes de trocar a OP ou fechar a tela.";
+        string mensagem = MensagemDoBloqueio();
         statusLabel.Text = mensagem;
         MessageBox.Show(mensagem, "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    /// <summary>
+    /// Diz qual caixa está bloqueando e por quê.
+    /// <para>
+    /// No envio único a mensagem antiga mentiria: acumular caixa finalizada é o processo, então o que
+    /// barra nunca é "aguardando integração" — é uma caixa aberta, um envio em curso ou um resultado
+    /// que precisa de decisão. Mandar "confirme ou cancele" diante de uma caixa em ERRO_SAP manda o
+    /// operador fazer o que não resolve.
+    /// </para>
+    /// </summary>
+    private string MensagemDoBloqueio()
+    {
+        if (_processoPesagemOp != ProcessoPesagemProduto.EnvioUnico)
+        {
+            return "Existe uma caixa finalizada aguardando integração. Confirme ou cancele a caixa antes de "
+                 + "trocar a OP ou fechar a tela.";
+        }
+
+        ProdutoAcabadoCaixa? bloqueando =
+            RegraBloqueioPesagemProdutoAcabado.PrimeiraQueImpede(_processoPesagemOp, _caixasPesadas);
+
+        if (bloqueando is null)
+        {
+            return "Existe uma caixa que impede seguir.";
+        }
+
+        string estado = MapeadorStatusHuCaixa.ParaTextoBanco(bloqueando.StatusIntegracao);
+        return bloqueando.StatusIntegracao == StatusIntegracaoCaixa.EmPesagem
+            ? $"A caixa {bloqueando.CodigoCaixaLocal} está aberta na balança. Finalize ou cancele essa caixa antes de seguir."
+            : $"A caixa {bloqueando.CodigoCaixaLocal} está em {estado} e precisa ser resolvida antes de seguir. "
+              + "As demais caixas pesadas continuam pendentes de envio e não se perdem.";
     }
 
     private bool SolicitarPesoManual(decimal taraKg, out decimal pesoKg)
@@ -3343,7 +3403,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private async void ProcessoProdutoAcabadoForm_KeyDown(object? sender, KeyEventArgs e)
     {
         // §4: bloqueio preventivo de F5/F9/F12 com caixa ativa pendente (Delete=cancelar e Escape seguem).
-        if (PrimeiraEntregaHu && ExisteCaixaAtiva()
+        if (PrimeiraEntregaHu && ExisteCaixaQueImpedeSeguir()
             && e.KeyCode is Keys.F5 or Keys.F9 or Keys.F12 && !_leituraIniciada)
         {
             e.SuppressKeyPress = true;

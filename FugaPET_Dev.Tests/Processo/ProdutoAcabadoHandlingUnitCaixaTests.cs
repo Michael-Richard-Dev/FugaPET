@@ -1,3 +1,4 @@
+using FugaPET_Dev.Modelo.Cadastro;
 using System.Net;
 using System.Text.Json;
 using FugaPET_Dev.AcessoDados.Repositorio;
@@ -310,7 +311,10 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
         await service.RegistrarEFinalizarCaixaAsync(CaixaValida(), Usuario, Terminal);
         ResultadoFinalizacaoHu segunda = await service.RegistrarEFinalizarCaixaAsync(CaixaValida(), Usuario, Terminal);
         Assert.False(segunda.Sucesso);
-        Assert.Contains("caixa ativa", segunda.Mensagem, StringComparison.OrdinalIgnoreCase);
+        // 068: a mensagem passou a NOMEAR a caixa que bloqueia e o estado dela, em vez de dizer
+        // genericamente "caixa ativa" — o bloqueio, que e o que este teste protege, nao mudou.
+        Assert.Contains("precisa ser resolvida", segunda.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("CX-", segunda.Mensagem, StringComparison.Ordinal);
     }
 
     // ===================== §24.20/21/22 Form/Repository sem banco/SAP/SQL direto =====================
@@ -828,7 +832,84 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
 
     // ===================== helpers =====================
 
-    private static ProdutoAcabadoCaixa CaixaValida(string lote = "L-TESTE", string centro = "3007") => new()
+    // ================= 068: registro sequencial no envio unico =================
+
+    /// <summary>
+    /// O DEFEITO: depois de liberar o indice do banco e a guarda da tela, a pesagem ainda travava AQUI,
+    /// no servico, que recusava registrar havendo qualquer caixa nao confirmada no terminal. A mesma
+    /// regra estava escrita em TRES lugares, e corrigir dois deixava o processo impossivel de operar.
+    /// </summary>
+    [Fact]
+    public async Task EnvioUnico_RegistraCaixasSeguidasSemEnviarNenhuma()
+    {
+        (ProdutoAcabadoHuService service, RepoFake repo, _) = MontarServico();
+
+        for (int i = 1; i <= 3; i++)
+        {
+            ResultadoFinalizacaoHu r = await service.RegistrarEFinalizarCaixaAsync(
+                CaixaValida(processo: ProcessoPesagemProduto.EnvioUnico), Usuario, Terminal);
+            Assert.True(r.Sucesso, $"caixa {i} foi recusada: {r.Mensagem}");
+        }
+
+        IReadOnlyList<ProdutoAcabadoCaixa> caixas =
+            await repo.ListarPorOrdemTerminalAsync("1001951", Terminal);
+        Assert.Equal(3, caixas.Count);
+        Assert.All(caixas, c => Assert.Equal(StatusIntegracaoCaixa.AguardandoAutorizacaoSap, c.StatusIntegracao));
+    }
+
+    /// <summary>E o caixa a caixa continua recusando a segunda, exatamente como antes.</summary>
+    [Fact]
+    public async Task CaixaACaixa_ContinuaRecusandoASegundaCaixa()
+    {
+        (ProdutoAcabadoHuService service, _, _) = MontarServico();
+
+        Assert.True((await service.RegistrarEFinalizarCaixaAsync(
+            CaixaValida(processo: ProcessoPesagemProduto.CaixaACaixa), Usuario, Terminal)).Sucesso);
+
+        ResultadoFinalizacaoHu segunda = await service.RegistrarEFinalizarCaixaAsync(
+            CaixaValida(processo: ProcessoPesagemProduto.CaixaACaixa), Usuario, Terminal);
+
+        Assert.False(segunda.Sucesso);
+        Assert.Contains("precisa ser resolvida", segunda.Mensagem, StringComparison.Ordinal);
+    }
+
+    /// <summary>Caixa sem processo registrado segue a regra historica.</summary>
+    [Fact]
+    public async Task SemProcessoRegistrado_ContinuaRecusandoASegundaCaixa()
+    {
+        (ProdutoAcabadoHuService service, _, _) = MontarServico();
+
+        Assert.True((await service.RegistrarEFinalizarCaixaAsync(CaixaValida(), Usuario, Terminal)).Sucesso);
+        Assert.False((await service.RegistrarEFinalizarCaixaAsync(CaixaValida(), Usuario, Terminal)).Sucesso);
+    }
+
+    /// <summary>
+    /// No envio unico, caixa que exige decisao humana BARRA a proxima mesmo havendo pendentes MAIS
+    /// NOVAS — o caso que a consulta antiga, por devolver a ultima nao confirmada, nao enxergava.
+    /// </summary>
+    [Fact]
+    public async Task EnvioUnico_CaixaEmErroBarraMesmoComPendenteMaisNova()
+    {
+        (ProdutoAcabadoHuService service, RepoFake repo, _) = MontarServico();
+
+        await service.RegistrarEFinalizarCaixaAsync(
+            CaixaValida(processo: ProcessoPesagemProduto.EnvioUnico), Usuario, Terminal);
+        await service.RegistrarEFinalizarCaixaAsync(
+            CaixaValida(processo: ProcessoPesagemProduto.EnvioUnico), Usuario, Terminal);
+
+        // A MAIS ANTIGA vai para ERRO_SAP; a mais nova segue pendente e inofensiva.
+        IReadOnlyList<ProdutoAcabadoCaixa> caixas = await repo.ListarPorOrdemTerminalAsync("1001951", Terminal);
+        repo.ForcarStatus(caixas[0].CodigoProdutoAcabadoCaixa!.Value, StatusIntegracaoCaixa.ErroSap);
+
+        ResultadoFinalizacaoHu terceira = await service.RegistrarEFinalizarCaixaAsync(
+            CaixaValida(processo: ProcessoPesagemProduto.EnvioUnico), Usuario, Terminal);
+
+        Assert.False(terceira.Sucesso);
+        Assert.Contains("ERRO_SAP", terceira.Mensagem, StringComparison.Ordinal);
+    }
+
+    private static ProdutoAcabadoCaixa CaixaValida(
+        string lote = "L-TESTE", string centro = "3007", ProcessoPesagemProduto? processo = null) => new()
     {
         NumeroOrdemProducao = "1001951",
         ItemOrdemProducao = "0001",
@@ -847,7 +928,8 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
         OrigemPesagem = "MANUAL",
         CorrelationId = Guid.NewGuid(),
         Terminal = Terminal,
-        CodigoUsuario = Usuario
+        CodigoUsuario = Usuario,
+        ProcessoPesagem = processo
     };
 
     private static (ProdutoAcabadoHuService, RepoFake, GatewayFake) MontarServico(GatewayFake? gateway = null)
@@ -1148,6 +1230,32 @@ public sealed class ProdutoAcabadoHandlingUnitCaixaTests
                 string.Equals(c.Terminal, terminal, StringComparison.OrdinalIgnoreCase)
                 && c.StatusIntegracao is not (StatusIntegracaoCaixa.ConfirmadaSap or StatusIntegracaoCaixa.Cancelada));
             return Task.FromResult(ativa is null ? null : Clonar(ativa));
+        }
+
+        /// <summary>
+        /// Coloca a caixa num status sem passar pelas transicoes. Existe so para ARMAR cenarios que o
+        /// fluxo normal levaria muitos passos para produzir (uma caixa antiga em ERRO_SAP, por exemplo).
+        /// </summary>
+        public void ForcarStatus(long codigo, StatusIntegracaoCaixa status)
+            => _store[codigo].StatusIntegracao = status;
+
+        // 068: a que BLOQUEIA, entre os status informados — mesma semantica do repositorio real,
+        // inclusive a ordem (mais antiga primeiro), para o duplo nao ser mais permissivo que o banco.
+        public Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(
+            string terminal, IReadOnlyList<string> statusQueImpedem, CancellationToken ct = default)
+        {
+            if (statusQueImpedem is null || statusQueImpedem.Count == 0)
+            {
+                return Task.FromResult<ProdutoAcabadoCaixa?>(null);
+            }
+
+            ProdutoAcabadoCaixa? bloqueadora = _store.Values
+                .Where(c => string.Equals(c.Terminal, terminal, StringComparison.OrdinalIgnoreCase)
+                    && statusQueImpedem.Contains(MapeadorStatusHuCaixa.ParaTextoBanco(c.StatusIntegracao)))
+                .OrderBy(c => c.CodigoProdutoAcabadoCaixa)
+                .FirstOrDefault();
+
+            return Task.FromResult(bloqueadora is null ? null : Clonar(bloqueadora));
         }
 
         // REV3-B2: recuperação persistida COMPLETA por OP+terminal (todos os estados), ordenada por número.

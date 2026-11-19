@@ -101,6 +101,9 @@ public sealed class PaPipeline113MBlockersTests
         }
         public Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string t, CancellationToken ct = default)
             => Task.FromResult<ProdutoAcabadoCaixa?>(null);
+
+        public Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(string t, IReadOnlyList<string> s, CancellationToken ct = default)
+            => Task.FromResult<ProdutoAcabadoCaixa?>(null);
         public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorOrdemTerminalAsync(string o, string t, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<ProdutoAcabadoCaixa>>([]);
         public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorContextoAsync(string o, string i, string m, string l, string t, CancellationToken ct = default)
@@ -216,6 +219,7 @@ public sealed class PaPipeline113MBlockersTests
         public Task<bool> LiberarReprocessamentoAsync(long c, long u, string t, string m, CancellationToken ct = default) => Task.FromResult(true);
         public Task<ProdutoAcabadoCaixa?> ObterPorCodigoAsync(long c, CancellationToken ct = default) => interno.ObterPorCodigoAsync(c, ct);
         public Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string t, CancellationToken ct = default) => interno.ObterAtivaPorTerminalAsync(t, ct);
+        public Task<ProdutoAcabadoCaixa?> ObterBloqueadoraPorTerminalAsync(string t, IReadOnlyList<string> s, CancellationToken ct = default) => interno.ObterBloqueadoraPorTerminalAsync(t, s, ct);
         public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorOrdemTerminalAsync(string o, string t, CancellationToken ct = default) => interno.ListarPorOrdemTerminalAsync(o, t, ct);
         public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorContextoAsync(string o, string i, string m, string l, string t, CancellationToken ct = default) => interno.ListarPorContextoAsync(o, i, m, l, t, ct);
 

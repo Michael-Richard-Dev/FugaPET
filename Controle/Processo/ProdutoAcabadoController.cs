@@ -1272,7 +1272,8 @@ public sealed class ProdutoAcabadoController
         OrigemMaterialEmbalagemCaixa origemMaterialEmbalagem = OrigemMaterialEmbalagemCaixa.NaoInformada,
         CancellationToken cancellationToken = default,
         long? codigoBalanca = null,
-        Action<Servicos.Diagnostico.EtapaRegistroCaixa120E>? diagnostico = null)
+        Action<Servicos.Diagnostico.EtapaRegistroCaixa120E>? diagnostico = null,
+        ProcessoPesagemProduto? processoPesagem = null)
     {
         ArgumentNullException.ThrowIfNull(ordem);
         ArgumentNullException.ThrowIfNull(norma);
@@ -1291,6 +1292,10 @@ public sealed class ProdutoAcabadoController
         ProdutoAcabadoCaixa caixa = MontarCaixaSemIdentidadeSequencial(
             ordem, norma, pesoBrutoKg, taraKg, origemPesagem,
             materialEmbalagem, origemMaterialEmbalagem, terminal, codigoUsuario, codigoBalanca);
+
+        // 068: a caixa nasce carimbada com o processo, porque é o banco que precisa dele — o índice de
+        // terminal ativo aplica uma regra por processo. Nulo continua significando caixa a caixa.
+        caixa.ProcessoPesagem = processoPesagem;
 
         ResultadoFinalizacaoHu resultado = await _huService.RegistrarEFinalizarCaixaAsync(
             caixa, usuario, terminal, cancellationToken, diagnostico);

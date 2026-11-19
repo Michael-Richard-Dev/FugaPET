@@ -67,6 +67,22 @@ public sealed class ProdutoAcabadoCaixa
     /// <summary>Código de HU da caixa usado pelo builder de palete (fase futura). Não é o retorno HU desta fase.</summary>
     public string HandlingUnitCaixa { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Processo sob o qual a caixa foi ABERTA (incremento 068). Nulo = não registrado, tratado como
+    /// caixa a caixa.
+    /// <para>
+    /// Existe para o BANCO, não para a tela: é ele que faz o índice de terminal ativo aplicar a regra
+    /// certa — uma pendente por terminal no caixa a caixa, várias no envio único. A tela continua
+    /// sabendo o processo pelo vínculo da OP.
+    /// </para>
+    /// <para>
+    /// Fica gravado na caixa, e não consultado no vínculo na hora da escrita, porque a caixa tem de
+    /// continuar sob a regra sob a qual nasceu mesmo que alguém mude o vínculo do produto no meio da
+    /// ordem.
+    /// </para>
+    /// </summary>
+    public Cadastro.ProcessoPesagemProduto? ProcessoPesagem { get; set; }
+
     /// <summary>Tenta transitar o status; lança <see cref="TransicaoStatusInvalidaException"/> se inválido.</summary>
     public void TransicionarPara(StatusIntegracaoCaixa destino)
         => StatusIntegracao = TransicaoStatusIntegracaoCaixa.Transitar(StatusIntegracao, destino);
