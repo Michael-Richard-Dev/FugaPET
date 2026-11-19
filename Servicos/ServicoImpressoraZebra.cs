@@ -188,9 +188,17 @@ public sealed class ServicoImpressoraZebra
             ? "SEM-CODIGO"
             : etiqueta.CodigoCaixaLocal;
 
-        // O que vai CODIFICADO e o codigo local sem o prefixo "CX-"; o que o operador LE embaixo
-        // continua sendo o codigo inteiro. Ver DadoDaBarraCaixa para o porque.
-        string codigoBarras = DadoDaBarraCaixa(codigoLegivel);
+        // A BARRA CARREGA A HU DO SAP. Pedido do usuario em 19/11/2026: bipar a etiqueta tem de
+        // devolver a Handling Unit, que e como a caixa existe no SAP — era o codigo local que saia, e
+        // ele nao serve para quem le a etiqueta do lado de la.
+        //
+        // Isso so e possivel porque a etiqueta passou a ser impressa DEPOIS da confirmacao: a
+        // elegibilidade exige HU nao vazia, entao aqui ela sempre existe. Se um dia alguem imprimir
+        // antes, a barra sairia com "PENDENTE" — e por isso o fallback abaixo NAO codifica: sem HU
+        // nao ha barra, porque uma barra que devolve a palavra PENDENTE e pior que nenhuma.
+        string codigoBarras = string.IsNullOrWhiteSpace(etiqueta.HandlingUnitSap)
+            ? string.Empty
+            : etiqueta.HandlingUnitSap.Trim();
 
         // Geometria convertida de Relatorio/EtiquetaProduto8x5.rdlc, caixa por caixa. O RDLC esta em
         // polegadas; aqui tudo vira dots a 203 dpi (8x5 cm = 3,15 x 1,97 pol = 640 x 400 dots).
@@ -261,26 +269,34 @@ public sealed class ServicoImpressoraZebra
         //    Por isso o parametro saiu daqui e a estimativa voltou a ser a conservadora.
         //
         // Consequencia das duas: 15 caracteres na vertical medem 5,0 cm numa etiqueta de 5,0 cm de
-        // altura. Nao ha posicionamento que resolva — faltaria ate a zona de silencio das pontas. O
-        // que encurta o simbolo e encurtar o DADO, decisao tomada pelo usuario: ver DadoDaBarraCaixa.
-        int moduloBarra = ModuloBarrasCaixa;
+        // altura. Nao ha posicionamento que resolva — faltaria ate a zona de silencio das pontas.
+        //
+        // Com a HU no lugar do codigo local o simbolo ENCURTOU: as HUs reais do SAP tem 9 digitos
+        // (ex.: 300015994) e as simuladas 10 caracteres, contra os 12 do codigo local sem prefixo.
+        // A guarda de estreitamento continua, porque o tamanho da HU e definido pelo SAP e nao por
+        // nos — se um dia vier maior, a barra aperta em vez de sair cortada.
+        // Curso que a barra tem para descer: do topo dela ate a folga de baixo. NAO e simetrico —
+        // ver RodapeFaixaBarra.
+        int cursoDisponivel = altura - TopoFaixaBarra - RodapeFaixaBarra;
+        int moduloBarra = EscolherModuloBarraCaixa(codigoBarras, cursoDisponivel);
         int cursoBarra = EstimarLarguraCode128Dots(codigoBarras, moduloBarra);
-        int cursoDisponivel = altura - (2 * TopoFaixaBarra);
 
-        // Codigo longo demais para o modulo cheio: estreita em vez de sair cortado. Barra apertada
-        // ainda e lida de perto; barra cortada nao e lida nunca.
-        if (cursoBarra > cursoDisponivel)
+        // Sem HU nao se imprime barra nenhuma. Ver o comentario de codigoBarras: codificar a palavra
+        // "PENDENTE" faria o leitor devolver um texto que nao identifica caixa alguma, e o operador
+        // descobriria isso so no destino.
+        if (codigoBarras.Length > 0)
         {
-            moduloBarra = ModuloBarrasCaixaEstreito;
-            cursoBarra = EstimarLarguraCode128Dots(codigoBarras, moduloBarra);
+            zpl.Append($"^FO{faixaBarraX},{TopoFaixaBarra}^BY{moduloBarra}^BCB,{AlturaBarrasCaixa},N,N,N^FD{Z(codigoBarras)}^FS\n");
         }
 
-        zpl.Append($"^FO{faixaBarraX},{TopoFaixaBarra}^BY{moduloBarra}^BCB,{AlturaBarrasCaixa},N,N,N^FD{Z(codigoBarras)}^FS\n");
-
-        // Leitura humana: o codigo INTEIRO, com o prefixo, no rodape da grade. O que a barra carrega
-        // e menos do que isso, e e proposital — quem digita a mao continua vendo o identificador
-        // completo, que e como ele aparece no sistema.
-        zpl.Append($"^FO{colEsqX},{P(1.70)}^A0N,20,20^FB{larguraGrade},1,0,C^FD{Z(codigoLegivel)}^FS\n")
+        // Leitura humana no rodape da grade: PRIMEIRO o que a barra carrega — convencao de etiqueta,
+        // o numero sob o simbolo e o conteudo dele —, depois o codigo local, que e como a caixa
+        // aparece no nosso sistema. Os dois precisam estar visiveis: quem bipa quer a HU, quem abre
+        // um chamado cita o codigo local.
+        string rodape = codigoBarras.Length > 0
+            ? $"HU {codigoBarras}  -  {codigoLegivel}"
+            : codigoLegivel;
+        zpl.Append($"^FO{colEsqX},{P(1.70)}^A0N,20,20^FB{larguraGrade},1,0,C^FD{Z(rodape)}^FS\n")
            .Append("^XZ");
 
         return zpl.ToString();
@@ -288,26 +304,6 @@ public sealed class ServicoImpressoraZebra
 
     /// <summary>Texto de campo sem origem no sistema — nunca preenchido por suposicao.</summary>
     private const string SemOrigem = "NAO INFORMADA";
-
-    /// <summary>
-    /// O que a barra da CAIXA carrega: o codigo local SEM o prefixo <c>CX-</c>.
-    /// <para>
-    /// Decisao do usuario em 18/11/2026, depois da calibracao impressa. Com os 15 caracteres o
-    /// simbolo mede 5,0 cm — a altura inteira da etiqueta — e nao ha como ele ficar vertical. Sem o
-    /// prefixo sobram 12 caracteres, 167 modulos, 334 pontos: 4,2 cm, dentro da faixa pedida e com
-    /// espaco para a zona de silencio das pontas.
-    /// </para>
-    /// <para>
-    /// O prefixo nao carrega informacao: ele e constante em toda caixa. O que identifica e a ordem
-    /// mais o numero da caixa, que continuam ali. A leitura HUMANA impressa abaixo da barra mostra o
-    /// codigo completo — se um dia algum consumidor precisar do <c>CX-</c>, ele o recompoe, porque o
-    /// prefixo e fixo.
-    /// </para>
-    /// </summary>
-    internal static string DadoDaBarraCaixa(string codigoCaixaLocal)
-        => codigoCaixaLocal.StartsWith("CX-", StringComparison.OrdinalIgnoreCase)
-            ? codigoCaixaLocal[3..]
-            : codigoCaixaLocal;
 
     public string ConstruirZplEtiquetaMateriaPrimaGrafica(DadosEtiquetaMateriaPrima etiqueta)
     {
@@ -661,6 +657,13 @@ public sealed class ServicoImpressoraZebra
     internal const int ModuloBarrasCaixaEstreito = 1;
 
     /// <summary>
+    /// Teto do modulo da barra da CAIXA. Quatro pontos sao 0,5 mm de modulo — barra bem larga, lida
+    /// de longe. Nao sobe mais porque acima disso o simbolo passa do curso da faixa com qualquer HU,
+    /// e porque modulo grande demais exige distancia MINIMA de leitura que o operador nao tem na linha.
+    /// </summary>
+    internal const int ModuloBarrasCaixaMaximo = 4;
+
+    /// <summary>
     /// Altura das barras da CAIXA, em pontos (~13 mm a 203 dpi).
     /// <para>
     /// Com a barra VERTICAL esta e a medida horizontal da faixa. E a tolerancia de mira do operador:
@@ -672,93 +675,82 @@ public sealed class ServicoImpressoraZebra
     internal const int AlturaBarrasCaixa = 104;
 
     /// <summary>
-    /// Onde a barra COMECA, em pontos a partir do topo — e, por simetria, a margem que sobra embaixo.
+    /// Onde a barra COMECA, em pontos a partir do topo da etiqueta: 80 pontos = 1,0 cm a 203 dpi.
     /// <para>
     /// Em ^BCB o simbolo cresce para BAIXO a partir da origem (medido na calibracao de 18/11/2026),
-    /// entao este valor e literalmente a origem Y do campo. Dez pontos dao ~1,2 mm, acima dos 10
-    /// modulos de zona de silencio que o Code128 pede em cada ponta.
+    /// entao este valor e literalmente a origem Y do campo.
+    /// </para>
+    /// <para>
+    /// Era 10 pontos (~1,2 mm) ate 19/11/2026, o minimo da zona de silencio. Impresso, o simbolo
+    /// nascia colado na borda e ficava com cara de corte — pedido do usuario, com a etiqueta na mao:
+    /// 1 cm de folga.
     /// </para>
     /// </summary>
-    internal const int TopoFaixaBarra = 10;
+    internal const int TopoFaixaBarra = 80;
 
     /// <summary>
-    /// GATE 126D: largura ESTIMADA de um Code128 em pontos. Serve para centralizar o codigo dentro
-    /// da moldura, ja que ZPL nao tem centralizacao para campo de barras (^FB vale so para texto).
+    /// Folga MINIMA abaixo da barra, em pontos. Cobre a zona de silencio da ponta de baixo (10
+    /// modulos, 20 pontos no modulo 2) com margem.
     /// <para>
-    /// A conta segue a codificacao do Code128: start + simbolos de dado + digito verificador valem
-    /// 11 modulos cada, e o stop vale 13. Em subconjunto C cada simbolo carrega DOIS digitos; um
-    /// dado com quantidade impar de caracteres, ou nao numerico, gasta um simbolo por caractere.
-    /// </para>
-    /// <para>
-    /// E ESTIMATIVA, nao medida: a impressora escolhe os subconjuntos sozinha, entao o resultado
-    /// pode ficar alguns pontos fora do centro exato. Isso e aceitavel para posicionar; o que nao
-    /// seria aceitavel e o codigo nascer fora da moldura, e por isso o retorno e preso ao intervalo
-    /// da moldura antes de ser usado.
+    /// Existe separada do topo porque as duas deixaram de ser iguais. Enquanto o topo era o minimo
+    /// tecnico, bastava um valor e a conta podia ser simetrica; com 1 cm em cima, tratar a folga de
+    /// baixo como igual roubaria 160 pontos do curso e empurraria o seletor para um modulo mais
+    /// fino — exatamente a barra fina que o leitor nao lia em 18/11/2026.
     /// </para>
     /// </summary>
+    internal const int RodapeFaixaBarra = 24;
+
     /// <summary>
-    /// GATE 130B: comprimento estimado do Code128 quando a impressora trabalha em MODO AUTOMATICO
-    /// (parametro final 'A' do ^BC), que e o unico jeito de 15 caracteres caberem na altura da 8x5.
+    /// Escolhe a largura de modulo da barra da CAIXA: a MAIOR que ainda cabe no curso disponivel.
     /// <para>
-    /// A <see cref="EstimarLarguraCode128Dots"/> assume um simbolo por caractere assim que aparece
-    /// qualquer nao-digito — o pior caso do subconjunto B. O modo automatico troca para o subconjunto
-    /// C nas CORRIDAS de digitos, onde cada simbolo carrega dois, e e essa economia que precisa ser
-    /// prevista para dimensionar a faixa. Para <c>CX-0000000-0000</c> a conta cai de 200 para 178
-    /// modulos.
+    /// Ate 19/11/2026 o modulo era fixo em <see cref="ModuloBarrasCaixa"/>, com um unico recuo para
+    /// <see cref="ModuloBarrasCaixaEstreito"/> quando o dado nao cabia. Fazia sentido enquanto a barra
+    /// carregava o codigo local, de 12 caracteres, que ocupava quase toda a faixa. Com a HU do SAP o
+    /// dado encurtou: 9 caracteres sao 134 modulos, contra os 167 do codigo local. Escolher o modulo pelo
+    /// dado mantem as barras tao largas quanto a faixa permite, qualquer que seja o tamanho da HU.
     /// </para>
     /// <para>
-    /// O modelo e deliberadamente PESSIMISTA onde ha duvida: conta a troca para C mesmo quando o dado
-    /// comeca por digitos (ali o proprio codigo de inicio ja seleciona o subconjunto, e a troca nao
-    /// existe). Errar para mais faz a barra ser estimada maior do que sera impressa, e o efeito disso
-    /// e no maximo estreitar o modulo cedo demais — nunca imprimir uma barra cortada.
+    /// Modulo maior significa barra mais LARGA, que e o que o leitor de mao precisa — foi exatamente a
+    /// queixa de 18/11/2026, quando o modulo era 1 e o leitor nao lia. Preencher a faixa e consequencia,
+    /// nao objetivo: o objetivo e a barra mais grossa que cabe.
+    /// </para>
+    /// <para>
+    /// O piso continua sendo <see cref="ModuloBarrasCaixaEstreito"/>, usado so quando nem o modulo
+    /// minimo legivel cabe: barra apertada ainda e lida de perto; barra cortada nao e lida nunca.
     /// </para>
     /// </summary>
-    internal static int EstimarLarguraCode128AutoDots(string dados, int larguraModulo)
+    internal static int EscolherModuloBarraCaixa(string dados, int cursoDisponivel)
     {
-        if (string.IsNullOrEmpty(dados) || larguraModulo <= 0)
+        if (string.IsNullOrEmpty(dados))
         {
-            return 0;
+            return ModuloBarrasCaixa;
         }
 
-        int simbolos = 0;
-        bool emC = false;
-
-        for (int i = 0; i < dados.Length;)
+        for (int modulo = ModuloBarrasCaixaMaximo; modulo >= ModuloBarrasCaixa; modulo--)
         {
-            int corrida = 0;
-            while (i + corrida < dados.Length && char.IsAsciiDigit(dados[i + corrida]))
+            if (EstimarLarguraCode128Dots(dados, modulo) <= cursoDisponivel)
             {
-                corrida++;
-            }
-
-            // Corrida curta nao paga a troca de subconjunto: duas trocas custam mais do que os
-            // simbolos que economizariam.
-            if (corrida >= 4)
-            {
-                if (!emC) { simbolos++; emC = true; }
-                simbolos += corrida / 2;
-
-                if (corrida % 2 == 1)
-                {
-                    simbolos += 2;   // volta para B mais o digito que sobrou
-                    emC = false;
-                }
-
-                i += corrida;
-            }
-            else
-            {
-                int quantos = corrida > 0 ? corrida : 1;
-                if (emC) { simbolos++; emC = false; }
-                simbolos += quantos;
-                i += quantos;
+                return modulo;
             }
         }
 
-        // start + dados + verificador, a 11 modulos cada, mais o stop de 13 modulos.
-        return ((11 * (1 + simbolos + 1)) + 13) * larguraModulo;
+        return ModuloBarrasCaixaEstreito;
     }
 
+    /// <summary>
+    /// GATE 126D: largura ESTIMADA de um Code128 em pontos. Serve para dimensionar e centralizar o
+    /// codigo, ja que ZPL nao tem centralizacao para campo de barras (^FB vale so para texto).
+    /// <para>
+    /// A conta segue a codificacao do Code128: start + simbolos de dado + digito verificador valem
+    /// 11 modulos cada, e o stop vale 13. UM SIMBOLO POR CARACTERE — ver o corpo para o porque de a
+    /// compressao de digitos nao entrar nesta conta.
+    /// </para>
+    /// <para>
+    /// E ESTIMATIVA, nao medida. Ela erra para MAIS quando a impressora comprime, e esse e o erro
+    /// seguro: a barra sai menor do que o previsto e cabe. Errar para menos foi o que imprimiu uma
+    /// barra de 6,6 cm numa etiqueta de 5,0 cm em 19/11/2026.
+    /// </para>
+    /// </summary>
     internal static int EstimarLarguraCode128Dots(string dados, int larguraModulo)
     {
         if (string.IsNullOrEmpty(dados) || larguraModulo <= 0)
@@ -766,19 +758,22 @@ public sealed class ServicoImpressoraZebra
             return 0;
         }
 
-        bool somenteDigitos = true;
-        foreach (char c in dados)
-        {
-            if (!char.IsAsciiDigit(c))
-            {
-                somenteDigitos = false;
-                break;
-            }
-        }
-
-        int simbolosDados = somenteDigitos
-            ? (dados.Length / 2) + (dados.Length % 2)   // subconjunto C: 2 digitos por simbolo
-            : dados.Length;                              // demais: 1 caractere por simbolo
+        // UM SIMBOLO POR CARACTERE, SEMPRE — inclusive quando o dado e so digito.
+        //
+        // O Code128 PODE comprimir digitos no subconjunto C, dois por simbolo, e esta conta chegou a
+        // supor isso. Mas a calibracao impressa em 18/11/2026 mediu com regua que ESTA IMPRESSORA NAO
+        // COMPRIME: a barra com modo automatico e a sem modo sairam do mesmo tamanho, 5,0 cm, que e a
+        // conta do subconjunto B puro para 15 caracteres (200 modulos a modulo 2).
+        //
+        // A suposicao de compressao ficou dormindo no codigo porque o dado de entao — o codigo local —
+        // tinha hifen e caia no ramo "demais". Quando a barra passou a carregar a HU, que e so digito,
+        // a estimativa passou a prever METADE do simbolo real: 9 digitos foram estimados em 90 modulos
+        // e sairam com 134. No modulo 4 isso virou 6,6 cm numa etiqueta de 5,0 cm, e a barra saiu da
+        // etiqueta — relatado pelo usuario em 19/11/2026.
+        //
+        // A conta volta a ser a CONSERVADORA. Se um dia a impressora passar a comprimir, a barra sai
+        // menor que o previsto, que e o erro seguro: cabe na etiqueta.
+        int simbolosDados = dados.Length;
 
         // start + dados + verificador, a 11 modulos cada, mais o stop de 13 modulos.
         int modulos = (11 * (1 + simbolosDados + 1)) + 13;

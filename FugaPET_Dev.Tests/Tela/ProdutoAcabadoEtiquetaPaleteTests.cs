@@ -244,12 +244,16 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
     }
 
     [Theory]
-    // 10 digitos em subconjunto C: start + 5 simbolos + verificador = 7 x 11, mais stop de 13 = 90
-    // modulos; a 3 pontos por modulo, 270 pontos.
-    [InlineData("2000017747", 3, 270)]
-    [InlineData("2000017747", 1, 90)]
-    // Quantidade impar de digitos gasta um simbolo a mais.
-    [InlineData("200001774", 3, 270)]
+    // A CONTA MUDOU EM 19/11/2026: a estimativa supunha subconjunto C, dois digitos por simbolo. Esta
+    // impressora NAO comprime — medido com regua na calibracao de 18/11 — e a suposicao previa METADE
+    // do simbolo real. Agora e um simbolo por caractere, sempre.
+    //
+    // 10 caracteres: start + 10 simbolos + verificador = 12 x 11, mais stop de 13 = 145 modulos;
+    // a 3 pontos por modulo, 435 pontos.
+    [InlineData("2000017747", 3, 435)]
+    [InlineData("2000017747", 1, 145)]
+    // Um caractere a menos tira 11 modulos, nao zero: nao ha mais par de digitos por simbolo.
+    [InlineData("200001774", 3, 402)]
     [InlineData("", 3, 0)]
     public void LarguraEstimadaDoCode128(string dados, int modulo, int esperado)
         => Assert.Equal(esperado, ServicoImpressoraZebra.EstimarLarguraCode128Dots(dados, modulo));
@@ -265,10 +269,16 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
         Assert.Equal(XMoldura, ServicoImpressoraZebra.CentralizarBarras(
             new string('9', 400), ServicoImpressoraZebra.ModuloBarrasPalete, XMoldura, 499));
 
+        // 19/11/2026: com a estimativa corrigida este caso mede 435 pontos, nao 270. A centralizacao
+        // antiga punha a barra em +114 supondo 270, e o simbolo REAL de 435 terminava em 549 — 50
+        // pontos ALEM da moldura de 499. Corrigir a estimativa corrigiu a centralizacao do palete
+        // junto, sem que isso fosse o objetivo.
+        const int ComprimentoReal = 435;
         int centralizado = ServicoImpressoraZebra.CentralizarBarras(
             "2000017747", ServicoImpressoraZebra.ModuloBarrasPalete, XMoldura, 499);
         Assert.True(centralizado > XMoldura, "um codigo que cabe deve ser deslocado para o centro");
-        Assert.True(centralizado + 270 <= XMoldura + 499, "o codigo centralizado nao pode passar da moldura");
+        Assert.True(centralizado + ComprimentoReal <= XMoldura + 499,
+            "o codigo centralizado nao pode passar da moldura");
     }
 
     /// <summary>
