@@ -2,21 +2,27 @@
 -- ============================================================
 -- 068_processo_pesagem_na_caixa_DEV_VALIDACAO_GAIA.sql
 -- FugaPET | Ambiente DEV | Schema desenvolvimento
--- Incremento 068 - VALIDACAO (SOMENTE LEITURA)
+-- Incremento 068 - VALIDACAO (SOMENTE LEITURA, ZERO ESCRITA)
 --
--- PROVA as regras seguindo a PROGRESSAO REAL da caixa, e nao inventando estados.
+-- POR QUE ESTA VALIDACAO NAO ESCREVE NADA
 --
--- A primeira versao deste arquivo inseria caixas ja em AGUARDANDO_AUTORIZACAO_SAP e
--- falhou: o gatilho fn_hu_caixa_preparar_insert FORCA status_hu_caixa := 'EM_PESAGEM'
--- em todo INSERT. As tres "pendentes" viraram tres caixas abertas na balanca, que o
--- indice deve mesmo recusar. A caixa so chega a pendente por UPDATE, e e assim que
--- esta validacao faz agora — EM_PESAGEM -> FINALIZADA_LOCAL, transicao que o gatilho
--- de UPDATE permite.
+-- A primeira versao provava a regra INSERINDO caixas e mudando o status delas. Passava
+-- AQUI por duas condicoes que valem so no DEV, e falhou nos dois bancos do Q:
 --
--- Tudo roda dentro de uma transacao sempre desfeita. Nenhuma linha sobra.
+--   QAS110: UPDATE_DIRETO_HU_CAIXA_BLOQUEADO_USE_FUNCOES_CONTROLADAS. No DEV o papel
+--           postgres e DONO de hu_caixa e o gatilho o deixa passar; aqui nao e.
+--   QAS130: SEM_CAIXA_MODELO. O banco nao tem caixa nenhuma para servir de molde.
+--
+-- A correcao nao foi contornar as duas coisas, e sim parar de precisar delas: O
+-- PREDICADO DO INDICE E A REGRA. Esta validacao LE o predicado real do catalogo e o
+-- avalia contra todas as combinacoes de processo x status. Nao insere, nao atualiza,
+-- nao depende de dado existente nem de ser dono da tabela — e, por ler o predicado do
+-- banco em vez de uma copia escrita aqui, nao pode divergir do que esta aplicado.
 -- ============================================================
 
 \echo '== 068 VALIDACAO =='
+
+SELECT current_database() AS banco;
 
 \echo '-- a coluna existe, com CHECK (esperado: t e 1)'
 SELECT EXISTS (
@@ -26,141 +32,93 @@ SELECT EXISTS (
 SELECT count(*) AS checks_do_processo FROM pg_constraint
  WHERE conrelid='desenvolvimento.hu_caixa'::regclass AND conname='ck_hu_caixa_processo_pesagem';
 
-\echo '-- o indice novo conhece o processo (esperado: t)'
-SELECT indexdef ILIKE '%processo_pesagem%' AS indice_conhece_o_processo
-  FROM pg_indexes
- WHERE schemaname='desenvolvimento' AND indexname='uq_hu_caixa_terminal_ativo';
+\echo '-- o indice e UNICO e PARCIAL, e conhece o processo (esperado: t t t)'
+SELECT i.indisunique AS unico,
+       pg_get_expr(i.indpred, i.indrelid) IS NOT NULL AS parcial,
+       pg_get_expr(i.indpred, i.indrelid) ILIKE '%processo_pesagem%' AS conhece_o_processo
+  FROM pg_index i
+ WHERE i.indexrelid = 'desenvolvimento.uq_hu_caixa_terminal_ativo'::regclass;
 
-\echo '-- privilegio de COLUNA do papel na coluna nova (esperado: INSERT e SELECT)'
+\echo '-- privilegio de COLUNA do papel deste banco na coluna nova (esperado: INSERT e SELECT)'
 SELECT privilege_type
   FROM information_schema.role_column_grants
  WHERE table_schema='desenvolvimento' AND table_name='hu_caixa'
-   AND column_name='processo_pesagem' AND grantee='fugapet_dev_app'
+   AND column_name='processo_pesagem'
+   AND grantee = 'fugapet_dev_app'
  ORDER BY 1;
 
-\echo '-- nenhuma caixa anterior foi reescrita (esperado: 0 com processo preenchido)'
+\echo 'caixas ja nascidas com processo registrado (0 logo apos aplicar; cresce com as novas)'
 SELECT count(*) AS caixas_com_processo
   FROM desenvolvimento.hu_caixa WHERE processo_pesagem IS NOT NULL;
 
-\echo '-- PROVA DAS REGRAS (tudo desfeito ao final)'
-BEGIN;
+\echo '-- PROVA DA REGRA: o predicado REAL do indice, avaliado combinacao a combinacao'
+DO $prova$
+DECLARE
+    v_predicado text;
+    v_sql       text;
+    v_erros     integer;
+    v_linhas    text;
+BEGIN
+    SELECT pg_get_expr(i.indpred, i.indrelid) INTO v_predicado
+      FROM pg_index i
+     WHERE i.indexrelid = 'desenvolvimento.uq_hu_caixa_terminal_ativo'::regclass;
 
-    -- Auxiliar das provas: nasce e morre DENTRO da transacao desfeita, para o script continuar
-    -- nao deixando nada para tras. Copia uma caixa real como molde porque hu_caixa tem muita
-    -- coluna obrigatoria, e inventar valores daria erro por motivo errado.
-    CREATE FUNCTION desenvolvimento.inserir_caixa_validacao_068(p_processo text)
-    RETURNS bigint
-    LANGUAGE plpgsql AS $aux$
-    DECLARE
-        m desenvolvimento.hu_caixa%ROWTYPE;
-        v_codigo bigint;
-    BEGIN
-        SELECT * INTO m FROM desenvolvimento.hu_caixa ORDER BY codigo_hu_caixa LIMIT 1;
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'SEM_CAIXA_MODELO: a validacao precisa de ao menos uma caixa existente.';
-        END IF;
+    IF v_predicado IS NULL THEN
+        RAISE EXCEPTION 'FALHA: o indice nao e parcial; nao ha predicado para avaliar.';
+    END IF;
 
-        INSERT INTO desenvolvimento.hu_caixa
-               (numero_ordem_producao, item_ordem_producao, material, lote, centro, deposito,
-                material_embalagem, origem_material_embalagem, peso_bruto, peso_liquido, peso_tara,
-                unidade_peso, quantidade, unidade_quantidade, origem_pesagem, codigo_usuario, terminal,
-                processo_pesagem)
-        VALUES (m.numero_ordem_producao, m.item_ordem_producao, m.material, m.lote, m.centro, m.deposito,
-                m.material_embalagem, m.origem_material_embalagem, 1, 1, 0, 'KG', 1, 'UN', 'MANUAL',
-                m.codigo_usuario, 'VALIDACAO-068', p_processo)
-        RETURNING codigo_hu_caixa INTO v_codigo;
+    -- "ocupa" = a linha entra no indice e portanto TOMA o terminal, impedindo outra.
+    -- Caixa a caixa (e processo nulo): ocupa tudo que nao esta confirmado nem cancelado.
+    -- Envio unico: ocupa so o que exige decisao humana na balanca ou no envio.
+    v_sql := format($f$
+        SELECT count(*) FILTER (WHERE (%1$s) IS DISTINCT FROM esperado),
+               string_agg(
+                   format('processo=%%s status=%%s esperado=%%s obtido=%%s',
+                          COALESCE(processo_pesagem,'<nulo>'), status_hu_caixa,
+                          esperado, (%1$s)),
+                   E'\n') FILTER (WHERE (%1$s) IS DISTINCT FROM esperado)
+          FROM (VALUES
+              -- CAIXA_A_CAIXA: regra historica, intocada
+              ('CAIXA_A_CAIXA'::varchar, 'EM_PESAGEM'::varchar,                 true),
+              ('CAIXA_A_CAIXA',          'FINALIZADA_LOCAL',                    true),
+              ('CAIXA_A_CAIXA',          'PREVIEW_HU_GERADO',                   true),
+              ('CAIXA_A_CAIXA',          'AGUARDANDO_AUTORIZACAO_SAP',          true),
+              ('CAIXA_A_CAIXA',          'PRONTA_PARA_ENVIO',                   true),
+              ('CAIXA_A_CAIXA',          'ENVIANDO_SAP',                        true),
+              ('CAIXA_A_CAIXA',          'ERRO_SAP',                            true),
+              ('CAIXA_A_CAIXA',          'INDETERMINADO_TIMEOUT',               true),
+              ('CAIXA_A_CAIXA',          'BLOQUEADA',                           true),
+              ('CAIXA_A_CAIXA',          'CONFIRMADA_SAP',                      false),
+              ('CAIXA_A_CAIXA',          'CANCELADA',                           false),
 
-        RETURN v_codigo;
-    END
-    $aux$;
+              -- Processo NAO REGISTRADO: tratado como caixa a caixa
+              (NULL,                     'AGUARDANDO_AUTORIZACAO_SAP',          true),
+              (NULL,                     'CONFIRMADA_SAP',                      false),
 
-    \echo '-- 1. CAIXA A CAIXA: com uma caixa FINALIZADA_LOCAL, a proxima e RECUSADA (como hoje)'
-    SAVEPOINT s1;
-    DO $prova1$
-    DECLARE
-        v_codigo bigint;
-    BEGIN
-        v_codigo := desenvolvimento.inserir_caixa_validacao_068('CAIXA_A_CAIXA');
-        UPDATE desenvolvimento.hu_caixa SET status_hu_caixa='FINALIZADA_LOCAL' WHERE codigo_hu_caixa=v_codigo;
+              -- ENVIO_UNICO: pendente NAO ocupa; so o que exige decisao humana
+              ('ENVIO_UNICO',            'EM_PESAGEM',                          true),
+              ('ENVIO_UNICO',            'ENVIANDO_SAP',                        true),
+              ('ENVIO_UNICO',            'FINALIZADA_LOCAL',                    false),
+              ('ENVIO_UNICO',            'PREVIEW_HU_GERADO',                   false),
+              ('ENVIO_UNICO',            'AGUARDANDO_AUTORIZACAO_SAP',          false),
+              ('ENVIO_UNICO',            'PRONTA_PARA_ENVIO',                   false),
+              ('ENVIO_UNICO',            'CONFIRMADA_SAP',                      false),
+              ('ENVIO_UNICO',            'CANCELADA',                           false)
+          ) AS t(processo_pesagem, status_hu_caixa, esperado)
+    $f$, v_predicado);
 
-        PERFORM desenvolvimento.inserir_caixa_validacao_068('CAIXA_A_CAIXA');
-        RAISE EXCEPTION 'FALHA: o caixa a caixa aceitou uma segunda caixa com a anterior pendente.';
-    EXCEPTION WHEN unique_violation THEN
-        RAISE NOTICE 'OK: caixa a caixa continua admitindo so uma caixa pendente por terminal.';
-    END
-    $prova1$;
-    ROLLBACK TO SAVEPOINT s1;
+    EXECUTE v_sql INTO v_erros, v_linhas;
 
-    \echo '-- 2. ENVIO UNICO: tres caixas pendentes no mesmo terminal sao ACEITAS (o defeito corrigido)'
-    SAVEPOINT s2;
-    DO $prova2$
-    DECLARE
-        v_codigo bigint;
-        i integer;
-        v_pendentes integer;
-    BEGIN
-        FOR i IN 1..3 LOOP
-            v_codigo := desenvolvimento.inserir_caixa_validacao_068('ENVIO_UNICO');
-            UPDATE desenvolvimento.hu_caixa SET status_hu_caixa='FINALIZADA_LOCAL' WHERE codigo_hu_caixa=v_codigo;
-        END LOOP;
+    IF v_erros > 0 THEN
+        RAISE EXCEPTION 'FALHA: % combinacao(oes) divergem do esperado:%s', v_erros, E'\n' || v_linhas;
+    END IF;
 
-        SELECT count(*) INTO v_pendentes FROM desenvolvimento.hu_caixa
-         WHERE terminal='VALIDACAO-068' AND status_hu_caixa='FINALIZADA_LOCAL';
+    RAISE NOTICE 'OK: as 21 combinacoes de processo x status batem com a regra.';
+    RAISE NOTICE 'OK: caixa a caixa ocupa o terminal com QUALQUER pendente (regra intocada).';
+    RAISE NOTICE 'OK: envio unico NAO ocupa com pendente de envio — e o que destrava o processo.';
+    RAISE NOTICE 'OK: envio unico OCUPA com caixa aberta na balanca ou envio em curso.';
+END
+$prova$;
 
-        IF v_pendentes <> 3 THEN
-            RAISE EXCEPTION 'FALHA: esperava 3 pendentes acumuladas, achei %.', v_pendentes;
-        END IF;
-
-        RAISE NOTICE 'OK: envio unico acumulou 3 caixas pendentes no mesmo terminal.';
-    END
-    $prova2$;
-    ROLLBACK TO SAVEPOINT s2;
-
-    \echo '-- 3. ENVIO UNICO: duas caixas ABERTAS NA BALANCA continuam RECUSADAS'
-    SAVEPOINT s3;
-    DO $prova3$
-    BEGIN
-        PERFORM desenvolvimento.inserir_caixa_validacao_068('ENVIO_UNICO');
-        PERFORM desenvolvimento.inserir_caixa_validacao_068('ENVIO_UNICO');
-        RAISE EXCEPTION 'FALHA: duas caixas abertas na balanca no mesmo terminal foram aceitas.';
-    EXCEPTION WHEN unique_violation THEN
-        RAISE NOTICE 'OK: uma caixa por vez na balanca vale tambem no envio unico.';
-    END
-    $prova3$;
-    ROLLBACK TO SAVEPOINT s3;
-
-    \echo '-- 4. o processo sobrevive ao gatilho de INSERT (esperado: ENVIO_UNICO)'
-    SAVEPOINT s4;
-    DO $prova4$
-    DECLARE
-        v_codigo bigint;
-        v_processo text;
-    BEGIN
-        v_codigo := desenvolvimento.inserir_caixa_validacao_068('ENVIO_UNICO');
-        SELECT processo_pesagem INTO v_processo FROM desenvolvimento.hu_caixa WHERE codigo_hu_caixa=v_codigo;
-
-        IF v_processo IS DISTINCT FROM 'ENVIO_UNICO' THEN
-            RAISE EXCEPTION 'FALHA: o gatilho apagou o processo (achei %).', COALESCE(v_processo,'<nulo>');
-        END IF;
-
-        RAISE NOTICE 'OK: o processo gravado no INSERT sobrevive ao gatilho.';
-    END
-    $prova4$;
-    ROLLBACK TO SAVEPOINT s4;
-
-    \echo '-- 5. processo fora do dominio e RECUSADO pelo CHECK'
-    SAVEPOINT s5;
-    DO $prova5$
-    BEGIN
-        PERFORM desenvolvimento.inserir_caixa_validacao_068('QUALQUER_COISA');
-        RAISE EXCEPTION 'FALHA: processo invalido foi aceito.';
-    EXCEPTION WHEN check_violation THEN
-        RAISE NOTICE 'OK: processo fora do dominio recusado.';
-    END
-    $prova5$;
-    ROLLBACK TO SAVEPOINT s5;
-
-ROLLBACK;
-
-\echo '-- nada sobrou (esperado: 0)'
+\echo '-- nada foi escrito por esta validacao (esperado: 0)'
 SELECT count(*) AS resto FROM desenvolvimento.hu_caixa WHERE terminal = 'VALIDACAO-068';
