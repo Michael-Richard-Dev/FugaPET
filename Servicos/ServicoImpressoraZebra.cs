@@ -275,28 +275,32 @@ public sealed class ServicoImpressoraZebra
         // (ex.: 300015994) e as simuladas 10 caracteres, contra os 12 do codigo local sem prefixo.
         // A guarda de estreitamento continua, porque o tamanho da HU e definido pelo SAP e nao por
         // nos — se um dia vier maior, a barra aperta em vez de sair cortada.
-        // Curso que a barra tem para descer: do topo dela ate a folga de baixo. NAO e simetrico —
-        // ver RodapeFaixaBarra.
-        int cursoDisponivel = altura - TopoFaixaBarra - RodapeFaixaBarra;
+        // Primeiro o MODULO, com a folga minima de cada ponta reservada; depois a posicao, que sai da
+        // centralizacao. A ordem importa: a margem nao e dado de entrada, e consequencia do tamanho
+        // que o simbolo acabou tendo.
+        int cursoDisponivel = altura - (2 * MargemMinimaFaixaBarra);
         int moduloBarra = EscolherModuloBarraCaixa(codigoBarras, cursoDisponivel);
         int cursoBarra = EstimarLarguraCode128Dots(codigoBarras, moduloBarra);
+        int topoBarra = TopoCentralizadoBarraCaixa(altura, cursoBarra);
 
         // Sem HU nao se imprime barra nenhuma. Ver o comentario de codigoBarras: codificar a palavra
         // "PENDENTE" faria o leitor devolver um texto que nao identifica caixa alguma, e o operador
         // descobriria isso so no destino.
         if (codigoBarras.Length > 0)
         {
-            zpl.Append($"^FO{faixaBarraX},{TopoFaixaBarra}^BY{moduloBarra}^BCB,{AlturaBarrasCaixa},N,N,N^FD{Z(codigoBarras)}^FS\n");
+            zpl.Append($"^FO{faixaBarraX},{topoBarra}^BY{moduloBarra}^BCB,{AlturaBarrasCaixa},N,N,N^FD{Z(codigoBarras)}^FS\n");
         }
 
-        // Leitura humana no rodape da grade: PRIMEIRO o que a barra carrega — convencao de etiqueta,
-        // o numero sob o simbolo e o conteudo dele —, depois o codigo local, que e como a caixa
-        // aparece no nosso sistema. Os dois precisam estar visiveis: quem bipa quer a HU, quem abre
-        // um chamado cita o codigo local.
-        string rodape = codigoBarras.Length > 0
-            ? $"HU {codigoBarras}  -  {codigoLegivel}"
-            : codigoLegivel;
-        zpl.Append($"^FO{colEsqX},{P(1.70)}^A0N,20,20^FB{larguraGrade},1,0,C^FD{Z(rodape)}^FS\n")
+        // Leitura humana no rodape da grade: SO o codigo local.
+        //
+        // A HU chegou a vir junto aqui, pela convencao de que o numero impresso sob um codigo de
+        // barras e o conteudo dele. A convencao NAO se aplica a este layout: a barra e vertical, na
+        // faixa da direita, e este rodape fica embaixo da grade, a esquerda — nao ha nada "sob a
+        // barra". O que sobrou foi a HU aparecendo duas vezes na mesma etiqueta, aqui e na celula
+        // "HU SAP" da grade. O usuario apontou a repeticao na etiqueta impressa em 19/11/2026.
+        //
+        // Cada identificador tem UM lugar: a HU na celula rotulada, o codigo local aqui.
+        zpl.Append($"^FO{colEsqX},{P(1.70)}^A0N,20,20^FB{larguraGrade},1,0,C^FD{Z(codigoLegivel)}^FS\n")
            .Append("^XZ");
 
         return zpl.ToString();
@@ -675,30 +679,14 @@ public sealed class ServicoImpressoraZebra
     internal const int AlturaBarrasCaixa = 104;
 
     /// <summary>
-    /// Onde a barra COMECA, em pontos a partir do topo da etiqueta: 80 pontos = 1,0 cm a 203 dpi.
+    /// Folga MINIMA em cada ponta da barra, em pontos. Cobre a zona de silencio que o Code128 pede
+    /// (10 modulos, 20 pontos no modulo 2) com uma sobra pequena.
     /// <para>
-    /// Em ^BCB o simbolo cresce para BAIXO a partir da origem (medido na calibracao de 18/11/2026),
-    /// entao este valor e literalmente a origem Y do campo.
-    /// </para>
-    /// <para>
-    /// Era 10 pontos (~1,2 mm) ate 19/11/2026, o minimo da zona de silencio. Impresso, o simbolo
-    /// nascia colado na borda e ficava com cara de corte — pedido do usuario, com a etiqueta na mao:
-    /// 1 cm de folga.
+    /// NAO e a margem impressa: e so o piso usado para ESCOLHER O MODULO. A folga real sai da
+    /// centralizacao — ver <see cref="TopoCentralizadoBarraCaixa"/> —, e por isso costuma ser maior.
     /// </para>
     /// </summary>
-    internal const int TopoFaixaBarra = 80;
-
-    /// <summary>
-    /// Folga MINIMA abaixo da barra, em pontos. Cobre a zona de silencio da ponta de baixo (10
-    /// modulos, 20 pontos no modulo 2) com margem.
-    /// <para>
-    /// Existe separada do topo porque as duas deixaram de ser iguais. Enquanto o topo era o minimo
-    /// tecnico, bastava um valor e a conta podia ser simetrica; com 1 cm em cima, tratar a folga de
-    /// baixo como igual roubaria 160 pontos do curso e empurraria o seletor para um modulo mais
-    /// fino — exatamente a barra fina que o leitor nao lia em 18/11/2026.
-    /// </para>
-    /// </summary>
-    internal const int RodapeFaixaBarra = 24;
+    internal const int MargemMinimaFaixaBarra = 24;
 
     /// <summary>
     /// Escolhe a largura de modulo da barra da CAIXA: a MAIOR que ainda cabe no curso disponivel.
@@ -719,6 +707,30 @@ public sealed class ServicoImpressoraZebra
     /// minimo legivel cabe: barra apertada ainda e lida de perto; barra cortada nao e lida nunca.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Origem Y que deixa a barra CENTRALIZADA na altura da etiqueta: folga igual em cima e embaixo.
+    /// <para>
+    /// Em ^BCB o simbolo cresce para BAIXO a partir da origem, entao centralizar e simplesmente
+    /// comecar na metade do que sobra. Pedido do usuario em 19/11/2026, com a etiqueta impressa na
+    /// mao: o 1 cm fixo no topo deixava a barra visivelmente mais perto de uma borda que da outra.
+    /// </para>
+    /// <para>
+    /// A margem deixou de ser constante de propósito: ela agora DEPENDE do comprimento do simbolo,
+    /// que depende do tamanho da HU, que quem define e o SAP. Fixar a margem de novo faria a barra
+    /// sair descentralizada no dia em que a HU mudasse de tamanho.
+    /// </para>
+    /// <para>
+    /// Nunca devolve menos que <see cref="MargemMinimaFaixaBarra"/>: se o simbolo for maior que o
+    /// previsto, a zona de silencio e preservada e o excesso vai para baixo, onde ha a grade — e nao
+    /// para fora do topo, onde nao seria impresso.
+    /// </para>
+    /// </summary>
+    internal static int TopoCentralizadoBarraCaixa(int alturaEtiqueta, int comprimentoBarra)
+    {
+        int folga = (alturaEtiqueta - comprimentoBarra) / 2;
+        return folga < MargemMinimaFaixaBarra ? MargemMinimaFaixaBarra : folga;
+    }
+
     internal static int EscolherModuloBarraCaixa(string dados, int cursoDisponivel)
     {
         if (string.IsNullOrEmpty(dados))

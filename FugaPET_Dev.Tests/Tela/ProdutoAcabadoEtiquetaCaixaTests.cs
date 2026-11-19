@@ -221,14 +221,16 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
     }
 
     /// <summary>
-    /// A barra nasce COLADA NO TOPO, como o operador pediu em 18/11/2026, e nao no rodape.
+    /// A barra fica CENTRALIZADA na altura: folga igual em cima e embaixo.
     /// <para>
-    /// Este teste falha contra a versao anterior, em que a origem era <c>altura - P(0,03)</c>: como o
-    /// simbolo desce, aquela origem jogava a barra inteira para fora, na etiqueta seguinte do rolo.
+    /// A geometria desta barra mudou tres vezes com a etiqueta impressa na mao, e cada versao deste
+    /// teste fixou o pedido da vez: 18/11 "colada no topo" (a origem anterior jogava o simbolo na
+    /// etiqueta seguinte do rolo), 19/11 de manha "1 cm do topo", 19/11 a tarde "a mesma distancia em
+    /// cima e embaixo". O que nao muda e a regra: medir impresso, nao deduzir.
     /// </para>
     /// </summary>
     [Fact]
-    public void Zpl_CodigoDeBarras_NasceNoTopoDaEtiqueta()
+    public void Zpl_CodigoDeBarras_FicaCentralizadoNaAltura()
     {
         string codigoLocal = "CX-1001951-0004";
         ProdutoAcabadoCaixa caixa = CaixaConfirmada();
@@ -238,18 +240,42 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
 
         BarraCaixa barra = LerBarra(zpl);
 
-        // 19/11/2026, com a etiqueta impressa na mao: colada na borda ficava com cara de corte. O
-        // usuario pediu 1 cm de folga, que a 203 dpi sao 80 pontos.
-        const int UmCentimetro = 80;
-        Assert.Equal(UmCentimetro, barra.Y);
+        int folgaEmCima = barra.Y;
+        int folgaEmbaixo = barra.Altura - (barra.Y + barra.Comprimento);
 
-        // E a folga de cima nao pode ter custado o modulo: a barra continua no piso legivel.
+        // Centralizada: as duas folgas sao iguais, a menos de 1 ponto da divisao inteira.
+        Assert.InRange(folgaEmCima - folgaEmbaixo, -1, 1);
+
+        // A centralizacao nao pode ter custado o modulo: a barra continua no piso legivel.
         Assert.True(barra.Modulo >= ServicoImpressoraZebra.ModuloBarrasCaixa,
-            $"a margem de 1 cm estreitou a barra para o modulo {barra.Modulo}");
+            $"a centralizacao estreitou a barra para o modulo {barra.Modulo}");
 
-        // Termina dentro da etiqueta, com a folga de baixo respeitada.
-        Assert.True(barra.Y + barra.Comprimento <= barra.Altura - ServicoImpressoraZebra.RodapeFaixaBarra,
-            $"o simbolo termina em {barra.Y + barra.Comprimento} numa etiqueta de {barra.Altura}");
+        // E a zona de silencio continua respeitada nas duas pontas.
+        Assert.True(folgaEmCima >= ServicoImpressoraZebra.MargemMinimaFaixaBarra,
+            $"folga de cima com {folgaEmCima} pontos");
+        Assert.True(folgaEmbaixo >= ServicoImpressoraZebra.MargemMinimaFaixaBarra,
+            $"folga de baixo com {folgaEmbaixo} pontos");
+    }
+
+    /// <summary>
+    /// A centralizacao acompanha o TAMANHO da HU: a margem e consequencia do simbolo, nao constante.
+    /// Fixar a margem faria a barra sair descentralizada no dia em que o SAP mudasse o formato da HU.
+    /// </summary>
+    [Theory]
+    [InlineData("300015994")]     // 9 digitos, a HU real de hoje
+    [InlineData("HU00BA55C4")]    // 10 caracteres, a HU simulada
+    [InlineData("30001599412")]   // 11, hipotetica
+    public void Zpl_Centralizacao_AcompanhaOTamanhoDaHu(string hu)
+    {
+        ProdutoAcabadoCaixa caixa = CaixaConfirmada();
+        caixa.HandlingUnitExternalId = hu;
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaCaixaProdutoAcabado(
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
+
+        BarraCaixa barra = LerBarra(zpl);
+        int folgaEmbaixo = barra.Altura - (barra.Y + barra.Comprimento);
+
+        Assert.InRange(barra.Y - folgaEmbaixo, -1, 1);
     }
 
     /// <summary>
@@ -272,9 +298,23 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
         Assert.Contains("^FD300015994^FS", linhaBarra, StringComparison.Ordinal);
         Assert.DoesNotContain("1001951-0004", linhaBarra, StringComparison.Ordinal);
 
-        // No rodape, a HU primeiro (convencao: o numero sob a barra e o conteudo dela) e o codigo
-        // local logo depois, porque e como a caixa aparece no nosso sistema.
-        Assert.Contains("^FDHU 300015994  -  CX-1001951-0004^FS", zpl, StringComparison.Ordinal);
+        // CADA IDENTIFICADOR EM UM LUGAR SO. A HU vive na celula rotulada "HU SAP" da grade; o rodape
+        // leva o codigo local e nada mais. A HU chegou a vir nos dois, pela convencao de imprimir o
+        // conteudo sob o simbolo — que nao se aplica aqui, porque a barra e vertical na faixa da
+        // direita e o rodape fica sob a GRADE. O usuario apontou a repeticao na etiqueta impressa.
+        Assert.Contains("^FDCX-1001951-0004^FS", zpl, StringComparison.Ordinal);
+        Assert.DoesNotContain("HU 300015994", zpl, StringComparison.Ordinal);
+
+        // A HU aparece DUAS vezes no ZPL, e so uma delas e texto para o operador ler: o dado da
+        // BARRA (^BCB...^FD) e a celula "HU SAP" da grade. Impressa, portanto, aparece uma vez.
+        int ocorrencias = 0;
+        for (int i = zpl.IndexOf("300015994", StringComparison.Ordinal); i >= 0;
+                 i = zpl.IndexOf("300015994", i + 1, StringComparison.Ordinal))
+        {
+            ocorrencias++;
+        }
+
+        Assert.Equal(2, ocorrencias);
     }
 
     /// <summary>
@@ -318,7 +358,7 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
             ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
 
         BarraCaixa barra = LerBarra(zpl);
-        int cursoDisponivel = barra.Altura - ServicoImpressoraZebra.TopoFaixaBarra - ServicoImpressoraZebra.RodapeFaixaBarra;
+        int cursoDisponivel = barra.Altura - (2 * ServicoImpressoraZebra.MargemMinimaFaixaBarra);
 
         // 9 digitos em subconjunto B sao 134 modulos. A modulo 2 isso da 268 dots (3,4 cm); a modulo 3
         // daria 402 (5,0 cm), que NAO CABE na etiqueta de 400 dots. Nao existe valor entre os dois,
@@ -361,7 +401,7 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
             ImpressaoProdutoAcabadoServico.CriarEtiqueta(caixa));
 
         BarraCaixa barra = LerBarra(zpl);
-        int cursoDisponivel = barra.Altura - ServicoImpressoraZebra.TopoFaixaBarra - ServicoImpressoraZebra.RodapeFaixaBarra;
+        int cursoDisponivel = barra.Altura - (2 * ServicoImpressoraZebra.MargemMinimaFaixaBarra);
 
         Assert.True(barra.Comprimento <= cursoDisponivel,
             $"o simbolo mede {barra.Comprimento} dots e a faixa tem {cursoDisponivel}");
