@@ -250,7 +250,9 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         // sem dizer isso faria o usuario supor que a pesagem ja se comporta assim.
         _avisoProcesso.AutoSize = true;
         _avisoProcesso.MaximumSize = new Size(Escalar(290), 0);
-        _avisoProcesso.ForeColor = Color.FromArgb(0xB4, 0x50, 0x09);
+        // Cinza, não o laranja de alerta: o texto passou a DESCREVER o processo, não a avisar de uma
+        // limitação. Manter a cor de alarme faria uma escolha normal parecer arriscada.
+        _avisoProcesso.ForeColor = Color.FromArgb(0x6B, 0x72, 0x80);
         _avisoProcesso.Margin = new Padding(0, 0, 0, Escalar(12));
 
         _salvar.Text = "Salvar vínculo";
@@ -281,10 +283,18 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         return _situacao;
     }
 
+    /// <summary>
+    /// Explica o que a escolha faz na pesagem.
+    /// <para>
+    /// Até 19/11/2026 este aviso dizia que o envio único não estava implementado, o que era verdade e
+    /// deixou de ser. Aviso que descreve o comportamento tem de morrer junto com o comportamento que
+    /// descreve: um alerta desatualizado é pior que nenhum, porque o operador aprende a não ler.
+    /// </para>
+    /// </summary>
     private void AtualizarAvisoProcesso()
         => _avisoProcesso.Text = ProcessoSelecionado() == ProcessoPesagemProduto.EnvioUnico
-            ? "Atenção: o envio único ainda não está implementado na pesagem. "
-              + "A escolha fica registrada, mas hoje não há caminho de envio para ela."
+            ? "Envio único: as caixas são pesadas sem ir ao SAP, e um botão envia todas no fim — "
+              + "uma Handling Unit por caixa, como no caixa a caixa. O envio para na primeira que não confirmar."
             : string.Empty;
 
     private ProcessoPesagemProduto ProcessoSelecionado()

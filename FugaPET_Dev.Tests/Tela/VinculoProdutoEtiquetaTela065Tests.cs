@@ -56,14 +56,23 @@ public sealed class VinculoProdutoEtiquetaTela065Tests
     }
 
     /// <summary>
-    /// O aviso de que o envio unico ainda nao existe tem de continuar na tela. Sem ele, marcar o
-    /// processo passaria a impressao de que a pesagem ja se comporta assim.
+    /// O aviso do processo tem de DESCREVER o envio unico, e nunca mais dizer que ele nao existe.
+    /// <para>
+    /// Ate 19/11/2026 este teste exigia o oposto — que a tela avisasse que o envio unico ainda nao
+    /// estava implementado —, e estava certo enquanto era verdade. Implementado o processo, a guarda
+    /// inverte: o perigo deixou de ser o operador supor que funciona e passou a ser o aviso velho
+    /// dizendo que nao funciona. Alerta desatualizado e pior que nenhum, porque ensina a nao ler.
+    /// </para>
     /// </summary>
     [Fact]
-    public void Tela_AvisaQueOEnvioUnicoAindaNaoExiste()
+    public void Tela_DescreveOEnvioUnicoSemDizerQueEleNaoExiste()
     {
         string fonte = LerTela();
-        Assert.Contains("envio único ainda não está implementado", fonte, StringComparison.Ordinal);
+
+        Assert.Contains("Envio único:", fonte, StringComparison.Ordinal);
+        Assert.Contains("uma Handling Unit por caixa", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("ainda não está implementado", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("não há caminho de envio", fonte, StringComparison.Ordinal);
     }
 
     /// <summary>O cartao do Cadastro clona o cartao vivo, em vez de repetir numeros do Designer.</summary>
