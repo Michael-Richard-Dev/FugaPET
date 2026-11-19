@@ -443,10 +443,12 @@ public sealed class PaPipelineEarlyBinding113JTests
             new ResultadoPipelineProdutoAcabado(true, EtapaPipelineProdutoAcabado.Concluido, "ok", null)));
         Assert.False(ProcessoProdutoAcabadoForm.PipelineConcluidoIntegralmente(
             new ResultadoPipelineProdutoAcabado(true, EtapaPipelineProdutoAcabado.HandlingUnit, "parcial", null)));
-        // A etiqueta passou a ser emitida na pesagem; o disparo ao fim do pipeline sairia duplicado.
+        // 19/11/2026: a etiqueta voltou para o FIM do pipeline, porque a HU — que a identifica — so
+        // existe depois do envio. O gatilho e o pipeline INTEGRALMENTE concluido, nunca etapa parcial,
+        // e e exatamente isso que as duas afirmacoes acima garantem.
         string form = FonteForm();
-        Assert.DoesNotContain("ImprimirEtiquetaCaixaAsync(caixaConfirmadaPipeline)", form, StringComparison.Ordinal);
-        Assert.Contains("ImprimirEtiquetaCaixaPesadaAsync(resultado.Caixa)", form, StringComparison.Ordinal);
+        Assert.Contains("ImprimirEtiquetaCaixaConfirmadaAsync(caixaConfirmadaPipeline)", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ImprimirEtiquetaCaixaPesadaAsync", form, StringComparison.Ordinal);
     }
 
     // ================= leitura de fonte =================

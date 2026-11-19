@@ -890,9 +890,8 @@ public partial class ProcessoProdutoAcabadoForm : Form
                         "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
 
-                // A etiqueta desta caixa já saiu na pesagem. Não se imprime de novo aqui: isso geraria duas
-                // etiquetas para a mesma caixa física, e duas etiquetas na mesma caixa é erro de operação.
-                // Para obter a etiqueta já com a HU confirmada, use a reimpressão.
+                // AQUI é o momento da etiqueta: a HU real acabou de existir e está no snapshot persistido.
+                await ImprimirEtiquetaCaixaConfirmadaAsync(confirmada);
             }
             else
             {
@@ -1201,11 +1200,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AtualizarSaldoPendente();
         }
 
-        // GATE 113E (§5) revisto: a etiqueta desta caixa já foi emitida na pesagem, antes do pipeline.
-        // Imprimir de novo aqui colocaria duas etiquetas na mesma caixa física. A etiqueta com a HU
-        // confirmada continua disponível pela reimpressão, sob demanda.
-        _ = pipelineConcluido;
-        _ = caixaConfirmadaPipeline;
+        // GATE 113E (§5): a etiqueta sai DEPOIS do finally, que já recarregou o snapshot persistido, e
+        // SOMENTE com o pipeline integralmente concluído — 261 confirmado, 101 confirmado e HU
+        // ConfirmadaSap. Etapa parcial não imprime: a caixa ainda não tem HU para carimbar na etiqueta.
+        if (pipelineConcluido && caixaConfirmadaPipeline is not null)
+        {
+            await ImprimirEtiquetaCaixaConfirmadaAsync(caixaConfirmadaPipeline);
+        }
     }
 
     /// <summary>
@@ -2050,29 +2051,34 @@ public partial class ProcessoProdutoAcabadoForm : Form
             + $"{MapeadorStatusHuCaixa.ParaTextoBanco(resultado.Caixa.StatusIntegracao)}). "
             + $"Bruto: {FormatarKg(pesoBrutoKg)} | Tara: {FormatarKg(taraKg)} | Líquido: {FormatarKg(pesoLiquidoKg)}.";
 
-        // Etiqueta da caixa a cada pesagem, depois da persistência e com a HU ainda PENDENTE. Vem por
-        // último de propósito: a caixa já está registrada e visível na grid, de modo que uma falha de
-        // impressora não desfaz nem esconde o registro.
-        await ImprimirEtiquetaCaixaPesadaAsync(resultado.Caixa);
+        // A ETIQUETA NÃO SAI AQUI. A Handling Unit da caixa só existe depois que o SAP responde, e é ela
+        // que identifica a caixa física; imprimir na pesagem produziria uma etiqueta com "HU PENDENTE",
+        // que depois precisaria ser trocada. A impressão acontece na confirmação do envio.
         return true;
     }
 
     /// <summary>
-    /// Impressão no momento da pesagem. Efeito puramente local e isolado: qualquer falha é reportada na
-    /// barra de status e NUNCA propaga — a caixa persistida continua válida, e a etiqueta pode ser emitida
-    /// depois pela reimpressão. Sem caixa de diálogo, para não interromper o ritmo de quem está pesando.
+    /// Impressão da etiqueta DEPOIS da confirmação no SAP, com a Handling Unit real já na caixa.
+    /// <para>
+    /// Efeito puramente local e isolado: qualquer falha é reportada na barra de status e NUNCA propaga —
+    /// a caixa continua confirmada no SAP, e a etiqueta pode ser emitida pela reimpressão. Sem caixa de
+    /// diálogo, para não interromper o ritmo de quem opera, e para o lote não parar por causa de papel.
+    /// </para>
+    /// <para>
+    /// Recebe o SNAPSHOT PERSISTIDO, não o objeto de cache: é dele que sai a HU que vai na etiqueta.
+    /// </para>
     /// </summary>
-    private async Task ImprimirEtiquetaCaixaPesadaAsync(ProdutoAcabadoCaixa caixa)
+    private async Task ImprimirEtiquetaCaixaConfirmadaAsync(ProdutoAcabadoCaixa caixa)
     {
         try
         {
-            await _impressaoProdutoAcabadoServico.ImprimirCaixaPesadaAsync(caixa, ObterDescricaoMaterialAtual());
-            statusLabel.Text += $" Etiqueta impressa (HU PENDENTE).";
+            await _impressaoProdutoAcabadoServico.ImprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual());
+            statusLabel.Text += $" Etiqueta impressa (HU {caixa.HandlingUnitExternalId}).";
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceWarning(
-                $"[ProdutoAcabado] Falha ao imprimir etiqueta da caixa pesada: {ex.GetType().Name}");
+                $"[ProdutoAcabado] Falha ao imprimir etiqueta da caixa confirmada: {ex.GetType().Name}");
             statusLabel.Text += " ATENCAO: a etiqueta NAO foi impressa — use a reimpressão.";
         }
     }

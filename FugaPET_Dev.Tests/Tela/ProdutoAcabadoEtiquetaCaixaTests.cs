@@ -54,49 +54,61 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
         return caixa;
     }
 
-    // Na pesagem a etiqueta sai sem SAP: basta a caixa estar persistida.
+    /// <summary>
+    /// A REGRA INVERTEU em 19/11/2026: antes a caixa recem-pesada era elegivel e a etiqueta saia com a
+    /// HU "PENDENTE". Agora NENHUM estado anterior a confirmacao imprime, porque a HU — que identifica a
+    /// caixa fisica — so e gerada pelo SAP depois do envio.
+    /// </summary>
     [Fact]
-    public void Pesagem_CaixaPersistidaSemSapEElegivel()
+    public void AntesDaConfirmacaoSap_NenhumEstadoImprime()
     {
-        ImpressaoProdutoAcabadoServico.ValidarCaixaPesadaElegivelParaEtiqueta(CaixaPesada());
-
-        // Em qualquer estado anterior ao envio, continua elegível — o gatilho é a pesagem, não o SAP.
         foreach (StatusIntegracaoCaixa estado in new[]
         {
             StatusIntegracaoCaixa.EmPesagem,
             StatusIntegracaoCaixa.FinalizadaLocal,
+            StatusIntegracaoCaixa.PreviewHuGerado,
+            StatusIntegracaoCaixa.AguardandoAutorizacaoSap,
             StatusIntegracaoCaixa.ProntaParaEnvio,
-            StatusIntegracaoCaixa.ErroSap
+            StatusIntegracaoCaixa.EnviandoSap,
+            StatusIntegracaoCaixa.ErroSap,
+            StatusIntegracaoCaixa.IndeterminadoTimeout
         })
         {
             ProdutoAcabadoCaixa caixa = CaixaPesada();
             caixa.StatusIntegracao = estado;
-            ImpressaoProdutoAcabadoServico.ValidarCaixaPesadaElegivelParaEtiqueta(caixa);
+
+            ErroOperacionalEsperadoException erro = Assert.Throws<ErroOperacionalEsperadoException>(
+                () => ImpressaoProdutoAcabadoServico.ValidarCaixaElegivelParaEtiqueta(caixa));
+            Assert.Contains("CONFIRMADA_SAP", erro.Message, StringComparison.Ordinal);
         }
     }
 
     // Sem lastro no banco, não há etiqueta: caixa física sem rastreabilidade continua barrada.
     [Fact]
-    public void Pesagem_SemIdentidadePersistidaNaoImprime()
+    public void SemIdentidadePersistidaNaoImprime()
     {
-        ProdutoAcabadoCaixa semId = CaixaPesada();
+        ProdutoAcabadoCaixa semId = CaixaConfirmada();
         semId.CodigoProdutoAcabadoCaixa = null;
         Assert.Throws<ErroOperacionalEsperadoException>(() =>
-            ImpressaoProdutoAcabadoServico.ValidarCaixaPesadaElegivelParaEtiqueta(semId));
+            ImpressaoProdutoAcabadoServico.ValidarCaixaElegivelParaEtiqueta(semId));
 
-        ProdutoAcabadoCaixa semCodigo = CaixaPesada();
+        ProdutoAcabadoCaixa semCodigo = CaixaConfirmada();
         semCodigo.CodigoCaixaLocal = "  ";
         Assert.Throws<ErroOperacionalEsperadoException>(() =>
-            ImpressaoProdutoAcabadoServico.ValidarCaixaPesadaElegivelParaEtiqueta(semCodigo));
+            ImpressaoProdutoAcabadoServico.ValidarCaixaElegivelParaEtiqueta(semCodigo));
     }
 
-    // A etiqueta da pesagem sai com a HU como PENDENTE — e isso precisa chegar ao ZPL.
+    /// <summary>
+    /// A ETIQUETA CARREGA A HU REAL. Era este o motivo de mover a impressao para depois do envio: antes
+    /// o campo saia vazio e a etiqueta precisaria ser trocada quando a HU aparecesse.
+    /// </summary>
     [Fact]
-    public void Pesagem_HuAindaNaoExisteEVaiComoPendente()
+    public void EtiquetaDaCaixaConfirmada_LevaAHuReal()
     {
         DadosEtiquetaCaixaProdutoAcabado e =
-            ImpressaoProdutoAcabadoServico.CriarEtiqueta(CaixaPesada(), "SACO PET 25KG");
-        Assert.Equal(string.Empty, e.HandlingUnitSap);
+            ImpressaoProdutoAcabadoServico.CriarEtiqueta(CaixaConfirmada(), "SACO PET 25KG");
+
+        Assert.False(string.IsNullOrWhiteSpace(e.HandlingUnitSap));
 
         // O restante da identidade da caixa continua completo na etiqueta.
         Assert.Equal("1001951", e.OrdemProducao);
@@ -650,34 +662,60 @@ public sealed class ProdutoAcabadoEtiquetaCaixaTests
         Assert.DoesNotContain("CriarHandlingUnitCaixaAsync", servico, StringComparison.Ordinal);
     }
 
-    // Form: a etiqueta sai a cada PESAGEM, logo após a caixa ser persistida, e a impressão é ISOLADA
-    // (try/catch) — falha não altera a caixa nem a integração.
+    /// <summary>
+    /// A impressao e ISOLADA: captura qualquer excecao e nao chama nada de SAP. Falha de impressora nao
+    /// altera a caixa, nao desfaz a confirmacao e — no envio unico — nao interrompe o lote.
+    /// </summary>
     [Fact]
-    public void Form_ImpressaoNaPesagem_IsoladaENaoAfetaHu()
+    public void Form_ImpressaoAposConfirmacao_IsoladaENaoTocaSap()
     {
         string form = LerFonte("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        int inicio = form.IndexOf("private async Task ImprimirEtiquetaCaixaPesadaAsync(", StringComparison.Ordinal);
-        Assert.True(inicio >= 0);
+        int inicio = form.IndexOf("private async Task ImprimirEtiquetaCaixaConfirmadaAsync(", StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "o metodo de impressao pos-confirmacao sumiu");
         int fim = form.IndexOf("private async Task ", inicio + 20, StringComparison.Ordinal);
         string metodo = fim > inicio ? form[inicio..fim] : form[inicio..];
-        // O corpo captura qualquer exceção e NÃO chama nada de SAP.
+
         Assert.Contains("catch (Exception ex)", metodo, StringComparison.Ordinal);
-        Assert.Contains("_impressaoProdutoAcabadoServico.ImprimirCaixaPesadaAsync(", metodo, StringComparison.Ordinal);
+        Assert.Contains("_impressaoProdutoAcabadoServico.ImprimirCaixaAsync(", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("EnviarCaixaHandlingUnitAsync", metodo, StringComparison.Ordinal);
         Assert.DoesNotContain("AutorizarEnvioCaixaAsync", metodo, StringComparison.Ordinal);
-        // Disparada no registro da caixa, depois da persistência — nao na confirmação SAP.
-        Assert.Contains("await ImprimirEtiquetaCaixaPesadaAsync(resultado.Caixa);", form, StringComparison.Ordinal);
     }
 
-    // A etiqueta nao e emitida duas vezes para a mesma caixa: o antigo disparo pos-confirmacao saiu.
+    /// <summary>
+    /// A REGRA INVERTEU em 19/11/2026. Este teste exigia o oposto — que a etiqueta saisse na pesagem e
+    /// NAO na confirmacao — e estava certo enquanto a politica era essa. Agora trava o contrario: a
+    /// pesagem nao imprime, os DOIS caminhos de envio imprimem na confirmacao, e a entrada que imprimia
+    /// sem HU nao pode voltar.
+    /// </summary>
     [Fact]
-    public void Form_NaoImprimeSegundaEtiquetaAposConfirmacaoSap()
+    public void Form_ImprimeNaConfirmacaoENaoNaPesagem()
     {
         string form = LerFonte("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
-        Assert.DoesNotContain("await ImprimirEtiquetaCaixaAsync(confirmada);", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("ImprimirEtiquetaCaixaAsync(caixaConfirmadaPipeline)", form, StringComparison.Ordinal);
-        // A reimpressao manual continua existindo, para obter a etiqueta ja com a HU.
+
+        // Os dois caminhos de envio imprimem: HU isolada e 261→101→HU.
+        Assert.Contains("await ImprimirEtiquetaCaixaConfirmadaAsync(confirmada);", form, StringComparison.Ordinal);
+        Assert.Contains("ImprimirEtiquetaCaixaConfirmadaAsync(caixaConfirmadaPipeline)", form, StringComparison.Ordinal);
+
+        // E a pesagem nao imprime mais, por nenhuma porta.
+        Assert.DoesNotContain("ImprimirCaixaPesadaAsync", form, StringComparison.Ordinal);
+        Assert.DoesNotContain("ImprimirEtiquetaCaixaPesadaAsync", form, StringComparison.Ordinal);
+
+        // A reimpressao manual continua existindo.
         Assert.Contains("ReimprimirEtiquetaCaixaAsync(", form, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// O caminho do pipeline so imprime com ele INTEGRALMENTE concluido. Etapa parcial nao tem HU, e
+    /// imprimir ali produziria etiqueta sem o dado que a justifica.
+    /// </summary>
+    [Fact]
+    public void Form_PipelineSoImprimeComPipelineConcluido()
+    {
+        string form = LerFonte("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs");
+
+        Assert.Contains(
+            "if (pipelineConcluido && caixaConfirmadaPipeline is not null)",
+            form, StringComparison.Ordinal);
     }
 
     // Form: reimpressão é ação EXPLÍCITA (duplo clique + confirmação) e NÃO chama SAP.

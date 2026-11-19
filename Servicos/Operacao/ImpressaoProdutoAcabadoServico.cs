@@ -44,29 +44,23 @@ public sealed class ImpressaoProdutoAcabadoServico
         _auditarEtiqueta = auditarEtiqueta ?? RegistrarAuditoriaPadraoAsync;
     }
 
+    /// <summary>
+    /// Etiqueta da caixa, emitida DEPOIS da confirmação no SAP.
+    /// <para>
+    /// Até 19/11/2026 existia aqui uma segunda entrada, <c>ImprimirCaixaPesadaAsync</c>, que imprimia no
+    /// momento da pesagem com a Handling Unit ainda PENDENTE. Ela foi REMOVIDA a pedido do usuário: a HU
+    /// só é gerada pelo SAP depois do envio, e é ela que identifica a caixa física — a etiqueta anterior
+    /// nascia com um campo que precisaria ser trocado, e duas etiquetas na mesma caixa é erro de operação.
+    /// </para>
+    /// <para>
+    /// CONSEQUENCIA QUE PRECISA SER SABIDA: em ambiente onde o envio ao SAP não está habilitado, a caixa
+    /// nunca chega a CONFIRMADA_SAP e NENHUMA etiqueta é emitida — nem por aqui nem pela reimpressão, que
+    /// exige o mesmo estado. Isso é consequência direta da regra pedida, não um efeito colateral oculto.
+    /// </para>
+    /// </summary>
     public Task ImprimirCaixaAsync(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
     {
         ValidarCaixaElegivelParaEtiqueta(caixa);
-        return ExecutarImpressaoComAuditoriaAsync(caixa, TipoOperacaoImpressao,
-            () => _impressoraEtiquetaServico.ImprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial)));
-    }
-
-    /// <summary>
-    /// Etiqueta emitida no momento da PESAGEM, assim que a caixa foi persistida — antes, portanto, de
-    /// qualquer integração SAP. É a mesma etiqueta e o mesmo layout da <see cref="ImprimirCaixaAsync"/>;
-    /// muda apenas a elegibilidade, que aqui exige somente identidade persistida.
-    /// <para>
-    /// A Handling Unit ainda não existe neste instante e sai como PENDENTE na etiqueta. Isso é deliberado:
-    /// a caixa física precisa ser identificada na linha no momento em que é fechada, e o envio ao SAP pode
-    /// nem estar habilitado no ambiente. Quando a HU for confirmada, a reimpressão manual emite a etiqueta
-    /// já com ela.
-    /// </para>
-    /// Espelha o que a Entrada de Matéria-Prima faz desde sempre: imprime após a leitura de peso, sem
-    /// exigir resultado remoto.
-    /// </summary>
-    public Task ImprimirCaixaPesadaAsync(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
-    {
-        ValidarCaixaPesadaElegivelParaEtiqueta(caixa);
         return ExecutarImpressaoComAuditoriaAsync(caixa, TipoOperacaoImpressao,
             () => _impressoraEtiquetaServico.ImprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial)));
     }
@@ -120,24 +114,13 @@ public sealed class ImpressaoProdutoAcabadoServico
     /// BLOQUEADA). Nenhum fluxo operacional de impressão/reimpressão alcança "HU SAP: PENDENTE". NÃO toca SAP.
     /// </summary>
     /// <summary>
-    /// Elegibilidade da etiqueta de PESAGEM: exige apenas que a caixa exista no banco, com código local.
-    /// Não exige SAP, porque no momento da pesagem não há — nem pode haver — resultado remoto.
+    /// Elegibilidade da etiqueta: identidade persistida E confirmação no SAP.
     /// <para>
-    /// O que esta regra ainda impede: imprimir etiqueta de uma caixa que não foi persistida. Uma etiqueta
-    /// sem lastro no banco é uma caixa física sem rastreabilidade, e isso continua barrado.
+    /// A elegibilidade frouxa que acompanhava a impressão na pesagem foi removida junto com ela em
+    /// 19/11/2026. Restou UMA regra, e ela vale para impressão e reimpressão: sem HU confirmada não sai
+    /// etiqueta, porque a etiqueta identifica a caixa pela HU.
     /// </para>
     /// </summary>
-    public static void ValidarCaixaPesadaElegivelParaEtiqueta(ProdutoAcabadoCaixa caixa)
-    {
-        ArgumentNullException.ThrowIfNull(caixa);
-
-        if (caixa.CodigoProdutoAcabadoCaixa is null || string.IsNullOrWhiteSpace(caixa.CodigoCaixaLocal))
-        {
-            throw new ErroOperacionalEsperadoException(
-                "A caixa não possui identidade persistida (código local). Impressão indisponível.");
-        }
-    }
-
     public static void ValidarCaixaElegivelParaEtiqueta(ProdutoAcabadoCaixa caixa)
     {
         ArgumentNullException.ThrowIfNull(caixa);
