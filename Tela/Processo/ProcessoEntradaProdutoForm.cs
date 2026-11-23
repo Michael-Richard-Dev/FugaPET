@@ -10,6 +10,7 @@ using FugaPET_Dev.Servicos.Seguranca;
 using FugaPET_Dev.Servicos.IntegracaoSap;
 using FugaPET_Dev.AcessoDados.Banco;
 using FugaPET_Dev.Controle.Processo;
+using FugaPET_Dev.Servicos.Processo;
 using FugaPET_Dev.Tela.Teste;
 using FugaPET_Dev.Tela;
 using FugaPET_Dev.Tela.Comum;
@@ -98,6 +99,19 @@ public partial class ProcessoEntradaProdutoForm : Form
     private readonly global::FugaPET_Dev.Controle.Processo.EntradaProdutoController _controller;
     private readonly EntradaProdutoServico _entradaServico;
     private readonly Dictionary<long, PedidoCompraSapItem> _itensCarregadosPorCodigo = [];
+
+    // Tolerancia de recebimento por MATERIAL (incremento 069), carregada uma vez por pedido.
+    // Chave = material; ausente = nao cadastrada, o que BLOQUEIA (decisao do usuario em 23/11/2026).
+    // Consultar a cada pesagem iria ao banco no meio do ritmo da balanca, e uma falha de rede no
+    // meio do recebimento viraria bloqueio de material que ESTA cadastrado.
+    private readonly Dictionary<string, Modelo.Cadastro.ToleranciaRecebimentoMaterial> _toleranciasPorMaterial =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Falso enquanto as tolerancias nao puderam ser lidas (banco fora, cadastro indisponivel). Nesse
+    // caso a tela NAO bloqueia por "sem cadastro": nao saber se existe tolerancia e diferente de saber
+    // que nao existe, e parar a producao por indisponibilidade do cadastro seria a guarda sem valvula
+    // de saida que ja prendeu a operacao antes.
+    private bool _toleranciasDisponiveis;
     private readonly Dictionary<long, List<EntradaProdutoPesagem>> _leiturasPorItem = [];
     private readonly Dictionary<long, global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro> _tarasPorItem = [];
     private IReadOnlyList<PedidoCompraSapItem> _itensPedidoCarregados = [];
@@ -2091,6 +2105,18 @@ public partial class ProcessoEntradaProdutoForm : Form
                 return; // mensagem objetiva já publicada; mantém a leitura ativa.
             }
 
+            // Incremento 069: o PISO da tolerancia so pode ser cobrado aqui. Todo item comeca em zero,
+            // que esta abaixo de qualquer piso — cobra-lo durante a pesagem barraria a primeira pesagem
+            // de todo recebimento. Falta de quantidade so vira fato quando o operador declara que
+            // terminou, e e este o momento.
+            if (!ToleranciaPermiteFinalizar(out string motivoFinalizacao))
+            {
+                statusLabel.Text = motivoFinalizacao;
+                MessageBox.Show(this, motivoFinalizacao, "Tolerância de recebimento",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             // §3: o orquestrador é a única fonte da árvore por lotes (mesmas correlation_id no retry).
             EntradaProdutoLancamentoComLotesPersistencia arvore =
                 _controller.MontarLancamentoComLotesParaPersistencia();
@@ -3927,6 +3953,20 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         List<EntradaProdutoPesagem> leituras =
             _leiturasPorItem.GetValueOrDefault(codigoItem) ?? [];
+
+        // Incremento 069: o teto da tolerancia e cobrado AQUI, antes de a leitura entrar na lista.
+        // Depois de entrar, o peso ja faz parte do total do item, e desfazer isso exigiria remover a
+        // pesagem — bloquear antes e o que deixa o estado intacto.
+        if (!ToleranciaPermitePesagem(codigoItem, leituras, pesoLiquido, out string motivoTolerancia))
+        {
+            statusLabel.Text = motivoTolerancia;
+            // Caixa de dialogo, nao so a barra de status: a pesagem foi RECUSADA, e quem esta na
+            // balanca precisa parar e ler em vez de seguir achando que registrou.
+            MessageBox.Show(this, motivoTolerancia, "Tolerância de recebimento",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         // Regra definitiva: cada leitura é UMA pesagem = UMA etiqueta. Guardamos a pesagem criada para
         // imprimir SOMENTE ela (pesagem.PesoLiquidoKg), nunca o total consolidado da linha.
         EntradaProdutoPesagem nova = EntradaProdutoPesagemCalculos.MontarLeitura(
@@ -3942,6 +3982,152 @@ public partial class ProcessoEntradaProdutoForm : Form
         _leiturasPorItem[codigoItem] = leituras;
         pesagemCriada = nova;
         return AtualizarTotaisDaLinha(linhaItem, leituras);
+    }
+
+    /// <summary>
+    /// Carrega as tolerancias do centro uma vez por pedido (incremento 069).
+    /// <para>
+    /// Falha aqui NAO bloqueia: <see cref="_toleranciasDisponiveis"/> fica falso e a tela volta a se
+    /// comportar como antes do 069. Nao saber se existe tolerancia e diferente de saber que nao existe,
+    /// e parar a producao por indisponibilidade do CADASTRO seria a guarda sem valvula de saida que ja
+    /// prendeu a operacao antes.
+    /// </para>
+    /// </summary>
+    private async Task CarregarToleranciasDoPedidoAsync(IReadOnlyList<PedidoCompraSapItem> itens)
+    {
+        _toleranciasPorMaterial.Clear();
+        _toleranciasDisponiveis = false;
+
+        string centro = itens
+            .Select(i => (i.Centro ?? string.Empty).Trim())
+            .FirstOrDefault(c => c.Length > 0)
+            ?? Modelo.Cadastro.ToleranciaRecebimentoMaterial.CentroPadrao;
+
+        try
+        {
+            IReadOnlyList<Modelo.Cadastro.ToleranciaRecebimentoMaterial> tolerancias =
+                await _controller.ListarToleranciasRecebimentoAsync(centro, CancellationToken.None);
+
+            foreach (Modelo.Cadastro.ToleranciaRecebimentoMaterial tolerancia in tolerancias)
+            {
+                _toleranciasPorMaterial[tolerancia.Material] = tolerancia;
+            }
+
+            _toleranciasDisponiveis = true;
+        }
+        catch (Exception erro)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[Entrada] Tolerancias de recebimento indisponiveis: {erro.GetType().Name}. Pesagem segue sem o limite.");
+        }
+    }
+
+    /// <summary>
+    /// Todos os itens PESADOS estao dentro da tolerancia? Cobra os dois lados, porque aqui o
+    /// recebimento esta sendo encerrado.
+    /// <para>
+    /// Item SEM nenhuma pesagem e ignorado de proposito: nao receber um item nao e "receber a menos",
+    /// e um pedido parcial e situacao normal. Cobrar o piso de quem nao foi pesado impediria finalizar
+    /// qualquer recebimento parcial.
+    /// </para>
+    /// <para>
+    /// Relata TODOS os itens fora, nao so o primeiro: quem esta finalizando precisa saber o tamanho do
+    /// problema de uma vez, em vez de descobrir um item por tentativa.
+    /// </para>
+    /// </summary>
+    private bool ToleranciaPermiteFinalizar(out string mensagem)
+    {
+        mensagem = string.Empty;
+        if (!_toleranciasDisponiveis)
+        {
+            return true;
+        }
+
+        List<string> problemas = [];
+
+        foreach (DataGridViewRow row in productionDataGridView.Rows)
+        {
+            if (row.IsNewRow
+                || !long.TryParse(GetCellValue(row, "productionItemIdColumn"), out long codigoItem)
+                || codigoItem <= 0)
+            {
+                continue;
+            }
+
+            IReadOnlyList<EntradaProdutoPesagem> leituras = ObterLeiturasItem(codigoItem);
+            if (leituras.Count == 0)
+            {
+                continue;
+            }
+
+            if (!_itensCarregadosPorCodigo.TryGetValue(codigoItem, out PedidoCompraSapItem? item))
+            {
+                continue;
+            }
+
+            string material = (item.CodigoMaterial ?? string.Empty).Trim();
+            _toleranciasPorMaterial.TryGetValue(material, out Modelo.Cadastro.ToleranciaRecebimentoMaterial? tolerancia);
+
+            VereditoTolerancia veredito = RegraToleranciaRecebimento.AvaliarNaFinalizacao(
+                item.Quantidade,
+                EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido(leituras),
+                tolerancia);
+
+            if (veredito.Bloqueia)
+            {
+                problemas.Add(RegraToleranciaRecebimento.Mensagem(material, veredito));
+            }
+        }
+
+        if (problemas.Count == 0)
+        {
+            return true;
+        }
+
+        mensagem = problemas.Count == 1
+            ? problemas[0]
+            : "Não é possível finalizar o recebimento:" + Environment.NewLine + Environment.NewLine
+              + string.Join(Environment.NewLine + Environment.NewLine, problemas);
+        return false;
+    }
+
+    /// <summary>
+    /// O item pode receber mais esta pesagem? Cobra SO o teto — o piso e da finalizacao
+    /// (ver <see cref="RegraToleranciaRecebimento"/>).
+    /// </summary>
+    private bool ToleranciaPermitePesagem(
+        long codigoItem,
+        IReadOnlyList<EntradaProdutoPesagem> leiturasAtuais,
+        decimal pesoLiquidoNovo,
+        out string mensagem)
+    {
+        mensagem = string.Empty;
+
+        // Cadastro indisponivel nesta execucao: nao da para afirmar que falta tolerancia.
+        if (!_toleranciasDisponiveis
+            || !_itensCarregadosPorCodigo.TryGetValue(codigoItem, out PedidoCompraSapItem? item))
+        {
+            return true;
+        }
+
+        string material = (item.CodigoMaterial ?? string.Empty).Trim();
+        _toleranciasPorMaterial.TryGetValue(material, out Modelo.Cadastro.ToleranciaRecebimentoMaterial? tolerancia);
+
+        // TOTAL do item depois desta pesagem — nao a pesagem sozinha. Um item de 100 recebido em 5
+        // pesagens de 20 seria barrado nas cinco se a conta fosse por pesagem.
+        decimal totalProjetado =
+            EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido(leiturasAtuais) + pesoLiquidoNovo;
+
+        VereditoTolerancia veredito = RegraToleranciaRecebimento.AvaliarDurantePesagem(
+            item.Quantidade, totalProjetado, tolerancia);
+
+        if (!veredito.Bloqueia)
+        {
+            return true;
+        }
+
+        mensagem = RegraToleranciaRecebimento.Mensagem(material, veredito);
+        return false;
     }
 
     private static bool AtualizarTotaisDaLinha(
@@ -4430,6 +4616,8 @@ public partial class ProcessoEntradaProdutoForm : Form
             {
                 _itensCarregadosPorCodigo[itemAutorizado.CodigoItem] = itemAutorizado;
             }
+
+            await CarregarToleranciasDoPedidoAsync(resultado.ItensAutorizados);
 
             PreencherItensPedidoCompra(resultado.ItensAutorizados);
             await RehidratarLancamentoLocalPersistidoAsync(numeroPedido);

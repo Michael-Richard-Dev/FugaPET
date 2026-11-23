@@ -31,6 +31,19 @@ public sealed class EntradaProdutoController
     public AutorizacaoCentroDepositoEntrada AutorizacaoCentroDeposito { get; }
     public TaraController Tara { get; }
 
+    /// <summary>
+    /// Tolerancias de recebimento cadastradas no centro (incremento 069).
+    /// <para>
+    /// Devolve o CENTRO INTEIRO de uma vez, e nao material a material: a tela carrega isso uma vez por
+    /// pedido e consulta em memoria a cada pesagem. Ir ao banco por pesagem colocaria o ritmo da
+    /// balanca na dependencia da rede, e uma falha no meio do recebimento viraria bloqueio de material
+    /// que ESTA cadastrado.
+    /// </para>
+    /// </summary>
+    public Task<IReadOnlyList<Modelo.Cadastro.ToleranciaRecebimentoMaterial>> ListarToleranciasRecebimentoAsync(
+        string centro, CancellationToken cancellationToken = default)
+        => _listarToleranciasRecebimento(centro, cancellationToken);
+
     // Tarefa Entrada 24.1: serviço de tipo mestre (A_Product) LAZY — só construído ao consultar um pedido.
     private IProductMasterSapServico? _productMasterServico;
     private IProductMasterSapServico ProductMasterServico =>
@@ -44,6 +57,9 @@ public sealed class EntradaProdutoController
     private readonly Func<string, string, CancellationToken, Task<ProdutoCentroSapMestre?>> _consultarProdutoCentroSap;
     // GATE R2: ProductType do material (classificacao ROH/HIBE) e evidencia de recebimento ja confirmado.
     private readonly Func<string, CancellationToken, Task<ProdutoSapMestre?>> _consultarProdutoMestreSap;
+
+    private readonly Func<string, CancellationToken, Task<IReadOnlyList<Modelo.Cadastro.ToleranciaRecebimentoMaterial>>>
+        _listarToleranciasRecebimento;
     private readonly Func<string, string, long, CancellationToken, Task<bool?>> _existeRecebimentoConfirmadoItemPedido;
     private readonly Func<long, CancellationToken, Task<string?>> _obterStatusLancamento;
     // 12G-D: reidratação — localiza o lançamento local elegível por pedido (read-only). Seam p/ teste.
@@ -109,7 +125,11 @@ public sealed class EntradaProdutoController
         Func<long, CancellationToken, Task<Modelo.Entrada.ResultadoExclusaoPesagem>>? excluirPesagemLocal = null,
         // GATE R2: acrescentados NO FIM da lista para nao deslocar nenhum argumento posicional existente.
         Func<string, CancellationToken, Task<ProdutoSapMestre?>>? consultarProdutoMestreSap = null,
-        Func<string, string, long, CancellationToken, Task<bool?>>? existeRecebimentoConfirmadoItemPedido = null)
+        Func<string, string, long, CancellationToken, Task<bool?>>? existeRecebimentoConfirmadoItemPedido = null,
+        // Incremento 069: tolerancia de recebimento por material. NO FIM da lista, pela mesma razao
+        // dos de cima — nao deslocar nenhum argumento posicional existente.
+        Func<string, CancellationToken, Task<IReadOnlyList<Modelo.Cadastro.ToleranciaRecebimentoMaterial>>>?
+            listarToleranciasRecebimento = null)
     {
         Sap = sap ?? throw new ArgumentNullException(nameof(sap));
         EntradaProduto = entradaProdutoServico ?? throw new ArgumentNullException(nameof(entradaProdutoServico));
@@ -131,6 +151,19 @@ public sealed class EntradaProdutoController
         _consultarProdutoMestreSap = consultarProdutoMestreSap
             ?? ((material, cancellationToken) =>
                 FabricaProductMasterSapServico.Criar().ObterProdutoAsync(material, cancellationToken));
+        // Incremento 069: a MESMA composicao que a tela de cadastro usa (FabricaControladoresCadastro).
+        // Montar outra aqui abriria a porta para as duas lerem de lugares diferentes.
+        _listarToleranciasRecebimento = listarToleranciasRecebimento
+            ?? (async (centro, cancellationToken) =>
+            {
+                ResultadoListagemTolerancia listagem = await FabricaControladoresCadastro
+                    .CriarToleranciaRecebimentoMaterialServico()
+                    .ListarAsync(centro, cancellationToken);
+
+                return [.. listagem.Linhas
+                    .Where(l => l.Tolerancia is not null)
+                    .Select(l => l.Tolerancia!)];
+            });
         // GATE R2 (P5): evidencia de recebimento ja confirmado para o MESMO item do pedido. TRI-STATE:
         // true = ja houve (bloqueia), false = nao houve (libera), null = DESCONHECIDO (bloqueia).
         // GATE R5: o seam passou a ser atendido pelo provider OPERACIONAL, que compoe tres evidencias

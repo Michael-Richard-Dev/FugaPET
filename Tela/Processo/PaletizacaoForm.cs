@@ -358,6 +358,15 @@ public sealed class PaletizacaoForm : Form
             paletesFormadosDataGridView.Columns[nome].Width = largura;
         }
 
+        // Duplo clique na linha: REIMPRESSAO da etiqueta do palete (pedido do usuario em 23/11/2026).
+        // Mesmo gesto que ja reimprime a etiqueta da CAIXA na tela de Produto Acabado, para quem
+        // conhece uma tela nao precisar aprender outra coisa aqui.
+        //
+        // NUNCA envia ao SAP: o envio tem botao proprio e visivel. Duplo clique que dispara
+        // integracao seria efeito oculto num gesto que o operador usa para conferir.
+        paletesFormadosDataGridView.CellDoubleClick += async (_, e) =>
+            await ReimprimirEtiquetaPaleteAsync(e.RowIndex);
+
         // GATE 047-Z: ação EXPLÍCITA "ENVIAR AO SAP" para o palete selecionado (o operador depende de UI visível;
         // nada de comportamento oculto). GRAVAR PALETE continua SOMENTE local; o envio INT012 é este botão.
         Panel acoes = new() { Dock = DockStyle.Bottom, Height = 44, BackColor = Color.White };
@@ -556,10 +565,18 @@ public sealed class PaletizacaoForm : Form
                 return;
             }
 
-            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal} gravado localmente em RASCUNHO.";
-            // Etiqueta padrão do palete, emitida na gravação. O código vem da persistência, que é
-            // quem define o sequencial — por isso a impressão vem depois dela, nunca antes.
-            await ImprimirEtiquetaPaleteAsync(palete, persistencia.CodigoHuPalete, terminal);
+            // A ETIQUETA NAO SAI MAIS AQUI (pedido do usuario em 23/11/2026).
+            //
+            // Ate aqui ela era emitida na gravacao, e por isso a barra so podia carregar o codigo
+            // local com prefixo "20". Agora a barra carrega a HU do palete, que o SAP so gera no
+            // ENVIAR AO SAP — imprimir aqui produziria etiqueta sem barra. A impressao passou para o
+            // fechamento do envio, em EnviarPaleteSapAsync.
+            //
+            // CONSEQUENCIA QUE PRECISA SER SABIDA: palete gravado e nao enviado NAO tem etiqueta.
+            // E a mesma regra adotada para a etiqueta da CAIXA em 19/11/2026, e pela mesma razao:
+            // a etiqueta identifica pela HU, e duas etiquetas no mesmo palete seriam erro de operacao.
+            statusLabel.Text = $"Palete {palete.CodigoPaleteLocal} gravado localmente em RASCUNHO. "
+                             + "A etiqueta sai no envio ao SAP.";
             LimparSelecao();
             await RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe());
         }
@@ -567,6 +584,80 @@ public sealed class PaletizacaoForm : Form
         {
             statusLabel.Text = ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Reimpressão da etiqueta de um palete JÁ FORMADO, pelo duplo clique na linha.
+    /// <para>
+    /// Só reimprime palete com HU do SAP. Palete em RASCUNHO ou ERRO_SAP não tem HU, e a etiqueta
+    /// existe para identificar pela HU — emitir uma sem barra aqui daria ao operador um papel que
+    /// não serve para bipar, com aparência de etiqueta válida. A mensagem diz o motivo e o caminho.
+    /// </para>
+    /// <para>
+    /// Lê da lista em memória, que é reconstruída do BANCO a cada recarga — não do que está escrito
+    /// nas células da grade.
+    /// </para>
+    /// </summary>
+    private async Task ReimprimirEtiquetaPaleteAsync(int indiceLinha)
+    {
+        if (indiceLinha < 0 || indiceLinha >= _paletesFormados.Count)
+        {
+            return;
+        }
+
+        ProdutoAcabadoPalete palete = _paletesFormados[indiceLinha];
+
+        if (string.IsNullOrWhiteSpace(palete.HandlingUnitPalete))
+        {
+            string situacao = string.IsNullOrWhiteSpace(palete.StatusSap) ? "sem situação" : palete.StatusSap.Trim();
+            statusLabel.Text =
+                $"Palete {palete.CodigoPaleteLocal} está em {situacao} e ainda não tem HU do SAP. "
+                + "A etiqueta sai depois do ENVIAR AO SAP.";
+            return;
+        }
+
+        statusLabel.Text = $"Reimprimindo a etiqueta do palete {palete.CodigoPaleteLocal}...";
+        string terminal = EstadoTerminalLocalAtual.ObterContextoAtualizado()?.NomeTerminal ?? string.Empty;
+        await ImprimirEtiquetaPaleteAsync(palete, palete.CodigoHuPalete, terminal);
+    }
+
+    /// <summary>
+    /// Imprime a etiqueta do palete que o SAP acabou de confirmar, localizando-o na lista JA
+    /// RECARREGADA — que é de onde vem a HU.
+    /// <para>
+    /// Busca pelo código local em vez de receber o objeto pronto: o palete de antes do envio é um
+    /// retrato em RASCUNHO, sem HU, e imprimi-lo produziria exatamente a etiqueta sem barra que esta
+    /// mudança veio eliminar.
+    /// </para>
+    /// <para>
+    /// Falha aqui NUNCA propaga: o palete já está confirmado no SAP e nada do que acontece com a
+    /// impressora muda isso. O operador é avisado na barra de status.
+    /// </para>
+    /// </summary>
+    private async Task ImprimirEtiquetaPaleteConfirmadoAsync(string codigoPaleteLocal)
+    {
+        ProdutoAcabadoPalete? confirmado = _paletesFormados.FirstOrDefault(p =>
+            string.Equals(
+                (p.CodigoPaleteLocal ?? string.Empty).Trim(),
+                (codigoPaleteLocal ?? string.Empty).Trim(),
+                StringComparison.OrdinalIgnoreCase));
+
+        if (confirmado is null)
+        {
+            statusLabel.Text += " Etiqueta NAO impressa: palete nao localizado apos a recarga.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(confirmado.HandlingUnitPalete))
+        {
+            // Confirmado sem HU seria contradição do próprio fechamento; não se imprime barra
+            // inventada para contorná-la.
+            statusLabel.Text += " Etiqueta NAO impressa: palete confirmado sem HU do SAP.";
+            return;
+        }
+
+        string terminal = EstadoTerminalLocalAtual.ObterContextoAtualizado()?.NomeTerminal ?? string.Empty;
+        await ImprimirEtiquetaPaleteAsync(confirmado, confirmado.CodigoHuPalete, terminal);
     }
 
     /// <summary>
@@ -668,6 +759,12 @@ public sealed class PaletizacaoForm : Form
             if (resultado.Estado == EstadoPaleteInt012.Confirmado)
             {
                 await RecarregarPaletesFormadosAsync(palete.NumeroOrdemDe());
+
+                // A etiqueta sai AQUI, com a HU real na barra (23/11/2026). Depois do reload de
+                // proposito: e ele que traz o palete com a HU que o SAP acabou de gerar. Imprimir a
+                // partir do objeto `palete` de antes do envio sairia sem HU, porque aquele retrato
+                // ainda e o de RASCUNHO.
+                await ImprimirEtiquetaPaleteConfirmadoAsync(palete.CodigoPaleteLocal);
             }
             else
             {

@@ -662,6 +662,9 @@ public partial class PainelInicialForm : Form
         _cadastroForm.VinculoProdutoEtiquetaRequested -= CadastroForm_VinculoProdutoEtiquetaRequested;
         _cadastroForm.VinculoProdutoEtiquetaRequested += CadastroForm_VinculoProdutoEtiquetaRequested;
 
+        _cadastroForm.ToleranciaRecebimentoRequested -= CadastroForm_ToleranciaRecebimentoRequested;
+        _cadastroForm.ToleranciaRecebimentoRequested += CadastroForm_ToleranciaRecebimentoRequested;
+
         contentScrollPanel.SuspendLayout();
         contentScrollPanel.Controls.Clear();
         contentScrollPanel.AutoScroll = false;
@@ -983,6 +986,35 @@ public partial class PainelInicialForm : Form
     {
         if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.Etiqueta, "Vínculo de Produto e Etiqueta")) return;
         using Cadastro.VinculoProdutoEtiquetaForm form = new();
+
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            NavigateToCadastro();
+        }
+    }
+
+    /// <summary>
+    /// Abre a Tolerancia de Recebimento por material (incremento 069).
+    /// <para>
+    /// Entra por PROCESSO_PRODUCAO/ENTRADA_PRODUTO, a permissao da propria tela de Recebimento — ver
+    /// a ressalva em <c>CadastroForm.AplicarFiltroPermissoes</c>.
+    /// </para>
+    /// </summary>
+    private async void CadastroForm_ToleranciaRecebimentoRequested(object? sender, EventArgs e)
+    {
+        if (!await PermiteAbrirTelaAsync(
+                PermissoesSistema.Modulos.ProcessoProducao,
+                PermissoesSistema.Rotinas.EntradaProduto,
+                "Tolerância de Recebimento")) return;
+
+        using Cadastro.ToleranciaRecebimentoMaterialForm form = new();
 
         Hide();
 
@@ -1386,6 +1418,14 @@ public partial class PainelInicialForm : Form
             if (e.KeyCode == Keys.F8)
             {
                 CadastroForm_VinculoProdutoEtiquetaRequested(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
+
+            // F9 abre a Tolerancia de Recebimento (incremento 069).
+            if (e.KeyCode == Keys.F9)
+            {
+                CadastroForm_ToleranciaRecebimentoRequested(this, EventArgs.Empty);
                 e.Handled = true;
                 return;
             }

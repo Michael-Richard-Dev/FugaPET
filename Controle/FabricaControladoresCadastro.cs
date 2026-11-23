@@ -126,6 +126,32 @@ public static class FabricaControladoresCadastro
         return new ProcessoPesagemProdutoServico(repositorio);
     }
 
+    /// <summary>
+    /// Tolerancia de recebimento por material (incremento 069). Mesma composicao do vinculo: le o
+    /// catalogo LOCAL, e o SAP so e tocado pelo botao de sincronizar.
+    /// </summary>
+    public static ToleranciaRecebimentoMaterialController CriarToleranciaRecebimentoMaterialController()
+        => new(CriarToleranciaRecebimentoMaterialServico());
+
+    /// <summary>
+    /// O mesmo servico que a tela usa, para o RECEBIMENTO consultar a tolerancia do material. Uma
+    /// composicao so: se o recebimento montasse a sua, as duas poderiam ler de lugares diferentes.
+    /// </summary>
+    public static ToleranciaRecebimentoMaterialServico CriarToleranciaRecebimentoMaterialServico()
+    {
+        ToleranciaRecebimentoMaterialRepositorio repositorio = new(FabricaConexao.Value);
+        CatalogoProdutoCentroRepositorio catalogoRepositorio = new(FabricaConexao.Value);
+
+        SincronizacaoCatalogoProdutoServico sincronizacao = new(
+            catalogoRepositorio,
+            FabricaCatalogoProdutoCentroSapServico.Criar());
+
+        return new ToleranciaRecebimentoMaterialServico(
+            repositorio,
+            sincronizacao,
+            CriarAuditoriaServico());
+    }
+
     public static CampoEtiquetaController CriarCampoEtiquetaController()
     {
         CampoEtiquetaRepositorio repositorio = new(FabricaConexao.Value);

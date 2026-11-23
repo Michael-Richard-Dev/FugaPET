@@ -10,11 +10,13 @@ public partial class CadastroForm : UserControl
     public event EventHandler? EtiquetaRequested;
     public event EventHandler? ModeloEtiquetaRequested;
     public event EventHandler? VinculoProdutoEtiquetaRequested;
+    public event EventHandler? ToleranciaRecebimentoRequested;
 
     public CadastroForm()
     {
         InitializeComponent();
         CriarCartaoVinculoProdutoEtiqueta();
+        CriarCartaoToleranciaRecebimento();
         if (System.ComponentModel.LicenseManager.UsageMode != System.ComponentModel.LicenseUsageMode.Designtime)
         {
             AplicarFiltroPermissoes();
@@ -33,6 +35,40 @@ public partial class CadastroForm : UserControl
     /// </para>
     /// </summary>
     private void CriarCartaoVinculoProdutoEtiqueta()
+        => _cartaoVinculoProdutoEtiqueta = CriarCartaoClonado(
+            nome: "vinculoProdutoEtiquetaCard",
+            titulo: "Vínculo de Produto",
+            descricao: "Produto acabado, etiqueta e processo de pesagem.",
+            atalho: "F8",
+            corDoIcone: Color.FromArgb(254, 240, 221),
+            aoClicar: OnVinculoProdutoEtiquetaClick);
+
+    /// <summary>
+    /// Tolerancia de recebimento por material (incremento 069). Irmao do cartao de Vinculo, com o
+    /// mesmo mecanismo de clonagem — ver <see cref="CriarCartaoClonado"/>.
+    /// </summary>
+    private void CriarCartaoToleranciaRecebimento()
+        => _cartaoToleranciaRecebimento = CriarCartaoClonado(
+            nome: "toleranciaRecebimentoCard",
+            titulo: "Tolerância de Recebimento",
+            descricao: "Quanto a pesagem pode divergir do pedido, por material.",
+            atalho: "F9",
+            // Verde-agua: distingue do laranja-claro do Vinculo, para os dois cartoes clonados nao
+            // virarem um par indistinguivel no meio da grade.
+            corDoIcone: Color.FromArgb(222, 247, 236),
+            aoClicar: OnToleranciaRecebimentoClick);
+
+    /// <summary>
+    /// Monta um cartao novo COPIANDO a geometria do cartao de Etiqueta que ja existe.
+    /// <para>
+    /// Por que clonar em vez de desenhar no Designer: toda geometria vem LIDA do cartao vivo —
+    /// tamanho, margens, posicao e fonte de cada parte. Assim o cartao novo herda o que o DPI ja fez
+    /// com o antigo, em vez de trazer pixels cravados que quebram em outra resolucao; e, se o desenho
+    /// dos cartoes mudar, estes acompanham sem ninguem lembrar de atualizar varios lugares.
+    /// </para>
+    /// </summary>
+    private Control CriarCartaoClonado(
+        string nome, string titulo, string descricao, string atalho, Color corDoIcone, EventHandler aoClicar)
     {
         Controls.RoundedPanel cartao = new()
         {
@@ -40,7 +76,7 @@ public partial class CadastroForm : UserControl
             BorderColor = etiquetaCard.BorderColor,
             Cursor = Cursors.Hand,
             Margin = etiquetaCard.Margin,
-            Name = "vinculoProdutoEtiquetaCard",
+            Name = nome,
             ShadowBlur = etiquetaCard.ShadowBlur,
             ShadowOffsetY = etiquetaCard.ShadowOffsetY,
             Size = etiquetaCard.Size,
@@ -52,7 +88,7 @@ public partial class CadastroForm : UserControl
             BorderRadius = etiquetaIconPanel.BorderRadius,
             Cursor = Cursors.Hand,
             // Cor propria para o cartao nao virar copia visual do de Etiqueta: sao coisas diferentes.
-            FillColor = Color.FromArgb(254, 240, 221),
+            FillColor = corDoIcone,
             Location = etiquetaIconPanel.Location,
             Size = etiquetaIconPanel.Size,
         };
@@ -67,25 +103,26 @@ public partial class CadastroForm : UserControl
         };
         icone.Controls.Add(simboloIcone);
 
-        Label titulo = ClonarRotuloDoCartao(etiquetaTitleLabel, "Vínculo de Produto");
-        Label descricao = ClonarRotuloDoCartao(
-            etiquetaDescriptionLabel, "Produto acabado, etiqueta e processo de pesagem.");
+        Label rotuloTitulo = ClonarRotuloDoCartao(etiquetaTitleLabel, titulo);
+        Label rotuloDescricao = ClonarRotuloDoCartao(etiquetaDescriptionLabel, descricao);
         Label situacao = ClonarRotuloDoCartao(etiquetaStatusLabel, "Disponível");
-        Label atalho = ClonarRotuloDoCartao(etiquetaShortcutLabel, "F8");
+        Label rotuloAtalho = ClonarRotuloDoCartao(etiquetaShortcutLabel, atalho);
         Label seta = ClonarRotuloDoCartao(etiquetaArrowLabel, etiquetaArrowLabel.Text);
 
-        cartao.Controls.AddRange([icone, titulo, descricao, situacao, atalho, seta]);
+        cartao.Controls.AddRange([icone, rotuloTitulo, rotuloDescricao, situacao, rotuloAtalho, seta]);
         modulesFlowLayoutPanel.Controls.Add(cartao);
 
-        foreach (Control parte in new Control[] { cartao, icone, simboloIcone, titulo, descricao, situacao, atalho, seta })
+        foreach (Control parte in new Control[]
+                 { cartao, icone, simboloIcone, rotuloTitulo, rotuloDescricao, situacao, rotuloAtalho, seta })
         {
-            parte.Click += OnVinculoProdutoEtiquetaClick;
+            parte.Click += aoClicar;
         }
 
-        _cartaoVinculoProdutoEtiqueta = cartao;
+        return cartao;
     }
 
     private Control? _cartaoVinculoProdutoEtiqueta;
+    private Control? _cartaoToleranciaRecebimento;
 
     /// <summary>Copia aparencia e geometria de um rotulo do cartao, trocando so o texto.</summary>
     private static Label ClonarRotuloDoCartao(Label modelo, string texto) => new()
@@ -102,6 +139,9 @@ public partial class CadastroForm : UserControl
 
     private void OnVinculoProdutoEtiquetaClick(object? sender, EventArgs e)
         => VinculoProdutoEtiquetaRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnToleranciaRecebimentoClick(object? sender, EventArgs e)
+        => ToleranciaRecebimentoRequested?.Invoke(this, EventArgs.Empty);
 
     private void AplicarFiltroPermissoes()
     {
@@ -147,6 +187,20 @@ public partial class CadastroForm : UserControl
                 _cartaoVinculoProdutoEtiqueta,
                 Servicos.Seguranca.PermissoesSistema.Modulos.Etiqueta,
                 Servicos.Seguranca.PermissoesSistema.Rotinas.Etiqueta);
+        }
+
+        // Entra pela permissao da propria tela de Recebimento (ENTRADA_PRODUTO), pela mesma razao que
+        // levou o Vinculo a entrar por ETIQUETA: rotina nova exigiria semear permissao no banco antes
+        // de a tela poder abrir para alguem.
+        //
+        // RESSALVA HONESTA: isso deixa quem OPERA o recebimento mudar a propria tolerancia, o que
+        // enfraquece o controle. Se virar perfil separado, e so trocar a rotina aqui e no painel.
+        if (_cartaoToleranciaRecebimento is not null)
+        {
+            ConfigurarVisibilidadeCadastro(
+                _cartaoToleranciaRecebimento,
+                Servicos.Seguranca.PermissoesSistema.Modulos.ProcessoProducao,
+                Servicos.Seguranca.PermissoesSistema.Rotinas.EntradaProduto);
         }
     }
 

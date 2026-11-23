@@ -33,10 +33,24 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
             CriadoEm = new DateTimeOffset(2026, 11, 11, 9, 0, 0, TimeSpan.Zero)
         };
 
+    /// <summary>
+    /// HU do palete NA FORMA COMO O BANCO A GUARDA: preenchida com zeros ate 20 caracteres. Os
+    /// testes usam a forma preenchida de proposito — e ela que chega na etiqueta, e imprimi-la crua
+    /// seria o defeito. Valor real observado no DEV110 em 23/11/2026 (palete 8).
+    /// </summary>
+    private const string HuPaleteArmazenada = "00000000000300016060";
+
+    /// <summary>A mesma HU como o SAP e as pessoas a chamam — o que tem de sair na barra.</summary>
+    private const string HuPaleteImpressa = "300016060";
+
     private static ProdutoAcabadoPalete Palete(params ProdutoAcabadoCaixa[] caixas)
         => new()
         {
             CodigoPaleteLocal = "1",
+            // A etiqueta so sai depois da confirmacao no SAP (23/11/2026), entao o palete de teste
+            // nasce confirmado: um palete sem HU nao chega a imprimir no fluxo real.
+            HandlingUnitPalete = HuPaleteArmazenada,
+            StatusSap = "CONFIRMADO_SAP",
             PrimeiraCaixa = caixas.Length == 0 ? 0 : caixas.Min(c => c.NumeroCaixa),
             UltimaCaixa = caixas.Length == 0 ? 0 : caixas.Max(c => c.NumeroCaixa),
             PesoBrutoKg = caixas.Sum(c => c.PesoBrutoKg),
@@ -182,9 +196,14 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
         Assert.Contains("Qt Pct/PC: 60", zpl, StringComparison.Ordinal);
         Assert.Contains("Peso B.: 30,00", zpl, StringComparison.Ordinal);
         Assert.Contains("Peso L.: 28,50", zpl, StringComparison.Ordinal);
-        // Code128 do codigo de barras do palete, com leitura humana (Y) dentro da moldura.
+        // Code128 com leitura humana (Y) dentro da moldura. A BARRA CARREGA A HU DO PALETE desde
+        // 23/11/2026 — e SEM os zeros a esquerda do armazenamento, senao o leitor devolve um numero
+        // que nao bate com o que o SAP mostra.
         Assert.Contains("^BCN,120,Y,N,N", zpl, StringComparison.Ordinal);
-        Assert.Contains("^FD2000017747^FS", zpl, StringComparison.Ordinal);
+        Assert.Contains($"^FD{HuPaleteImpressa}^FS", zpl, StringComparison.Ordinal);
+        Assert.DoesNotContain(HuPaleteArmazenada, zpl, StringComparison.Ordinal);
+        // O codigo local com prefixo "20" NAO vai mais na barra.
+        Assert.DoesNotContain("^FD2000017747^FS", zpl, StringComparison.Ordinal);
         // Titulo, numero e totais centralizados/alinhados por bloco (^FB), como no modelo.
         Assert.Contains(",1,0,C^FDFUGA PET^FS", zpl, StringComparison.Ordinal);
         // Uma linha por lote, com as quatro colunas do modelo.
@@ -216,7 +235,7 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
 
         string campoDeBarras = zpl[inicio..fim];
         Assert.DoesNotContain("^FB", campoDeBarras, StringComparison.Ordinal);
-        Assert.Contains("^FD2000017747", campoDeBarras, StringComparison.Ordinal);
+        Assert.Contains($"^FD{HuPaleteImpressa}", campoDeBarras, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -458,16 +477,143 @@ public sealed class ProdutoAcabadoEtiquetaPaleteTests
             Assert.DoesNotContain(proibido, servico, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A IMPRESSAO MUDOU DE MOMENTO EM 23/11/2026. Antes saia na GRAVACAO, e por isso a barra so
+    /// podia levar o codigo local. Agora a barra leva a HU do palete, que o SAP so gera no envio —
+    /// logo a etiqueta tem de sair no fechamento do ENVIO, e depois da recarga, que e quem traz a HU.
+    /// <para>
+    /// Consequencia aceita pelo usuario: palete gravado e nao enviado NAO tem etiqueta.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void TelaImprimeNaGravacaoEIsolaAFalha()
+    public void TelaImprimeApenasAposConfirmacaoDoSap()
     {
         string form = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Processo", "PaletizacaoForm.cs"));
-        // A impressao vem DEPOIS da persistencia, que e quem define o sequencial.
-        int persistencia = form.IndexOf("persistencia.Sucesso", StringComparison.Ordinal);
-        int impressao = form.IndexOf("ImprimirEtiquetaPaleteAsync(palete", StringComparison.Ordinal);
-        Assert.True(persistencia >= 0 && impressao > persistencia);
+
+        // A impressao vem DEPOIS do reload do envio confirmado.
+        int confirmado = form.IndexOf("EstadoPaleteInt012.Confirmado", StringComparison.Ordinal);
+        Assert.True(confirmado >= 0, "o fluxo de envio confirmado precisa existir");
+
+        int recarga = form.IndexOf("RecarregarPaletesFormadosAsync", confirmado, StringComparison.Ordinal);
+        int impressao = form.IndexOf("ImprimirEtiquetaPaleteConfirmadoAsync", confirmado, StringComparison.Ordinal);
+        Assert.True(recarga > confirmado, "a recarga precisa vir no bloco do confirmado");
+        Assert.True(impressao > recarga, "a impressao precisa vir DEPOIS da recarga: e ela que traz a HU");
+
+        // E NAO sai mais na gravacao. A ancora e a CHAMADA EXATA que existia la — so a gravacao tinha
+        // o codigo vindo de `persistencia`. Uma versao anterior deste teste recortava o TRECHO entre
+        // duas ancoras e procurava a chamada dentro dele; quebrou assim que um metodo novo (a
+        // reimpressao) passou a morar nesse intervalo, sem que a gravacao tivesse mudado nada.
+        // Recorte de texto entre metodos NAO delimita um metodo.
+        Assert.DoesNotContain(
+            "ImprimirEtiquetaPaleteAsync(palete, persistencia.CodigoHuPalete", form, StringComparison.Ordinal);
+
+        // A falha de impressao continua isolada do estado do palete.
         Assert.Contains("catch (Exception ex)", form, StringComparison.Ordinal);
         Assert.Contains("palete sem código persistido", form, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------- reimpressao por duplo clique
+
+    /// <summary>
+    /// Duplo clique na linha da grade reimprime a etiqueta do palete (23/11/2026). Mesmo gesto da
+    /// reimpressao da CAIXA na tela de Produto Acabado.
+    /// </summary>
+    [Fact]
+    public void DuploCliqueNaGradeReimprimeEtiqueta()
+    {
+        string form = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Processo", "PaletizacaoForm.cs"));
+
+        Assert.Contains("paletesFormadosDataGridView.CellDoubleClick", form, StringComparison.Ordinal);
+        Assert.Contains("ReimprimirEtiquetaPaleteAsync", form, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// O duplo clique NAO pode disparar integracao. O envio tem botao proprio e visivel; efeito de
+    /// SAP escondido num gesto de conferencia seria o pior tipo de surpresa no chao de fabrica.
+    /// </summary>
+    [Fact]
+    public void DuploCliqueNaoEnviaAoSap()
+    {
+        string form = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Processo", "PaletizacaoForm.cs"));
+
+        int inicio = form.IndexOf("private async Task ReimprimirEtiquetaPaleteAsync", StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "o metodo de reimpressao precisa existir");
+
+        int fim = form.IndexOf("private async Task ImprimirEtiquetaPaleteConfirmadoAsync", inicio, StringComparison.Ordinal);
+        Assert.True(fim > inicio, "ancora de fim do metodo nao encontrada");
+
+        string corpo = form[inicio..fim];
+        Assert.DoesNotContain("EnviarPaleteInt012Async", corpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnviarPaleteSelecionadoAsync", corpo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Palete sem HU nao reimprime: a etiqueta identifica pela HU, e um papel sem barra com cara de
+    /// etiqueta valida e pior que nenhum. A mensagem precisa dizer o caminho (ENVIAR AO SAP).
+    /// </summary>
+    [Fact]
+    public void ReimpressaoExigeHuEExplicaOCaminho()
+    {
+        string form = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Processo", "PaletizacaoForm.cs"));
+
+        int inicio = form.IndexOf("private async Task ReimprimirEtiquetaPaleteAsync", StringComparison.Ordinal);
+        int fim = form.IndexOf("private async Task ImprimirEtiquetaPaleteConfirmadoAsync", inicio, StringComparison.Ordinal);
+        string corpo = form[inicio..fim];
+
+        Assert.Contains("IsNullOrWhiteSpace(palete.HandlingUnitPalete)", corpo, StringComparison.Ordinal);
+        Assert.Contains("ENVIAR AO SAP", corpo, StringComparison.Ordinal);
+    }
+
+    // ---------------------------------------------------------------- HU na barra (23/11/2026)
+
+    /// <summary>
+    /// O palete guarda a HU PREENCHIDA com zeros ate 20 caracteres; a caixa guarda limpa. A
+    /// diferenca e real (verificada no banco do DEV110) e e a razao de existir desta normalizacao.
+    /// </summary>
+    [Theory]
+    [InlineData("00000000000300016060", "300016060")]
+    [InlineData("300016060", "300016060")]
+    [InlineData("  00000000000300016060  ", "300016060")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    // Toda de zeros vira "0", nao vazio: vazio significaria "nao tem HU", que e outra coisa.
+    [InlineData("00000000000000000000", "0")]
+    public void HuDoPaleteSaiSemOsZerosDeArmazenamento(string? armazenada, string esperada)
+        => Assert.Equal(esperada, ServicoImpressoraZebra.NormalizarHandlingUnit(armazenada));
+
+    /// <summary>
+    /// Sem HU nao sai barra NENHUMA — nem a antiga, com o codigo local. Uma barra que devolve um
+    /// numero que o SAP nao conhece e pior que a ausencia dela, porque quem bipa confia no resultado.
+    /// </summary>
+    [Fact]
+    public void PaleteSemHu_NaoImprimeBarraEAvisa()
+    {
+        ProdutoAcabadoPalete semHu = Palete(Caixa(1, "022 26", 10m, 20));
+        semHu.HandlingUnitPalete = string.Empty;
+        semHu.StatusSap = "RASCUNHO";
+
+        string zpl = new ServicoImpressoraZebra().ConstruirZplEtiquetaPaleteProdutoAcabado(
+            ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(semHu, 17747, "TERMINAL_TI_TESTE"));
+
+        Assert.DoesNotContain("^BCN", zpl, StringComparison.Ordinal);
+        Assert.Contains("PALETE SEM HU DO SAP", zpl, StringComparison.Ordinal);
+        // E, sobretudo, NAO cai de volta no codigo local.
+        Assert.DoesNotContain("2000017747", zpl, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// O numero do palete e o codigo local continuam EXISTINDO no contrato — o que mudou foi o que
+    /// vai na BARRA. Guardar isso impede que uma "limpeza" futura remova o campo achando que sobrou.
+    /// </summary>
+    [Fact]
+    public void CodigoLocalContinuaNoContratoDaEtiqueta()
+    {
+        DadosEtiquetaPaleteProdutoAcabado e = ImpressaoPaleteProdutoAcabadoServico.CriarEtiqueta(
+            Palete(Caixa(1, "022 26", 10m, 20)), 17747, "TERMINAL_TI_TESTE");
+
+        Assert.Equal("2000017747", e.CodigoBarras);
+        Assert.Equal("17747", e.Numero);
+        Assert.Equal(HuPaleteArmazenada, e.HandlingUnitSap);
     }
 
     private static string RaizProjeto()
