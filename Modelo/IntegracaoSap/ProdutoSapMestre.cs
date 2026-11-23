@@ -24,6 +24,42 @@ public sealed class SapProductDescriptionDto
 }
 
 /// <summary>
+/// DTO cru de uma linha da aba "EANs adicionais" do material (API_PRODUCT_SRV / A_ProductUnitsOfMeasureEAN),
+/// que e a origem do EAN impresso na etiqueta da CAIXA de Produto Acabado (pedido do usuario em 23/11/2026,
+/// com print da MM02 apontando a linha da unidade alternativa).
+/// <para>
+/// O nome da colecao e PLURAL — <c>A_ProductUnitsOfMeasureEAN</c> —, verificado em 23/11/2026 no documento
+/// de servico do proprio DEV110. O singular rende 404, como ja aconteceu com <c>A_Batch</c> × <c>Batch</c>.
+/// </para>
+/// <para>
+/// Correspondencia com a tela da MM02: UM alt = <see cref="AlternativeUnit"/>, Codigo EAN/UPC =
+/// <see cref="ProductStandardID"/>, Ctg.EAN = <see cref="InternationalArticleNumberCat"/>, EAN princ. =
+/// <see cref="IsMainGlobalTradeItemNumber"/>.
+/// </para>
+/// </summary>
+public sealed class SapProdutoEanDto
+{
+    public string Product { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Unidade da linha. CUIDADO: em 23/11/2026 a entidade VIZINHA
+    /// <c>A_ProductUnitsOfMeasure</c> devolveu <c>009</c> (codigo interno) onde a MM02 mostra <c>CX</c>,
+    /// enquanto esta aqui devolveu <c>KG</c>/<c>ST</c>/<c>UN</c>/<c>BT</c> (forma externa). Se um dia vier o
+    /// codigo interno tambem aqui, a escolha da caixa nao casa e a etiqueta fica SEM barra — que e o lado
+    /// seguro de falhar. Comecar a investigacao por aqui.
+    /// </summary>
+    public string AlternativeUnit { get; set; } = string.Empty;
+
+    /// <summary>O EAN propriamente dito (coluna "Codigo EAN/UPC").</summary>
+    public string ProductStandardID { get; set; } = string.Empty;
+
+    /// <summary>Categoria do EAN (coluna "Ctg.EAN"); obrigatoria na MM02 para a linha ser gravavel.</summary>
+    public string InternationalArticleNumberCat { get; set; } = string.Empty;
+
+    public bool IsMainGlobalTradeItemNumber { get; set; }
+}
+
+/// <summary>
 /// Modelo interno do tipo mestre do material (enriquecido a partir do <see cref="SapProductMasterDto"/>).
 /// </summary>
 public sealed class ProdutoSapMestre

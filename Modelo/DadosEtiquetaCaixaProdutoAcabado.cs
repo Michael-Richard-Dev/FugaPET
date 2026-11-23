@@ -22,6 +22,12 @@ public sealed class DadosEtiquetaCaixaProdutoAcabado
     public string Quantidade { get; init; } = string.Empty;
     /// <summary>Handling Unit SAP retornada (quando CONFIRMADA_SAP); vazio ⇒ "PENDENTE" na etiqueta.</summary>
     public string HandlingUnitSap { get; init; } = string.Empty;
+    /// <summary>
+    /// EAN da unidade CAIXA do material, lido de A_ProductUnitsOfMeasureEAN (aba "EANs adicionais" da MM02,
+    /// linha CX). Vazio ⇒ a etiqueta mantém o aviso "EAN DO PRODUTO NAO CADASTRADO", nunca uma barra
+    /// inventada ou de outra unidade. Pedido do usuário em 23/11/2026.
+    /// </summary>
+    public string EanCaixa { get; init; } = string.Empty;
     public string DataHora { get; init; } = string.Empty;
     public string Terminal { get; init; } = string.Empty;
 }

@@ -58,18 +58,24 @@ public sealed class ImpressaoProdutoAcabadoServico
     /// exige o mesmo estado. Isso é consequência direta da regra pedida, não um efeito colateral oculto.
     /// </para>
     /// </summary>
-    public Task ImprimirCaixaAsync(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
+    public Task ImprimirCaixaAsync(
+        ProdutoAcabadoCaixa caixa,
+        string? descricaoMaterial = null,
+        string? eanCaixa = null)
     {
         ValidarCaixaElegivelParaEtiqueta(caixa);
         return ExecutarImpressaoComAuditoriaAsync(caixa, TipoOperacaoImpressao,
-            () => _impressoraEtiquetaServico.ImprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial)));
+            () => _impressoraEtiquetaServico.ImprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial, eanCaixa)));
     }
 
-    public Task ReimprimirCaixaAsync(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
+    public Task ReimprimirCaixaAsync(
+        ProdutoAcabadoCaixa caixa,
+        string? descricaoMaterial = null,
+        string? eanCaixa = null)
     {
         ValidarCaixaElegivelParaEtiqueta(caixa);
         return ExecutarImpressaoComAuditoriaAsync(caixa, TipoOperacaoReimpressao,
-            () => _impressoraEtiquetaServico.ReimprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial)));
+            () => _impressoraEtiquetaServico.ReimprimirEtiquetaCaixaProdutoAcabadoAsync(CriarEtiqueta(caixa, descricaoMaterial, eanCaixa)));
     }
 
     /// <summary>
@@ -145,8 +151,18 @@ public sealed class ImpressaoProdutoAcabadoServico
         }
     }
 
-    /// <summary>Monta a etiqueta a partir da caixa PERSISTIDA (fonte da verdade). HU vazia ⇒ "PENDENTE" (fallback técnico).</summary>
-    public static DadosEtiquetaCaixaProdutoAcabado CriarEtiqueta(ProdutoAcabadoCaixa caixa, string? descricaoMaterial = null)
+    /// <summary>
+    /// Monta a etiqueta a partir da caixa PERSISTIDA (fonte da verdade). HU vazia ⇒ "PENDENTE" (fallback técnico).
+    /// <para>
+    /// <paramref name="eanCaixa"/> entra de FORA, como a descrição: este método continua puro (sem SAP, sem
+    /// rede), e quem busca o EAN é a camada que já tem o serviço do Product Master. Vazio ⇒ etiqueta sem
+    /// barra de EAN.
+    /// </para>
+    /// </summary>
+    public static DadosEtiquetaCaixaProdutoAcabado CriarEtiqueta(
+        ProdutoAcabadoCaixa caixa,
+        string? descricaoMaterial = null,
+        string? eanCaixa = null)
     {
         string unidade = string.IsNullOrWhiteSpace(caixa.UnidadePeso) ? "KG" : caixa.UnidadePeso.Trim();
         return new DadosEtiquetaCaixaProdutoAcabado
@@ -166,6 +182,7 @@ public sealed class ImpressaoProdutoAcabadoServico
             Quantidade = $"{caixa.QuantidadeProdutos.ToString(CultureInfo.InvariantCulture)} "
                 + (string.IsNullOrWhiteSpace(caixa.UnidadeQuantidade) ? "UN" : caixa.UnidadeQuantidade.Trim()),
             HandlingUnitSap = caixa.HandlingUnitExternalId ?? string.Empty,
+            EanCaixa = (eanCaixa ?? string.Empty).Trim(),
             DataHora = (caixa.ConfirmadoSapEm ?? caixa.AtualizadoEm ?? caixa.CriadoEm).ToString("dd/MM/yyyy HH:mm"),
             Terminal = caixa.Terminal
         };

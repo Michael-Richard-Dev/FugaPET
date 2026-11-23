@@ -44,6 +44,7 @@ public sealed class ProdutoAcabadoController
     // Composto preguicosamente porque depende do banco de cadastro, que pode nao estar configurado em
     // teste; neste caso a tela cai no comportamento historico, que e o de sempre.
     private readonly Lazy<ProcessoPesagemProdutoServico?> _processoPesagemServico;
+    private readonly Lazy<IProductMasterSapServico?> _productMasterSapServico;
 
     public ProdutoAcabadoController()
         : this(FabricaProductionOrderSapServico.Criar())
@@ -61,8 +62,28 @@ public sealed class ProdutoAcabadoController
         ConfiguracaoSap? configuracaoSap = null,
         IProdutoAcabadoPipelineStore? pipelineStore = null,
         IProdutoAcabadoPaleteInt012Gateway? paleteInt012Gateway = null,
-        ProcessoPesagemProdutoServico? processoPesagemServico = null)
+        ProcessoPesagemProdutoServico? processoPesagemServico = null,
+        IProductMasterSapServico? productMasterSapServico = null)
     {
+        // Mesmo motivo do servico acima: compor exige configuracao SAP, e a tela abre sem ela. Falha na
+        // composicao vira "sem EAN", nao excecao na abertura da tela.
+        _productMasterSapServico = new Lazy<IProductMasterSapServico?>(() =>
+        {
+            if (productMasterSapServico is not null)
+            {
+                return productMasterSapServico;
+            }
+
+            try
+            {
+                return FabricaProductMasterSapServico.Criar();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        });
+
         // Preguicoso de proposito: compor o servico exige o banco de cadastro, e a tela de Produto
         // Acabado tem de abrir mesmo onde esse banco nao esta configurado. Falha na composicao vira
         // "sem processo configurado", nao excecao na abertura da tela.
@@ -1232,6 +1253,34 @@ public sealed class ProdutoAcabadoController
     /// inventar um erro que nao muda nada do que a tela faz.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// EAN da unidade CAIXA do material (A_ProductUnitsOfMeasureEAN, linha CX), para a barra da etiqueta.
+    /// String VAZIA quando nao ha EAN em CX, quando o SAP nao esta configurado ou quando a consulta falha.
+    /// <para>
+    /// Os tres casos colapsam no mesmo vazio de proposito, pela mesma razao do processo de pesagem: a
+    /// etiqueta so precisa saber se tem ou nao tem numero. Sem numero, mantem o aviso — nunca uma barra
+    /// inventada. Falha aqui NAO derruba a consulta da ordem.
+    /// </para>
+    /// </summary>
+    public async Task<string> ObterEanCaixaAsync(
+        string? produto, CancellationToken cancellationToken = default)
+    {
+        IProductMasterSapServico? servico = _productMasterSapServico.Value;
+        if (servico is null)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return await servico.ObterEanCaixaAsync(produto ?? string.Empty, cancellationToken);
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
     public async Task<ProcessoPesagemProduto?> ObterProcessoPesagemAsync(
         string? centro, string? produto, CancellationToken cancellationToken = default)
     {

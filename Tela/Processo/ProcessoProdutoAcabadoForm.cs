@@ -82,6 +82,10 @@ public partial class ProcessoProdutoAcabadoForm : Form
     // não pode parar produção.
     private ProcessoPesagemProduto? _processoPesagemOp;
 
+    // EAN da unidade CAIXA do material da OP (A_ProductUnitsOfMeasureEAN, linha CX), lido uma vez ao
+    // carregar a OP. VAZIO = material sem EAN cadastrado em CX, e aí a etiqueta mantém o aviso.
+    private string _eanCaixaOp = string.Empty;
+
     // Guarda do lote. Separada de _envioCaixaSapEmAndamento porque o lote CHAMA o envio individual, e
     // uma flag só faria a primeira chamada de dentro do laço voltar sem enviar nada.
     private bool _envioLoteEmAndamento;
@@ -1525,6 +1529,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
             // já pesadas sob a anterior. Sem vínculo ⇒ null ⇒ caixa a caixa, como sempre foi.
             _processoPesagemOp = await _controller.ObterProcessoPesagemAsync(
                 _ordemAtual.Centro, _ordemAtual.MaterialProduzido, CancellationToken.None);
+
+            // O EAN e do MATERIAL, e a OP tem um material so — entao uma consulta por OP, aqui, e nao uma
+            // por caixa na hora de imprimir. Num envio unico de 24 caixas isso seriam 24 idas ao SAP para
+            // trazer sempre o mesmo numero, e cada uma delas poderia falhar e deixar uma etiqueta sem EAN
+            // enquanto a vizinha sai com ele. Vazio ⇒ etiqueta mantem o aviso.
+            _eanCaixaOp = await _controller.ObterEanCaixaAsync(
+                _ordemAtual.MaterialProduzido, CancellationToken.None);
             _caixasPesadas.Clear();
             // GATE 046-E §12: BANCO autoritativo — ao carregar a OP, recarrega os paletes locais persistidos.
             bool paletesRecarregados = await RecarregarPaletesPersistidosAsync();
@@ -2100,7 +2111,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
     {
         try
         {
-            await _impressaoProdutoAcabadoServico.ImprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual());
+            await _impressaoProdutoAcabadoServico.ImprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual(), _eanCaixaOp);
             statusLabel.Text += $" Etiqueta impressa (HU {caixa.HandlingUnitExternalId}).";
         }
         catch (Exception ex)
@@ -2937,7 +2948,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
         try
         {
-            await _impressaoProdutoAcabadoServico.ReimprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual());
+            await _impressaoProdutoAcabadoServico.ReimprimirCaixaAsync(caixa, ObterDescricaoMaterialAtual(), _eanCaixaOp);
             statusLabel.Text = $"Etiqueta da caixa {caixa.CodigoCaixaLocal} reimpressa com sucesso.";
             // UX: confirmação EXPLÍCITA de sucesso da REIMPRESSÃO (diferenciada da impressão inicial; sem reenvio SAP).
             MessageBox.Show(
@@ -3157,6 +3168,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
         // Sem OP não há processo: deixar o modo anterior aqui faria a próxima OP herdar a regra da
         // antiga até a consulta terminar, e o botão ofereceria envio em lote para quem não é lote.
         _processoPesagemOp = null;
+        // Mesma razao: sem OP nao ha material, e guardar o EAN da OP anterior faria a proxima caixa sair
+        // com o EAN de OUTRO produto — exatamente o erro que a busca existe para evitar.
+        _eanCaixaOp = string.Empty;
         _taraCaixaSelecionada = null;
         _caixasPesadas.Clear();
         _paletesMontados.Clear();

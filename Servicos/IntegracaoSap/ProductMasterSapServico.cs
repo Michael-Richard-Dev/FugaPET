@@ -18,6 +18,10 @@ internal sealed class ProductMasterSapServico : IProductMasterSapServico
     // Costura de teste: substitui a chamada HTTP real (para exercitar parse/erro sem rede).
     private readonly Func<string, CancellationToken, Task<string?>>? _obterJsonOverride;
 
+    // Costura SEPARADA para o GET dos EANs. Reusar a de cima faria um teste de produto responder também ao
+    // EAN (e vice-versa), escondendo qual dos dois GETs o código realmente fez.
+    private readonly Func<string, CancellationToken, Task<string?>>? _obterJsonEanOverride;
+
     public ProductMasterSapServico(ConfiguracaoSap configuracao)
         : this(configuracao, null)
     {
@@ -25,10 +29,12 @@ internal sealed class ProductMasterSapServico : IProductMasterSapServico
 
     internal ProductMasterSapServico(
         ConfiguracaoSap configuracao,
-        Func<string, CancellationToken, Task<string?>>? obterJsonOverride)
+        Func<string, CancellationToken, Task<string?>>? obterJsonOverride,
+        Func<string, CancellationToken, Task<string?>>? obterJsonEanOverride = null)
     {
         _configuracao = configuracao ?? throw new ArgumentNullException(nameof(configuracao));
         _obterJsonOverride = obterJsonOverride;
+        _obterJsonEanOverride = obterJsonEanOverride;
     }
 
     public bool EhSimulado => false;
@@ -83,6 +89,80 @@ internal sealed class ProductMasterSapServico : IProductMasterSapServico
         }
     }
 
+    /// <summary>
+    /// GET dos EANs do material e escolha da linha da unidade CAIXA. Nunca lança: qualquer falha vira string
+    /// vazia + diagnóstico, e a etiqueta mantém o aviso. Pedido do usuário em 23/11/2026.
+    /// </summary>
+    public async Task<string> ObterEanCaixaAsync(
+        string codigoProduto,
+        CancellationToken cancellationToken = default)
+    {
+        string codigo = (codigoProduto ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(codigo))
+        {
+            return string.Empty;
+        }
+
+        if (_obterJsonEanOverride is null && !_configuracao.ProductMasterConfigurado)
+        {
+            RegistrarDiagnostico($"Produto {codigo}: Product Master não configurado. EAN da caixa não consultado.");
+            return string.Empty;
+        }
+
+        try
+        {
+            string? json = await ObterJsonEansAsync(codigo, cancellationToken);
+            IReadOnlyList<SapProdutoEanDto> eans = ProductMasterSapApiClient.ParsearEans(json);
+            string ean = ProductMasterSapApiClient.EscolherEanDaCaixa(eans);
+
+            if (string.IsNullOrWhiteSpace(ean))
+            {
+                // Distinguir "material sem EAN nenhum" de "tem EAN, mas não em CX" é o que permite ao
+                // usuário saber se falta cadastrar a linha ou se o problema é a unidade.
+                string unidades = eans.Count == 0
+                    ? "nenhuma linha de EAN"
+                    : "unidades " + string.Join("/", eans.Select(e => e.AlternativeUnit));
+                RegistrarDiagnostico(
+                    $"Produto {codigo}: sem EAN na unidade {ProductMasterSapApiClient.UnidadeCaixa} ({unidades}). Etiqueta sem barra de EAN.");
+                return string.Empty;
+            }
+
+            RegistrarDiagnostico(
+                $"Produto {codigo}: EAN da caixa {ean} (unidade {ProductMasterSapApiClient.UnidadeCaixa}); origem A_ProductUnitsOfMeasureEAN.");
+            return ean;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            RegistrarDiagnostico(
+                $"Produto {codigo}: GET EAN HTTP status {((int?)ex.StatusCode)?.ToString() ?? "indefinido"}: {ex.GetType().Name}. Etiqueta sem barra de EAN.");
+            return string.Empty;
+        }
+        catch (Exception ex)
+        {
+            RegistrarDiagnostico($"Produto {codigo}: GET EAN etapa CLIENTE: {ex.GetType().Name}. Etiqueta sem barra de EAN.");
+            return string.Empty;
+        }
+    }
+
+    private async Task<string?> ObterJsonEansAsync(string codigo, CancellationToken cancellationToken)
+    {
+        if (_obterJsonEanOverride is not null)
+        {
+            return await _obterJsonEanOverride(codigo, cancellationToken);
+        }
+
+        Uri baseUri = ValidadorUrlSap.ValidarBaseUrl(
+            _configuracao.ProductMasterBaseUrlEfetiva,
+            _configuracao.HostsPermitidos);
+
+        Uri url = ProductMasterSapApiClient.MontarUrlEansProduto(baseUri, codigo, _configuracao.SapClient);
+        return await EnviarGetAsync(baseUri, url, cancellationToken);
+    }
+
     private async Task<string?> ObterJsonProdutoAsync(string codigo, CancellationToken cancellationToken)
     {
         if (_obterJsonOverride is not null)
@@ -95,7 +175,17 @@ internal sealed class ProductMasterSapServico : IProductMasterSapServico
             _configuracao.HostsPermitidos);
 
         Uri url = ProductMasterSapApiClient.MontarUrlProduto(baseUri, codigo, _configuracao.SapClient);
+        return await EnviarGetAsync(baseUri, url, cancellationToken);
+    }
 
+    /// <summary>
+    /// GET autenticado, com a validação de destino aplicada. Extraído ao acrescentar o GET dos EANs: sem
+    /// isso, o segundo GET duplicaria a montagem do Basic Auth e a revalidação do host — e uma cópia que
+    /// esquecesse <see cref="ValidadorUrlSap.ValidarDestino"/> deixaria passar redirecionamento para fora
+    /// dos hosts permitidos. Só GET: nada de POST/PATCH/CSRF neste serviço.
+    /// </summary>
+    private async Task<string?> EnviarGetAsync(Uri baseUri, Uri url, CancellationToken cancellationToken)
+    {
         string credenciais = Convert.ToBase64String(
             Encoding.UTF8.GetBytes($"{_configuracao.Usuario}:{_configuracao.Senha}"));
 
