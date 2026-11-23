@@ -2054,7 +2054,35 @@ public partial class ProcessoProdutoAcabadoForm : Form
         // A ETIQUETA NÃO SAI AQUI. A Handling Unit da caixa só existe depois que o SAP responde, e é ela
         // que identifica a caixa física; imprimir na pesagem produziria uma etiqueta com "HU PENDENTE",
         // que depois precisaria ser trocada. A impressão acontece na confirmação do envio.
+
+        // Aviso de ritmo do envio único, por último e sem travar nada: a caixa já está registrada,
+        // visível na grade e contada. Se o operador fechar o aviso sem ler, não perdeu nada.
+        AvisarTrocaDeCaixaSeForAHora();
         return true;
+    }
+
+    /// <summary>
+    /// Aviso de "troque a caixa" a cada 24 pesagens, só no processo ENVIO_UNICO.
+    /// <para>
+    /// Deliberadamente burro: uma caixa de diálogo com OK. Não bloqueia a próxima pesagem, não exige
+    /// confirmação de nada e não grava estado — pedido do usuário em 23/11/2026, "nada burocrático".
+    /// </para>
+    /// <para>
+    /// A regra de QUANDO avisar vive em <see cref="AvisoTrocaDeCaixaEnvioUnico"/>, fora da tela, para
+    /// poder ser provada sem WinForms.
+    /// </para>
+    /// </summary>
+    private void AvisarTrocaDeCaixaSeForAHora()
+    {
+        if (!AvisoTrocaDeCaixaEnvioUnico.DeveAvisar(_processoPesagemOp, _caixasPesadas))
+        {
+            return;
+        }
+
+        int pesadas = _caixasPesadas.Count(AvisoTrocaDeCaixaEnvioUnico.Conta);
+        MessageBox.Show(
+            AvisoTrocaDeCaixaEnvioUnico.Mensagem(pesadas),
+            "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     /// <summary>
