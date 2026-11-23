@@ -205,6 +205,9 @@ partial class LoginForm
         // 
         userTextBox.BackColor = Color.FromArgb(250, 251, 252);
         userTextBox.BorderStyle = BorderStyle.None;
+        // Usuario sempre em CAIXA ALTA, pedido do usuario em 23/11/2026. Seguro para quem ja esta
+        // cadastrado em minusculas: a busca do login compara com lower() dos dois lados.
+        userTextBox.CharacterCasing = CharacterCasing.Upper;
         userTextBox.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
         userTextBox.Location = new Point(46, 11);
         userTextBox.Name = "userTextBox";
