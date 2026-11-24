@@ -607,21 +607,6 @@ public sealed class ProcessoSemiAcabadoTests
         Assert.Contains("fuga.ico", helper, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Telas_20_6_FormsPrincipaisTemIcone()
-    {
-        // Teste icone 2: as telas que estavam sem icone passaram a aplicar o helper.
-        foreach (string[] partes in new[]
-                 {
-                     new[] { "Tela", "Processo", "DiagnosticoConsumoSap261Form.cs" },
-                     new[] { "Tela", "Processo", "ProcessoConsumoMaterialHistoricoForm.cs" },
-                 })
-        {
-            string arquivo = LerArquivoProjeto(partes);
-            Assert.Contains("IconeJanelaHelper.AplicarIconePadrao(this)", arquivo, StringComparison.Ordinal);
-        }
-    }
-
     // ======================================================================
     // Comportamentais — cálculo válido-apenas, envio SAP e agnosticismo de schema.
     // ======================================================================

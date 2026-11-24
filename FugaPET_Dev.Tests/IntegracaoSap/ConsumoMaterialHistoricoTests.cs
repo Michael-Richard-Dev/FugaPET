@@ -88,33 +88,14 @@ public sealed class ConsumoMaterialHistoricoTests
     }
 
     [Fact]
-    public void TelaHistorico_NaoDeveEnviarSapBuscarCsrfOuAlterarStatus()
+    public void Preview_NaoEnviaAoSap()
     {
-        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialHistoricoForm.cs");
-
-        Assert.DoesNotContain("EnviarConsumoSap261Async", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnviarConsumo261Async", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("CSRF", form, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("HttpClient", form, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TentarReservarEnvioSapAsync", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("MarcarFalhaSapAsync", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("MarcarConsumoConfirmadoSapAsync", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("PATCH", form, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void PreviewTela_DeveSerSomenteParaPendenteENaoEnviarSap()
-    {
-        string form = LerArquivoProjeto("Tela", "Processo", "ProcessoConsumoMaterialHistoricoForm.cs");
+        // 24/11/2026: a tela de Historico foi removida a pedido do usuario, e com ela as metades
+        // deste teste que liam o fonte dela. O que importava continua de pe e e o que de fato
+        // protege o sistema: o SERVICO que gera o preview nao pode enviar nada ao SAP.
         string servico = LerArquivoProjeto("Servicos", "Operacao", "ConsumoMaterialConsultaServico.cs");
 
-        Assert.Contains("ConsumoMaterialConsultaServico.MensagemPreviewSomentePendente", form, StringComparison.Ordinal);
-        Assert.Contains("StatusPendenteSap", form, StringComparison.Ordinal);
-        Assert.Contains("GerarPreviewSap261Async", form, StringComparison.Ordinal);
-        Assert.Contains("string json = preview.PayloadJson;", form, StringComparison.Ordinal);
         Assert.Contains("GerarPreviewSap261Async", servico, StringComparison.Ordinal);
-        Assert.DoesNotContain("JsonSerializer.Serialize(preview.Payload", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("using System.Text.Json;", form, StringComparison.Ordinal);
         Assert.DoesNotContain("EnviarConsumoSap261Async", servico, StringComparison.Ordinal);
         Assert.DoesNotContain("TentarReservarEnvioSapAsync", servico, StringComparison.Ordinal);
     }

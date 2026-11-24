@@ -103,8 +103,10 @@ public sealed class DiagnosticoConsumoSap261Tests
     [Fact]
     public void Diagnostico_NaoDeveFazerPostCsrfPatchOuDml()
     {
+        // 24/11/2026: a tela de Diagnostico foi removida a pedido do usuario; as asercoes que liam o
+        // fonte dela sairam junto. O servico continua, e a garantia que importa e dele: diagnostico
+        // LE, nunca escreve.
         string servico = LerArquivoProjeto("Servicos", "Diagnostico", "DiagnosticoConsumoSap261Servico.cs");
-        string form = LerArquivoProjeto("Tela", "Processo", "DiagnosticoConsumoSap261Form.cs");
 
         Assert.DoesNotContain("HttpClient", servico, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CSRF", servico, StringComparison.OrdinalIgnoreCase);
@@ -113,10 +115,6 @@ public sealed class DiagnosticoConsumoSap261Tests
         Assert.DoesNotContain("INSERT ", servico, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE ", servico, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE ", servico, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("EnviarConsumoSap261Async", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("TentarReservarEnvioSapAsync", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("MarcarFalhaSapAsync", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("MarcarConsumoConfirmadoSapAsync", form, StringComparison.Ordinal);
     }
 
     [Fact]
