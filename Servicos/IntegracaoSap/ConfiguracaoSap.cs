@@ -90,6 +90,27 @@ public sealed class ConfiguracaoSap
     public bool ProdutoAcabadoPipelineHabilitado { get; init; }
 
     /// <summary>
+    /// Autorizacao ESPECIFICA e ISOLADA do POST 101 do PRODUTO SEMI-ACABADO.
+    /// <para>
+    /// PADRAO FALSE POR DECISAO DE NEGOCIO, e nao por cautela tecnica: em 24/11/2026 o usuario
+    /// determinou que o lancamento do semi-acabado passa a ser feito MANUALMENTE dentro do SAP. A
+    /// tela continua fazendo todo o resto — pesagem, persistencia local e etiqueta —, apenas nao
+    /// transmite.
+    /// </para>
+    /// <para>
+    /// Com o gate em false o apontamento conclui como CONCLUIDO LOCALMENTE, nao como confirmado no
+    /// SAP. Isso e proposital: dizer "confirmado" sem documento de material seria afirmar o que nao
+    /// aconteceu, e quem olhasse o apontamento depois nao teria como saber que falta lancar.
+    /// </para>
+    /// <para>
+    /// Religar e setar a chave FUGAPET_SAP_SEMI_ACABADO_WRITE_ENABLED (ou
+    /// <c>semi_acabado_write_enabled</c> no arquivo). O caminho de envio continua inteiro no codigo,
+    /// com claim, one-shot e tratamento de divergencia — nada foi removido.
+    /// </para>
+    /// </summary>
+    public bool SemiAcabadoEnvioSapHabilitado { get; init; }
+
+    /// <summary>
     /// URL base ESPECIFICA do endpoint CPI do palete (INT012). NUNCA derivada de <see cref="HandlingUnitBaseUrl"/>.
     /// Vazia ⇒ gateway INT012 fail-closed. Chave FUGAPET_SAP_PALLET_INT012_BASE_URL.
     /// </summary>

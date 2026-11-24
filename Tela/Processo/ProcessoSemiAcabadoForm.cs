@@ -1344,14 +1344,20 @@ public partial class ProcessoSemiAcabadoForm : Form
         lancamento.CodigoSemiAcabadoLancamento = _codigoLancamentoPersistido;
         decimal pesoLiquidoTotal = lancamento.PesoLiquidoTotalKg;
 
-        // Confirmação ao operador antes do envio real (movimento 101).
+        // Confirmação ao operador. O texto muda com o portão: prometer envio ao SAP quando ele está
+        // desligado faria o operador acreditar que lançou — e descobrir o contrário só no estoque.
+        bool enviaAoSap = _controller.EnvioSemiAcabadoSapHabilitado;
         DialogResult confirmacao = MessageBox.Show(
-            $"Confirmar produção de semi-acabado e enviar ao SAP (movimento 101)?\n\n"
+            (enviaAoSap
+                ? "Confirmar produção de semi-acabado e enviar ao SAP (movimento 101)?\n\n"
+                : "Confirmar produção de semi-acabado?\n\n")
             + $"OP: {ordemConfirmada.NumeroOrdem}\n"
             + $"Material: {ordemConfirmada.MaterialProduzido}\n"
             + $"Pesagens válidas: {validas}\n"
             + $"Peso líquido total: {FormatarKg(pesoLiquidoTotal)}\n"
-            + $"Movimento: 101",
+            + (enviaAoSap
+                ? "Movimento: 101"
+                : "O movimento 101 NÃO será enviado: lance-o manualmente no SAP."),
             "Confirmar Produto Semi-Acabado",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
@@ -1364,7 +1370,9 @@ public partial class ProcessoSemiAcabadoForm : Form
         _operacaoEmAndamento = true;
         productionDataGridView.Enabled = false;
         AtualizarBotoesOperacao();
-        statusLabel.Text = "Preparando lançamento para envio ao SAP (movimento 101)...";
+        statusLabel.Text = enviaAoSap
+            ? "Preparando lançamento para envio ao SAP (movimento 101)..."
+            : "Registrando produção localmente (o 101 será lançado manualmente no SAP)...";
         try
         {
             // GATE 104C-D: IDENTIDADE DURÁVEL ANTES de armar a capability. Persiste (1º envio) ou recupera
@@ -1376,6 +1384,46 @@ public partial class ProcessoSemiAcabadoForm : Form
             {
                 _codigoLancamentoPersistido = preparo.CodigoLancamento;
                 _codigoLancamentoPersistidoPorItem[chaveConfirmada] = preparo.CodigoLancamento;
+            }
+
+            // 073: LANÇAMENTO MANUAL NO SAP (decisão do usuário em 24/11/2026).
+            //
+            // Com o portão FUGAPET_SAP_SEMI_ACABADO_WRITE_ENABLED fechado — que é o PADRÃO —, a tela
+            // faz todo o resto e PARA AQUI: a pesagem já aconteceu, a etiqueta já saiu na pesagem, e
+            // o lançamento acabou de ser persistido localmente por PrepararEnvio101Async. O que não
+            // acontece é a transmissão: o movimento 101 passa a ser lançado à mão dentro do SAP.
+            //
+            // Para ANTES da cerimônia de propósito: sem POST não há o que autorizar, e armar a
+            // capability aqui gastaria uma habilitação one-shot sem uso, além de registrar na
+            // auditoria uma escrita que nunca foi tentada.
+            //
+            // Conclui como CONCLUIDO LOCALMENTE, e não como confirmado: dizer "confirmado no SAP"
+            // sem documento de material seria afirmar o que não aconteceu, e quem olhasse o
+            // apontamento depois não teria como saber que ainda falta lançar.
+            if (preparo.Sucesso && !_controller.EnvioSemiAcabadoSapHabilitado)
+            {
+                _confirmadoNaSessaoPorItem[chaveConfirmada] = true;
+                _leituraIniciada = false;
+                statusValueLabel.Text = "CONCLUÍDO LOCALMENTE";
+                statusHintLabel.Text = "Lançamento do 101 é manual no SAP. Etiqueta e pesagens preservadas.";
+                statusLabel.Text =
+                    "Produção registrada localmente. O movimento 101 deve ser lançado manualmente no SAP.";
+                AtualizarEstadoLeitura(false);
+
+                ResultadoExecucaoApontamento = new ResultadoExecucaoProcesso(
+                    ResultadoExecucaoProcessoApontamento.ConcluidoLocalmente,
+                    preparo.CodigoLancamento,
+                    statusLabel.Text,
+                    indicadorConfirmadoSap: false);
+
+                MessageBox.Show(
+                    "Produção registrada localmente.\n\n"
+                    + "A etiqueta já foi impressa e as pesagens estão guardadas.\n"
+                    + "O movimento 101 NÃO foi enviado: lance-o manualmente no SAP.",
+                    "Produto Semi-Acabado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
             }
 
             ResultadoEnvioSemiAcabadoSap resultado;

@@ -101,6 +101,21 @@ public sealed class SemiAcabadoController
         CancellationToken cancellationToken = default)
         => _semiAcabadoServico.SalvarEEnviarSap101Async(lancamento, cancellationToken);
 
+    /// <summary>
+    /// O envio do 101 do semi-acabado está habilitado?
+    /// <para>
+    /// Falso é o PADRÃO desde 24/11/2026, por decisão do usuário: o lançamento passou a ser feito
+    /// manualmente dentro do SAP. A tela continua pesando, imprimindo a etiqueta e persistindo o
+    /// lançamento local — só não transmite.
+    /// </para>
+    /// <para>
+    /// Lido da configuração a cada consulta, e não guardado em campo: ligar a chave passa a valer na
+    /// próxima confirmação, sem reabrir a tela.
+    /// </para>
+    /// </summary>
+    public bool EnvioSemiAcabadoSapHabilitado
+        => Servicos.IntegracaoSap.LeitorConfiguracaoSap.Carregar().SemiAcabadoEnvioSapHabilitado;
+
     // GATE 104C-D: identidade durável ANTES de armar a capability (persiste/recupera a PK; sem armar/claim/HTTP).
     public Task<PreparacaoEnvioSemiAcabado> PrepararEnvio101Async(
         LancamentoSemiAcabado lancamento,

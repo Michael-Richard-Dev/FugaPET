@@ -33,6 +33,8 @@ public static class LeitorConfiguracaoSap
     private const string VariavelAmbientePaMaterialDocumentWriteHabilitado = "FUGAPET_SAP_PA_MATERIAL_DOCUMENT_WRITE_ENABLED";
     private const string VariavelAmbientePalletWriteHabilitado = "FUGAPET_SAP_PALLET_WRITE_ENABLED";
     private const string VariavelAmbientePaPipelineHabilitado = "FUGAPET_SAP_PA_PIPELINE_ENABLED";
+    // 073: envio 101 do SEMI-ACABADO. Padrao false — o lancamento passou a ser manual no SAP.
+    private const string VariavelAmbienteSemiAcabadoWriteHabilitado = "FUGAPET_SAP_SEMI_ACABADO_WRITE_ENABLED";
     private const string VariavelAmbientePalletInt012BaseUrl = "FUGAPET_SAP_PALLET_INT012_BASE_URL";
     private const string VariavelAmbientePalletInt012HostsPermitidos = "FUGAPET_SAP_PALLET_INT012_ALLOWED_HOSTS";
     private const string VariavelAmbientePalletInt012Usuario = "FUGAPET_SAP_PALLET_INT012_USERNAME";
@@ -168,6 +170,7 @@ public static class LeitorConfiguracaoSap
         // o que deixava pa_material_document_write_enabled MORTO na configuracao implantada.
         bool paMaterialDocumentWriteHabilitadoArquivo = false;
         bool palletWriteHabilitadoArquivo = false;
+        bool semiAcabadoWriteHabilitadoArquivo = false;
         string palletInt012BaseUrlArquivo = string.Empty;
         IReadOnlyList<string> palletInt012HostsPermitidosArquivo = [];
         // GATE 126V: mapeamento da tara fisica da embalagem do palete. Lista VAZIA por padrao ⇒ fail-closed.
@@ -214,6 +217,7 @@ public static class LeitorConfiguracaoSap
                     paMaterialDocumentWriteHabilitadoArquivo =
                         LerBooleano(sap, "pa_material_document_write_enabled", false);
                     palletWriteHabilitadoArquivo = LerBooleano(sap, "pallet_write_habilitado", false);
+                    semiAcabadoWriteHabilitadoArquivo = LerBooleano(sap, "semi_acabado_write_enabled", false);
                     palletInt012BaseUrlArquivo = LerTexto(sap, "pallet_int012_base_url", string.Empty);
                     palletInt012HostsPermitidosArquivo = LerListaTextos(sap, "pallet_int012_hosts_permitidos");
                     // GATE 126V: tara fisica da embalagem do palete por mandante + centro + material.
@@ -304,6 +308,14 @@ public static class LeitorConfiguracaoSap
                 VariavelAmbientePaPipelineHabilitado,
                 paPipelineHabilitadoArquivo,
                 DefaultsPerfilQ.PipelineProdutoAcabado(perfilAmbiente)),
+            // 073: envio 101 do SEMI-ACABADO. O perfil NAO participa (padraoPerfil: false sempre) —
+            // o lancamento passou a ser manual no SAP por decisao de negocio, e nao por ambiente.
+            // Nem mesmo o Q liga isso sozinho: quem religar o faz explicitamente.
+            SemiAcabadoEnvioSapHabilitado = ResolverGateOperacional(
+                lerVariavelPorAlvo,
+                VariavelAmbienteSemiAcabadoWriteHabilitado,
+                semiAcabadoWriteHabilitadoArquivo,
+                padraoPerfil: false),
             PalletInt012BaseUrl = ObterOuAmbiente(
                 obterVariavelAmbiente,
                 VariavelAmbientePalletInt012BaseUrl,
