@@ -127,11 +127,11 @@ public sealed class CadastroCartoesLegibilidadeTests
             rotulo.Text,
             rotulo.Font,
             new Size(rotulo.Width, int.MaxValue),
-            TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
+            TextFormatFlags.WordBreak).Height;
 
     private static int UmaLinha(Label rotulo)
         => TextRenderer.MeasureText("Xg", rotulo.Font, new Size(rotulo.Width, int.MaxValue),
-            TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
+            TextFormatFlags.WordBreak).Height;
 
     private static void ComATelaMontada(
         Action<List<(Control Cartao, Label Titulo, Label Descricao, Label[] Rodape)>> verificar)

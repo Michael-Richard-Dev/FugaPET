@@ -97,7 +97,7 @@ public sealed class PainelInicialAvisoPreCarregamentoLayoutTests
         const string frase = "Pedidos de entrada atualizados às 18:47";
 
         int altura = TextRenderer.MeasureText(
-            frase, fonte, new Size(290, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
+            frase, fonte, new Size(290, int.MaxValue), TextFormatFlags.WordBreak).Height;
 
         Assert.True(altura > 24, $"a frase ocupa {altura}px; a reserva antiga era de 24px");
     }

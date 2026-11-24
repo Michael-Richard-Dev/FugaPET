@@ -314,7 +314,7 @@ public partial class PainelInicialForm : Form
                 aviso.Text,
                 aviso.Font,
                 new Size(aviso.Width, int.MaxValue),
-                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
+                TextFormatFlags.WordBreak).Height;
 
         (int topo, int altura) = CalcularCaixaDoAviso(
             topoDoBlocoDoUsuario: sidebarUserPanel.Top,

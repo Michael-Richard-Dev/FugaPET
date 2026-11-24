@@ -165,7 +165,7 @@ public partial class CadastroForm : UserControl
                 rotulo.Text,
                 rotulo.Font,
                 new Size(largura, int.MaxValue),
-                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height);
+                TextFormatFlags.WordBreak).Height);
 
     /// <summary>
     /// Cartao do Vinculo de Produto e Etiqueta, montado EM TEMPO DE EXECUCAO a partir do cartao de
