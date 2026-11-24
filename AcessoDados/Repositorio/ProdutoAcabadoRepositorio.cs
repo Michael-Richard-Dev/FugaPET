@@ -528,6 +528,91 @@ public sealed class ProdutoAcabadoRepositorio : IProdutoAcabadoRepositorio
 
         return caixas;
     }
+    /// <summary>
+    /// Por que uma HU bipada na Paletizacao nao entrou. Consulta de DIAGNOSTICO: roda SO depois de a
+    /// busca normal nao ter trazido nada, e nunca decide elegibilidade.
+    /// <para>
+    /// AS CONDICOES ABAIXO ESPELHAM <c>vw_hu_caixas_sem_palete</c>, lida do banco em 23/11/2026. Em
+    /// especial o vinculo de palete: so barra quando esta ATIVO e com status VINCULADO/ENVIADO_SAP/
+    /// CONFIRMADO_SAP. Um vinculo cancelado NAO impede, e um diagnostico que dissesse "ja esta no
+    /// palete N" nesse caso contradiria a tela que acabou de recusar por outro motivo.
+    /// </para>
+    /// <para>
+    /// USA SO <c>hu_caixa</c> e <c>hu_palete_item</c> de proposito: verificado em 23/11/2026 que o
+    /// papel da aplicacao NAO tem SELECT em <c>hu_palete</c> em nenhum dos tres ambientes. Buscar o
+    /// palete por ali funcionaria no meu teste como superusuario e falharia na mao do operador.
+    /// </para>
+    /// </summary>
+    public async Task<DiagnosticoHandlingUnitCaixa> DiagnosticarHandlingUnitAsync(
+        string handlingUnit, CancellationToken cancellationToken = default)
+    {
+        string hu = (handlingUnit ?? string.Empty).Trim();
+        if (hu.Length == 0)
+        {
+            return new DiagnosticoHandlingUnitCaixa
+            {
+                HandlingUnit = hu,
+                Motivo = MotivoHuIndisponivel.Desconhecida,
+            };
+        }
+
+        const string sql = """
+            SELECT hc.status_hu_caixa,
+                   hc.situacao_hu_caixa,
+                   hc.numero_caixa,
+                   hc.numero_ordem_producao,
+                   hc.material,
+                   hc.terminal,
+                   (SELECT i.codigo_hu_palete
+                      FROM hu_palete_item i
+                     WHERE i.codigo_hu_caixa = hc.codigo_hu_caixa
+                       AND i.situacao_hu_palete_item IS TRUE
+                       AND i.status_vinculo IN ('VINCULADO','ENVIADO_SAP','CONFIRMADO_SAP')
+                     LIMIT 1) AS codigo_palete
+              FROM hu_caixa hc
+             WHERE btrim(hc.handling_unit_external_id) = @hu
+             ORDER BY hc.codigo_hu_caixa DESC
+             LIMIT 1
+            """;
+
+        await using NpgsqlConnection con = await _fabricaConexao.CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlCommand cmd = new(sql, con);
+        cmd.Parameters.AddWithValue("hu", NpgsqlDbType.Text, hu);
+        await using NpgsqlDataReader r = await cmd.ExecuteReaderAsync(cancellationToken);
+
+        if (!await r.ReadAsync(cancellationToken))
+        {
+            return new DiagnosticoHandlingUnitCaixa
+            {
+                HandlingUnit = hu,
+                Motivo = MotivoHuIndisponivel.Desconhecida,
+            };
+        }
+
+        string status = r.IsDBNull(0) ? string.Empty : r.GetString(0);
+        bool ativa = !r.IsDBNull(1) && r.GetBoolean(1);
+        int numeroCaixa = r.IsDBNull(2) ? 0 : r.GetInt32(2);
+        string ordem = r.IsDBNull(3) ? string.Empty : r.GetString(3);
+        string material = r.IsDBNull(4) ? string.Empty : r.GetString(4);
+        string terminal = r.IsDBNull(5) ? string.Empty : r.GetString(5);
+        long? palete = r.IsDBNull(6) ? null : r.GetInt64(6);
+
+        // A ordem das regras vive no modelo, como função pura, para ser testável sem banco.
+        MotivoHuIndisponivel motivo = DiagnosticoHandlingUnitCaixa.DecidirMotivo(ativa, status, palete);
+
+        return new DiagnosticoHandlingUnitCaixa
+        {
+            HandlingUnit = hu,
+            Motivo = motivo,
+            StatusCaixa = status,
+            CodigoPalete = palete,
+            NumeroCaixa = numeroCaixa,
+            NumeroOrdemProducao = ordem,
+            Material = material,
+            Terminal = terminal,
+        };
+    }
+
     public async Task<ProdutoAcabadoCaixa?> ObterAtivaPorTerminalAsync(string terminal, CancellationToken cancellationToken = default)
     {
         string sql = $"""

@@ -485,6 +485,14 @@ public sealed class ProdutoAcabadoHuService : IProdutoAcabadoHuBridgeServico
         IReadOnlyList<string> husExternais, CancellationToken cancellationToken = default)
         => _repositorio.ListarPorHandlingUnitsAsync(husExternais, cancellationToken);
 
+    /// <summary>
+    /// Por que a HU bipada não entrou. Chamado SÓ depois de a busca acima devolver vazio — nunca
+    /// antes, porque isto não decide elegibilidade, só explica a recusa. Read-only, sem SAP/POST.
+    /// </summary>
+    public Task<DiagnosticoHandlingUnitCaixa> DiagnosticarHandlingUnitAsync(
+        string handlingUnit, CancellationToken cancellationToken = default)
+        => _repositorio.DiagnosticarHandlingUnitAsync(handlingUnit, cancellationToken);
+
     /// <summary>INC-047: caixas por intervalo de HU externo (Paletização — SEQUÊNCIA). Read-only, sem SAP/POST.</summary>
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarCaixasPorIntervaloHandlingUnitAsync(
         string huInicial, string huFinal, string? material, CancellationToken cancellationToken = default)

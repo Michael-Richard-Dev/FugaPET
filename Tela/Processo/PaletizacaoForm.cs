@@ -435,9 +435,22 @@ public sealed class PaletizacaoForm : Form
         {
             IReadOnlyList<ProdutoAcabadoCaixa> caixas = await _controller.ListarCaixasPorHandlingUnitsAsync([hu]);
             int adicionadas = MesclarCaixas(caixas);
-            statusLabel.Text = caixas.Count == 0
-                ? $"HU {hu} não encontrada."
-                : adicionadas == 0 ? $"HU {hu} já estava na seleção." : $"HU {hu} adicionada.";
+
+            if (caixas.Count == 0)
+            {
+                // Ate 23/11/2026 todos os casos davam "HU nao encontrada", e "ja esta no palete 7",
+                // "o SAP ainda nao confirmou" e "essa HU nao existe aqui" ficavam indistinguiveis.
+                // Sao problemas diferentes, com acoes diferentes — e o operador so podia bipar de novo.
+                Modelo.Processo.DiagnosticoHandlingUnitCaixa diagnostico =
+                    await _controller.DiagnosticarHandlingUnitAsync(hu);
+                statusLabel.Text = diagnostico.Mensagem();
+            }
+            else
+            {
+                statusLabel.Text = adicionadas == 0
+                    ? $"HU {hu} já estava na seleção."
+                    : $"HU {hu} adicionada.";
+            }
             huManualTextBox.Clear();
             huManualTextBox.Focus();
         }

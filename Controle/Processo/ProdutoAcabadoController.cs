@@ -1471,6 +1471,28 @@ public sealed class ProdutoAcabadoController
         IReadOnlyList<string> husExternais, CancellationToken cancellationToken = default)
         => _huService.ListarCaixasPorHandlingUnitsAsync(husExternais, cancellationToken);
 
+    /// <summary>
+    /// Por que uma HU bipada não entrou na seleção. Diagnóstico, não regra: chamado depois da recusa.
+    /// Falha aqui devolve "desconhecida" em vez de propagar — não explicar é ruim, mas derrubar a
+    /// bipagem por causa da explicação seria pior.
+    /// </summary>
+    public async Task<DiagnosticoHandlingUnitCaixa> DiagnosticarHandlingUnitAsync(
+        string handlingUnit, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _huService.DiagnosticarHandlingUnitAsync(handlingUnit, cancellationToken);
+        }
+        catch (Exception)
+        {
+            return new DiagnosticoHandlingUnitCaixa
+            {
+                HandlingUnit = (handlingUnit ?? string.Empty).Trim(),
+                Motivo = MotivoHuIndisponivel.Desconhecida,
+            };
+        }
+    }
+
     /// <summary>INC-047: caixas por intervalo de HU externo (Paletização — SEQUÊNCIA). Read-only, sem SAP/POST.</summary>
     public Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarCaixasPorIntervaloHandlingUnitAsync(
         string huInicial, string huFinal, string? material, CancellationToken cancellationToken = default)

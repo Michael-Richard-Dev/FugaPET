@@ -139,5 +139,19 @@ public interface IProdutoAcabadoRepositorio
 
     /// <summary>INC-047: Paletização — intervalo numérico de HU + material via capability Gaia.</summary>
     Task<IReadOnlyList<ProdutoAcabadoCaixa>> ListarPorIntervaloHandlingUnitAsync(
-        string huInicial, string huFinal, string? material, CancellationToken cancellationToken = default);}
+        string huInicial, string huFinal, string? material, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Por que uma HU bipada não entrou na seleção da Paletização. Só DIAGNÓSTICO: roda depois da
+    /// recusa e nunca decide elegibilidade. Implementação PADRÃO devolve "desconhecida", para que
+    /// dublês de teste e implementações parciais herdem o comportamento antigo sem saber disto.
+    /// </summary>
+    Task<DiagnosticoHandlingUnitCaixa> DiagnosticarHandlingUnitAsync(
+        string handlingUnit, CancellationToken cancellationToken = default)
+        => Task.FromResult(new DiagnosticoHandlingUnitCaixa
+        {
+            HandlingUnit = (handlingUnit ?? string.Empty).Trim(),
+            Motivo = MotivoHuIndisponivel.Desconhecida,
+        });
+}
 
