@@ -181,6 +181,10 @@ public sealed class ResultadoApontamentoRepositorio : RepositorioBase, IResultad
             });
         }
 
+        // ORDEM CRESCENTE DE codigo_resultado, e isso e CONTRATO, nao detalhe: desde o incremento
+        // 072 o apontamento pode ter mais de um resultado (correcao), e quem consome toma o ULTIMO
+        // como o valor corrente. O codigo e identity, entao cresce com o tempo de gravacao; ordenar
+        // por aqui, e nao por registrado_em, evita empate entre duas gravacoes no mesmo instante.
         return resultados
             .OrderBy(par => par.Key)
             .Select(par => new ResultadoPersistidoApontamento

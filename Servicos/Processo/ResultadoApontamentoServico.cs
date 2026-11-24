@@ -155,13 +155,17 @@ public sealed class ResultadoApontamentoServico
                 return ResultadoApontamentoPersistidoRecovery.Ausente();
             }
 
-            if (resultados.Count > 1)
-            {
-                return ResultadoApontamentoPersistidoRecovery.Falha(
-                    "Mais de um resultado persistido para o apontamento; recovery local bloqueado.");
-            }
-
-            ResultadoPersistidoApontamento resultado = resultados[0];
+            // CORRECAO DE RESULTADO (incremento 072, decisao do usuario em 24/11/2026).
+            //
+            // Ate aqui, mais de um resultado para o mesmo apontamento BLOQUEAVA o recovery — e o
+            // banco nem permitia o segundo, por causa do UNIQUE (codigo_apontamento). O efeito
+            // pratico era que o PRIMEIRO valor gravado virava definitivo: o operador digitava outro
+            // tempo e a tela continuava mostrando o antigo, sem deixar mudar.
+            //
+            // Agora vale o MAIS RECENTE, e os anteriores continuam na tabela. A tabela e append-only
+            // de proposito: corrigir nao apaga o que foi registrado antes, apenas deixa de ser o
+            // valor corrente. Quem auditar ve a correcao e o que ela substituiu.
+            ResultadoPersistidoApontamento resultado = resultados[^1];
             string? erro = ValidarResultadoPersistido(contexto, definicoes, resultado);
             return erro is null
                 ? ResultadoApontamentoPersistidoRecovery.Recuperado(resultado)

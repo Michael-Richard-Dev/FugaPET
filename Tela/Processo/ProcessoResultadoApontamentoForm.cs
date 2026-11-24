@@ -45,6 +45,8 @@ public partial class ProcessoResultadoApontamentoForm : Form
         ConfigurarEventos();
         PreencherContexto();
         ConfigurarGridResultados();
+
+
     }
 
     private void ConfigurarEventos()
@@ -116,6 +118,7 @@ public partial class ProcessoResultadoApontamentoForm : Form
             IReadOnlyList<ResultadoApontamentoItem> definicoes =
                 await _controller.ListarDefinicoesAsync(_contexto, CancellationToken.None);
 
+            ReiniciarEstadoCorrecao();
             _itens.Clear();
             _itens.AddRange(definicoes.OrderBy(item => item.OrdemExibicao));
             _definicoesCarregadasComPerfilResolvido = _contexto.CodigoPerfilResultado is long;
@@ -233,8 +236,12 @@ public partial class ProcessoResultadoApontamentoForm : Form
         _itens.Clear();
         _itens.AddRange(resultado.Itens.OrderBy(item => item.OrdemExibicao));
         PreencherGrid();
-        colResultado.ReadOnly = true;
-        resultadosGridView.ReadOnly = true;
+
+        // 072: a grade continua EDITÁVEL. Travá-la aqui era o que fazia o primeiro valor gravado
+        // virar definitivo — o operador digitava outro e nada acontecia. Agora ele digita por cima,
+        // a tela confirma uma vez que é correção, e o F10 grava um registro novo que passa a valer.
+        colResultado.ReadOnly = false;
+        resultadosGridView.ReadOnly = false;
         gravarResultadoButton.Text = "FINALIZAR";
         gravarResultadoButton.Enabled = true;
         fecharButton.Enabled = true;
@@ -243,7 +250,7 @@ public partial class ProcessoResultadoApontamentoForm : Form
         statusValueLabel.ForeColor = Color.FromArgb(34, 166, 82);
         atalhoValueLabel.Text = "Finalizar · Esc fechar";
         instrucaoLabel.Text = "Resultado já registrado localmente; finalize para reconciliar o apontamento sem nova gravação.";
-        statusLabel.Text = "Resultado já registrado localmente. Nenhum novo resultado será gravado.";
+        statusLabel.Text = "Resultado já registrado localmente. Use CORRIGIR RESULTADO para informar outro valor.";
     }
 
     private void FocarPrimeiroResultado()
@@ -370,6 +377,16 @@ public partial class ProcessoResultadoApontamentoForm : Form
             e.Cancel = true;
             resultadosGridView.Rows[e.RowIndex].ErrorText = "Informe um número válido no padrão pt-BR.";
             statusLabel.Text = "Resultado inválido. Use números no padrão pt-BR, por exemplo 5,5.";
+            return;
+        }
+
+        // 072: editar um resultado JÁ REGISTRADO é uma correção, e o operador precisa saber disso
+        // antes de seguir. A pergunta vem aqui, na validação, porque é o último ponto em que dá
+        // para recusar a mudança e deixar a célula como estava.
+        if (!ConfirmarCorrecaoDoResultadoPersistido())
+        {
+            e.Cancel = true;
+            resultadosGridView.CancelEdit();
         }
     }
 
