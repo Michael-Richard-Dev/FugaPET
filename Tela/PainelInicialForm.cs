@@ -111,6 +111,7 @@ public partial class PainelInicialForm : Form
             // item de 2 linhas ("Processo de Produção") e separa os módulos. Larguras/rotulos já vêm do Designer.
             ReempilharSidebar();
             AjustarRodapeSidebar();
+            AjustarMarcaCentral();
         };
 
         // Sidebar 2.0x SEM cortar: os rótulos ficam em AutoSize (crescem com a fonte e nunca cortam). A largura
@@ -194,6 +195,88 @@ public partial class PainelInicialForm : Form
         sidebarUserChevronLabel.Visible = false;   // seta ">" removida
 
         PosicionarStatusPreCarregamentoPedidos();
+    }
+
+    /// <summary>
+    /// Deixa a marca central como a do FugaPEC: GRANDE e sem moldura (pedido do usuario em
+    /// 24/11/2026, comparando as duas telas — "a do FugaPEC esta muito mais vistosa").
+    /// <para>
+    /// O que a fazia pequena aqui eram tres coisas, nenhuma delas o logo (que continua o do FugaPET):
+    /// o <c>Padding(62, 18, 62, 18)</c> que o Designer poe no PictureBox e que, numa caixa de
+    /// 388x112, deixava so 264x76 para a imagem; a caixa pequena; e o cartao branco arredondado
+    /// desenhado sobre o fundo cinza, que vira uma moldura em volta de um logo ja miudo.
+    /// </para>
+    /// <para>
+    /// A estrutura do FugaPEC (Tela/PainelInicialForm.cs daquele projeto) resolve assim: area de
+    /// conteudo BRANCA, cartao branco sem raio e sem borda — some contra o fundo em vez de ser
+    /// removido, entao o layout da celula continua o mesmo — e o PictureBox sem padding, do tamanho
+    /// do painel, em Zoom (que preserva a proporcao do logo).
+    /// </para>
+    /// <para>
+    /// Uma diferenca proposital: la o tamanho e 520x184 cravado. Aqui ele acompanha o DPI e cede a
+    /// largura disponivel da celula, porque pixel cravado e exatamente o que quebra a tela em outra
+    /// maquina. A 100% o resultado e o mesmo 520x184.
+    /// </para>
+    /// </summary>
+    private static int Arredondar(float valor) => (int)Math.Round(valor, MidpointRounding.AwayFromZero);
+
+    private void AjustarMarcaCentral()
+    {
+        // Fundo branco na area de conteudo: e ELE que faz o cartao sumir. Pintar o cartao de cinza
+        // deixaria o logo (que tem fundo branco proprio) com um retangulo claro em volta.
+        contentScrollPanel.BackColor = Color.White;
+        contentLayout.BackColor = Color.White;
+
+        contentBrandHeaderPanel.FillColor = Color.White;
+        contentBrandHeaderPanel.BorderColor = Color.White;
+        contentBrandHeaderPanel.BorderRadius = 0;
+
+        contentBrandHeaderPanel.Size = CalcularTamanhoDaMarca(
+            fatorDpi: DeviceDpi / 96f,
+            larguraDisponivel: Math.Max(120, contentLayout.ClientSize.Width - contentLayout.Padding.Horizontal));
+
+        // "S/A" era um rotulo BRANCO sobre o cartao branco — invisivel hoje e invisivel depois.
+        // Escondido de proposito, como no FugaPEC, para nao reaparecer se alguem escurecer o fundo.
+        logoSaLabel.Visible = false;
+
+        contentBrandPictureBox.BackColor = Color.White;
+        contentBrandPictureBox.Padding = Padding.Empty;
+        contentBrandPictureBox.Location = Point.Empty;
+        contentBrandPictureBox.Size = contentBrandHeaderPanel.Size;
+        contentBrandPictureBox.SizeMode = PictureBoxSizeMode.Zoom;
+
+        // O painel tem Anchor=None: quem o centraliza na celula e o TableLayoutPanel, no passe de
+        // layout. Como este ajuste roda DEPOIS do PerformLayout da escala de fonte, sem pedir o
+        // passe a marca cresceria ancorada no canto antigo e ficaria fora do centro.
+        contentLayout.PerformLayout();
+    }
+
+    /// <summary>O desenho da marca central no FugaPEC, em pontos de 96 DPI.</summary>
+    private const int LarguraMarcaBase = 520;
+
+    /// <summary>A altura que acompanha <see cref="LarguraMarcaBase"/> na proporcao do FugaPEC.</summary>
+    private const int AlturaMarcaBase = 184;
+
+    /// <summary>
+    /// O tamanho da marca central, isolado do Form para teste direto (InternalsVisibleTo).
+    /// <para>
+    /// Duas garantias: acompanha o DPI (o desenho do FugaPEC vale a 96 DPI e cresce junto com a tela)
+    /// e nunca passa da largura disponivel — em janela estreita a marca CEDE mantendo a proporcao,
+    /// em vez de ser cortada pela celula.
+    /// </para>
+    /// </summary>
+    internal static Size CalcularTamanhoDaMarca(float fatorDpi, int larguraDisponivel)
+    {
+        int largura = Math.Max(1, Arredondar(LarguraMarcaBase * fatorDpi));
+        int altura = Math.Max(1, Arredondar(AlturaMarcaBase * fatorDpi));
+
+        if (largura > larguraDisponivel)
+        {
+            altura = Math.Max(1, Arredondar(altura * (larguraDisponivel / (float)largura)));
+            largura = Math.Max(1, larguraDisponivel);
+        }
+
+        return new Size(largura, altura);
     }
 
     /// <summary>
