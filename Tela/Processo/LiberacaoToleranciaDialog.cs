@@ -21,8 +21,20 @@ public sealed class LiberacaoToleranciaDialog : Form
     private readonly Label _erro = new();
     private readonly Button _liberar = new();
 
+    /// <summary>
+    /// A senha CONFIRMADA, capturada no fechamento — não lida do controle.
+    /// <para>
+    /// É assim por um defeito real: <c>Liberar</c> tem <c>DialogResult.OK</c>, então clicar nele
+    /// FECHA o diálogo, e o fechamento dispara <c>OnFormClosed</c> ANTES de <c>ShowDialog</c>
+    /// retornar. Como ali a senha era apagada por higiene, quem lia <c>Senha</c> depois do
+    /// <c>ShowDialog</c> recebia sempre vazio e levava "Informe usuário e senha" — com a senha
+    /// corretamente digitada. A liberação nunca funcionou até 24/11/2026.
+    /// </para>
+    /// </summary>
+    private string _senhaConfirmada = string.Empty;
+
     public string Usuario => _usuario.Text.Trim();
-    public string Senha => _senha.Text;
+    public string Senha => _senhaConfirmada;
 
     public LiberacaoToleranciaDialog(string mensagemDoEstouro)
     {
@@ -134,19 +146,35 @@ public sealed class LiberacaoToleranciaDialog : Form
     public void MostrarErro(string mensagem)
     {
         _erro.Text = mensagem;
+        _senhaConfirmada = string.Empty;
         _senha.Clear();
         _senha.Focus();
     }
 
     /// <summary>
-    /// Limpa a senha da memória do controle assim que o diálogo fecha. Não é proteção forte — a
-    /// string já existe no heap —, mas evita que ela fique viva num controle enquanto o formulário
-    /// não é coletado.
+    /// CAPTURA a senha antes de limpar o controle. A ordem importa: é o fechamento que entrega a
+    /// credencial a quem chamou, e limpar sem capturar foi o que deixou a liberação sempre vazia.
+    /// <para>
+    /// Limpar o controle não é proteção forte — a string já existe no heap —, mas evita que ela
+    /// fique viva num controle enquanto o formulário não é coletado.
+    /// </para>
     /// </summary>
-    protected override void OnFormClosed(FormClosedEventArgs e)
+    protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        _senhaConfirmada = DialogResult == DialogResult.OK ? _senha.Text : string.Empty;
         _senha.Clear();
-        base.OnFormClosed(e);
+        base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Agora sim, quando ninguem mais vai ler.
+            _senhaConfirmada = string.Empty;
+        }
+
+        base.Dispose(disposing);
     }
 
     /// <summary>Texto do estouro para o diálogo, a partir do veredito da regra.</summary>
