@@ -23,7 +23,14 @@ public sealed class PainelInicialSidebarHarmoniaTests
         Assert.Contains("sidebarUserAvatarLabel.SetBounds(18, 20, 44, 44);", source, StringComparison.Ordinal);
         Assert.Contains("sidebarUserNameLabel.SetBounds(74, 18, larguraTexto, 26);", source, StringComparison.Ordinal);
         Assert.Contains("sidebarUserStatusLabel.SetBounds(74, 44, larguraTexto, 22);", source, StringComparison.Ordinal);
-        Assert.Contains("_preCarregamentoStatusLabel.Top = sidebarUserPanel.Top - 24;", source, StringComparison.Ordinal);
+
+        // 24/11/2026: este teste cobrava o literal "_preCarregamentoStatusLabel.Top =
+        // sidebarUserPanel.Top - 24;" — e era JUSTAMENTE esse numero de pixels cravado que fazia o
+        // aviso cobrir o nome do usuario. O teste pinava o defeito. Agora cobra a propriedade: a
+        // caixa do aviso e calculada, e a conta e exercitada em
+        // PainelInicialAvisoPreCarregamentoLayoutTests.
+        Assert.Contains("PosicionarStatusPreCarregamentoPedidos();", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_preCarregamentoStatusLabel.Top = sidebarUserPanel.Top", source, StringComparison.Ordinal);
     }
 
     [Fact]

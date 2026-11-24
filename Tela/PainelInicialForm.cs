@@ -193,12 +193,72 @@ public partial class PainelInicialForm : Form
         sidebarUserStatusLabel.SetBounds(74, 44, larguraTexto, 22);
         sidebarUserChevronLabel.Visible = false;   // seta ">" removida
 
-        if (_preCarregamentoStatusLabel is not null)
+        PosicionarStatusPreCarregamentoPedidos();
+    }
+
+    /// <summary>
+    /// Coloca o aviso de pre-carregamento ACIMA do bloco do usuario, com a altura que o texto
+    /// realmente ocupa na fonte e na largura que ele tem AGORA.
+    /// <para>
+    /// POR QUE EXISTE: o aviso era posicionado por <c>sidebarUserPanel.Top - 24</c> — um numero de
+    /// pixels cravado, que supunha o rotulo de 18px e uma linha so. Depois do Shown a sidebar leva
+    /// escala de fonte 2.0x e AdaptarAlturasParaFonte, entao o rotulo fica mais alto e a frase passa
+    /// a ocupar DUAS linhas: a segunda descia por cima do nome do usuario, que aparecia cortado ao
+    /// meio. Pixel cravado nao acompanha a fonte; medida acompanha.
+    /// </para>
+    /// <para>
+    /// A altura e limitada pelo espaco que existe entre o ultimo item do menu e o bloco do usuario.
+    /// Com AutoEllipsis, texto que nao couber termina em reticencias em vez de invadir o vizinho —
+    /// uma frase longa nunca empurra o layout.
+    /// </para>
+    /// </summary>
+    private void PosicionarStatusPreCarregamentoPedidos()
+    {
+        if (_preCarregamentoStatusLabel is null)
         {
-            _preCarregamentoStatusLabel.Left = 18;
-            _preCarregamentoStatusLabel.Top = sidebarUserPanel.Top - 24;
-            _preCarregamentoStatusLabel.Width = Math.Max(40, sidebarPanel.ClientSize.Width - 36);
+            return;
         }
+
+        Label aviso = _preCarregamentoStatusLabel;
+        aviso.Left = 18;
+        aviso.Width = Math.Max(40, sidebarPanel.ClientSize.Width - 36);
+
+        int folga = Math.Max(6, (int)Math.Round(6 * (DeviceDpi / 96f), MidpointRounding.AwayFromZero));
+
+        int necessario = string.IsNullOrEmpty(aviso.Text)
+            ? 1
+            : TextRenderer.MeasureText(
+                aviso.Text,
+                aviso.Font,
+                new Size(aviso.Width, int.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
+
+        (int topo, int altura) = CalcularCaixaDoAviso(
+            topoDoBlocoDoUsuario: sidebarUserPanel.Top,
+            limiteSuperior: menuItemSeguranca.Bottom,
+            folga: folga,
+            alturaNecessaria: necessario);
+
+        aviso.Height = altura;
+        aviso.Top = topo;
+    }
+
+    /// <summary>
+    /// A conta da caixa do aviso, isolada do Form para teste direto (InternalsVisibleTo).
+    /// <para>
+    /// Duas garantias, e e por elas que o teste cobra — nao pela formula: a caixa NUNCA encosta no
+    /// bloco do usuario (foi o que cobriu o nome "admin") e NUNCA sobe para dentro do ultimo item do
+    /// menu. Quando nao ha espaco para o texto inteiro, a caixa encolhe e o AutoEllipsis corta com
+    /// reticencias; invadir o vizinho nunca e opcao.
+    /// </para>
+    /// </summary>
+    internal static (int Topo, int Altura) CalcularCaixaDoAviso(
+        int topoDoBlocoDoUsuario, int limiteSuperior, int folga, int alturaNecessaria)
+    {
+        int disponivel = Math.Max(1, topoDoBlocoDoUsuario - folga - limiteSuperior);
+        int altura = Math.Clamp(alturaNecessaria, 1, disponivel);
+
+        return (topoDoBlocoDoUsuario - folga - altura, altura);
     }
 
     /// <summary>Dispara o pre-carregamento dos pedidos da Entrada sem bloquear a UI (fire-and-forget).</summary>
@@ -270,12 +330,14 @@ public partial class PainelInicialForm : Form
             Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
             Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
             Size = new Size(Math.Max(40, sidebarPanel.ClientSize.Width - 36), 18),
-            TextAlign = ContentAlignment.MiddleLeft,
+            // TopLeft, nao MiddleLeft: a caixa agora tem a altura do texto, e quando a frase ocupa
+            // duas linhas e o centro vertical que empurra a segunda para fora da caixa.
+            TextAlign = ContentAlignment.TopLeft,
             Visible = false
         };
         sidebarPanel.Controls.Add(_preCarregamentoStatusLabel);
-        _preCarregamentoStatusLabel.Location = new Point(18, sidebarUserPanel.Top - 24);
         _preCarregamentoStatusLabel.BringToFront();
+        PosicionarStatusPreCarregamentoPedidos();
     }
 
     private void AtualizarStatusPreCarregamentoPedidos(string texto)
@@ -301,6 +363,11 @@ public partial class PainelInicialForm : Form
 
         _preCarregamentoStatusLabel.Visible = !string.IsNullOrEmpty(texto);
         _preCarregamentoStatusLabel.Text = texto;
+
+        // A geometria depende do TEXTO: "Sincronizando pedidos de entrada..." cabe numa linha e
+        // "Pedidos de entrada atualizados as HH:mm" nao. Posicionar so na montagem da tela deixava a
+        // frase maior, que chega depois, sobrando por baixo e cobrindo o nome do usuario.
+        PosicionarStatusPreCarregamentoPedidos();
     }
 
     private async Task AtualizarStatusIndustrialAsync()
