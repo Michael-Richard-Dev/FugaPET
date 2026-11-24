@@ -217,6 +217,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
 
     private void ConfigurarEventos()
     {
+        // O botao da pesagem automatica (24/11/2026) nasce AQUI, copiando a geometria dos botoes
+        // vivos — ver ProcessoProdutoAcabadoForm.PesagemAutomatica.cs.
+        MontarBotaoPesagemAutomatica();
         Shown += ProcessoProdutoAcabadoForm_Shown;
         FormClosing += ProcessoProdutoAcabadoForm_FormClosing;
         KeyDown += ProcessoProdutoAcabadoForm_KeyDown;
@@ -3222,6 +3225,10 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return;
         }
 
+        // O laco da pesagem automatica morre JUNTO com a tela. Deixado vivo, ele continuaria lendo a
+        // balanca e tentando registrar caixa numa tela que nao existe mais.
+        PararPesagemAutomatica("Pesagem automática encerrada com a tela.");
+
         _footerClockTimer?.Dispose();
     }
 
@@ -3473,6 +3480,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
         {
             e.SuppressKeyPress = true;
             await RegistrarPesoManualAsync();
+        }
+        else if (e.KeyCode == Keys.F11)
+        {
+            // Liga e desliga a pesagem automatica (24/11/2026). Existe tambem como tecla, e nao so
+            // como botao, para o operador parar o ciclo sem procurar o mouse se algo der errado.
+            e.SuppressKeyPress = true;
+            await AlternarPesagemAutomaticaAsync();
         }
         else if (e.KeyCode is Keys.F6 or Keys.Delete)
         {
