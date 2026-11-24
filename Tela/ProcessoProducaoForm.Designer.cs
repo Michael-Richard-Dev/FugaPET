@@ -223,7 +223,7 @@ partial class ProcessoProducaoForm
         semiAcabadoIconPanel.BorderRadius = 9;
         semiAcabadoIconPanel.Controls.Add(semiAcabadoIconLabel);
         semiAcabadoIconPanel.Cursor = Cursors.Hand;
-        semiAcabadoIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        semiAcabadoIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         semiAcabadoIconPanel.Location = new Point(92, 20);
         semiAcabadoIconPanel.Name = "semiAcabadoIconPanel";
         semiAcabadoIconPanel.ShadowBlur = 0;
@@ -335,7 +335,7 @@ partial class ProcessoProducaoForm
         processIconPanel.BorderRadius = 9;
         processIconPanel.Controls.Add(processIconLabel);
         processIconPanel.Cursor = Cursors.Hand;
-        processIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        processIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         processIconPanel.Location = new Point(92, 20);
         processIconPanel.Name = "processIconPanel";
         processIconPanel.ShadowBlur = 0;
@@ -448,7 +448,7 @@ partial class ProcessoProducaoForm
         pesagemIconPanel.BorderRadius = 9;
         pesagemIconPanel.Controls.Add(pesagemIconLabel);
         pesagemIconPanel.Cursor = Cursors.Hand;
-        pesagemIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        pesagemIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         pesagemIconPanel.Location = new Point(92, 20);
         pesagemIconPanel.Name = "pesagemIconPanel";
         pesagemIconPanel.ShadowBlur = 0;
@@ -561,7 +561,7 @@ partial class ProcessoProducaoForm
         quimicosIconPanel.BorderRadius = 9;
         quimicosIconPanel.Controls.Add(quimicosIconLabel);
         quimicosIconPanel.Cursor = Cursors.Hand;
-        quimicosIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        quimicosIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         quimicosIconPanel.Location = new Point(92, 20);
         quimicosIconPanel.Name = "quimicosIconPanel";
         quimicosIconPanel.ShadowBlur = 0;
@@ -673,7 +673,7 @@ partial class ProcessoProducaoForm
         ordensIconPanel.BorderRadius = 9;
         ordensIconPanel.Controls.Add(ordensIconLabel);
         ordensIconPanel.Cursor = Cursors.Hand;
-        ordensIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        ordensIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         ordensIconPanel.Location = new Point(92, 20);
         ordensIconPanel.Name = "ordensIconPanel";
         ordensIconPanel.ShadowBlur = 0;
@@ -785,7 +785,7 @@ partial class ProcessoProducaoForm
         apontamentosIconPanel.BorderRadius = 9;
         apontamentosIconPanel.Controls.Add(apontamentosIconLabel);
         apontamentosIconPanel.Cursor = Cursors.Hand;
-        apontamentosIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        apontamentosIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         apontamentosIconPanel.Location = new Point(92, 20);
         apontamentosIconPanel.Name = "apontamentosIconPanel";
         apontamentosIconPanel.ShadowBlur = 0;
@@ -897,7 +897,7 @@ partial class ProcessoProducaoForm
         entradaIconPanel.BorderRadius = 9;
         entradaIconPanel.Controls.Add(entradaIconLabel);
         entradaIconPanel.Cursor = Cursors.Hand;
-        entradaIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        entradaIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         entradaIconPanel.Location = new Point(92, 20);
         entradaIconPanel.Name = "entradaIconPanel";
         entradaIconPanel.ShadowBlur = 0;
@@ -1012,7 +1012,7 @@ partial class ProcessoProducaoForm
         entradaQuimicosIconPanel.BorderRadius = 9;
         entradaQuimicosIconPanel.Controls.Add(entradaQuimicosIconLabel);
         entradaQuimicosIconPanel.Cursor = Cursors.Hand;
-        entradaQuimicosIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        entradaQuimicosIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         entradaQuimicosIconPanel.Location = new Point(92, 20);
         entradaQuimicosIconPanel.Name = "entradaQuimicosIconPanel";
         entradaQuimicosIconPanel.ShadowBlur = 0;

@@ -32,7 +32,7 @@ public sealed class CadastroCartoesPaletaTests
     [Fact]
     public void OLadrilho_EUmaTintaClaraDeLaranja()
     {
-        Color ladrilho = CadastroForm.LadrilhoDoIcone;
+        Color ladrilho = FugaPET_Dev.Tela.Comum.CartoesDeModulo.LadrilhoDoIcone;
 
         Assert.True(ladrilho.R > ladrilho.G && ladrilho.G > ladrilho.B, "a cor tem de ser alaranjada (R > G > B)");
         Assert.True(ladrilho.GetBrightness() > 0.80, "o ladrilho e uma TINTA: claro o bastante para o icone escuro aparecer");
@@ -53,7 +53,7 @@ public sealed class CadastroCartoesPaletaTests
     [Fact]
     public void OIcone_ContinuaLegivelSobreOLadrilho()
     {
-        double contraste = Contraste(LaranjaEscuro, CadastroForm.LadrilhoDoIcone);
+        double contraste = Contraste(LaranjaEscuro, FugaPET_Dev.Tela.Comum.CartoesDeModulo.LadrilhoDoIcone);
 
         Assert.True(contraste >= 3.0, $"contraste icone/ladrilho ficou em {contraste:0.0}:1");
     }
@@ -71,19 +71,27 @@ public sealed class CadastroCartoesPaletaTests
     }
 
     /// <summary>
-    /// A COR E APLICADA PERCORRENDO OS CARTOES, nao repetida cartao a cartao. Dez literais iguais
-    /// sao dez chances de divergir — e foi assim que a grade acabou com quatro tons.
+    /// A COR SAI DE UM LUGAR SO, E ESSE LUGAR E COMPARTILHADO pelas duas telas de cartoes. Dez
+    /// literais iguais sao dez chances de divergir — foi assim que a grade acabou com quatro tons —,
+    /// e duas copias da rotina sao duas chances de so uma das telas ser corrigida, que foi o que
+    /// aconteceu: o usuario pediu a mesma correcao duas vezes, uma para cada tela.
     /// </summary>
     [Fact]
-    public void ACor_SaiDeUmLugarSo()
+    public void ACor_SaiDeUmLugarSoCompartilhado()
     {
-        string fonte = Fonte();
+        string helper = LerComum("CartoesDeModulo.cs");
 
-        Assert.Contains("foreach (Control cartao in modulesFlowLayoutPanel.Controls)", fonte, StringComparison.Ordinal);
-        Assert.Contains("ladrilho.FillColor = LadrilhoDoIcone;", fonte, StringComparison.Ordinal);
+        Assert.Contains("ladrilho.FillColor = LadrilhoDoIcone;", helper, StringComparison.Ordinal);
 
-        // O parametro de cor por cartao deixou de existir: nao ha mais onde escolher um tom proprio.
-        Assert.DoesNotContain("corDoIcone", fonte, StringComparison.Ordinal);
+        // As duas telas DELEGAM: nenhuma delas repinta por conta propria.
+        foreach (string tela in new[] { Fonte(), LerTela("ProcessoProducaoForm.cs") })
+        {
+            Assert.Contains("Comum.CartoesDeModulo.AplicarPaleta(cartoes);", tela, StringComparison.Ordinal);
+            Assert.DoesNotContain("FillColor = Color.FromArgb", tela, StringComparison.Ordinal);
+        }
+
+        // O parametro de cor por cartao deixou de existir: nao ha onde escolher um tom proprio.
+        Assert.DoesNotContain("corDoIcone", Fonte(), StringComparison.Ordinal);
     }
 
     /// <summary>Os tons rosa, pessego, verde-agua e azul nao podem voltar a esta tela.</summary>
@@ -105,7 +113,7 @@ public sealed class CadastroCartoesPaletaTests
     [Fact]
     public void ODesigner_NasceComOLadrilhoCerto()
     {
-        Color c = CadastroForm.LadrilhoDoIcone;
+        Color c = FugaPET_Dev.Tela.Comum.CartoesDeModulo.LadrilhoDoIcone;
         string esperado = $"IconPanel.FillColor = Color.FromArgb({c.R}, {c.G}, {c.B});";
 
         int quantos = Designer().Split(esperado).Length - 1;
@@ -137,17 +145,18 @@ public sealed class CadastroCartoesPaletaTests
     /// selo verde e o titulo escuro junto.
     /// </summary>
     [Fact]
-    public void ORepinte_AlcancaSoOLadrilho()
+    public void ORepinte_NaoTocaNoSeloVerde()
     {
-        string fonte = Fonte();
+        string helper = LerComum("CartoesDeModulo.cs");
 
-        int ondeVarre = fonte.IndexOf("foreach (Control parte in cartao.Controls)", StringComparison.Ordinal);
-        int fim = fonte.IndexOf("    /// <summary>", ondeVarre, StringComparison.Ordinal);
-        string corpo = fonte[ondeVarre..fim];
+        int ondeVarre = helper.IndexOf("internal static void AplicarPaleta", StringComparison.Ordinal);
+        int fim = helper.IndexOf("internal static int AjustarTextos", StringComparison.Ordinal);
+        string corpo = helper[ondeVarre..fim];
 
-        Assert.Contains("if (parte is Controls.RoundedPanel ladrilho)", corpo, StringComparison.Ordinal);
-        Assert.DoesNotContain("ForeColor", corpo, StringComparison.Ordinal);
-        Assert.DoesNotContain("BackColor", corpo, StringComparison.Ordinal);
+        // Pinta ladrilho, glifo e seta. NAO mexe em BackColor: e o fundo do selo "Disponivel" e do
+        // atalho, e repinta-los apagaria a unica cor que o usuario mandou preservar.
+        Assert.Contains("ladrilho.FillColor = LadrilhoDoIcone;", corpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("BackColor = Color", corpo, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -188,6 +197,10 @@ public sealed class CadastroCartoesPaletaTests
     private static string Fonte() => Ler("CadastroForm.cs");
 
     private static string Designer() => Ler("CadastroForm.Designer.cs");
+
+    private static string LerTela(string arquivo) => Ler(arquivo);
+
+    private static string LerComum(string arquivo) => Ler(Path.Combine("Comum", arquivo));
 
     private static string Ler(string arquivo)
         => File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", arquivo));

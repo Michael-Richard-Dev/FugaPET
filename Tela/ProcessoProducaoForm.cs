@@ -21,8 +21,6 @@ public partial class ProcessoProducaoForm : UserControl
     public event EventHandler? ProcessoSemiAcabadoRequested;
     public event EventHandler? ProcessoConsumoMaterialRequested;
     public event EventHandler? ProcessoConsumoQuimicosRequested;
-    public event EventHandler? HistoricoConsumoMaterialRequested;
-    public event EventHandler? DiagnosticoConsumoSap261Requested;
     public event EventHandler? OrdensAndamentoRequested;
     public event EventHandler? PaletizacaoRequested;
 
@@ -33,53 +31,31 @@ public partial class ProcessoProducaoForm : UserControl
     {
         InitializeComponent();
         AddPaletizacaoCard();
+        // A aparencia vem ANTES da compactacao: e ela que pode fazer os cartoes crescerem, e a
+        // grade precisa da altura final para calcular o passo das linhas.
+        AplicarAparenciaDosCartoes();
         CompactarCardsVisiveis();
         ApplyProductionIcons();
-        AddHistoricoConsumoButton();
-        AddDiagnosticoConsumoButton();
         WireCardClickEvents();
     }
 
-    private void AddHistoricoConsumoButton()
+    /// <summary>
+    /// A cor e o layout dos cartoes vem do helper compartilhado — ver
+    /// <see cref="Comum.CartoesDeModulo"/>, o mesmo que a tela de Cadastro usa.
+    /// <para>
+    /// Aqui ele corrige tres coisas de uma vez: o ladrilho rosa (#FEE2E2) que sobrou do vermelho de
+    /// antes do reskin laranja, a seta do cartao de Paletizacao que ficou em #EF4444 vermelho
+    /// enquanto as outras oito ja eram laranja, e as descricoes cortadas — "Leitura e controle das
+    /// operacoes da ordem de producao" parava em "da ordem de", porque a caixa tinha 46px e o texto
+    /// pedia mais.
+    /// </para>
+    /// </summary>
+    private void AplicarAparenciaDosCartoes()
     {
-        Button historicoConsumoButton = new()
-        {
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            BackColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point, 0),
-            ForeColor = Color.FromArgb(31, 41, 55),
-            Location = new Point(Math.Max(16, Width - 214), 26),
-            Name = "historicoConsumoButton",
-            Size = new Size(186, 30),
-            Text = "Histórico de Consumo",
-            UseVisualStyleBackColor = false
-        };
-        historicoConsumoButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
-        historicoConsumoButton.Click += OnHistoricoConsumoMaterialClick;
-        contentPanel.Controls.Add(historicoConsumoButton);
-        historicoConsumoButton.BringToFront();
-    }
+        IReadOnlyList<Control> cartoes = Comum.CartoesDeModulo.Localizar(contentPanel);
 
-    private void AddDiagnosticoConsumoButton()
-    {
-        Button diagnosticoConsumoButton = new()
-        {
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            BackColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point, 0),
-            ForeColor = Color.FromArgb(31, 41, 55),
-            Location = new Point(Math.Max(16, Width - 214), 60),
-            Name = "diagnosticoConsumoButton",
-            Size = new Size(186, 30),
-            Text = "Diagnóstico Consumo 261",
-            UseVisualStyleBackColor = false
-        };
-        diagnosticoConsumoButton.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
-        diagnosticoConsumoButton.Click += OnDiagnosticoConsumoSap261Click;
-        contentPanel.Controls.Add(diagnosticoConsumoButton);
-        diagnosticoConsumoButton.BringToFront();
+        Comum.CartoesDeModulo.AplicarPaleta(cartoes);
+        Comum.CartoesDeModulo.AjustarTextos(cartoes);
     }
 
     private void AddPaletizacaoCard()
@@ -118,11 +94,21 @@ public partial class ProcessoProducaoForm : UserControl
         ];
 
         Control[] cardsVisiveis = cards.Where(card => card.Visible).ToArray();
+        if (cardsVisiveis.Length == 0)
+        {
+            return;
+        }
+
+        // O passo da linha sai da ALTURA REAL do cartao mais o respiro, nao de um 266 cravado. Se o
+        // ajuste de texto fez os cartoes crescerem, a segunda linha desceria por cima da primeira.
+        const int respiroEntreLinhas = 16;
+        int passo = cardsVisiveis.Max(card => card.Height) + respiroEntreLinhas;
+
         for (int indice = 0; indice < cardsVisiveis.Length; indice++)
         {
             int coluna = indice % 4;
             int linha = indice / 4;
-            cardsVisiveis[indice].Location = new Point(28 + (coluna * 256), 70 + (linha * 266));
+            cardsVisiveis[indice].Location = new Point(28 + (coluna * 256), 70 + (linha * passo));
         }
     }
 
@@ -156,7 +142,7 @@ public partial class ProcessoProducaoForm : UserControl
             BackColor = Color.Transparent,
             BorderRadius = 9,
             Cursor = Cursors.Hand,
-            FillColor = Color.FromArgb(254, 226, 226),
+            FillColor = Comum.CartoesDeModulo.LadrilhoDoIcone,
             Location = new Point(92, 20),
             Name = name + "IconPanel",
             ShadowBlur = 0,
@@ -225,7 +211,7 @@ public partial class ProcessoProducaoForm : UserControl
             BackColor = Color.Transparent,
             Cursor = Cursors.Hand,
             Font = new Font("Segoe UI", 16F, FontStyle.Regular, GraphicsUnit.Point, 0),
-            ForeColor = Color.FromArgb(239, 68, 68),
+            ForeColor = Comum.CartoesDeModulo.LaranjaEscuro,
             Location = new Point(190, 207),
             Size = new Size(32, 36),
             Text = "→",
@@ -417,16 +403,6 @@ public partial class ProcessoProducaoForm : UserControl
     {
         _ = ModoConsumoMaterial.Quimico;
         ProcessoConsumoQuimicosRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void OnHistoricoConsumoMaterialClick(object? sender, EventArgs e)
-    {
-        HistoricoConsumoMaterialRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void OnDiagnosticoConsumoSap261Click(object? sender, EventArgs e)
-    {
-        DiagnosticoConsumoSap261Requested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnOrdensAndamentoClick(object? sender, EventArgs e)

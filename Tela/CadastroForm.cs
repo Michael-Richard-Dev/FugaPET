@@ -19,8 +19,7 @@ public partial class CadastroForm : UserControl
         CriarCartaoVinculoProdutoEtiqueta();
         CriarCartaoToleranciaRecebimento();
         CriarCartaoToleranciaProducao();
-        AplicarPaletaDosCartoes();
-        AjustarTextosDosCartoes();
+        AplicarAparenciaDosCartoes();
         if (System.ComponentModel.LicenseManager.UsageMode != System.ComponentModel.LicenseUsageMode.Designtime)
         {
             AplicarFiltroPermissoes();
@@ -29,144 +28,20 @@ public partial class CadastroForm : UserControl
     }
 
     /// <summary>
-    /// O ladrilho atras do icone, em TODOS os cartoes de modulo. Tinta clara do laranja da paleta.
+    /// A cor e o layout dos cartoes vem do helper compartilhado — ver
+    /// <see cref="Comum.CartoesDeModulo"/>. Antes esta tela resolvia os dois por conta propria e a
+    /// de Processo de Producao resolvia de outro jeito; o usuario pediu a mesma correcao duas
+    /// vezes, uma para cada tela. Duas copias sao duas chances de divergir.
     /// </summary>
-    internal static readonly Color LadrilhoDoIcone = Color.FromArgb(253, 228, 211);
-
-    /// <summary>
-    /// Pinta os ladrilhos dos icones com a paleta do sistema (pedido do usuario em 24/11/2026:
-    /// "os modulos estao com cores diferentes... preserve o Disponivel apenas com sua cor verde, as
-    /// demais cores tem que ser alteradas para laranja").
-    /// <para>
-    /// Os dez cartoes tinham QUATRO tons: rosa (#FEE2E2, resto do vermelho de antes do reskin
-    /// laranja) nos sete do Designer, pessego no Vinculo, verde-agua na Tolerancia de Recebimento e
-    /// azul na de Producao. Os tres ultimos foram escolha minha, para os cartoes clonados nao
-    /// virarem um par indistinguivel — distinguir por COR entre modulos nao vale o preco de a tela
-    /// parecer de outro sistema. Quem distingue e o titulo, o icone e o atalho.
-    /// </para>
-    /// <para>
-    /// A cor e aplicada PERCORRENDO os cartoes, nao repetida em dez pontos: a troca vale para
-    /// qualquer cartao novo sem ninguem lembrar de pinta-lo, e nao ha literal para alguem copiar
-    /// errado. O "Disponivel" verde nao e tocado, e a cor do icone e da seta ja era o laranja
-    /// escuro da paleta.
-    /// </para>
-    /// </summary>
-    private void AplicarPaletaDosCartoes()
+    private void AplicarAparenciaDosCartoes()
     {
-        foreach (Control cartao in modulesFlowLayoutPanel.Controls)
-        {
-            foreach (Control parte in cartao.Controls)
-            {
-                // O ladrilho do icone e o unico RoundedPanel dentro de um cartao.
-                if (parte is Controls.RoundedPanel ladrilho)
-                {
-                    ladrilho.FillColor = LadrilhoDoIcone;
-                }
-            }
-        }
+        IReadOnlyList<Control> cartoes = Comum.CartoesDeModulo.Localizar(modulesFlowLayoutPanel);
+
+        Comum.CartoesDeModulo.AplicarPaleta(cartoes);
+        Comum.CartoesDeModulo.AjustarTextos(cartoes);
     }
 
-    /// <summary>A respiracao entre o icone, o titulo, a descricao e a linha de baixo do cartao.</summary>
-    private const int FolgaEntreBlocosDoCartao = 8;
-
     /// <summary>
-    /// Da ao titulo e a descricao de CADA cartao a altura que o texto realmente ocupa, e reempilha
-    /// os dois entre o icone e a linha de baixo.
-    /// <para>
-    /// POR QUE EXISTE (relatado pelo usuario em 24/11/2026, com print): "Vinculo de Produto"
-    /// aparecia como "Vinculo de" e "Tolerancia de Recebimento" como "Tolerancia de". Os cartoes
-    /// clonados copiam a geometria do cartao de ETIQUETA, cujo titulo tem caixa de 185x28 — UMA
-    /// linha, porque "Etiqueta" cabe numa. Titulo de duas linhas precisa de 50px e o que passava de
-    /// 28 era cortado, sem erro nenhum. O mesmo nas descricoes longas, numa caixa de 34px.
-    /// </para>
-    /// <para>
-    /// De quebra arruma um desalinhamento que ja estava na tela: o Designer tem DUAS geometrias
-    /// convivendo — Setor e Cargo com titulo em y=92 e caixa de 62, os outros cinco em y=102 com
-    /// caixa de 28 —, entao os titulos nao ficavam na mesma linha de card para card. Medindo, todos
-    /// passam a sair do mesmo lugar.
-    /// </para>
-    /// <para>
-    /// As partes sao achadas pela GEOMETRIA, nao por nome ou ordem de insercao: o ladrilho e o unico
-    /// RoundedPanel, o titulo e a descricao sao os dois rotulos mais ao alto, e o resto e a linha de
-    /// baixo. Assim um cartao novo entra no ajuste sem ninguem lembrar de cadastra-lo aqui.
-    /// </para>
-    /// <para>
-    /// Se o texto nao couber no espaco que existe, os cartoes CRESCEM — todos pela mesma medida,
-    /// para a grade nao ficar irregular. Cortar silenciosamente foi exatamente o defeito relatado.
-    /// </para>
-    /// </summary>
-    private void AjustarTextosDosCartoes()
-    {
-        List<(Control Cartao, Label Titulo, Label Descricao, int TopoDoBloco, int BaseDoBloco)> cartoes = [];
-
-        foreach (Control cartao in modulesFlowLayoutPanel.Controls)
-        {
-            Controls.RoundedPanel? ladrilho = cartao.Controls.OfType<Controls.RoundedPanel>().FirstOrDefault();
-            Label[] rotulos = [.. cartao.Controls.OfType<Label>().OrderBy(rotulo => rotulo.Top)];
-
-            // Cartao sem o desenho esperado fica como esta: melhor um cartao fora do ajuste do que
-            // uma tela remontada as cegas.
-            if (ladrilho is null || rotulos.Length < 3)
-            {
-                continue;
-            }
-
-            cartoes.Add((cartao, rotulos[0], rotulos[1], ladrilho.Bottom, rotulos.Skip(2).Min(r => r.Top)));
-        }
-
-        int crescimento = 0;
-        foreach ((Control cartao, Label titulo, Label descricao, int topo, int baseDoBloco) in cartoes)
-        {
-            int largura = LarguraDoTextoNoCartao(cartao, titulo);
-            int necessario = topo
-                + FolgaEntreBlocosDoCartao + AlturaMedida(titulo, largura)
-                + FolgaEntreBlocosDoCartao + AlturaMedida(descricao, largura)
-                + FolgaEntreBlocosDoCartao;
-
-            crescimento = Math.Max(crescimento, necessario - baseDoBloco);
-        }
-
-        crescimento = Math.Max(0, crescimento);
-
-        foreach ((Control cartao, Label titulo, Label descricao, int topo, int baseDoBloco) in cartoes)
-        {
-            int margem = titulo.Left;
-            int largura = LarguraDoTextoNoCartao(cartao, titulo);
-
-            titulo.SetBounds(margem, topo + FolgaEntreBlocosDoCartao, largura, AlturaMedida(titulo, largura));
-            descricao.SetBounds(
-                margem, titulo.Bottom + FolgaEntreBlocosDoCartao, largura, AlturaMedida(descricao, largura));
-
-            if (crescimento == 0)
-            {
-                continue;
-            }
-
-            // A linha de baixo (situacao, atalho e seta) desce junto, senao o texto novo passaria por
-            // cima dela — trocar um corte por uma sobreposicao nao e corrigir.
-            foreach (Label rodape in cartao.Controls.OfType<Label>().Where(r => r.Top >= baseDoBloco))
-            {
-                rodape.Top += crescimento;
-            }
-
-            cartao.Height += crescimento;
-        }
-    }
-
-    /// <summary>A largura util do texto: a caixa do cartao menos a margem que o proprio rotulo usa.</summary>
-    private static int LarguraDoTextoNoCartao(Control cartao, Label titulo)
-        => Math.Max(40, cartao.Width - (titulo.Left * 2));
-
-    /// <summary>A altura que o texto ocupa EMBRULHADO nessa largura, na fonte que o rotulo tem agora.</summary>
-    private static int AlturaMedida(Label rotulo, int largura)
-        => Math.Max(
-            1,
-            TextRenderer.MeasureText(
-                rotulo.Text,
-                rotulo.Font,
-                new Size(largura, int.MaxValue),
-                TextFormatFlags.WordBreak).Height);
-
     /// <summary>
     /// Cartao do Vinculo de Produto e Etiqueta, montado EM TEMPO DE EXECUCAO a partir do cartao de
     /// Etiqueta que ja existe.
@@ -243,9 +118,9 @@ public partial class CadastroForm : UserControl
             BackColor = etiquetaIconPanel.BackColor,
             BorderRadius = etiquetaIconPanel.BorderRadius,
             Cursor = Cursors.Hand,
-            // Mesmo ladrilho de todos: AplicarPaletaDosCartoes repinta, mas nascer ja certo evita o
+            // Mesmo ladrilho de todos: o helper repinta depois, mas nascer ja certo evita o
             // piscar do rosa herdado do cartao de Etiqueta.
-            FillColor = LadrilhoDoIcone,
+            FillColor = Comum.CartoesDeModulo.LadrilhoDoIcone,
             Location = etiquetaIconPanel.Location,
             Size = etiquetaIconPanel.Size,
         };

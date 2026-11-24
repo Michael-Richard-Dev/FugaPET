@@ -1225,8 +1225,6 @@ public partial class PainelInicialForm : Form
         view.ProcessoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.MateriaPrima);
         view.ProcessoConsumoQuimicosRequested += async (_, _) => await OpenProcessoConsumoMaterialAsync(global::FugaPET_Dev.Modelo.Processo.ModoConsumoMaterial.Quimico);
         view.ControleApontamentosRequested += async (_, _) => await OpenControleApontamentosAsync();
-        view.HistoricoConsumoMaterialRequested += async (_, _) => await OpenProcessoConsumoMaterialHistoricoAsync();
-        view.DiagnosticoConsumoSap261Requested += async (_, _) => await OpenDiagnosticoConsumoSap261Async();
         view.OrdensAndamentoRequested += async (_, _) => await OpenConsultaOrdemProducaoAsync();
         view.PaletizacaoRequested += async (_, _) => await OpenPaletizacaoAsync();
 
@@ -1401,44 +1399,6 @@ public partial class PainelInicialForm : Form
 
         Hide();
         form.Show(this);
-    }
-
-    private async Task OpenProcessoConsumoMaterialHistoricoAsync()
-    {
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Histórico de Consumo de Matéria-Prima")) return;
-
-        using Processo.ProcessoConsumoMaterialHistoricoForm form = new();
-        Hide();
-
-        try
-        {
-            form.ShowDialog(this);
-        }
-        finally
-        {
-            Show();
-            Activate();
-            NavigateToProcessoProducao();
-        }
-    }
-
-    private async Task OpenDiagnosticoConsumoSap261Async()
-    {
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, RotinaLeituraProducao, "Diagnóstico Consumo SAP 261")) return;
-
-        using Processo.DiagnosticoConsumoSap261Form form = new();
-        Hide();
-
-        try
-        {
-            form.ShowDialog(this);
-        }
-        finally
-        {
-            Show();
-            Activate();
-            NavigateToProcessoProducao();
-        }
     }
 
     private async Task OpenConsultaOrdemProducaoAsync()
