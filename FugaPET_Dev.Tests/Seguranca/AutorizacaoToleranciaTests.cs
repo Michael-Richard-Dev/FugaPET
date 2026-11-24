@@ -24,12 +24,26 @@ public sealed class AutorizacaoToleranciaTests
 
         public RepositorioFalso() : base(new FabricaConexaoNula()) { }
 
+        /// <summary>Quantas vezes o repositorio foi acionado — uma gravacao por CHAMADA, nao por linha.</summary>
+        public int Chamadas;
+
         public override Task<long> RegistrarAsync(
             LiberacaoToleranciaRecebimento liberacao, CancellationToken cancellationToken = default)
         {
             if (Explode) { throw new InvalidOperationException("banco fora"); }
+            Chamadas++;
             Gravadas.Add(liberacao);
             return Task.FromResult((long)Gravadas.Count);
+        }
+
+        public override Task RegistrarLoteAsync(
+            IReadOnlyList<LiberacaoToleranciaRecebimento> liberacoes,
+            CancellationToken cancellationToken = default)
+        {
+            if (Explode) { throw new InvalidOperationException("banco fora"); }
+            Chamadas++;
+            Gravadas.AddRange(liberacoes);
+            return Task.CompletedTask;
         }
     }
 
@@ -199,6 +213,93 @@ public sealed class AutorizacaoToleranciaTests
 
         Assert.False(AutorizacaoToleranciaServico.PossuiPermissaoDeLiberacao(falso));
         Assert.True(AutorizacaoToleranciaServico.PossuiPermissaoDeLiberacao(Gerente(true)));
+    }
+
+    // ---------------------------------------------------------------- finalizacao: varios itens
+
+    private static ContextoEstouroTolerancia Falta(string item, string material, decimal apurada)
+        => new()
+        {
+            NumeroPedido = "4500001234",
+            NumeroItem = item,
+            Material = material,
+            QuantidadePedida = 1000m,
+            QuantidadeApurada = apurada,
+            LimiteAplicado = 900m,
+            PercentualTolerancia = 10m,
+            TipoEstouro = "ABAIXO_DO_PISO",
+            LoginOperador = "OPERADOR",
+            Terminal = "TERMINAL_TI_TESTE",
+        };
+
+    /// <summary>
+    /// UMA senha digitada, UMA gravacao, mas UMA LINHA POR ITEM. Resumir os tres itens numa linha so
+    /// tiraria do log justamente o que ele existe para responder: qual material faltou, e quanto.
+    /// </summary>
+    [Fact]
+    public async Task VariosItensAbaixoDoPiso_UmaAutenticacao_UmaLinhaPorItem()
+    {
+        RepositorioFalso repo = new();
+        int autenticacoes = 0;
+        AutorizacaoToleranciaServico s = Servico(repo, (_, _) =>
+        {
+            autenticacoes++;
+            return ResultadoAutenticacao.Ok(Gerente(true));
+        });
+
+        ResultadoAutorizacaoTolerancia r = await s.AutorizarAsync(
+            "GERENTE", "senha",
+            [Falta("00010", "2000042", 880m), Falta("00020", "2000043", 700m), Falta("00030", "2000044", 10m)]);
+
+        Assert.True(r.Autorizada);
+        Assert.Equal(1, autenticacoes);
+        Assert.Equal(1, repo.Chamadas);      // uma transacao, nao tres
+        Assert.Equal(3, repo.Gravadas.Count);
+        Assert.Equal(["2000042", "2000043", "2000044"], repo.Gravadas.Select(g => g.Contexto.Material));
+        Assert.All(repo.Gravadas, g => Assert.Equal(LiberacaoToleranciaRecebimento.Autorizada, g.Resultado));
+        // Os numeros de cada item vao proprios, nao copiados do primeiro.
+        Assert.Equal([880m, 700m, 10m], repo.Gravadas.Select(g => g.Contexto.QuantidadeApurada));
+    }
+
+    [Fact]
+    public async Task LoteRecusado_RegistraTodosOsItensComoRecusados()
+    {
+        RepositorioFalso repo = new();
+        AutorizacaoToleranciaServico s = Servico(repo, (_, _) => ResultadoAutenticacao.Falha("x"));
+
+        ResultadoAutorizacaoTolerancia r = await s.AutorizarAsync(
+            "FULANO", "errada", [Falta("00010", "2000042", 880m), Falta("00020", "2000043", 700m)]);
+
+        Assert.False(r.Autorizada);
+        Assert.Equal(2, repo.Gravadas.Count);
+        Assert.All(repo.Gravadas, g => Assert.Equal(LiberacaoToleranciaRecebimento.Recusada, g.Resultado));
+    }
+
+    /// <summary>
+    /// O fail-closed do lote e a razao de existir a transacao: se a gravacao falha, NADA foi gravado
+    /// e nada e liberado. O desfecho parcial — dois itens autorizados de tres — nao existe.
+    /// </summary>
+    [Fact]
+    public async Task LoteQueNaoGrava_NAO_Autoriza()
+    {
+        RepositorioFalso repo = new() { Explode = true };
+        AutorizacaoToleranciaServico s = Servico(repo, (_, _) => ResultadoAutenticacao.Ok(Gerente(true)));
+
+        ResultadoAutorizacaoTolerancia r = await s.AutorizarAsync(
+            "GERENTE", "senha", [Falta("00010", "2000042", 880m), Falta("00020", "2000043", 700m)]);
+
+        Assert.False(r.Autorizada);
+        Assert.Empty(repo.Gravadas);
+    }
+
+    [Fact]
+    public async Task LoteVazio_NaoEChamadaValida()
+    {
+        RepositorioFalso repo = new();
+        AutorizacaoToleranciaServico s = Servico(repo, (_, _) => ResultadoAutenticacao.Ok(Gerente(true)));
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => s.AutorizarAsync("GERENTE", "senha", Array.Empty<ContextoEstouroTolerancia>()));
     }
 
     // ---------------------------------------------------------------- so estouro e liberavel

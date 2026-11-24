@@ -54,13 +54,39 @@ public sealed class AutorizacaoToleranciaServico
     /// Autoriza (ou recusa) o estouro. Qualquer desfecho que nao seja autorizacao comprovada devolve
     /// recusa — nao ha caminho em que a duvida libere.
     /// </summary>
-    public async Task<ResultadoAutorizacaoTolerancia> AutorizarAsync(
+    public Task<ResultadoAutorizacaoTolerancia> AutorizarAsync(
         string login,
         string senha,
         ContextoEstouroTolerancia contexto,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contexto);
+        return AutorizarAsync(login, senha, [contexto], cancellationToken);
+    }
+
+    /// <summary>
+    /// Autoriza (ou recusa) VARIOS estouros com UMA credencial — o caso da finalizacao, em que mais
+    /// de um item do pedido pode estar abaixo do piso.
+    /// <para>
+    /// Uma digitacao de senha para a decisao inteira, e nao uma por item: a decisao do gerente e
+    /// "este recebimento pode ser finalizado assim", nao N decisoes independentes. O log continua
+    /// com UMA LINHA POR ITEM, com os numeros daquele item — resumir os itens numa linha so tiraria
+    /// do log justamente o que ele existe para responder: qual material saiu do limite, e quanto.
+    /// </para>
+    /// </summary>
+    public async Task<ResultadoAutorizacaoTolerancia> AutorizarAsync(
+        string login,
+        string senha,
+        IReadOnlyList<ContextoEstouroTolerancia> contextos,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contextos);
+        if (contextos.Count == 0)
+        {
+            throw new ArgumentException("Nada a autorizar.", nameof(contextos));
+        }
+
+        ContextoEstouroTolerancia contexto = contextos[0];
         string usuario = (login ?? string.Empty).Trim();
 
         if (usuario.Length == 0 || string.IsNullOrEmpty(senha))
@@ -85,7 +111,7 @@ public sealed class AutorizacaoToleranciaServico
 
         if (!autenticacao.Sucesso || autenticacao.Sessao is null)
         {
-            await RegistrarRecusaBestEffortAsync(contexto, usuario, null, MotivoCredencialInvalida, cancellationToken);
+            await RegistrarRecusaBestEffortAsync(contextos, usuario, null, MotivoCredencialInvalida, cancellationToken);
             return ResultadoAutorizacaoTolerancia.Nao(MotivoCredencialInvalida);
         }
 
@@ -96,20 +122,20 @@ public sealed class AutorizacaoToleranciaServico
             // Aqui a mensagem é ESPECÍFICA de propósito, ao contrário da credencial inválida: a
             // pessoa está em pé na balança e precisa saber que errou de usuário, não de senha.
             await RegistrarRecusaBestEffortAsync(
-                contexto, usuario, gerente.IdUsuario, MotivoSemPermissao, cancellationToken);
+                contextos, usuario, gerente.IdUsuario, MotivoSemPermissao, cancellationToken);
             return ResultadoAutorizacaoTolerancia.Nao(MotivoSemPermissao);
         }
 
         try
         {
-            await _repositorio.RegistrarAsync(
-                new LiberacaoToleranciaRecebimento
+            await _repositorio.RegistrarLoteAsync(
+                [.. contextos.Select(c => new LiberacaoToleranciaRecebimento
                 {
-                    Contexto = contexto,
+                    Contexto = c,
                     Resultado = LiberacaoToleranciaRecebimento.Autorizada,
                     CodigoUsuarioAutorizador = gerente.IdUsuario,
                     LoginAutorizador = usuario,
-                },
+                })],
                 cancellationToken);
         }
         catch (Exception)
@@ -134,7 +160,7 @@ public sealed class AutorizacaoToleranciaServico
                PermissoesSistema.Acoes.LiberarTolerancia));
 
     private async Task RegistrarRecusaBestEffortAsync(
-        ContextoEstouroTolerancia contexto,
+        IReadOnlyList<ContextoEstouroTolerancia> contextos,
         string login,
         long? codigoUsuario,
         string motivo,
@@ -142,15 +168,17 @@ public sealed class AutorizacaoToleranciaServico
     {
         try
         {
-            await _repositorio.RegistrarAsync(
-                new LiberacaoToleranciaRecebimento
+            // Lote tambem na recusa, para o log ler igual nos dois desfechos. Aqui a transacao e
+            // conveniencia, nao regra: a recusa ja bloqueia por si.
+            await _repositorio.RegistrarLoteAsync(
+                [.. contextos.Select(c => new LiberacaoToleranciaRecebimento
                 {
-                    Contexto = contexto,
+                    Contexto = c,
                     Resultado = LiberacaoToleranciaRecebimento.Recusada,
                     MotivoRecusa = motivo,
                     CodigoUsuarioAutorizador = codigoUsuario,
                     LoginAutorizador = login,
-                },
+                })],
                 cancellationToken);
         }
         catch (Exception erro)

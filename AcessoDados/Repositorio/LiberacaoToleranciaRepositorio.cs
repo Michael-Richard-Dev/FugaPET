@@ -34,6 +34,48 @@ public class LiberacaoToleranciaRepositorio : RepositorioBase
         LiberacaoToleranciaRecebimento liberacao, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(liberacao);
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        return await InserirAsync(conexao, null, liberacao, cancellationToken);
+    }
+
+    /// <summary>
+    /// Registra VARIAS liberacoes numa UNICA transacao — o caso da finalizacao, em que mais de um
+    /// item pode estar abaixo do piso e o gerente autoriza o recebimento inteiro de uma vez.
+    /// <para>
+    /// Uma transacao so, e nao N chamadas, por causa do fail-closed: se a terceira gravacao falhasse
+    /// depois de duas gravadas, o banco ficaria com duas linhas AUTORIZADA de uma liberacao que NAO
+    /// valeu. Ou tudo entra, ou nada entra, e so entao a liberacao existe.
+    /// </para>
+    /// </summary>
+    public virtual async Task RegistrarLoteAsync(
+        IReadOnlyList<LiberacaoToleranciaRecebimento> liberacoes,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(liberacoes);
+        if (liberacoes.Count == 0)
+        {
+            return;
+        }
+
+        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
+        await using NpgsqlTransaction transacao = await conexao.BeginTransactionAsync(cancellationToken);
+
+        foreach (LiberacaoToleranciaRecebimento liberacao in liberacoes)
+        {
+            await InserirAsync(conexao, transacao, liberacao, cancellationToken);
+        }
+
+        await transacao.CommitAsync(cancellationToken);
+    }
+
+    private static async Task<long> InserirAsync(
+        NpgsqlConnection conexao,
+        NpgsqlTransaction? transacao,
+        LiberacaoToleranciaRecebimento liberacao,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(liberacao);
         ContextoEstouroTolerancia c = liberacao.Contexto;
 
         const string sql = """
@@ -51,8 +93,7 @@ public class LiberacaoToleranciaRepositorio : RepositorioBase
             RETURNING codigo_liberacao;
             """;
 
-        await using NpgsqlConnection conexao = await CriarConexaoAbertaAsync(cancellationToken);
-        await using NpgsqlCommand comando = new(sql, conexao);
+        await using NpgsqlCommand comando = new(sql, conexao, transacao);
         comando.Parameters.AddWithValue("@pedido", c.NumeroPedido);
         comando.Parameters.AddWithValue("@item", c.NumeroItem);
         comando.Parameters.AddWithValue("@material", c.Material);
