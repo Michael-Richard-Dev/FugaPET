@@ -11,12 +11,14 @@ public partial class CadastroForm : UserControl
     public event EventHandler? ModeloEtiquetaRequested;
     public event EventHandler? VinculoProdutoEtiquetaRequested;
     public event EventHandler? ToleranciaRecebimentoRequested;
+    public event EventHandler? ToleranciaProducaoRequested;
 
     public CadastroForm()
     {
         InitializeComponent();
         CriarCartaoVinculoProdutoEtiqueta();
         CriarCartaoToleranciaRecebimento();
+        CriarCartaoToleranciaProducao();
         if (System.ComponentModel.LicenseManager.UsageMode != System.ComponentModel.LicenseUsageMode.Designtime)
         {
             AplicarFiltroPermissoes();
@@ -57,6 +59,25 @@ public partial class CadastroForm : UserControl
             // virarem um par indistinguivel no meio da grade.
             corDoIcone: Color.FromArgb(222, 247, 236),
             aoClicar: OnToleranciaRecebimentoClick);
+
+    /// <summary>
+    /// Tolerancia por produto nos processos de producao (incremento 071). Terceiro cartao clonado —
+    /// ver <see cref="CriarCartaoClonado"/>.
+    /// <para>
+    /// Cartao SEPARADO do de Recebimento, e nao uma aba dentro dele, porque sao decisoes de
+    /// naturezas diferentes: la a referencia e o pedido de compra, aqui e a ordem de producao. Juntar
+    /// os dois numa tela so faria o usuario escolher a referencia errada sem perceber.
+    /// </para>
+    /// </summary>
+    private void CriarCartaoToleranciaProducao()
+        => _cartaoToleranciaProducao = CriarCartaoClonado(
+            nome: "toleranciaProducaoCard",
+            titulo: "Tolerância de Produção",
+            descricao: "Quanto a pesagem pode divergir da OP, por produto e processo.",
+            atalho: "F10",
+            // Azul-claro: terceiro tom, para os cartoes clonados continuarem distinguiveis entre si.
+            corDoIcone: Color.FromArgb(219, 234, 254),
+            aoClicar: OnToleranciaProducaoClick);
 
     /// <summary>
     /// Monta um cartao novo COPIANDO a geometria do cartao de Etiqueta que ja existe.
@@ -123,6 +144,7 @@ public partial class CadastroForm : UserControl
 
     private Control? _cartaoVinculoProdutoEtiqueta;
     private Control? _cartaoToleranciaRecebimento;
+    private Control? _cartaoToleranciaProducao;
 
     /// <summary>Copia aparencia e geometria de um rotulo do cartao, trocando so o texto.</summary>
     private static Label ClonarRotuloDoCartao(Label modelo, string texto) => new()
@@ -142,6 +164,9 @@ public partial class CadastroForm : UserControl
 
     private void OnToleranciaRecebimentoClick(object? sender, EventArgs e)
         => ToleranciaRecebimentoRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnToleranciaProducaoClick(object? sender, EventArgs e)
+        => ToleranciaProducaoRequested?.Invoke(this, EventArgs.Empty);
 
     private void AplicarFiltroPermissoes()
     {
@@ -201,6 +226,17 @@ public partial class CadastroForm : UserControl
                 _cartaoToleranciaRecebimento,
                 Servicos.Seguranca.PermissoesSistema.Modulos.ProcessoProducao,
                 Servicos.Seguranca.PermissoesSistema.Rotinas.EntradaProduto);
+        }
+
+        // Entra por LEITURA_PRODUCAO, que e a rotina das proprias telas de Consumo e Semi-Acabado —
+        // mesma logica do cartao acima, e a mesma ressalva honesta: quem OPERA a producao pode mudar
+        // a propria tolerancia. Se virar perfil separado, e so trocar a rotina aqui e no painel.
+        if (_cartaoToleranciaProducao is not null)
+        {
+            ConfigurarVisibilidadeCadastro(
+                _cartaoToleranciaProducao,
+                Servicos.Seguranca.PermissoesSistema.Modulos.ProcessoProducao,
+                Servicos.Seguranca.PermissoesSistema.Rotinas.LeituraProducao);
         }
     }
 

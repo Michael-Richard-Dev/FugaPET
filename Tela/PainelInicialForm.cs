@@ -664,6 +664,8 @@ public partial class PainelInicialForm : Form
 
         _cadastroForm.ToleranciaRecebimentoRequested -= CadastroForm_ToleranciaRecebimentoRequested;
         _cadastroForm.ToleranciaRecebimentoRequested += CadastroForm_ToleranciaRecebimentoRequested;
+        _cadastroForm.ToleranciaProducaoRequested -= CadastroForm_ToleranciaProducaoRequested;
+        _cadastroForm.ToleranciaProducaoRequested += CadastroForm_ToleranciaProducaoRequested;
 
         contentScrollPanel.SuspendLayout();
         contentScrollPanel.Controls.Clear();
@@ -1015,6 +1017,35 @@ public partial class PainelInicialForm : Form
                 "Tolerância de Recebimento")) return;
 
         using Cadastro.ToleranciaRecebimentoMaterialForm form = new();
+
+        Hide();
+
+        try
+        {
+            form.ShowDialog(this);
+        }
+        finally
+        {
+            Show();
+            NavigateToCadastro();
+        }
+    }
+
+    /// <summary>
+    /// Abre a Tolerancia de Producao por produto e processo (incremento 071).
+    /// <para>
+    /// Entra por PROCESSO_PRODUCAO/LEITURA_PRODUCAO, a permissao das proprias telas de Consumo e
+    /// Semi-Acabado — ver a ressalva em <c>CadastroForm.AplicarFiltroPermissoes</c>.
+    /// </para>
+    /// </summary>
+    private async void CadastroForm_ToleranciaProducaoRequested(object? sender, EventArgs e)
+    {
+        if (!await PermiteAbrirTelaAsync(
+                PermissoesSistema.Modulos.ProcessoProducao,
+                PermissoesSistema.Rotinas.LeituraProducao,
+                "Tolerância de Produção")) return;
+
+        using Cadastro.ToleranciaProcessoProducaoForm form = new();
 
         Hide();
 
@@ -1426,6 +1457,14 @@ public partial class PainelInicialForm : Form
             if (e.KeyCode == Keys.F9)
             {
                 CadastroForm_ToleranciaRecebimentoRequested(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
+
+            // F10 abre a Tolerancia de Producao (incremento 071).
+            if (e.KeyCode == Keys.F10)
+            {
+                CadastroForm_ToleranciaProducaoRequested(this, EventArgs.Empty);
                 e.Handled = true;
                 return;
             }

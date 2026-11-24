@@ -152,6 +152,46 @@ public static class FabricaControladoresCadastro
             CriarAuditoriaServico());
     }
 
+    /// <summary>
+    /// Tolerancia por produto nos processos de producao (incremento 071). Mesma composicao do 069:
+    /// le o catalogo LOCAL, e o SAP so e tocado pelo botao de sincronizar.
+    /// </summary>
+    public static ToleranciaProcessoProducaoController CriarToleranciaProcessoProducaoController()
+        => new(CriarToleranciaProcessoProducaoServico());
+
+    /// <summary>
+    /// O mesmo servico que a tela usa, para as TELAS DE PROCESSO consultarem a tolerancia do produto.
+    /// Uma composicao so: se o Consumo montasse a sua, as duas poderiam ler de lugares diferentes.
+    /// </summary>
+    public static ToleranciaProcessoProducaoServico CriarToleranciaProcessoProducaoServico()
+    {
+        ToleranciaProcessoProducaoRepositorio repositorio = new(FabricaConexao.Value);
+        CatalogoProdutoCentroRepositorio catalogoRepositorio = new(FabricaConexao.Value);
+
+        SincronizacaoCatalogoProdutoServico sincronizacao = new(
+            catalogoRepositorio,
+            FabricaCatalogoProdutoCentroSapServico.Criar());
+
+        return new ToleranciaProcessoProducaoServico(
+            repositorio,
+            sincronizacao,
+            CriarAuditoriaServico());
+    }
+
+    /// <summary>
+    /// Leitura direta da tolerancia de UM produto num processo, para as telas de Consumo e
+    /// Semi-Acabado cobrarem o limite a cada pesagem sem carregar o centro inteiro.
+    /// </summary>
+    public static ToleranciaProcessoProducaoRepositorio CriarToleranciaProcessoProducaoRepositorio()
+        => new(FabricaConexao.Value);
+
+    /// <summary>
+    /// Liberacao gerencial do estouro de tolerancia na PRODUCAO (071). Reusa a mesma autenticacao e
+    /// a mesma permissao do Recebimento; muda so a tabela de log.
+    /// </summary>
+    public static AutorizacaoToleranciaProducaoServico CriarAutorizacaoToleranciaProducaoServico()
+        => new(CriarAutenticacaoServico(), new LiberacaoToleranciaProcessoRepositorio(FabricaConexao.Value));
+
     public static CampoEtiquetaController CriarCampoEtiquetaController()
     {
         CampoEtiquetaRepositorio repositorio = new(FabricaConexao.Value);
