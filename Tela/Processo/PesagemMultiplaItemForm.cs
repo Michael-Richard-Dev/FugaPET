@@ -208,6 +208,10 @@ public sealed class PesagemMultiplaItemForm : Form
             _itemExcluirPesagem = new ToolStripMenuItem("Excluir pesagem");
             _itemExcluirPesagem.Click += async (_, _) => await ExcluirPesagemSelecionadaAsync();
             menu.Items.Add(_itemExcluirPesagem);
+            // O estado do item e recalculado AO ABRIR o menu. Sem isto ele ficava no valor inicial
+            // (habilitado) ate alguma exclusao acontecer — foi o que fez o usuario clicar num item
+            // vivo que nao fazia nada.
+            menu.Opening += (_, _) => AtualizarEstadoAcaoExcluirPesagem();
             _pesagensGrid.ContextMenuStrip = menu;
             _pesagensGrid.CellMouseDown += (_, e) =>
             {
@@ -240,7 +244,12 @@ public sealed class PesagemMultiplaItemForm : Form
         EntradaProdutoPesagem pesagem = _pesagens[indice];
         if (pesagem.CodigoEntradaProdutoPesagem is not long codigo || codigo <= 0)
         {
-            return; // pesagem em memória (sem PK persistida) não é excluível por este fluxo.
+            // PESAGEM AINDA EM MEMÓRIA (sem PK). Até 24/11/2026 este caminho era um `return` calado:
+            // o item "Excluir pesagem" aparecia, o usuário clicava e NADA acontecia — sem apagar e sem
+            // explicar. O caminho que funciona sempre existiu, com outro nome: o botão "Cancelar
+            // leitura". Um menu que promete excluir precisa excluir, ou dizer por que não pode.
+            await CancelarPesagemEmMemoriaSelecionadaAsync(indice);
+            return;
         }
 
         _exclusaoPesagemEmAndamento = true;
@@ -264,6 +273,51 @@ public sealed class PesagemMultiplaItemForm : Form
         }
     }
 
+    /// <summary>
+    /// Tira da operação uma pesagem que ainda não foi gravada, pela MESMA primitiva do botão
+    /// "Cancelar leitura" — o peso sai do total e a linha fica marcada como CANCELADA.
+    /// <para>
+    /// Reusa o cancelamento canônico em vez de remover a linha da lista: quem manda na operação é o
+    /// controlador, e apagar a linha só aqui deixaria a tela contando uma coisa e a operação, outra.
+    /// </para>
+    /// </summary>
+    private async Task CancelarPesagemEmMemoriaSelecionadaAsync(int indice)
+    {
+        if (!_modoCanonico || _cancelarPesagemCanonicaAsync is null)
+        {
+            _statusLabel.Text = "Esta pesagem ainda não foi gravada e não há como cancelá-la aqui.";
+            return;
+        }
+
+        if (MessageBox.Show(
+                "Esta pesagem ainda não foi gravada." + Environment.NewLine + Environment.NewLine
+                + "Excluir agora retira o peso do total e marca a leitura como CANCELADA."
+                + Environment.NewLine + Environment.NewLine
+                + "Confirma?",
+                "Excluir pesagem",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        _exclusaoPesagemEmAndamento = true;
+        AtualizarEstadoAcaoExcluirPesagem();
+        try
+        {
+            await CancelarPesoCanonicoAsync(indice);
+        }
+        finally
+        {
+            _exclusaoPesagemEmAndamento = false;
+            if (!IsDisposed && !Disposing)
+            {
+                AtualizarEstadoAcaoExcluirPesagem();
+            }
+        }
+    }
+
     private void AtualizarEstadoAcaoExcluirPesagem()
     {
         if (_itemExcluirPesagem is null)
@@ -271,13 +325,25 @@ public sealed class PesagemMultiplaItemForm : Form
             return;
         }
 
-        bool pesagemPersistidaSelecionada =
+        bool temLinha =
             _pesagensGrid.CurrentRow is DataGridViewRow linha &&
             linha.Index >= 0 &&
-            linha.Index < _pesagens.Count &&
-            _pesagens[linha.Index].CodigoEntradaProdutoPesagem is > 0;
+            linha.Index < _pesagens.Count;
 
-        _itemExcluirPesagem.Enabled = !_exclusaoPesagemEmAndamento && pesagemPersistidaSelecionada;
+        bool excluivel = false;
+        if (temLinha)
+        {
+            EntradaProdutoPesagem selecionada = _pesagens[_pesagensGrid.CurrentRow!.Index];
+            bool jaCancelada = string.Equals(
+                selecionada.StatusPesagem, "CANCELADA", StringComparison.OrdinalIgnoreCase);
+
+            // Persistida: exclui no banco. Em memoria: cancela na operacao. Ja cancelada: nada a fazer.
+            excluivel = !jaCancelada
+                && (selecionada.CodigoEntradaProdutoPesagem is > 0
+                    || (_modoCanonico && _cancelarPesagemCanonicaAsync is not null));
+        }
+
+        _itemExcluirPesagem.Enabled = !_exclusaoPesagemEmAndamento && excluivel;
     }
 
     private void ConfigurarEntradaManual()
