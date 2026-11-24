@@ -209,7 +209,7 @@ partial class CadastroForm
         setorIconPanel.BorderRadius = 9;
         setorIconPanel.Controls.Add(setorIconLabel);
         setorIconPanel.Cursor = Cursors.Hand;
-        setorIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        setorIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         setorIconPanel.Location = new Point(82, 20);
         setorIconPanel.Name = "setorIconPanel";
         setorIconPanel.ShadowBlur = 0;
@@ -321,7 +321,7 @@ partial class CadastroForm
         cargoIconPanel.BorderRadius = 9;
         cargoIconPanel.Controls.Add(cargoIconLabel);
         cargoIconPanel.Cursor = Cursors.Hand;
-        cargoIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        cargoIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         cargoIconPanel.Location = new Point(82, 20);
         cargoIconPanel.Name = "cargoIconPanel";
         cargoIconPanel.ShadowBlur = 0;
@@ -432,7 +432,7 @@ partial class CadastroForm
         taraIconPanel.BorderRadius = 9;
         taraIconPanel.Controls.Add(taraIconLabel);
         taraIconPanel.Cursor = Cursors.Hand;
-        taraIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        taraIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         taraIconPanel.Location = new Point(82, 20);
         taraIconPanel.Name = "taraIconPanel";
         taraIconPanel.ShadowBlur = 0;
@@ -542,7 +542,7 @@ partial class CadastroForm
         balancaIconPanel.BorderRadius = 9;
         balancaIconPanel.Controls.Add(balancaIconLabel);
         balancaIconPanel.Cursor = Cursors.Hand;
-        balancaIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        balancaIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         balancaIconPanel.Location = new Point(82, 20);
         balancaIconPanel.Name = "balancaIconPanel";
         balancaIconPanel.ShadowBlur = 0;
@@ -652,7 +652,7 @@ partial class CadastroForm
         etiquetaIconPanel.BorderRadius = 9;
         etiquetaIconPanel.Controls.Add(etiquetaIconLabel);
         etiquetaIconPanel.Cursor = Cursors.Hand;
-        etiquetaIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        etiquetaIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         etiquetaIconPanel.Location = new Point(82, 20);
         etiquetaIconPanel.Name = "etiquetaIconPanel";
         etiquetaIconPanel.ShadowBlur = 0;
@@ -762,7 +762,7 @@ partial class CadastroForm
         tipoTaraIconPanel.BorderRadius = 9;
         tipoTaraIconPanel.Controls.Add(tipoTaraIconLabel);
         tipoTaraIconPanel.Cursor = Cursors.Hand;
-        tipoTaraIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        tipoTaraIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         tipoTaraIconPanel.Location = new Point(82, 20);
         tipoTaraIconPanel.Name = "tipoTaraIconPanel";
         tipoTaraIconPanel.ShadowBlur = 0;
@@ -874,7 +874,7 @@ partial class CadastroForm
         modeloEtiquetaIconPanel.BorderRadius = 9;
         modeloEtiquetaIconPanel.Controls.Add(modeloEtiquetaIconLabel);
         modeloEtiquetaIconPanel.Cursor = Cursors.Hand;
-        modeloEtiquetaIconPanel.FillColor = Color.FromArgb(254, 226, 226);
+        modeloEtiquetaIconPanel.FillColor = Color.FromArgb(253, 228, 211);
         modeloEtiquetaIconPanel.Location = new Point(82, 20);
         modeloEtiquetaIconPanel.Name = "modeloEtiquetaIconPanel";
         modeloEtiquetaIconPanel.ShadowBlur = 0;

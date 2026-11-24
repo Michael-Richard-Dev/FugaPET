@@ -19,11 +19,50 @@ public partial class CadastroForm : UserControl
         CriarCartaoVinculoProdutoEtiqueta();
         CriarCartaoToleranciaRecebimento();
         CriarCartaoToleranciaProducao();
+        AplicarPaletaDosCartoes();
         if (System.ComponentModel.LicenseManager.UsageMode != System.ComponentModel.LicenseUsageMode.Designtime)
         {
             AplicarFiltroPermissoes();
         }
         WireCardClickEvents();
+    }
+
+    /// <summary>
+    /// O ladrilho atras do icone, em TODOS os cartoes de modulo. Tinta clara do laranja da paleta.
+    /// </summary>
+    internal static readonly Color LadrilhoDoIcone = Color.FromArgb(253, 228, 211);
+
+    /// <summary>
+    /// Pinta os ladrilhos dos icones com a paleta do sistema (pedido do usuario em 24/11/2026:
+    /// "os modulos estao com cores diferentes... preserve o Disponivel apenas com sua cor verde, as
+    /// demais cores tem que ser alteradas para laranja").
+    /// <para>
+    /// Os dez cartoes tinham QUATRO tons: rosa (#FEE2E2, resto do vermelho de antes do reskin
+    /// laranja) nos sete do Designer, pessego no Vinculo, verde-agua na Tolerancia de Recebimento e
+    /// azul na de Producao. Os tres ultimos foram escolha minha, para os cartoes clonados nao
+    /// virarem um par indistinguivel — distinguir por COR entre modulos nao vale o preco de a tela
+    /// parecer de outro sistema. Quem distingue e o titulo, o icone e o atalho.
+    /// </para>
+    /// <para>
+    /// A cor e aplicada PERCORRENDO os cartoes, nao repetida em dez pontos: a troca vale para
+    /// qualquer cartao novo sem ninguem lembrar de pinta-lo, e nao ha literal para alguem copiar
+    /// errado. O "Disponivel" verde nao e tocado, e a cor do icone e da seta ja era o laranja
+    /// escuro da paleta.
+    /// </para>
+    /// </summary>
+    private void AplicarPaletaDosCartoes()
+    {
+        foreach (Control cartao in modulesFlowLayoutPanel.Controls)
+        {
+            foreach (Control parte in cartao.Controls)
+            {
+                // O ladrilho do icone e o unico RoundedPanel dentro de um cartao.
+                if (parte is Controls.RoundedPanel ladrilho)
+                {
+                    ladrilho.FillColor = LadrilhoDoIcone;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -42,7 +81,6 @@ public partial class CadastroForm : UserControl
             titulo: "Vínculo de Produto",
             descricao: "Produto acabado, etiqueta e processo de pesagem.",
             atalho: "F8",
-            corDoIcone: Color.FromArgb(254, 240, 221),
             aoClicar: OnVinculoProdutoEtiquetaClick);
 
     /// <summary>
@@ -55,9 +93,6 @@ public partial class CadastroForm : UserControl
             titulo: "Tolerância de Recebimento",
             descricao: "Quanto a pesagem pode divergir do pedido, por material.",
             atalho: "F9",
-            // Verde-agua: distingue do laranja-claro do Vinculo, para os dois cartoes clonados nao
-            // virarem um par indistinguivel no meio da grade.
-            corDoIcone: Color.FromArgb(222, 247, 236),
             aoClicar: OnToleranciaRecebimentoClick);
 
     /// <summary>
@@ -75,8 +110,6 @@ public partial class CadastroForm : UserControl
             titulo: "Tolerância de Produção",
             descricao: "Quanto a pesagem pode divergir da OP, por produto e processo.",
             atalho: "F10",
-            // Azul-claro: terceiro tom, para os cartoes clonados continuarem distinguiveis entre si.
-            corDoIcone: Color.FromArgb(219, 234, 254),
             aoClicar: OnToleranciaProducaoClick);
 
     /// <summary>
@@ -89,7 +122,7 @@ public partial class CadastroForm : UserControl
     /// </para>
     /// </summary>
     private Control CriarCartaoClonado(
-        string nome, string titulo, string descricao, string atalho, Color corDoIcone, EventHandler aoClicar)
+        string nome, string titulo, string descricao, string atalho, EventHandler aoClicar)
     {
         Controls.RoundedPanel cartao = new()
         {
@@ -108,8 +141,9 @@ public partial class CadastroForm : UserControl
             BackColor = etiquetaIconPanel.BackColor,
             BorderRadius = etiquetaIconPanel.BorderRadius,
             Cursor = Cursors.Hand,
-            // Cor propria para o cartao nao virar copia visual do de Etiqueta: sao coisas diferentes.
-            FillColor = corDoIcone,
+            // Mesmo ladrilho de todos: AplicarPaletaDosCartoes repinta, mas nascer ja certo evita o
+            // piscar do rosa herdado do cartao de Etiqueta.
+            FillColor = LadrilhoDoIcone,
             Location = etiquetaIconPanel.Location,
             Size = etiquetaIconPanel.Size,
         };
