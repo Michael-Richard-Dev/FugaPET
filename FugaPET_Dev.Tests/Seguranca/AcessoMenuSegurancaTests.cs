@@ -7,6 +7,7 @@ namespace FugaPET_Dev.Tests.Seguranca;
 /// Prova que a separacao Cadastro x Seguranca funciona: o administrador de seguranca acessa as
 /// telas de seguranca sem depender de nenhuma permissao de CADASTRO.
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class AcessoMenuSegurancaTests : IDisposable
 {
     public AcessoMenuSegurancaTests()

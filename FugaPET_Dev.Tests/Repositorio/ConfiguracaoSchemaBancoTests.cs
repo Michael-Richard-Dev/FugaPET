@@ -3,6 +3,7 @@ using Npgsql;
 
 namespace FugaPET_Dev.Tests.Repositorio;
 
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class ConfiguracaoSchemaBancoTests : IDisposable
 {
     private readonly string? _conexaoAnterior =

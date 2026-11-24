@@ -13,6 +13,7 @@ namespace FugaPET_Dev.Tests.Cadastro;
 /// .AtualizarComVinculosAsync) — isso exige teste de integracao com banco; aqui validamos o
 /// contrato C#: um unico idPerfilAcesso e repassado por chamada.
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class UsuarioAtualizacaoVinculosTests : IDisposable
 {
     public UsuarioAtualizacaoVinculosTests()

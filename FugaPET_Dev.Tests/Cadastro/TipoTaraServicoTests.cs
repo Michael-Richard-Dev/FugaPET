@@ -10,6 +10,7 @@ namespace FugaPET_Dev.Tests.Cadastro;
 /// Tarefa Tipo de Tara: regras do serviço (situação, duplicidade, e bloqueio de inativação com Tara ativa vinculada)
 /// + helpers puros de situação/referência.
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class TipoTaraServicoTests : IDisposable
 {
     public TipoTaraServicoTests()

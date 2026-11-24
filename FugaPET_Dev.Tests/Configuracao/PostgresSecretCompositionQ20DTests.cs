@@ -8,6 +8,7 @@ namespace FugaPET_Dev.Tests.Configuracao;
 /// string, é complementada EXCLUSIVAMENTE por FUGAPET_Q_POSTGRES_SENHA. Sem fallback HML, sem hardcode,
 /// ausência de secret permanece fail-closed.
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class PostgresSecretCompositionQ20DTests
 {
     private const string ConexaoQSemSenha =

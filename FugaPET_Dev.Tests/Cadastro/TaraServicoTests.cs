@@ -10,6 +10,7 @@ namespace FugaPET_Dev.Tests.Cadastro;
 /// Tarefa Tara: regras do serviço alinhadas a Setor/Cargo/TipoTara — validações de tamanho/peso, duplicidade
 /// GLOBAL por setor+tipo (ativo OU inativo), e situação que muda apenas por Inativar/Reativar.
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class TaraServicoTests : IDisposable
 {
     public TaraServicoTests()

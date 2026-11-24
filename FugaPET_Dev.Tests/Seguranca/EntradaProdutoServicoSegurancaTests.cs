@@ -12,6 +12,7 @@ namespace FugaPET_Dev.Tests.Seguranca;
 /// origem e pesos. RegistrarLancamentoAsync retorna ResultadoOperacao; excecoes de infra
 /// (null repositorio, DB fora do ar) propagam normalmente e sao testadas separadamente.
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class EntradaProdutoServicoSegurancaTests : IDisposable
 {
     public EntradaProdutoServicoSegurancaTests()

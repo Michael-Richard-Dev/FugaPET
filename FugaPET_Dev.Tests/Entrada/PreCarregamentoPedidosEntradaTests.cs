@@ -13,6 +13,7 @@ namespace FugaPET_Dev.Tests.Entrada;
 /// Pre-carregamento assincrono dos pedidos da Entrada (aquecimento do cache apos o login) e
 /// prioridade de CACHE LOCAL na consulta de pedido (GET especifico no SAP apenas como fallback).
 /// </summary>
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class PreCarregamentoPedidosEntradaTests
 {
     public PreCarregamentoPedidosEntradaTests()

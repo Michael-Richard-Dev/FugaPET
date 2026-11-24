@@ -4,6 +4,7 @@ using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Tests.Seguranca;
 
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class PermissoesEntradaProdutoH1Tests : IDisposable
 {
     public PermissoesEntradaProdutoH1Tests()

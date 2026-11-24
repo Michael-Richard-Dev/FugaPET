@@ -6,6 +6,7 @@ using FugaPET_Dev.Servicos.Seguranca;
 
 namespace FugaPET_Dev.Tests.Cadastro;
 
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class CargoServicoTests : IDisposable
 {
     public CargoServicoTests()

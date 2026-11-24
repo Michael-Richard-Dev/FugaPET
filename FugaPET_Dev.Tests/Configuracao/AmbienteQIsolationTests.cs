@@ -5,6 +5,7 @@ using FugaPET_Dev.Servicos.IntegracaoSap;
 
 namespace FugaPET_Dev.Tests.Configuracao;
 
+[Xunit.Collection(FugaPET_Dev.Tests.Configuracao.ColecaoConfiguracaoDeAmbiente.Nome)]
 public sealed class AmbienteQIsolationTests : IDisposable
 {
     private const string HostQ = "vhfufqs4ci.sap.fugacouros.com.br";
