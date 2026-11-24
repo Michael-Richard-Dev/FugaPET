@@ -157,3 +157,22 @@ public sealed class LiberacaoToleranciaDialog : Form
 
 /// <summary>Os números do estouro já formatados, para o diálogo não depender da regra.</summary>
 public sealed record VereditoToleranciaTexto(string Pedido, string Apurado, string Limite, string Percentual);
+
+/// <summary>
+/// Recusa de pesagem por tolerância, para os caminhos que só conseguem recusar lançando.
+/// <para>
+/// É o caso da janela de pesagens (<c>PesagemMultiplaItemForm</c>): o callback de registro devolve
+/// uma pesagem, e não um "não". A janela trata exceção do callback como recusa e publica a mensagem,
+/// então é por aí que a tolerância diz não — sem inventar uma pesagem inválida só para recusá-la
+/// depois, que deixaria estado sujo no meio do caminho.
+/// </para>
+/// </summary>
+public sealed class PesagemBloqueadaPorToleranciaException : InvalidOperationException
+{
+    public PesagemBloqueadaPorToleranciaException(string mensagem) : base(mensagem) { }
+
+    public PesagemBloqueadaPorToleranciaException() : base("Pesagem bloqueada pela tolerância do material.") { }
+
+    public PesagemBloqueadaPorToleranciaException(string mensagem, Exception innerException)
+        : base(mensagem, innerException) { }
+}

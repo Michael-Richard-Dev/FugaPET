@@ -938,6 +938,39 @@ public partial class ProcessoEntradaProdutoForm : Form
             return;
         }
 
+        // 24/11/2026 — A TELA PRECISA TER COMO SER FECHADA.
+        //
+        // Com a leitura ativa e a finalizacao recusada (tolerancia, por exemplo), este cancelamento
+        // dizia "finalize a leitura antes de sair" enquanto finalizar era exatamente o que nao
+        // passava. O usuario so saiu matando o processo no Gerenciador de Tarefas. Enquanto nada
+        // esta gravado nem gravando, sair e perda de pesos em memoria — e isso o operador pode
+        // decidir, desde que saiba o que perde.
+        //
+        // Os dois casos com estado REAL em risco continuam barrados: persistencia em andamento
+        // (_finalizandoPesagem) e arvore finalizada aguardando gravacao
+        // (_lotesFinalizadosAguardandoPersistencia). Esses nao sao escolha do operador.
+        if (_isProductionStarted && !_finalizandoPesagem && !_lotesFinalizadosAguardandoPersistencia)
+        {
+            DialogResult escolha = MessageBox.Show(
+                this,
+                "A leitura está ativa e há pesagens que ainda não foram gravadas." + Environment.NewLine
+                + Environment.NewLine
+                + "Sair agora DESCARTA essas pesagens. Nada foi gravado localmente nem enviado ao SAP."
+                + Environment.NewLine + Environment.NewLine
+                + "Sair mesmo assim?",
+                "Sair do recebimento",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (escolha == DialogResult.Yes)
+            {
+                _controller.LimparOperacaoComLotes();
+                _isProductionStarted = false;
+                return;   // deixa fechar
+            }
+        }
+
         e.Cancel = true;
         statusLabel.Text = _lotesFinalizadosAguardandoPersistencia
             ? "Existe uma entrada por lotes finalizada em memória e ainda não gravada. Tente novamente a gravação antes de sair."
@@ -3643,17 +3676,37 @@ public partial class ProcessoEntradaProdutoForm : Form
             tara,
             _idBalancaSelecionada,
             pesagensAtuais,
-            (peso, origem, leitura) => Task.FromResult(_controller.RegistrarPesagemOperacaoComLotes(
-                codigoItem,
-                peso,
-                EntradaProdutoQuantidadeSap.ConverterTaraParaKg(tara.PesoKg, "KG"),
-                tara.CodigoTara,
-                origem,
-                string.Equals(origem, EntradaProdutoPesagemCalculos.OrigemBalanca, StringComparison.OrdinalIgnoreCase)
-                    ? _idBalancaSelecionada
-                    : null,
-                leitura,
-                DateTimeOffset.Now)),
+            // A JANELA DE PESAGENS TAMBEM PASSA PELA TOLERANCIA.
+            //
+            // Ate 24/11/2026 este callback chamava o controlador DIRETO, sem verificacao nenhuma: era
+            // um terceiro caminho de pesagem, ao lado de LER PESO e DIGITAR PESO, e o unico sem a
+            // trava. Foi por aqui que entrou uma pesagem de material sem tolerancia cadastrada. Guarda
+            // em um caminho so nao e guarda — e o mesmo erro do codigo morto, de outra forma.
+            async (peso, origem, leitura) =>
+            {
+                decimal taraKg = EntradaProdutoQuantidadeSap.ConverterTaraParaKg(tara.PesoKg, "KG");
+
+                if (!await ToleranciaLiberaPesagemAsync(
+                        codigoItem,
+                        EntradaProdutoPesagemCalculos.CalcularPesoLiquido(peso, taraKg)))
+                {
+                    // A janela trata excecao do callback como recusa e mostra a mensagem. E o canal
+                    // que ela oferece para recusar sem inventar uma pesagem invalida.
+                    throw new PesagemBloqueadaPorToleranciaException(_ultimoMotivoBloqueioTolerancia);
+                }
+
+                return _controller.RegistrarPesagemOperacaoComLotes(
+                    codigoItem,
+                    peso,
+                    taraKg,
+                    tara.CodigoTara,
+                    origem,
+                    string.Equals(origem, EntradaProdutoPesagemCalculos.OrigemBalanca, StringComparison.OrdinalIgnoreCase)
+                        ? _idBalancaSelecionada
+                        : null,
+                    leitura,
+                    DateTimeOffset.Now);
+            },
             codigoLocalPesagem => Task.FromResult(_controller.CancelarPesagemOperacaoComLotes(codigoItem, codigoLocalPesagem)),
             imprimirPesagemAsync: null,
             reimprimirPesagemAsync: null,
@@ -4095,9 +4148,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
         if (!somenteFalta)
         {
-            statusLabel.Text = mensagem;
-            MessageBox.Show(this, mensagem, "Tolerância de recebimento",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            OferecerDescarteDaLeituraBloqueada(mensagem);
             return false;
         }
 
@@ -4107,10 +4158,68 @@ public partial class ProcessoEntradaProdutoForm : Form
                 Environment.NewLine,
                 bloqueados.Select(b => "• " + DescreverEstouroParaDialogo(b.Material, b.Veredito)));
 
-        return await PedirLiberacaoGerencialAsync(
-            [.. bloqueados.Select(b => MontarContextoEstouro(b.Material, b.NumeroItem, b.Veredito))],
-            detalhe,
-            mensagem);
+        if (await PedirLiberacaoGerencialAsync(
+                [.. bloqueados.Select(b => MontarContextoEstouro(b.Material, b.NumeroItem, b.Veredito))],
+                detalhe,
+                mensagem))
+        {
+            return true;
+        }
+
+        // Gerente nao veio, ou recusou: o operador nao pode ficar presto na tela por isso.
+        OferecerDescarteDaLeituraBloqueada(mensagem);
+        return false;
+    }
+
+    /// <summary>
+    /// A VÁLVULA DE SAÍDA do bloqueio de tolerância, e a razão de ela existir.
+    /// <para>
+    /// Em 24/11/2026 o usuário pesou um material sem tolerância cadastrada e ficou preso: a
+    /// finalização recusava, a tela só se fecha com a leitura encerrada, e as pesagens ainda em
+    /// memória não têm como ser excluídas (a exclusão só alcança pesagem já persistida). A única
+    /// saída foi matar o processo pelo Gerenciador de Tarefas. É a mesma armadilha do incidente 063:
+    /// guarda fail-closed sem caminho de liberação prende a operação de quem está trabalhando.
+    /// </para>
+    /// <para>
+    /// O bloqueio continua valendo — nada é gravado nem enviado fora do limite. O que se oferece é
+    /// DESCARTAR e recomeçar, que é honesto porque nesse ponto nada foi gravado: as pesagens desta
+    /// leitura vivem só na memória desta tela.
+    /// </para>
+    /// </summary>
+    private void OferecerDescarteDaLeituraBloqueada(string motivo)
+    {
+        statusLabel.Text = motivo;
+
+        DialogResult escolha = MessageBox.Show(
+            this,
+            motivo + Environment.NewLine + Environment.NewLine
+            + "Nada foi gravado: as pesagens desta leitura existem apenas na memória desta tela."
+            + Environment.NewLine + Environment.NewLine
+            + "Deseja DESCARTAR as pesagens e encerrar a leitura agora?" + Environment.NewLine
+            + "Os pesos lidos serão perdidos e o pedido continua carregado para uma nova tentativa."
+            + Environment.NewLine + Environment.NewLine
+            + "Escolhendo Não, a leitura segue ativa e você pode resolver a pendência — cadastrar a "
+            + "tolerância, ou chamar quem pode liberar — e parar a leitura de novo.",
+            "Tolerância de recebimento",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+
+        if (escolha != DialogResult.Yes)
+        {
+            return;
+        }
+
+        // Mesma primitiva do cancelamento sem leituras: limpa a operacao em memoria, encerra a
+        // leitura e NAO toca em lancamento persistido, arvore, banco ou SAP.
+        _controller.LimparOperacaoComLotes();
+        _isProductionStarted = false;
+        _lotesFinalizadosAguardandoPersistencia = false;
+        UpdateProductionState(false);
+        AtualizarEstadoVisualLocal(
+            EstadoVisualLocalEntrada.Pendente,
+            "leitura descartada por bloqueio de tolerância");
+        statusLabel.Text = "Leitura descartada. Nada foi gravado; resolva a tolerância e pese de novo.";
     }
 
     private bool ToleranciaPermiteFinalizar(
@@ -4188,6 +4297,9 @@ public partial class ProcessoEntradaProdutoForm : Form
     /// porta aberta para o resto do turno.
     /// </para>
     /// </summary>
+    /// <summary>Motivo do último bloqueio de tolerância, para quem recusa sem poder mostrar a caixa.</summary>
+    private string _ultimoMotivoBloqueioTolerancia = "Pesagem bloqueada pela tolerância do material.";
+
     private async Task<bool> ToleranciaLiberaPesagemAsync(long codigoItem, decimal pesoLiquidoNovo)
     {
         AvaliacaoToleranciaPesagem avaliacao = AvaliarToleranciaDaPesagem(
@@ -4198,13 +4310,20 @@ public partial class ProcessoEntradaProdutoForm : Form
             return true;
         }
 
+        _ultimoMotivoBloqueioTolerancia = avaliacao.Mensagem;
         VereditoTolerancia? veredito = avaliacao.Veredito;
 
         if (veredito?.Resultado != ResultadoTolerancia.AcimaDoTeto)
         {
             statusLabel.Text = avaliacao.Mensagem;
-            MessageBox.Show(this, avaliacao.Mensagem, "Tolerância de recebimento",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            // Sem caixa propria quando ja existe uma janela modal na frente: ela mostra a recusa, e
+            // duas caixas para o mesmo fato so atrapalham quem esta na balanca.
+            if (ReferenceEquals(ActiveForm, this))
+            {
+                MessageBox.Show(this, avaliacao.Mensagem, "Tolerância de recebimento",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+
             return false;
         }
 
@@ -4266,7 +4385,11 @@ public partial class ProcessoEntradaProdutoForm : Form
     {
         using LiberacaoToleranciaDialog dialogo = new(detalhe);
 
-        while (dialogo.ShowDialog(this) == DialogResult.OK)
+        // Dono = a janela que esta NA FRENTE, nao necessariamente esta tela: o estouro tambem pode vir
+        // da janela de pesagens, que e modal. Com dono atras dela o dialogo nasceria inacessivel.
+        IWin32Window dono = ActiveForm ?? (IWin32Window)this;
+
+        while (dialogo.ShowDialog(dono) == DialogResult.OK)
         {
             ResultadoAutorizacaoTolerancia resultado;
             try
