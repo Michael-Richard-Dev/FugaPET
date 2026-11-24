@@ -44,13 +44,24 @@ public sealed class CampoEtiquetaSelecaoConcorrenciaTests
     public void Repositorio_DeveLerCampoEMapeamentoEmUmComando()
     {
         string repositorio = LerArquivo("AcessoDados", "Repositorio", "CampoEtiquetaRepositorio.cs");
+
+        // ANCORA NO NOME DO METODO, nao na assinatura inteira. A ancora antiga exigia
+        // "public async Task<...>" e quebrou quando o metodo virou "public VIRTUAL async Task<...>"
+        // — mudanca que nada tem a ver com o que este teste afirma (ler campo e mapeamento num
+        // comando so). Pior: com inicio = -1 o recorte estourava ArgumentOutOfRange, e a falha
+        // aparecia como defeito de codigo em vez de ancora velha. Custou uma investigacao inteira
+        // em 24/11/2026.
         int inicio = repositorio.IndexOf(
-            "public async Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(",
+            "Task<CampoEtiquetaEdicaoAgregado?> ObterEdicaoAgregadaAsync(",
             StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "metodo ObterEdicaoAgregadaAsync nao encontrado no repositorio");
+
         int fim = repositorio.IndexOf(
-            "public async Task<bool> ExisteNomeNaEtiquetaAsync",
+            "Task<bool> ExisteNomeNaEtiquetaAsync",
             inicio,
             StringComparison.Ordinal);
+        Assert.True(fim > inicio, "ancora de fim (ExisteNomeNaEtiquetaAsync) nao encontrada apos o metodo");
+
         string metodo = repositorio[inicio..fim];
 
         Assert.Equal(1, ContarOcorrencias(metodo, "new(sql, conexao)"));
