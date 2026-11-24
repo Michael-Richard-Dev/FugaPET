@@ -48,6 +48,14 @@ public partial class ProcessoConsumoMaterialForm : Form
     private long? _idBalancaSelecionada;
     private long? _idTaraSelecionada;
     private readonly ProcessoConsumoMaterialController _controller = new();
+
+    /// <summary>
+    /// A trava de tolerância do Consumo (incremento 071). É a MESMA classe que o Semi-Acabado usa —
+    /// uma trava escrita duas vezes é uma trava que um dia vale só num lugar.
+    /// </summary>
+    private readonly GuardaToleranciaProducao _guardaTolerancia =
+        new(Modelo.Cadastro.ProcessoToleranciaProducao.Consumo);
+
     private readonly ModoConsumoMaterial _modoConsumo;
     private readonly ConfiguracaoTelaConsumoMaterial _configuracaoConsumo;
     private readonly ClassificadorOrdemConsumoMaterial _classificadorOrdemConsumo;
@@ -2672,6 +2680,31 @@ public partial class ProcessoConsumoMaterialForm : Form
 
         RegistrarDiagnosticoPesagemConsumo(pesoBruto, tara, pesoBruto - tara, taraAplicada.Origem);
 
+        // TETO DA TOLERANCIA (incremento 071) — antes de a pesagem entrar na lista. Depois de entrar,
+        // o peso ja faz parte do total do componente, e desfazer exigiria cancelar a pesagem.
+        //
+        // O total projetado soma o que o SAP JA registrou (QuantidadeConsumida) com o que esta so
+        // local, mais esta pesagem: a tolerancia e sobre quanto do componente foi consumido ao todo,
+        // nao sobre o que esta nesta sessao da tela.
+        if (!await _guardaTolerancia.PermitePesagemAsync(
+                this,
+                new ContextoPesagemProducao
+                {
+                    Centro = string.IsNullOrWhiteSpace(componente.Centro)
+                        ? Modelo.Cadastro.ToleranciaProcessoProducao.CentroPadrao
+                        : componente.Centro,
+                    Material = (componente.CodigoMaterial ?? string.Empty).Trim(),
+                    NumeroOrdem = _ordemConsumoAtual.NumeroOrdem,
+                    Operacao = componente.Operacao,
+                    QuantidadePrevista = ObterQuantidadePrevistaInicial(componente),
+                    Terminal = ObterNomeTerminalParaTolerancia(),
+                },
+                Math.Max(0m, componente.QuantidadeConsumida) + totalLocal + (pesoBruto - tara),
+                mensagem => statusLabel.Text = mensagem))
+        {
+            return;
+        }
+
         ResultadoPesagemConsumo resultado = _controller.RegistrarPesagemConsumo(
             componente,
             _ordemConsumoAtual.NumeroOrdem,
@@ -2835,6 +2868,12 @@ public partial class ProcessoConsumoMaterialForm : Form
         => _pesagensPorComponente.TryGetValue(chave, out List<PesagemConsumoMaterial>? lista)
             ? lista.Sum(pesagem => pesagem.PesoLiquidoKg)
             : 0m;
+
+    /// <summary>Nome do terminal para o log de liberação, com o nome da máquina como último recurso.</summary>
+    private string ObterNomeTerminalParaTolerancia()
+        => string.IsNullOrWhiteSpace(_contextoTerminal?.NomeTerminal)
+            ? Environment.MachineName
+            : _contextoTerminal.NomeTerminal;
 
     private static decimal ObterQuantidadePrevistaInicial(ComponenteConsumoMaterial componente)
         => componente.QuantidadePrevista > 0m

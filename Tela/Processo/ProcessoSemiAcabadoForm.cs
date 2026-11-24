@@ -17,6 +17,13 @@ public partial class ProcessoSemiAcabadoForm : Form
 
     private readonly SemiAcabadoController _controller;
 
+    /// <summary>
+    /// A trava de tolerância do Semi-Acabado (incremento 071). É a MESMA classe que o Consumo usa —
+    /// uma trava escrita duas vezes é uma trava que um dia vale só num lugar.
+    /// </summary>
+    private readonly GuardaToleranciaProducao _guardaTolerancia =
+        new(Modelo.Cadastro.ProcessoToleranciaProducao.SemiAcabado);
+
     // GATE 103V: quando aberta pelo Controle de Apontamentos, a tela nasce com a OP deste contexto
     // (autoritativa; o operador não troca de OP). Null no fluxo manual — o comportamento manual é preservado.
     private readonly ContextoApontamentoProcesso? _contextoApontamento;
@@ -1161,9 +1168,32 @@ public partial class ProcessoSemiAcabadoForm : Form
         string chave = ChaveItemOrdem(_ordemSelecionada);
         decimal totalAtual = PesagemSemiAcabadoCalculos.SomarPesoLiquidoValido(ObterPesagens(chave));
         decimal novoTotal = totalAtual + pesoLiquidoKg;
-        if (!ValidarSaldoSemiAcabado(novoTotal, _ordemSelecionada.QuantidadePendente, out string mensagemSaldo))
+
+        // TETO DA TOLERANCIA (incremento 071) — SUBSTITUI o teto absoluto que havia aqui.
+        //
+        // Ate 24/11/2026 esta tela barrava qualquer peso acima do saldo pendente, sem folga nenhuma
+        // (ValidarSaldoSemiAcabado). O usuario decidiu que a tolerancia toma o lugar desse teto: sem
+        // isso nada passaria de 100% e uma tolerancia PARA MAIS seria letra morta.
+        //
+        // A referencia e a quantidade PLANEJADA da ordem, e o total projetado soma o que o SAP ja
+        // recebeu (QuantidadeEntregue). Comparar contra o saldo pendente, como antes, daria um limite
+        // que encolhe a cada entrega — a tolerancia e sobre a ordem, nao sobre o que resta dela.
+        if (!await _guardaTolerancia.PermitePesagemAsync(
+                this,
+                new ContextoPesagemProducao
+                {
+                    Centro = string.IsNullOrWhiteSpace(_ordemSelecionada.Centro)
+                        ? Modelo.Cadastro.ToleranciaProcessoProducao.CentroPadrao
+                        : _ordemSelecionada.Centro,
+                    Material = (_ordemSelecionada.MaterialProduzido ?? string.Empty).Trim(),
+                    NumeroOrdem = _ordemSelecionada.NumeroOrdem,
+                    Operacao = _ordemSelecionada.Operacao,
+                    QuantidadePrevista = _ordemSelecionada.QuantidadePlanejada,
+                    Terminal = Environment.MachineName,
+                },
+                Math.Max(0m, _ordemSelecionada.QuantidadeEntregue) + novoTotal,
+                mensagem => statusLabel.Text = mensagem))
         {
-            MessageBox.Show(mensagemSaldo, "Saldo OP", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
 
@@ -2285,17 +2315,15 @@ public partial class ProcessoSemiAcabadoForm : Form
         return true;
     }
 
-    private static bool ValidarSaldoSemiAcabado(decimal pesoLiquidoTotalKg, decimal saldoPendenteKg, out string mensagem)
-    {
-        if (saldoPendenteKg > 0m && pesoLiquidoTotalKg > saldoPendenteKg)
-        {
-            mensagem = $"Peso líquido informado ({pesoLiquidoTotalKg:0.###} KG) ultrapassa o saldo previsto do semi-acabado ({saldoPendenteKg:0.###} KG).";
-            return false;
-        }
-
-        mensagem = string.Empty;
-        return true;
-    }
+    // REMOVIDO em 24/11/2026: ValidarSaldoSemiAcabado, o teto absoluto contra o saldo pendente.
+    //
+    // Quem cobra o teto agora e GuardaToleranciaProducao, com a tolerancia cadastrada por produto
+    // (incremento 071) — por decisao do usuario, a tolerancia SUBSTITUI aquele teto.
+    //
+    // Foi REMOVIDO, e nao deixado sem uso, de proposito: no mesmo dia descobrimos que a trava de
+    // teto do Recebimento vivia num metodo que ninguem mais chamava, e por isso nunca bloqueou nada
+    // enquanto parecia proteger. Guarda sem chamador e pior do que guarda nenhuma, porque engana
+    // quem le. Se o teto absoluto precisar voltar, ele volta no caminho vivo.
 
     private List<PesagemSemiAcabado> ObterPesagens(string chave)
     {
