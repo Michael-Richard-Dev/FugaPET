@@ -60,7 +60,7 @@ public sealed record VereditoTolerancia(
 /// de dizer QUAL material falta — ver [[guarda-sem-valvula-de-saida]]: trava sem caminho de liberacao
 /// ja prendeu a operacao antes.</para>
 /// </summary>
-public static class RegraToleranciaRecebimento
+public static class RegraTolerancia
 {
     /// <summary>
     /// Avalia o que acontece com o item DURANTE a pesagem. So o teto e cobrado aqui — ver a classe.
@@ -68,7 +68,7 @@ public static class RegraToleranciaRecebimento
     public static VereditoTolerancia AvaliarDurantePesagem(
         decimal? quantidadePedida,
         decimal quantidadeRecebida,
-        ToleranciaRecebimentoMaterial? tolerancia)
+        IToleranciaPercentual? tolerancia)
         => Avaliar(quantidadePedida, quantidadeRecebida, tolerancia, cobrarPiso: false);
 
     /// <summary>
@@ -78,13 +78,13 @@ public static class RegraToleranciaRecebimento
     public static VereditoTolerancia AvaliarNaFinalizacao(
         decimal? quantidadePedida,
         decimal quantidadeRecebida,
-        ToleranciaRecebimentoMaterial? tolerancia)
+        IToleranciaPercentual? tolerancia)
         => Avaliar(quantidadePedida, quantidadeRecebida, tolerancia, cobrarPiso: true);
 
     private static VereditoTolerancia Avaliar(
         decimal? quantidadePedida,
         decimal quantidadeRecebida,
-        ToleranciaRecebimentoMaterial? tolerancia,
+        IToleranciaPercentual? tolerancia,
         bool cobrarPiso)
     {
         decimal pedida = quantidadePedida ?? 0m;

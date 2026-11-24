@@ -55,7 +55,7 @@ public class ToleranciaRecebimentoMaterialRepositorio : RepositorioBase
     /// </para>
     /// <para>
     /// Devolve a linha INATIVA tambem, em vez de filtrar por <c>situacao</c> aqui. Quem decide o que
-    /// inativa significa e <see cref="FugaPET_Dev.Servicos.Processo.RegraToleranciaRecebimento"/>, num
+    /// inativa significa e <see cref="FugaPET_Dev.Servicos.Processo.RegraTolerancia"/>, num
     /// lugar so — um filtro aqui faria "inativa" virar "inexistente" antes de a regra opinar, e as duas
     /// coisas poderiam divergir no dia em que o significado mudasse.
     /// </para>

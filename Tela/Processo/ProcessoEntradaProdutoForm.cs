@@ -4257,14 +4257,14 @@ public partial class ProcessoEntradaProdutoForm : Form
             string material = (item.CodigoMaterial ?? string.Empty).Trim();
             _toleranciasPorMaterial.TryGetValue(material, out Modelo.Cadastro.ToleranciaRecebimentoMaterial? tolerancia);
 
-            VereditoTolerancia veredito = RegraToleranciaRecebimento.AvaliarNaFinalizacao(
+            VereditoTolerancia veredito = RegraTolerancia.AvaliarNaFinalizacao(
                 item.Quantidade,
                 EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido(leituras),
                 tolerancia);
 
             if (veredito.Bloqueia)
             {
-                string problema = RegraToleranciaRecebimento.Mensagem(material, veredito);
+                string problema = RegraTolerancia.Mensagem(material, veredito);
                 problemas.Add(problema);
                 bloqueados.Add(new ItemBloqueadoNaFinalizacao(
                     material, item.NumeroItem, veredito, problema));
@@ -4429,7 +4429,7 @@ public partial class ProcessoEntradaProdutoForm : Form
 
     /// <summary>
     /// O item pode receber mais esta pesagem? Cobra SO o teto — o piso e da finalizacao
-    /// (ver <see cref="RegraToleranciaRecebimento"/>).
+    /// (ver <see cref="RegraTolerancia"/>).
     /// <para>
     /// Devolve o VEREDITO, e nao so uma mensagem, porque quem chama precisa distinguir ESTOURO (que o
     /// gerente pode liberar, incremento 070) de FALTA DE CADASTRO (que so se resolve cadastrando) — e
@@ -4456,12 +4456,12 @@ public partial class ProcessoEntradaProdutoForm : Form
         decimal totalProjetado =
             EntradaProdutoPesagemCalculos.SomarPesoLiquidoValido(leiturasAtuais) + pesoLiquidoNovo;
 
-        VereditoTolerancia veredito = RegraToleranciaRecebimento.AvaliarDurantePesagem(
+        VereditoTolerancia veredito = RegraTolerancia.AvaliarDurantePesagem(
             item.Quantidade, totalProjetado, tolerancia);
 
         return veredito.Bloqueia
             ? new AvaliacaoToleranciaPesagem(
-                false, RegraToleranciaRecebimento.Mensagem(material, veredito), veredito, material, item.NumeroItem)
+                false, RegraTolerancia.Mensagem(material, veredito), veredito, material, item.NumeroItem)
             : AvaliacaoToleranciaPesagem.Liberada();
     }
 

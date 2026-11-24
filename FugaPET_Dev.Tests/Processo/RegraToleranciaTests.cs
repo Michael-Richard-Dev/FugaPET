@@ -12,7 +12,7 @@ namespace FugaPET_Dev.Tests.Processo;
 /// impoe — sobretudo a assimetria de MOMENTO entre teto e piso, que parece descuido e nao e.
 /// </para>
 /// </summary>
-public sealed class RegraToleranciaRecebimentoTests
+public sealed class RegraToleranciaTests
 {
     private static ToleranciaRecebimentoMaterial Tol(decimal percentual, bool ativa = true) => new()
     {
@@ -30,7 +30,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [InlineData(110)]   // exatamente no teto: PASSA, o limite e inclusivo
     public void PedidoCem_ComDezPorCento_AceitaDeNoventaACentoEDez(decimal recebido)
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, recebido, Tol(10m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(100m, recebido, Tol(10m));
 
         Assert.Equal(ResultadoTolerancia.Dentro, v.Resultado);
         Assert.False(v.Bloqueia);
@@ -39,7 +39,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void PedidoCem_ComDezPorCento_BloqueiaCentoEDoze()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 112m, Tol(10m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarDurantePesagem(100m, 112m, Tol(10m));
 
         Assert.Equal(ResultadoTolerancia.AcimaDoTeto, v.Resultado);
         Assert.Equal(90m, v.LimiteInferior);
@@ -49,8 +49,8 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void AMensagemDeBloqueioTrazOsNumeros()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 112m, Tol(10m));
-        string msg = RegraToleranciaRecebimento.Mensagem("4000548", v);
+        VereditoTolerancia v = RegraTolerancia.AvaliarDurantePesagem(100m, 112m, Tol(10m));
+        string msg = RegraTolerancia.Mensagem("4000548", v);
 
         // Sem os numeros, quem esta na balanca tem de adivinhar de quanto passou.
         Assert.Contains("112", msg, StringComparison.Ordinal);
@@ -68,7 +68,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void DuranteAPesagem_OPisoNaoEhCobrado()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 0m, Tol(10m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarDurantePesagem(100m, 0m, Tol(10m));
 
         Assert.Equal(ResultadoTolerancia.Dentro, v.Resultado);
     }
@@ -76,7 +76,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void NaFinalizacao_OPisoEhCobrado()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 89.9m, Tol(10m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(100m, 89.9m, Tol(10m));
 
         Assert.Equal(ResultadoTolerancia.AbaixoDoPiso, v.Resultado);
     }
@@ -86,9 +86,9 @@ public sealed class RegraToleranciaRecebimentoTests
     public void OTetoValeNosDoisMomentos()
     {
         Assert.Equal(ResultadoTolerancia.AcimaDoTeto,
-            RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 111m, Tol(10m)).Resultado);
+            RegraTolerancia.AvaliarDurantePesagem(100m, 111m, Tol(10m)).Resultado);
         Assert.Equal(ResultadoTolerancia.AcimaDoTeto,
-            RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 111m, Tol(10m)).Resultado);
+            RegraTolerancia.AvaliarNaFinalizacao(100m, 111m, Tol(10m)).Resultado);
     }
 
     // ---------------------------------------------------------------- sem cadastro
@@ -96,7 +96,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void SemCadastro_Bloqueia()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 10m, tolerancia: null);
+        VereditoTolerancia v = RegraTolerancia.AvaliarDurantePesagem(100m, 10m, tolerancia: null);
 
         Assert.Equal(ResultadoTolerancia.SemCadastro, v.Resultado);
         Assert.True(v.Bloqueia);
@@ -109,7 +109,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void ToleranciaInativa_ContaComoNaoCadastrada()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 10m, Tol(10m, ativa: false));
+        VereditoTolerancia v = RegraTolerancia.AvaliarDurantePesagem(100m, 10m, Tol(10m, ativa: false));
 
         Assert.Equal(ResultadoTolerancia.SemCadastro, v.Resultado);
     }
@@ -117,8 +117,8 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void SemCadastro_AMensagemDizQualMaterialEOndeCadastrar()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 10m, tolerancia: null);
-        string msg = RegraToleranciaRecebimento.Mensagem("4000548", v);
+        VereditoTolerancia v = RegraTolerancia.AvaliarDurantePesagem(100m, 10m, tolerancia: null);
+        string msg = RegraTolerancia.Mensagem("4000548", v);
 
         // Bloqueio sem caminho de saida ja prendeu a operacao antes (incidente 063).
         Assert.Contains("4000548", msg, StringComparison.Ordinal);
@@ -137,7 +137,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [InlineData(0d)]
     public void PedidoSemQuantidade_NaoBloqueia(double? pedida)
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(
             pedida is null ? null : (decimal)pedida.Value, 999m, Tol(10m));
 
         Assert.Equal(ResultadoTolerancia.Dentro, v.Resultado);
@@ -148,11 +148,11 @@ public sealed class RegraToleranciaRecebimentoTests
     public void ZeroPorCento_ExigeValorExato()
     {
         Assert.Equal(ResultadoTolerancia.Dentro,
-            RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 100m, Tol(0m)).Resultado);
+            RegraTolerancia.AvaliarNaFinalizacao(100m, 100m, Tol(0m)).Resultado);
         Assert.Equal(ResultadoTolerancia.AcimaDoTeto,
-            RegraToleranciaRecebimento.AvaliarDurantePesagem(100m, 100.001m, Tol(0m)).Resultado);
+            RegraTolerancia.AvaliarDurantePesagem(100m, 100.001m, Tol(0m)).Resultado);
         Assert.Equal(ResultadoTolerancia.AbaixoDoPiso,
-            RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 99.999m, Tol(0m)).Resultado);
+            RegraTolerancia.AvaliarNaFinalizacao(100m, 99.999m, Tol(0m)).Resultado);
     }
 
     /// <summary>100% leva o piso a zero — ainda um numero. Acima disso o piso ficaria negativo, e o
@@ -160,7 +160,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void CemPorCento_LevaOPisoAZero()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 0m, Tol(100m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(100m, 0m, Tol(100m));
 
         Assert.Equal(0m, v.LimiteInferior);
         Assert.Equal(200m, v.LimiteSuperior);
@@ -170,7 +170,7 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void PercentualFracionado_CalculaSemArredondarCedo()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 102.5m, Tol(2.5m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(100m, 102.5m, Tol(2.5m));
 
         Assert.Equal(97.5m, v.LimiteInferior);
         Assert.Equal(102.5m, v.LimiteSuperior);
@@ -181,21 +181,21 @@ public sealed class RegraToleranciaRecebimentoTests
     [Fact]
     public void QuantidadeQuebradaDePedido()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(37.5m, 40.5m, Tol(8m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(37.5m, 40.5m, Tol(8m));
 
         Assert.Equal(34.5m, v.LimiteInferior);
         Assert.Equal(40.5m, v.LimiteSuperior);
         Assert.Equal(ResultadoTolerancia.Dentro, v.Resultado);
 
         Assert.Equal(ResultadoTolerancia.AcimaDoTeto,
-            RegraToleranciaRecebimento.AvaliarDurantePesagem(37.5m, 40.6m, Tol(8m)).Resultado);
+            RegraTolerancia.AvaliarDurantePesagem(37.5m, 40.6m, Tol(8m)).Resultado);
     }
 
     [Fact]
     public void DentroDosLimites_NaoGeraMensagem()
     {
-        VereditoTolerancia v = RegraToleranciaRecebimento.AvaliarNaFinalizacao(100m, 100m, Tol(10m));
+        VereditoTolerancia v = RegraTolerancia.AvaliarNaFinalizacao(100m, 100m, Tol(10m));
 
-        Assert.Equal(string.Empty, RegraToleranciaRecebimento.Mensagem("X", v));
+        Assert.Equal(string.Empty, RegraTolerancia.Mensagem("X", v));
     }
 }

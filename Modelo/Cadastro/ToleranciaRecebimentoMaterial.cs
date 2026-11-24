@@ -14,7 +14,7 @@ namespace FugaPET_Dev.Modelo.Cadastro;
 /// um valor especial.
 /// </para>
 /// </summary>
-public sealed class ToleranciaRecebimentoMaterial
+public sealed class ToleranciaRecebimentoMaterial : IToleranciaPercentual
 {
     public const string CentroPadrao = "3007";
 
