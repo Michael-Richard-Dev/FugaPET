@@ -54,10 +54,51 @@ public partial class LoginForm : Form
         // A mensagem de erro so aparece depois de uma tentativa, entao ela NAO esta no Text agora.
         // Reservar a largura dela aqui evita o card "pular" de tamanho quando o erro aparece — e era
         // justamente essa frase que tambem cortava no notebook.
+        //
+        // 24/11/2026: a frase deixou de ser um literal copiado e passou a ser a CONSTANTE do
+        // classificador. Copia era o que fazia uma mensagem nova nascer cortada. As frases do
+        // diagnostico, maiores que esta, sao cobertas por AlturaReservadaParaMensagem: elas
+        // EMBRULHAM, e esticar o card para caber a maior numa linha so passaria de mil pixels.
         int larguraMensagem = TextRenderer.MeasureText(
-            "Nao foi possivel concluir a operacao. Acione o suporte.", messageLabel.Font).Width;
+            Servicos.Seguranca.DiagnosticoFalhaAcessoBanco.MensagemGenerica, messageLabel.Font).Width;
 
         return Math.Max(maior, larguraMensagem);
+    }
+
+    /// <summary>
+    /// GATE 129A (continuacao, 24/11/2026) — ALTURA reservada para a mensagem de erro, medida com o
+    /// texto EMBRULHADO na largura que o rotulo vai ter de verdade.
+    /// <para>
+    /// O messageLabel tem AutoSize=false, entao ele quebra o texto em linhas e o que sobra e cortado
+    /// por BAIXO. A reserva antiga era a largura de UMA frase, repetida como literal aqui; com o
+    /// diagnostico de acesso ao banco sao varias, e a maior (a do IP nao cadastrado) passaria de mil
+    /// pixels numa linha so — um card de login absurdo. Reservar ALTURA em vez de largura mostra a
+    /// frase inteira em duas linhas e deixa o card no tamanho de sempre.
+    /// </para>
+    /// <para>
+    /// A medida sai da PROPRIA lista do classificador, nunca de um literal copiado: foi exatamente a
+    /// copia que fez a mensagem nova nascer cortada.
+    /// </para>
+    /// </summary>
+    private int AlturaReservadaParaMensagem(int larguraItem)
+    {
+        int maior = 0;
+
+        foreach (string mensagem in Servicos.Seguranca.DiagnosticoFalhaAcessoBanco.MensagensPossiveis)
+        {
+            int altura = TextRenderer.MeasureText(
+                mensagem,
+                messageLabel.Font,
+                new Size(larguraItem, int.MaxValue),
+                TextFormatFlags.WordBreak).Height;
+
+            if (altura > maior)
+            {
+                maior = altura;
+            }
+        }
+
+        return maior;
     }
 
     // Reflow do card de login para a fonte 2.0x: empilha os elementos com altura preferida, cresce as caixas de
@@ -103,7 +144,7 @@ public partial class LoginForm : Form
         AjustarInputLogin(userInputPanel, userIconLabel, userTextBox, margem, larguraItem, ref y, 16);
         Faixa(passwordLabel, 26, 6);
         AjustarInputLogin(passwordInputPanel, passwordIconLabel, passwordTextBox, margem, larguraItem, ref y, 14);
-        Faixa(messageLabel, 24, 8);
+        Faixa(messageLabel, Math.Max(24, AlturaReservadaParaMensagem(larguraItem)), 8);
         Faixa(enterButton, 56, 10);
         Faixa(exitButton, 52, 12);
         Faixa(versionLabel, 24, 0);
@@ -281,7 +322,10 @@ public partial class LoginForm : Form
                 // A falha de auditoria nao deve expor detalhe tecnico nem travar a tela de login.
             }
 
-            messageLabel.Text = "Nao foi possivel concluir a operacao. Acione o suporte.";
+            // 24/11/2026: quando o servidor recusa ESTA estação por falta de regra no pg_hba, a tela
+            // passa a dizer isso. A mensagem genérica mandava procurar no lugar errado — o usuário
+            // perdeu tempo exatamente com esse caso. Causa não reconhecida continua caindo nela.
+            messageLabel.Text = DiagnosticoFalhaAcessoBanco.Classificar(ex).Mensagem;
         }
         finally
         {

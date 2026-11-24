@@ -112,6 +112,40 @@ public sealed class LoginEscalaDpi129ATests
                 $"em {escalaDaTela * 100:0}% a mensagem de erro precisa de {necessario}px e so ha {mensagem.Width}px");
         });
 
+    // 24/11/2026 — A FRASE MAIS LONGA DO DIAGNOSTICO DE BANCO TEM DE CABER.
+    //
+    // O messageLabel tem AutoSize=false: ele EMBRULHA o texto e corta o que sobra por BAIXO. Enquanto
+    // havia uma frase so, reservar largura bastava. Com o diagnostico de acesso ao banco a maior
+    // frase ("IP nao cadastrado: <endereco> ...") nao cabe em uma linha sem esticar o card para mais
+    // de mil pixels — ela ocupa duas, e o que faltava era ALTURA. Sem esta guarda o usuario leria
+    // "IP nao cadastrado:" e nada do endereco, que e justamente o dado que ele precisa.
+    [Theory]
+    [InlineData(1.00f)]
+    [InlineData(1.50f)]
+    public void Login_ReservaAlturaParaAMaiorFraseDoDiagnostico(float escalaDaTela)
+        => ExecutarEmSta(() =>
+        {
+            using LoginForm form = new();
+
+            Label mensagem = Campo<Label>(form, "messageLabel");
+            mensagem.Font = new Font(mensagem.Font.FontFamily, mensagem.Font.Size * escalaDaTela, mensagem.Font.Style);
+            RecalcularCard(form);
+
+            foreach (string frase in FugaPET_Dev.Servicos.Seguranca.DiagnosticoFalhaAcessoBanco.MensagensPossiveis)
+            {
+                int necessario = TextRenderer.MeasureText(
+                    frase,
+                    mensagem.Font,
+                    new Size(mensagem.Width, int.MaxValue),
+                    TextFormatFlags.WordBreak).Height;
+
+                Assert.True(
+                    mensagem.Height >= necessario,
+                    $"em {escalaDaTela * 100:0}% a frase \"{frase}\" precisa de {necessario}px de altura "
+                    + $"em {mensagem.Width}px de largura, e o rotulo tem {mensagem.Height}px — seria cortada");
+            }
+        });
+
     // O card cresce junto com o conteudo: se os rotulos cabem mas o card nao os comporta, o texto
     // fica fora da area branca — visualmente tao quebrado quanto cortar.
     [Fact]
