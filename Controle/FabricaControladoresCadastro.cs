@@ -174,6 +174,14 @@ public static class FabricaControladoresCadastro
         return new PermissaoController(servico);
     }
 
+    /// <summary>
+    /// Liberacao gerencial do estouro de tolerancia (incremento 070). Reusa a MESMA composicao da
+    /// autenticacao do login: assim o gerente passa pelas mesmas regras de BCrypt, usuario inativo e
+    /// usuario bloqueado, sem um segundo caminho de autenticacao que um dia divergiria.
+    /// </summary>
+    public static AutorizacaoToleranciaServico CriarAutorizacaoToleranciaServico()
+        => new(CriarAutenticacaoServico(), new LiberacaoToleranciaRepositorio(FabricaConexao.Value));
+
     public static AutenticacaoServico CriarAutenticacaoServico()
     {
         UsuarioRepositorio usuarioRepositorio = new(FabricaConexao.Value);

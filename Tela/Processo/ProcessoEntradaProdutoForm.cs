@@ -112,6 +112,13 @@ public partial class ProcessoEntradaProdutoForm : Form
     // que nao existe, e parar a producao por indisponibilidade do cadastro seria a guarda sem valvula
     // de saida que ja prendeu a operacao antes.
     private bool _toleranciasDisponiveis;
+
+    // Composto PREGUICOSAMENTE: a tela de Entrada abre em ambiente sem banco de cadastro, e falhar
+    // na composicao aqui impediria a tela de abrir por causa de um caminho que talvez nem seja usado.
+    private Servicos.Seguranca.AutorizacaoToleranciaServico? _autorizacaoTolerancia;
+
+    private Servicos.Seguranca.AutorizacaoToleranciaServico ObterAutorizacaoToleranciaServico()
+        => _autorizacaoTolerancia ??= Controle.FabricaControladoresCadastro.CriarAutorizacaoToleranciaServico();
     private readonly Dictionary<long, List<EntradaProdutoPesagem>> _leiturasPorItem = [];
     private readonly Dictionary<long, global::FugaPET_Dev.Modelo.Cadastro.TaraCadastro> _tarasPorItem = [];
     private IReadOnlyList<PedidoCompraSapItem> _itensPedidoCarregados = [];
@@ -2428,6 +2435,24 @@ public partial class ProcessoEntradaProdutoForm : Form
         }
 
         decimal taraKg = EntradaProdutoQuantidadeSap.ConverterTaraParaKg(tara.PesoKg, "KG");
+
+        // TETO DA TOLERANCIA — ESTE E O CAMINHO VIVO DA PESAGEM.
+        //
+        // Ate 24/11/2026 esta verificacao existia so em AdicionarLeituraNaLinha, que e chamado
+        // unicamente por RegistrarPesoLido — metodo que NAO E MAIS CHAMADO por ninguem desde que o
+        // fluxo por lotes o substituiu (ha ate teste afirmando a remocao). Resultado: o teto nunca
+        // bloqueou nada, e ninguem percebeu porque a tolerancia ainda nao tinha sido exercida num
+        // pedido real. O piso, na finalizacao, sempre esteve no caminho vivo.
+        //
+        // Aqui e antes de RegistrarPesagemOperacaoComLotes de proposito: depois dele o peso ja faz
+        // parte do total do item, e desfazer exigiria excluir a pesagem.
+        if (!await ToleranciaLiberaPesagemAsync(
+                codigoItem,
+                EntradaProdutoPesagemCalculos.CalcularPesoLiquido(pesoBruto, taraKg)))
+        {
+            return null;
+        }
+
         EntradaProdutoPesagemEmMemoria pesagem = _controller.RegistrarPesagemOperacaoComLotes(
             codigoItem,
             pesoBruto,
@@ -4092,22 +4117,133 @@ public partial class ProcessoEntradaProdutoForm : Form
     }
 
     /// <summary>
+    /// Decide se a pesagem segue: avalia o teto e, havendo ESTOURO, oferece a liberacao gerencial
+    /// (incremento 070). Devolve true quando pode registrar.
+    /// <para>
+    /// FALTA DE CADASTRO NAO ABRE O DIALOGO — decisao do usuario em 24/11/2026. Cadastrar leva
+    /// segundos na tela de Tolerancia; deixar o gerente furar esse bloqueio faria o cadastro nunca
+    /// ser feito, esvaziando a regra que ele mesmo escolheu.
+    /// </para>
+    /// <para>
+    /// A liberacao vale para UMA pesagem: ela e pedida aqui, a cada estouro, e nao fica guardada.
+    /// Nao ha flag de "liberado" sobrevivendo a esta chamada — e o que impede a autorizacao de virar
+    /// porta aberta para o resto do turno.
+    /// </para>
+    /// </summary>
+    private async Task<bool> ToleranciaLiberaPesagemAsync(long codigoItem, decimal pesoLiquidoNovo)
+    {
+        AvaliacaoToleranciaPesagem avaliacao = AvaliarToleranciaDaPesagem(
+            codigoItem, ObterLeiturasItem(codigoItem), pesoLiquidoNovo);
+
+        if (avaliacao.Permite)
+        {
+            return true;
+        }
+
+        VereditoTolerancia? veredito = avaliacao.Veredito;
+
+        if (veredito?.Resultado != ResultadoTolerancia.AcimaDoTeto)
+        {
+            statusLabel.Text = avaliacao.Mensagem;
+            MessageBox.Show(this, avaliacao.Mensagem, "Tolerância de recebimento",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        return await PedirLiberacaoGerencialAsync(avaliacao, veredito);
+    }
+
+    /// <summary>
+    /// Abre o diálogo de credencial e autoriza, ou não. Mantém o diálogo aberto quando a credencial
+    /// é recusada — quem está em pé na balança merece tentar de novo sem recomeçar a pesagem.
+    /// </summary>
+    private async Task<bool> PedirLiberacaoGerencialAsync(
+        AvaliacaoToleranciaPesagem avaliacao, VereditoTolerancia veredito)
+    {
+        static string N(decimal? v) => v is null
+            ? "-"
+            : v.Value.ToString("0.###", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+
+        ContextoEstouroTolerancia contexto = new()
+        {
+            NumeroPedido = _numeroPedidoCarregado ?? string.Empty,
+            NumeroItem = avaliacao.NumeroItem,
+            Material = avaliacao.Material,
+            QuantidadePedida = veredito.QuantidadePedida,
+            QuantidadeApurada = veredito.QuantidadeRecebida,
+            LimiteAplicado = veredito.LimiteSuperior,
+            PercentualTolerancia = veredito.Percentual,
+            TipoEstouro = ContextoEstouroTolerancia.TipoDoResultado(veredito.Resultado),
+            LoginOperador = EstadoSessaoUsuarioAtual.SessaoAtual?.Login,
+            CodigoUsuarioOperador = EstadoSessaoUsuarioAtual.SessaoAtual?.IdUsuario,
+            Terminal = ObterNomeTerminalAtual(),
+        };
+
+        string detalhe = LiberacaoToleranciaDialog.DescreverEstouro(
+            avaliacao.Material,
+            new VereditoToleranciaTexto(
+                N(veredito.QuantidadePedida), N(veredito.QuantidadeRecebida),
+                N(veredito.LimiteSuperior), $"{N(veredito.Percentual)} %"));
+
+        using LiberacaoToleranciaDialog dialogo = new(detalhe);
+
+        while (dialogo.ShowDialog(this) == DialogResult.OK)
+        {
+            ResultadoAutorizacaoTolerancia resultado;
+            try
+            {
+                resultado = await ObterAutorizacaoToleranciaServico()
+                    .AutorizarAsync(dialogo.Usuario, dialogo.Senha, contexto, CancellationToken.None);
+            }
+            catch (Exception erro)
+            {
+                // Qualquer falha inesperada NAO libera: a duvida mantem o bloqueio.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[Tolerancia] Falha ao autorizar: {erro.GetType().Name}");
+                resultado = ResultadoAutorizacaoTolerancia.Nao(
+                    "Não foi possível validar a credencial agora. A pesagem continua bloqueada.");
+            }
+
+            if (resultado.Autorizada)
+            {
+                statusLabel.Text = resultado.Mensagem;
+                return true;
+            }
+
+            dialogo.MostrarErro(resultado.Mensagem);
+        }
+
+        statusLabel.Text = avaliacao.Mensagem + " Liberação não autorizada.";
+        return false;
+    }
+
+    /// <summary>O que a avaliacao do teto apurou, para a tela decidir o que fazer.</summary>
+    private sealed record AvaliacaoToleranciaPesagem(
+        bool Permite, string Mensagem, VereditoTolerancia? Veredito, string Material, string NumeroItem)
+    {
+        public static AvaliacaoToleranciaPesagem Liberada()
+            => new(true, string.Empty, null, string.Empty, string.Empty);
+    }
+
+    /// <summary>
     /// O item pode receber mais esta pesagem? Cobra SO o teto — o piso e da finalizacao
     /// (ver <see cref="RegraToleranciaRecebimento"/>).
+    /// <para>
+    /// Devolve o VEREDITO, e nao so uma mensagem, porque quem chama precisa distinguir ESTOURO (que o
+    /// gerente pode liberar, incremento 070) de FALTA DE CADASTRO (que so se resolve cadastrando) — e
+    /// precisa dos numeros para mostrar ao gerente o que ele esta autorizando.
+    /// </para>
     /// </summary>
-    private bool ToleranciaPermitePesagem(
+    private AvaliacaoToleranciaPesagem AvaliarToleranciaDaPesagem(
         long codigoItem,
         IReadOnlyList<EntradaProdutoPesagem> leiturasAtuais,
-        decimal pesoLiquidoNovo,
-        out string mensagem)
+        decimal pesoLiquidoNovo)
     {
-        mensagem = string.Empty;
-
         // Cadastro indisponivel nesta execucao: nao da para afirmar que falta tolerancia.
         if (!_toleranciasDisponiveis
             || !_itensCarregadosPorCodigo.TryGetValue(codigoItem, out PedidoCompraSapItem? item))
         {
-            return true;
+            return AvaliacaoToleranciaPesagem.Liberada();
         }
 
         string material = (item.CodigoMaterial ?? string.Empty).Trim();
@@ -4121,13 +4257,22 @@ public partial class ProcessoEntradaProdutoForm : Form
         VereditoTolerancia veredito = RegraToleranciaRecebimento.AvaliarDurantePesagem(
             item.Quantidade, totalProjetado, tolerancia);
 
-        if (!veredito.Bloqueia)
-        {
-            return true;
-        }
+        return veredito.Bloqueia
+            ? new AvaliacaoToleranciaPesagem(
+                false, RegraToleranciaRecebimento.Mensagem(material, veredito), veredito, material, item.NumeroItem)
+            : AvaliacaoToleranciaPesagem.Liberada();
+    }
 
-        mensagem = RegraToleranciaRecebimento.Mensagem(material, veredito);
-        return false;
+    private bool ToleranciaPermitePesagem(
+        long codigoItem,
+        IReadOnlyList<EntradaProdutoPesagem> leiturasAtuais,
+        decimal pesoLiquidoNovo,
+        out string mensagem)
+    {
+        AvaliacaoToleranciaPesagem avaliacao =
+            AvaliarToleranciaDaPesagem(codigoItem, leiturasAtuais, pesoLiquidoNovo);
+        mensagem = avaliacao.Mensagem;
+        return avaliacao.Permite;
     }
 
     private static bool AtualizarTotaisDaLinha(

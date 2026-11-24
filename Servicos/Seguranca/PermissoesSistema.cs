@@ -87,6 +87,12 @@ public static class PermissoesSistema
         public const string SincronizarCache = "SINCRONIZAR_CACHE";
         public const string EnviarSap = "ENVIAR_SAP";
         public const string HabilitarEscritaSap = "HABILITAR_ESCRITA_SAP";
+
+        /// <summary>
+        /// Liberar uma pesagem que estourou a tolerancia do material (incremento 070). Concedida ao
+        /// perfil "Gerente", criado pelo mesmo incremento e com ESTA permissao apenas.
+        /// </summary>
+        public const string LiberarTolerancia = "LIBERAR_TOLERANCIA";
         public const string ExcluirPesagem = "EXCLUIR_PESAGEM";
         public const string Visualizar = "VISUALIZAR";
         public const string Exportar = "EXPORTAR";
