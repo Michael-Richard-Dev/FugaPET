@@ -34,6 +34,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [Theory]
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
     public void OsCabecalhosDaLista_FicamNaMesmaLinha(string tela)
         => ComATela(tela, c =>
         {
@@ -52,6 +53,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [Theory]
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
     public void NenhumRotulo_FicaComCaixaInflada(string tela)
         => ComATela(tela, c =>
         {
@@ -80,6 +82,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [Theory]
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
     public void NenhumRotulo_FicaCortado(string tela)
         => ComATela(tela, c =>
         {
@@ -107,6 +110,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [Theory]
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
     public void OsDivisores_NaoCruzamOsTextos(string tela)
         => ComATela(tela, c =>
         {
@@ -142,6 +146,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [Theory]
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
     public void OMinimoELimpoAntes_EAProtecaoReaplicadaDepois(string tela)
     {
         string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Cadastro", tela + ".cs"));
