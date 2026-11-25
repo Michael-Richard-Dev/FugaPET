@@ -93,25 +93,64 @@ public sealed class BarraDeTituloTests
     // ------------------------------------------------- as telas que faltavam
 
     /// <summary>
-    /// AS NOVE TELAS QUE NAO TINHAM O EFEITO passam a liga-lo. Setor esta nomeada porque foi a que
-    /// o usuario abriu e relatou.
+    /// TODA TELA QUE TEM BOTAO DE FECHAR NO CABECALHO LIGA O REALCE — pelo helper ou pela copia
+    /// antiga que ela ja carregava.
+    /// <para>
+    /// A lista e VARRIDA do projeto, nao escrita a mao. Uma lista fixa de nomes seria a mesma
+    /// doenca que causou o defeito: alguem cria a tela seguinte, ninguem lembra de acrescenta-la, e
+    /// alguns meses depois o usuario encontra a tela sem efeito. Assim, tela nova entra na cobranca
+    /// sozinha — e tela sem os botoes fica de fora sozinha, porque nela nao ha efeito a aplicar.
+    /// </para>
     /// </summary>
-    [Theory]
-    [InlineData("Cadastro", "SetorForm.cs")]
-    [InlineData("Cadastro", "CargoForm.cs")]
-    [InlineData("Cadastro", "TaraForm.cs")]
-    [InlineData("Cadastro", "BalancaForm.cs")]
-    [InlineData("Cadastro", "EtiquetaForm.cs")]
-    [InlineData("Cadastro", "ModeloEtiquetaForm.cs")]
-    [InlineData("Cadastro", "TipoTaraForm.cs")]
-    [InlineData("Cadastro", "CamposEtiquetaForm.cs")]
-    [InlineData("Processo", "ProcessoResultadoApontamentoForm.cs")]
-    public void AsTelasQueFaltavam_LigamORealce(string pasta, string arquivo)
+    [Fact]
+    public void TodaTelaComBotoesDeJanela_LigaORealce()
     {
-        string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", pasta, arquivo));
+        string[] semEfeito =
+        [
+            .. Directory
+                .EnumerateFiles(Path.Combine(RaizProjeto(), "Tela"), "*Form.cs", SearchOption.AllDirectories)
+                .Where(caminho => !caminho.EndsWith(".Designer.cs", StringComparison.Ordinal))
+                .Select(caminho => (Caminho: caminho, Fonte: File.ReadAllText(caminho)))
+                .Where(t => t.Fonte.Contains("closeWindowLabel", StringComparison.Ordinal))
+                // Tres formas valem: o helper novo e as DUAS copias privadas que ja existiam, com
+                // nomes diferentes. Os tres nomes estao aqui porque a cobranca e "a tela TEM
+                // realce", nao "a tela usa o helper" — migrar as que ja funcionam mudaria a cor
+                // literal de cada uma, bem alem do que foi pedido. A terceira copia
+                // (ConfigurarHoverBotaoTitulo) so apareceu porque esta varredura a encontrou; o
+                // levantamento que eu fiz a mao tinha passado por cima dela.
+                .Where(t => !t.Fonte.Contains("BarraDeTituloHelper.AplicarRealceDosBotoes", StringComparison.Ordinal)
+                         && !t.Fonte.Contains("ConfigureTitleButtonHover(", StringComparison.Ordinal)
+                         && !t.Fonte.Contains("ConfigurarHoverBotaoTitulo(", StringComparison.Ordinal))
+                .Select(t => Path.GetFileName(t.Caminho))
+        ];
 
-        Assert.Contains("BarraDeTituloHelper.AplicarRealceDosBotoes", fonte, StringComparison.Ordinal);
+        Assert.True(
+            semEfeito.Length == 0,
+            $"telas com botoes de janela e SEM realce: {string.Join(", ", semEfeito)}");
     }
+
+    /// <summary>
+    /// A varredura acima so vale se ela estiver OLHANDO ALGUMA COISA: sem esta guarda, um erro de
+    /// caminho faria a lista vir vazia e o teste passar sem ter examinado nada.
+    /// </summary>
+    [Fact]
+    public void AVarredura_EncontraAsTelasComBotoes()
+    {
+        int comBotoes = Directory
+            .EnumerateFiles(Path.Combine(RaizProjeto(), "Tela"), "*Form.cs", SearchOption.AllDirectories)
+            .Where(caminho => !caminho.EndsWith(".Designer.cs", StringComparison.Ordinal))
+            .Count(caminho => File.ReadAllText(caminho).Contains("closeWindowLabel", StringComparison.Ordinal));
+
+        Assert.True(comBotoes >= 15, $"a varredura achou so {comBotoes} telas com botoes de janela");
+    }
+
+    /// <summary>A tela de Setor, que o usuario abriu e relatou, usa o helper.</summary>
+    [Fact]
+    public void Setor_UsaOHelper()
+        => Assert.Contains(
+            "BarraDeTituloHelper.AplicarRealceDosBotoes",
+            File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Cadastro", "SetorForm.cs")),
+            StringComparison.Ordinal);
 
     /// <summary>
     /// A COR NAO E PARAMETRO no helper: era exatamente assim que cada tela podia errar a sua. Quem
