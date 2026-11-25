@@ -6,7 +6,7 @@ using Xunit;
 namespace FugaPET_Dev.Tests.Tela;
 
 /// <summary>
-/// A HARMONIA DA TELA DE SETOR EM 1920x1080 A 100% (pedido do usuario em 25/11/2026).
+/// A HARMONIA DAS TELAS DE CADASTRO EM 1920x1080 A 100% (pedidos do usuario em 25/11/2026).
 /// <para>
 /// "A tela nao esta harmonizada, a quebras de informacoes, linhas sobrescrevendo, botoes
 /// quebrados... para a resolucao 1920 x 1080 por 100% de escala."
@@ -25,15 +25,17 @@ namespace FugaPET_Dev.Tests.Tela;
 /// pixels eu estava inferindo errado, e a primeira correcao que escrevi piorou a tela.
 /// </para>
 /// </summary>
-public sealed class SetorLayoutHarmoniaTests
+public sealed class CadastroLayoutHarmoniaTests
 {
     /// <summary>
     /// OS DOIS CABECALHOS DA LISTA NA MESMA LINHA. Era a "linha sobrescrevendo" do relato: mesma
     /// posicao Y, mas caixas de alturas diferentes (33 contra 84) e texto centralizado.
     /// </summary>
-    [Fact]
-    public void OsCabecalhosDaLista_FicamNaMesmaLinha()
-        => ComATela(c =>
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    public void OsCabecalhosDaLista_FicamNaMesmaLinha(string tela)
+        => ComATela(tela, c =>
         {
             Label setor = (Label)c["profilesHeaderProfileLabel"];
             Label situacao = (Label)c["profilesHeaderStatusLabel"];
@@ -47,9 +49,11 @@ public sealed class SetorLayoutHarmoniaTests
     /// na largura que o rotulo REALMENTE tem. Era exatamente o estrago do minimo obsoleto, e e por
     /// isso que a medicao usa a largura final, nao a do Designer.
     /// </summary>
-    [Fact]
-    public void NenhumRotulo_FicaComCaixaInflada()
-        => ComATela(c =>
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    public void NenhumRotulo_FicaComCaixaInflada(string tela)
+        => ComATela(tela, c =>
         {
             foreach (string nome in new[]
             {
@@ -73,9 +77,11 @@ public sealed class SetorLayoutHarmoniaTests
     /// E NADA FICA CORTADO: inflar era o defeito, mas encolher demais seria trocar um por outro.
     /// Esta guarda e o contrapeso da anterior.
     /// </summary>
-    [Fact]
-    public void NenhumRotulo_FicaCortado()
-        => ComATela(c =>
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    public void NenhumRotulo_FicaCortado(string tela)
+        => ComATela(tela, c =>
         {
             foreach (string nome in new[]
             {
@@ -98,9 +104,11 @@ public sealed class SetorLayoutHarmoniaTests
     /// Os divisores do cartao de resumo NAO SE SOBREPOEM aos blocos de texto. Linha passando por
     /// cima de texto foi uma das quebras que o usuario viu.
     /// </summary>
-    [Fact]
-    public void OsDivisores_NaoCruzamOsTextos()
-        => ComATela(c =>
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    public void OsDivisores_NaoCruzamOsTextos(string tela)
+        => ComATela(tela, c =>
         {
             Control[] divisores =
             [
@@ -131,10 +139,12 @@ public sealed class SetorLayoutHarmoniaTests
     /// e REAPLICADA depois — com a largura e a fonte reais. Sem a reaplicacao, a tela ficaria sem a
     /// guarda do GATE 127C.
     /// </summary>
-    [Fact]
-    public void OMinimoELimpoAntes_EAProtecaoReaplicadaDepois()
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    public void OMinimoELimpoAntes_EAProtecaoReaplicadaDepois(string tela)
     {
-        string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Cadastro", "SetorForm.cs"));
+        string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Cadastro", tela + ".cs"));
 
         Assert.Equal(3, Ocorrencias(fonte, "LimparAlturaMinimaDosRotulos("));
         Assert.Contains("ReaplicarProtecaoDeAltura(", fonte, StringComparison.Ordinal);
@@ -146,14 +156,20 @@ public sealed class SetorLayoutHarmoniaTests
     private static int Ocorrencias(string texto, string agulha)
         => texto.Split(agulha).Length - 1;
 
-    private static void ComATela(Action<Dictionary<string, Control>> verificar)
+    private static void ComATela(string nomeDaTela, Action<Dictionary<string, Control>> verificar)
     {
         Exception? erro = null;
         Thread t = new(() =>
         {
             try
             {
-                using FugaPET_Dev.Tela.Cadastro.SetorForm tela = new();
+                Type tipo = typeof(FugaPET_Dev.Tela.Cadastro.SetorForm).Assembly
+                    .GetType("FugaPET_Dev.Tela.Cadastro." + nomeDaTela)
+                    ?? throw new InvalidOperationException("tela " + nomeDaTela + " nao encontrada");
+                // Os dois construtores recebem controller e auditoria OPCIONAIS; CreateInstance sem
+                // argumentos nao preenche opcionais e falharia por "no parameterless constructor".
+                // Passar nulos faz a tela montar as proprias dependencias, como em producao.
+                using Form tela = (Form)Activator.CreateInstance(tipo, [null, null])!;
                 tela.StartPosition = FormStartPosition.Manual;
                 tela.Location = new Point(-5000, -5000);
                 tela.Size = new Size(1920, 1080);
