@@ -130,7 +130,14 @@ public partial class CadastroForm : UserControl
             BackColor = Color.Transparent,
             Cursor = Cursors.Hand,
             Dock = DockStyle.Fill,
-            Image = etiquetaIconLabel.Image,
+            // O ICONE vem do cartao de SETOR, nao do de Etiqueta (pedido do usuario em 25/11/2026:
+            // "os tres ultimos cards estao com um icone incompativel com o que representa").
+            //
+            // A GEOMETRIA continua saindo do cartao de Etiqueta — e dele que estes cartoes herdam
+            // tamanho, margens e fonte. Clonar o desenho de um cartao NAO obriga a clonar o simbolo
+            // dele: Vinculo e as duas Tolerancias nao tem nada a ver com etiqueta, e o "ABC" do
+            // cartao de Etiqueta veio junto so porque era o molde mais a mao.
+            Image = setorIconLabel.Image,
             TextAlign = ContentAlignment.MiddleCenter,
         };
         icone.Controls.Add(simboloIcone);
