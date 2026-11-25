@@ -36,6 +36,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
     [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
     public void OsCabecalhosDaLista_FicamNaMesmaLinha(string tela)
         => ComATela(tela, c =>
         {
@@ -56,6 +57,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
     [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
     public void NenhumRotulo_FicaComCaixaInflada(string tela)
         => ComATela(tela, c =>
         {
@@ -86,6 +88,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
     [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
     public void NenhumRotulo_FicaCortado(string tela)
         => ComATela(tela, c =>
         {
@@ -115,6 +118,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
     [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
     public void OsDivisores_NaoCruzamOsTextos(string tela)
         => ComATela(tela, c =>
         {
@@ -152,6 +156,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
     [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
     public void OMinimoELimpoAntes_EAProtecaoReaplicadaDepois(string tela)
     {
         string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Cadastro", tela + ".cs"));
@@ -404,6 +409,35 @@ public sealed class CadastroLayoutHarmoniaTests
                 alturas.Length == 1,
                 "as molduras deveriam ter todas a mesma altura; vieram: "
                 + string.Join(", ", alturas.OrderBy(a => a)));
+        });
+
+    /// <summary>
+    /// O CABECALHO DAS TELAS PADRONIZADAS TRAZ O LOGO FUGAPET, NAO O FUGA COUROS ANTIGO.
+    /// <para>
+    /// O usuario em 25/11/2026, sobre o Modelo de Etiqueta: "essa ate o logo nao esta atualizado".
+    /// A tela nao chamava <c>IdentidadeVisualFugaPet.AplicarNoCabecalho</c> e ficava com o
+    /// <c>fuga_2026_logo</c> embutido no Designer.
+    /// </para>
+    /// <para>
+    /// A cobranca anda com a MESMA lista das outras: cada tela que entra na padronizacao passa a ser
+    /// cobrada aqui tambem, sem lista propria para manter. A verificacao e de COMPORTAMENTO (a tag
+    /// que o helper grava no controle), nao de texto no fonte.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
+    public void OCabecalho_TrazOLogoFugaPet(string tela)
+        => ComATela(tela, c =>
+        {
+            Control logo = Assert.IsType<PictureBox>(c["companyLogoPictureBox"]);
+
+            Assert.Equal(
+                global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.TagLogo,
+                logo.Tag as string);
         });
 
     private static int Ocorrencias(string texto, string agulha)

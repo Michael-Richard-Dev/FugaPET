@@ -88,6 +88,21 @@ public partial class ModeloEtiquetaForm : Form
         LayoutProfilesCard();
         LayoutDetailsCard();
         LayoutSummaryCard();
+
+        // GATE 127A: esta tela nascia com o logo Fuga Couros e sem a escala de conteudo das demais.
+        // A escala recebe o contentPanel, NAO o formulario: cabecalho e rodape sao comuns a todas as
+        // telas. Os Layout*Card correm de novo depois, porque calculam geometria a partir do texto.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarEscalaDeConteudo(
+            contentPanel,
+            () =>
+            {
+                LayoutProfilesCard();
+                LayoutDetailsCard();
+                LayoutSummaryCard();
+            });
+
         tipTextLabel.AutoEllipsis = true;
         tipTextLabel.AutoSize = false;
         tipTextLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -946,6 +961,11 @@ public partial class ModeloEtiquetaForm : Form
 
     private void LayoutSummaryCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(summaryCard);
+
         const int baseCardWidth = 326;
         const int baseCardHeight = 590;
         if (summaryCard.Width <= 0 || summaryCard.Height <= 0) return;
@@ -1003,10 +1023,25 @@ public partial class ModeloEtiquetaForm : Form
         summaryPerfilCaptionLabel.Text = "Modelo selecionado";
         summarySituacaoCaptionLabel.Text = "Situação";
         summaryUsuariosCaptionLabel.Text = "Versão";
+
+        ReaplicarProtecaoDeAltura(summaryCard);
     }
+
+    /// <summary>
+    /// Reaplica o GATE 127C (a protecao contra texto cortado) AGORA, com a largura e a fonte que
+    /// os rotulos tem de verdade. Sem isto, limpar o minimo deixaria a tela sem a protecao; com
+    /// isto, a protecao existe e passa a medir a realidade, nao o desenho do Designer.
+    /// </summary>
+    private static void ReaplicarProtecaoDeAltura(Control cartao)
+        => global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(cartao);
 
     private void LayoutDetailsCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(detailsCard);
+
         const int baseCardWidth = 557;
         const int baseCardHeight = 596;
         if (detailsCard.Width <= 0 || detailsCard.Height <= 0) return;
@@ -1098,6 +1133,11 @@ public partial class ModeloEtiquetaForm : Form
 
     private void LayoutProfilesCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(profilesCard);
+
         const int baseCardWidth = 411;
         const int baseCardHeight = 596;
         if (profilesCard.Width <= 0 || profilesCard.Height <= 0) return;
@@ -1158,6 +1198,8 @@ public partial class ModeloEtiquetaForm : Form
         SetBounds(profilesFooterLabel, Scale(20, scaleX), footerY, Math.Max(180, Scale(220, scaleX)), Scale(22, scaleY));
         AtualizarLayoutLinhas();
         ApplyProfilesFilter();
+
+        ReaplicarProtecaoDeAltura(profilesCard);
     }
 
     private void AtualizarLayoutLinhas()
