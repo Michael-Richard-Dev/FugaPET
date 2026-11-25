@@ -464,6 +464,51 @@ public sealed class CadastroLayoutHarmoniaTests
         }
     }
 
+    /// <summary>
+    /// A LINHA DA DATA DIZ A MESMA COISA EM TODA TELA DE CADASTRO.
+    /// <para>
+    /// A Tara dizia "Ultimo cadastro:" onde Setor, Cargo, Tipo de Tara e Balanca dizem "Data e Hora
+    /// do Cadastro:". O usuario pediu as telas padronizadas e autorizou uniformizar o texto em
+    /// 25/11/2026.
+    /// </para>
+    /// <para>
+    /// A cobranca VARRE os fontes de Tela/Cadastro em vez de listar telas, com guarda de que achou
+    /// arquivos — uma tela nova com outro texto cai aqui sozinha, e um erro de caminho nao faz o
+    /// teste passar sem examinar nada.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ALinhaDaData_DizOMesmoEmTodasAsTelasDeCadastro()
+    {
+        string pasta = Path.Combine(RaizProjeto(), "Tela", "Cadastro");
+        string[] fontes = [.. Directory.GetFiles(pasta, "*.cs", SearchOption.TopDirectoryOnly)];
+
+        Assert.True(
+            fontes.Length >= 10,
+            $"a varredura achou so {fontes.Length} fontes em {pasta} — ou o caminho mudou, ou este "
+            + "teste nao esta cobrando nada");
+
+        // So a linha UNICA da data entra na regra: o texto COMECA com a frase. O Cadastro de
+        // Usuario e a Etiqueta tem um bloco de TRES linhas (Cargo/Setor/data, Tipo/Modelo/data), em
+        // que a data e a ultima linha de outro elemento — cobrar a mesma frase ali seria cobrar
+        // uniformidade entre coisas diferentes.
+        List<string> fora = [];
+        foreach (string fonte in fontes)
+        {
+            string texto = File.ReadAllText(fonte);
+            if (texto.Contains("= \"Último cadastro:", StringComparison.Ordinal)
+                || texto.Contains("= $\"Último cadastro:", StringComparison.Ordinal))
+            {
+                fora.Add(Path.GetFileName(fonte));
+            }
+        }
+
+        Assert.True(
+            fora.Count == 0,
+            "estas telas usam outro texto na linha da data em vez de \"Data e Hora do Cadastro:\": "
+            + string.Join(", ", fora));
+    }
+
     private static string RaizProjeto()
     {
         DirectoryInfo? dir = new(AppContext.BaseDirectory);

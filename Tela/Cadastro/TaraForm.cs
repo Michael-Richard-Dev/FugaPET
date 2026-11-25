@@ -921,7 +921,7 @@ public partial class TaraForm : Form
         summaryPerfilValueLabel.Text = "-";
         summarySituacaoValueLabel.Text = "-";
         summaryUsuariosValueLabel.Text = "-";
-        tipTextLabel.Text = "Último cadastro: -";
+        tipTextLabel.Text = "Data e Hora do Cadastro: -";
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
     }
 
@@ -929,10 +929,10 @@ public partial class TaraForm : Form
     {
         if (!dataCadastro.HasValue)
         {
-            return "Último cadastro: -";
+            return "Data e Hora do Cadastro: -";
         }
 
-        return $"Último cadastro: {dataCadastro.Value.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"))}";
+        return $"Data e Hora do Cadastro: {dataCadastro.Value.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"))}";
     }
 
     private void AtualizarBotoesAcao(ModoAcaoBotoes modo)

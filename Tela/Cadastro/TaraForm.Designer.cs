@@ -1168,7 +1168,7 @@ partial class TaraForm
         tipTextLabel.Name = "tipTextLabel";
         tipTextLabel.Size = new Size(210, 24);
         tipTextLabel.TabIndex = 24;
-        tipTextLabel.Text = "Último cadastro: 13/05/2026 13:37";
+        tipTextLabel.Text = "Data e Hora do Cadastro: 13/05/2026 13:37";
         // 
         // summaryTitleIconLabel
         // 
