@@ -35,9 +35,6 @@ partial class PainelInicialForm
     private Panel menuItemConsulta;
     private Label menuConsultaIcon;
     private Label menuConsultaText;
-    private Panel menuItemEtiquetas;
-    private Label menuEtiquetasIcon;
-    private Label menuEtiquetasText;
     private Panel menuItemHistorico;
     private Label menuHistoricoIcon;
     private Label menuHistoricoText;
@@ -303,9 +300,6 @@ partial class PainelInicialForm
         menuItemLeitura = new Panel();
         menuLeituraIcon = new Label();
         menuLeituraText = new Label();
-        menuItemEtiquetas = new Panel();
-        menuEtiquetasIcon = new Label();
-        menuEtiquetasText = new Label();
         menuItemHistorico = new Panel();
         menuHistoricoIcon = new Label();
         menuHistoricoText = new Label();
@@ -550,7 +544,6 @@ partial class PainelInicialForm
         menuItemInicio.SuspendLayout();
         menuItemCadastro.SuspendLayout();
         menuItemLeitura.SuspendLayout();
-        menuItemEtiquetas.SuspendLayout();
         menuItemHistorico.SuspendLayout();
         menuItemRelatorios.SuspendLayout();
         menuItemSap.SuspendLayout();
@@ -665,7 +658,6 @@ partial class PainelInicialForm
         sidebarPanel.Controls.Add(menuItemInicio);
         sidebarPanel.Controls.Add(menuItemCadastro);
         sidebarPanel.Controls.Add(menuItemLeitura);
-        sidebarPanel.Controls.Add(menuItemEtiquetas);
         sidebarPanel.Controls.Add(menuItemHistorico);
         sidebarPanel.Controls.Add(menuItemRelatorios);
         sidebarPanel.Controls.Add(menuItemSap);
@@ -794,41 +786,6 @@ partial class PainelInicialForm
         menuLeituraText.TabIndex = 1;
         menuLeituraText.Text = "Processo de Produção";
         menuLeituraText.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // menuItemEtiquetas
-        // 
-        menuItemEtiquetas.BackColor = Color.Transparent;
-        menuItemEtiquetas.Controls.Add(menuEtiquetasIcon);
-        menuItemEtiquetas.Controls.Add(menuEtiquetasText);
-        menuItemEtiquetas.Cursor = Cursors.Hand;
-        menuItemEtiquetas.Location = new Point(9, 226);
-        menuItemEtiquetas.Name = "menuItemEtiquetas";
-        menuItemEtiquetas.Size = new Size(360, 40);
-        menuItemEtiquetas.TabIndex = 6;
-        // 
-        // menuEtiquetasIcon
-        // 
-        menuEtiquetasIcon.BackColor = Color.Transparent;
-        menuEtiquetasIcon.Font = new Font("Segoe MDL2 Assets", 13F);
-        menuEtiquetasIcon.ForeColor = Color.FromArgb(189, 196, 209);
-        menuEtiquetasIcon.Image = (Image)resources.GetObject("menuEtiquetasIcon.Image");
-        menuEtiquetasIcon.Location = new Point(12, 0);
-        menuEtiquetasIcon.Name = "menuEtiquetasIcon";
-        menuEtiquetasIcon.Size = new Size(28, 40);
-        menuEtiquetasIcon.TabIndex = 0;
-        menuEtiquetasIcon.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // menuEtiquetasText
-        // 
-        menuEtiquetasText.BackColor = Color.Transparent;
-        menuEtiquetasText.Font = new Font("Segoe UI", 8.5F);
-        menuEtiquetasText.ForeColor = Color.FromArgb(189, 196, 209);
-        menuEtiquetasText.Location = new Point(48, 0);
-        menuEtiquetasText.Name = "menuEtiquetasText";
-        menuEtiquetasText.Size = new Size(108, 40);
-        menuEtiquetasText.TabIndex = 1;
-        menuEtiquetasText.Text = "Etiquetas";
-        menuEtiquetasText.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // menuItemHistorico
         // 
@@ -3809,7 +3766,6 @@ partial class PainelInicialForm
         menuItemInicio.ResumeLayout(false);
         menuItemCadastro.ResumeLayout(false);
         menuItemLeitura.ResumeLayout(false);
-        menuItemEtiquetas.ResumeLayout(false);
         menuItemHistorico.ResumeLayout(false);
         menuItemRelatorios.ResumeLayout(false);
         menuItemSap.ResumeLayout(false);

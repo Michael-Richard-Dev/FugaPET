@@ -119,7 +119,7 @@ public partial class PainelInicialForm : Form
         // item. AutoSize é setado aqui no init (fora de qualquer SuspendLayout) para valer de fato.
         foreach (Label rotulo in new[]
                  {
-                     menuInicioText, menuCadastroText, menuLeituraText, menuEtiquetasText, menuHistoricoText,
+                     menuInicioText, menuCadastroText, menuLeituraText, menuHistoricoText,
                      menuRelatoriosText, menuSapText, menuConfigText, menuSegurancaText,
                  })
         {
@@ -140,7 +140,6 @@ public partial class PainelInicialForm : Form
             (menuItemInicio, menuInicioIcon, menuInicioText),
             (menuItemCadastro, menuCadastroIcon, menuCadastroText),
             (menuItemLeitura, menuLeituraIcon, menuLeituraText),
-            (menuItemEtiquetas, menuEtiquetasIcon, menuEtiquetasText),
             (menuItemHistorico, menuHistoricoIcon, menuHistoricoText),
             (menuItemRelatorios, menuRelatoriosIcon, menuRelatoriosText),
             (menuItemSap, menuSapIcon, menuSapText),
@@ -520,7 +519,6 @@ public partial class PainelInicialForm : Form
     {
         ConfigurarDisponibilidadeMenu(menuItemCadastro, PermissoesSistema.Modulos.Cadastro);
         ConfigurarDisponibilidadeMenu(menuItemLeitura, PermissoesSistema.Modulos.ProcessoProducao);
-        ConfigurarDisponibilidadeMenu(menuItemEtiquetas, PermissoesSistema.Modulos.Etiqueta);
         ConfigurarDisponibilidadeMenu(menuItemHistorico, PermissoesSistema.Modulos.Historico);
         ConfigurarDisponibilidadeMenu(menuItemRelatorios, PermissoesSistema.Modulos.Relatorio);
         ConfigurarDisponibilidadeMenu(menuItemSap, PermissoesSistema.Modulos.IntegracaoSap);
@@ -584,7 +582,6 @@ public partial class PainelInicialForm : Form
         RegisterSidebarMenuItem(menuItemInicio, menuInicioIcon, menuInicioText);
         RegisterSidebarMenuItem(menuItemCadastro, menuCadastroIcon, menuCadastroText);
         RegisterSidebarMenuItem(menuItemLeitura, menuLeituraIcon, menuLeituraText);
-        RegisterSidebarMenuItem(menuItemEtiquetas, menuEtiquetasIcon, menuEtiquetasText);
         RegisterSidebarMenuItem(menuItemHistorico, menuHistoricoIcon, menuHistoricoText);
         RegisterSidebarMenuItem(menuItemRelatorios, menuRelatoriosIcon, menuRelatoriosText);
         RegisterSidebarMenuItem(menuItemSap, menuSapIcon, menuSapText);
@@ -668,12 +665,6 @@ public partial class PainelInicialForm : Form
         if (item == menuItemLeitura)
         {
             await ShowProcessoProducaoContentAsync();
-            return;
-        }
-
-        if (item == menuItemEtiquetas)
-        {
-            await OpenConsultaEtiquetaAsync();
             return;
         }
 
@@ -1405,24 +1396,6 @@ public partial class PainelInicialForm : Form
     {
         if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, PermissoesSistema.Rotinas.OrdemAndamento, "Consulta de Ordem de Produção")) return;
         using Consulta.ConsultaOrdemProducaoForm form = new();
-
-        Hide();
-
-        try
-        {
-            form.ShowDialog(this);
-        }
-        finally
-        {
-            Show();
-        }
-    }
-
-    private async Task OpenConsultaEtiquetaAsync()
-    {
-        if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.Etiqueta, "Etiquetas")) return;
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.Etiqueta, PermissoesSistema.Rotinas.Etiqueta, "Consulta de Etiqueta")) return;
-        using Consulta.ConsultaEtiquetaForm form = new();
 
         Hide();
 
