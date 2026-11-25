@@ -771,12 +771,14 @@ partial class PainelInicialForm
         menuSegurancaIcon.BackColor = Color.Transparent;
         menuSegurancaIcon.Font = new Font("Segoe MDL2 Assets", 13F);
         menuSegurancaIcon.ForeColor = Color.FromArgb(189, 196, 209);
-        menuSegurancaIcon.Image = global::FugaPET_Dev.Properties.Resources.seguranca_24x_white;
-        menuSegurancaIcon.ImageAlign = ContentAlignment.MiddleCenter;
         menuSegurancaIcon.Location = new Point(12, 0);
         menuSegurancaIcon.Name = "menuSegurancaIcon";
         menuSegurancaIcon.Size = new Size(28, 40);
         menuSegurancaIcon.TabIndex = 0;
+        // U+E72E = cadeado fechado da Segoe MDL2 Assets, a mesma fonte dos outros itens. Escrito
+        // como escape, e nao como caractere literal, porque ele vive na area de uso privado do
+        // Unicode: copiar/colar ou um editor desatento o perdem em silencio, e o menu fica sem icone.
+        menuSegurancaIcon.Text = "\uE72E";
         menuSegurancaIcon.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // menuSegurancaText
