@@ -54,6 +54,11 @@ public partial class EtiquetaForm : Form
         LayoutProfilesCard();
         LayoutDetailsCard();
         LayoutSummaryCard();
+
+        // GATE 127A: esta tela nascia com o logo Fuga Couros embutido no Designer. O helper troca
+        // a imagem e leva o divisor a branco; nao mexe em geometria.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
         AplicarModoCard(ModoCard.Vazio);
         AtualizarBotoes();
         Shown += async (_, _) => await ExecutarOperacaoProtegidaAsync(InicializarTelaAsync, "ETIQUETA_INICIALIZAR_ERRO");

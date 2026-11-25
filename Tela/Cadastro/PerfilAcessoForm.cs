@@ -56,6 +56,11 @@ public partial class PerfilAcessoForm : Form
         LayoutProfilesCard();
         LayoutDetailsCard();
         LayoutSummaryCard();
+
+        // GATE 127A: esta tela nascia com o logo Fuga Couros embutido no Designer. O helper troca
+        // a imagem e leva o divisor a branco; nao mexe em geometria.
+        global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
+            companyLogoPictureBox, headerDividerLabel);
         summaryTipTextLabel.AutoEllipsis = true;
         summaryTipTextLabel.AutoSize = false;
         summaryTipTextLabel.TextAlign = ContentAlignment.MiddleLeft;
