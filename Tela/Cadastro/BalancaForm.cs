@@ -708,10 +708,133 @@ public partial class BalancaForm : Form
         AjustarBotoesLayout();
 
         // GATE 127A: com a fonte no corpo das telas principais, caixas dimensionadas para a fonte
-        // antiga cortariam o texto. A adaptacao so CRESCE (monotonica), entao reexecutar a cada
-        // Resize converge em vez de oscilar.
+        // antiga cortariam o texto.
+        //
+        // A adaptacao so CRESCE. O comentario antigo dizia que, por ser monotonica, reexecutar a
+        // cada Resize "converge" — e e justamente o nunca-encolher que estraga a tela: a altura
+        // medida numa janela menor fica gravada em MinimumSize e nao volta mais. Limpar o minimo
+        // antes faz cada passe medir a largura ATUAL em vez de herdar a de antes.
+        LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(contentLayout);
         LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(contentLayout);
+
+        AlinharCabecalhosDaLista();
+        ReempilharResumo();
     }
+
+    /// <summary>
+    /// Poe os tres cabecalhos da lista na MESMA LINHA e com a MESMA ALTURA.
+    /// <para>
+    /// POR QUE (medido em 25/11/2026): "Nome" ficava com 33px, "Setor / Identificacao" com 56 — que
+    /// ele precisa mesmo, sao duas linhas — e "Situacao" com 56 para um texto de 28. Alturas
+    /// diferentes com texto centralizado colocam cada titulo numa altura, e o da Situacao aparecia
+    /// cortado no print do usuario.
+    /// </para>
+    /// <para>
+    /// A altura comum e a MAIOR necessidade real entre os tres, nao um numero escolhido: assim o
+    /// cabecalho de duas linhas cabe e os outros dois se alinham a ele.
+    /// </para>
+    /// </summary>
+    private void AlinharCabecalhosDaLista()
+    {
+        Label[] cabecalhos = [listaNomeHeaderLabel, listaDetalhesHeaderLabel, listaSituacaoHeaderLabel];
+
+        int topo = cabecalhos.Min(c => c.Top);
+        int altura = cabecalhos.Max(AlturaDoTexto);
+
+        foreach (Label cabecalho in cabecalhos)
+        {
+            cabecalho.Top = topo;
+            cabecalho.Height = altura;
+
+            // Todos ancorados no TOPO da faixa. Com alturas iguais mas alinhamentos verticais
+            // diferentes, "Nome" aparecia na primeira linha e "Situacao" no meio — centralizado
+            // contra um vizinho de duas linhas. O horizontal de cada um e preservado.
+            cabecalho.TextAlign = cabecalho.TextAlign switch
+            {
+                ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter => ContentAlignment.TopCenter,
+                ContentAlignment.MiddleRight or ContentAlignment.BottomRight => ContentAlignment.TopRight,
+                _ => ContentAlignment.TopLeft,
+            };
+        }
+
+        // O PAI PRECISA CABER OS FILHOS. Dar altura ao rotulo nao adianta se a faixa que o hospeda
+        // continua com os 28px do Designer: o texto e cortado pelo painel, e foi assim que
+        // "Identificacao" e "Situacao" sumiram no print mesmo depois de alinhados.
+        listaHeaderPanel.Height = Math.Max(listaHeaderPanel.Height, topo + altura + topo);
+        balancasFlowPanel.Top = listaHeaderPanel.Bottom + 2;
+    }
+
+    /// <summary>
+    /// Reempilha o cartao de resumo a partir da ALTURA REAL de cada texto.
+    /// <para>
+    /// POR QUE (medido em 25/11/2026): o Designer poe a legenda em Y com 18px de altura e o valor em
+    /// Y+20. Quando a adaptacao de fonte cresce a legenda para 36px, ela termina em Y+36 e passa POR
+    /// CIMA do valor — 16px de sobreposicao em cada uma das quatro linhas do resumo. Era a
+    /// "quebra de informacoes" do relato.
+    /// </para>
+    /// <para>
+    /// Aqui nada e posicao cravada: cada linha ocupa o que seus dois textos medem, o divisor vem
+    /// depois dela, e a proxima comeca abaixo do divisor.
+    /// </para>
+    /// </summary>
+    private void ReempilharResumo()
+    {
+        const int folga = 10;
+
+        int margem = resumoDivisorTitulo.Left;
+        // A largura do divisor sai do CARTAO, nao do desenho do Designer: o cartao e mais largo em
+        // 1920x1080 e os tracos ficavam curtos, parando no meio da linha.
+        int larguraDivisor = Math.Max(120, resumoCard.ClientSize.Width - (margem * 2));
+        int y = resumoTitleIconLabel.Top;
+
+        int alturaTitulo = Math.Max(resumoTitleIconLabel.Height, AlturaDoTexto(resumoTitleLabel));
+        resumoTitleIconLabel.Top = y + ((alturaTitulo - resumoTitleIconLabel.Height) / 2);
+        resumoTitleLabel.SetBounds(resumoTitleLabel.Left, y, resumoTitleLabel.Width, alturaTitulo);
+        y += alturaTitulo + folga;
+
+        resumoDivisorTitulo.SetBounds(margem, y, larguraDivisor, 1);
+        y += folga;
+
+        (Label Icone, Label Legenda, Label Valor, Control Divisor)[] linhas =
+        [
+            (resumoNomeIconLabel, resumoNomeLabel, resumoNomeValueLabel, resumoDivisorNome),
+            (resumoSetorIconLabel, resumoSetorLabel, resumoSetorValueLabel, resumoDivisorSetor),
+            (resumoConexaoIconLabel, resumoConexaoLabel, resumoConexaoValueLabel, resumoDivisorConexao),
+            (resumoSituacaoIconLabel, resumoSituacaoLabel, resumoSituacaoValueLabel, resumoDivisorRodape),
+        ];
+
+        foreach ((Label icone, Label legenda, Label valor, Control divisor) in linhas)
+        {
+            int alturaLegenda = AlturaDoTexto(legenda);
+            int alturaValor = AlturaDoTexto(valor);
+            int alturaLinha = Math.Max(icone.Height, alturaLegenda + 2 + alturaValor);
+
+            icone.Top = y + ((alturaLinha - icone.Height) / 2);
+
+            int topoDoTexto = y + ((alturaLinha - (alturaLegenda + 2 + alturaValor)) / 2);
+            legenda.SetBounds(legenda.Left, topoDoTexto, legenda.Width, alturaLegenda);
+            valor.SetBounds(valor.Left, legenda.Bottom + 2, valor.Width, alturaValor);
+
+            y += alturaLinha + folga;
+            divisor.SetBounds(margem, y, larguraDivisor, 1);
+            y += folga;
+        }
+
+        resumoDataLabel.SetBounds(margem, y, larguraDivisor, AlturaDoTexto(resumoDataLabel));
+    }
+
+    /// <summary>
+    /// A altura que o texto do rotulo ocupa na LARGURA QUE ELE TEM, na fonte atual. Sem NoPadding:
+    /// o Label pinta com padding, e medir sem ele devolve uma linha a menos.
+    /// </summary>
+    private static int AlturaDoTexto(Label rotulo)
+        => Math.Max(
+            16,
+            TextRenderer.MeasureText(
+                string.IsNullOrEmpty(rotulo.Text) ? "Xg" : rotulo.Text,
+                rotulo.Font,
+                new Size(Math.Max(40, rotulo.Width), int.MaxValue),
+                TextFormatFlags.WordBreak).Height);
 
     // Mesma logica de escala de fonte do SetorForm/CargoForm (Math.Clamp por tipo de controle),
     // para que os tamanhos de fonte fiquem iguais aos dessas telas em qualquer tamanho de janela.
