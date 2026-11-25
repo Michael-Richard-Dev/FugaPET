@@ -331,6 +331,71 @@ public sealed class CadastroLayoutHarmoniaTests
                 + $"{legenda.Font.Size:0.00}pt");
         });
 
+    /// <summary>
+    /// TODO CAMPO CABE DENTRO DA SUA MOLDURA, E TODAS AS MOLDURAS TEM A MESMA ALTURA.
+    /// <para>
+    /// Relato do usuario em 25/11/2026: "a caixa fica falha, perdendo o contorno, como se o textbox
+    /// nao estivesse dentro do encaixe". MEDIDO: a moldura tinha 31px de area util e o ComboBox,
+    /// na fonte ja escalada, 31px de altura propria comecando depois do padding — terminava em 36 e
+    /// pintava POR CIMA da borda de baixo. O TextBox fazia o mesmo, 6px.
+    /// </para>
+    /// <para>
+    /// O teste VARRE os campos em vez de lista-los: campo novo na tela entra na cobranca sozinho.
+    /// Ha uma guarda de que a varredura achou alguma coisa — sem ela, uma mudanca de nome faria a
+    /// lista vir vazia e o teste passar sem examinar nada.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Balanca_NenhumCampo_TransbordaASuaMoldura()
+        => ComATela("BalancaForm", c =>
+        {
+            List<(string Nome, Control Moldura, Control Campo)> campos = [];
+            foreach ((string nome, Control moldura) in c)
+            {
+                // A observacao e multilinha e tem altura propria por desenho: fora da regra.
+                if (!nome.EndsWith("InputPanel", StringComparison.Ordinal)
+                    || nome.StartsWith("observacao", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // Molduras de linha COLAPSADA ficam de fora: os campos de TCP/IP somem quando a
+                // conexao e SERIAL e a linha deles vai a zero DE PROPOSITO — cobrar altura ali seria
+                // cobrar o oposto do que a tela deve fazer. (Nao da para filtrar por Visible: no
+                // modo Vazio o cartao inteiro esta escondido e a varredura viria vazia, passando
+                // sem examinar nada.)
+                if (moldura.ClientSize.Height <= 0)
+                {
+                    continue;
+                }
+
+                Control[] filhos = [.. moldura.Controls.Cast<Control>()];
+                if (filhos.Length == 1 && filhos[0] is TextBox or ComboBox)
+                {
+                    campos.Add((nome, moldura, filhos[0]));
+                }
+            }
+
+            Assert.True(
+                campos.Count >= 10,
+                $"a varredura achou so {campos.Count} campos — ou os nomes mudaram, ou ela parou de "
+                + "olhar a tela e este teste nao esta cobrando nada");
+
+            foreach ((string nome, Control moldura, Control campo) in campos)
+            {
+                Assert.True(
+                    campo.Top >= 0 && campo.Bottom <= moldura.ClientSize.Height,
+                    $"{nome}: o campo ocupa {campo.Top}..{campo.Bottom} numa moldura de "
+                    + $"{moldura.ClientSize.Height}px — transborda e apaga a borda");
+            }
+
+            int[] alturas = [.. campos.Select(x => x.Moldura.Height).Distinct()];
+            Assert.True(
+                alturas.Length == 1,
+                "as molduras deveriam ter todas a mesma altura; vieram: "
+                + string.Join(", ", alturas.OrderBy(a => a)));
+        });
+
     private static int Ocorrencias(string texto, string agulha)
         => texto.Split(agulha).Length - 1;
 

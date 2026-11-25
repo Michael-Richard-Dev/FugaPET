@@ -727,6 +727,9 @@ public partial class BalancaForm : Form
 
         AlinharCabecalhosDaLista();
         ReempilharResumo();
+        // Antes de ReempilharDados: e este passe que define a altura das linhas das tabelas, e o
+        // reempilhamento le essa altura para posicionar as secoes.
+        AjustarEncaixeDosCampos();
         ReempilharDados();
     }
 
@@ -744,6 +747,118 @@ public partial class BalancaForm : Form
     /// uma secao e a proxima), nao numeros novos.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Faz cada campo CABER dentro da sua moldura arredondada, e todas as molduras terem a mesma
+    /// altura.
+    /// <para>
+    /// POR QUE (apontado pelo usuario em 25/11/2026: "a caixa fica falha, perdendo o contorno, como
+    /// se o textbox nao estivesse dentro do encaixe"). MEDIDO: a moldura tem 31px de area util e o
+    /// ComboBox, na fonte ja escalada, tem 31px de ALTURA PROPRIA — comecando apos os 5px de padding
+    /// superior, ele terminava em 36 e TRANSBORDAVA a moldura por 5px, pintando por cima da borda de
+    /// baixo. O TextBox transbordava 6px pelo mesmo motivo. Nao era a borda sumindo: era o campo
+    /// passando por cima dela.
+    /// </para>
+    /// <para>
+    /// A causa de fundo e o rotulo: ele cresceu de 20 para ~25px com a escala de fonte (GATE 127A) e
+    /// comeu a altura da moldura, porque os dois dividem uma linha de 62px fixos do Designer. Entao
+    /// a correcao nao e empurrar o campo para dentro — e dar a linha a altura que rotulo e moldura
+    /// precisam HOJE, com a fonte de hoje.
+    /// </para>
+    /// <para>
+    /// A altura da caixa sai do campo MAIS ALTO de todos (o ComboBox), e vale para todos: assim as
+    /// caixas de texto e as de selecao ficam do mesmo tamanho, que e a "harmonia" pedida. O campo e
+    /// entao CENTRALIZADO na moldura, em vez de ancorado no topo.
+    /// </para>
+    /// </summary>
+    private void AjustarEncaixeDosCampos()
+    {
+        (RoundedPanel Moldura, Control Campo, Label Rotulo)[] campos =
+        [
+            (nomeBalancaInputPanel, nomeBalancaTextBox, nomeBalancaLabel),
+            (setorInputPanel, setorComboBox, setorLabel),
+            (identificacaoLocalInputPanel, identificacaoLocalTextBox, identificacaoLocalLabel),
+            (situacaoInputPanel, situacaoTextBox, situacaoLabel),
+            (tipoConexaoInputPanel, tipoConexaoComboBox, tipoConexaoLabel),
+            (enderecoIpInputPanel, enderecoIpTextBox, enderecoIpLabel),
+            (portaTcpInputPanel, portaTcpTextBox, portaTcpLabel),
+            (portaSerialInputPanel, portaSerialTextBox, portaSerialLabel),
+            (baudRateInputPanel, baudRateTextBox, baudRateLabel),
+            (dataBitsInputPanel, dataBitsTextBox, dataBitsLabel),
+            (paridadeInputPanel, paridadeComboBox, paridadeLabel),
+            (stopBitsInputPanel, stopBitsComboBox, stopBitsLabel),
+            (flowControlInputPanel, flowControlComboBox, flowControlLabel),
+            (protocoloInputPanel, protocoloTextBox, protocoloLabel),
+        ];
+
+        // 1) A altura de UMA caixa: o campo mais alto, mais o respiro da moldura dele.
+        //    PreferredHeight e a altura que o controle REALMENTE ocupa na fonte atual — o ComboBox
+        //    ignora qualquer Height que se atribua a ele, entao medir e a unica forma honesta.
+        int alturaDaCaixa = 0;
+        int alturaDoRotulo = 0;
+        foreach ((RoundedPanel moldura, Control campo, Label rotulo) in campos)
+        {
+            int proprio = campo switch
+            {
+                ComboBox combo => combo.PreferredHeight,
+                TextBox caixa => caixa.PreferredHeight,
+                _ => campo.Height,
+            };
+            alturaDaCaixa = Math.Max(alturaDaCaixa, proprio + moldura.Padding.Vertical);
+            alturaDoRotulo = Math.Max(alturaDoRotulo, AlturaDoTexto(rotulo));
+        }
+
+        // 2) A linha precisa comportar rotulo + caixa + o respiro do painel do campo. Como a moldura
+        //    tem Dock=Fill, e a LINHA que decide se ela cabe.
+        int respiroDoCampo = nomeCampoPanel.Padding.Vertical;
+        float alturaDaLinha = alturaDoRotulo + alturaDaCaixa + respiroDoCampo;
+
+        foreach (TableLayoutPanel tabela in new[] { identificacaoTable, conexaoTable, serialTable })
+        {
+            foreach (RowStyle linha in tabela.RowStyles)
+            {
+                // A linha zerada por ColapsarLinhaSeEscondida fica zerada: quem a reabre e aquele
+                // metodo, pelo cache de alturas, nao este passe.
+                if (linha.Height > 0)
+                {
+                    linha.Height = alturaDaLinha;
+                }
+            }
+        }
+
+        // O cache do colapso guarda a altura "original" da linha. Sem atualiza-lo, reexibir o painel
+        // de TCP devolveria os 62px velhos e o defeito voltaria so naquela linha.
+        if (_alturasOriginaisDaConexao is not null)
+        {
+            for (int i = 0; i < _alturasOriginaisDaConexao.Length; i++)
+            {
+                _alturasOriginaisDaConexao[i] = alturaDaLinha;
+            }
+        }
+
+        identificacaoTable.Height = AlturaDasLinhas(identificacaoTable);
+
+        // 3) Rotulo com a altura medida, no topo; campo centralizado na moldura que sobrou.
+        foreach ((RoundedPanel moldura, Control campo, Label rotulo) in campos)
+        {
+            rotulo.Height = alturaDoRotulo;
+
+            if (campo.Dock != DockStyle.None)
+            {
+                campo.Dock = DockStyle.None;
+            }
+
+            int proprio = campo switch
+            {
+                ComboBox combo => combo.PreferredHeight,
+                TextBox caixa => caixa.PreferredHeight,
+                _ => campo.Height,
+            };
+            int largura = Math.Max(40, moldura.ClientSize.Width - moldura.Padding.Horizontal);
+            int topo = Math.Max(0, (moldura.ClientSize.Height - proprio) / 2);
+            campo.SetBounds(moldura.Padding.Left, topo, largura, proprio);
+        }
+    }
+
     private void ReempilharDados()
     {
         const int respiroDaSecao = 2;
