@@ -19,8 +19,38 @@ public partial class PainelInicialForm : Form
     private const string WindowIconPath = "Servicos\\icone\\fugapet.ico";
     private const string RotinaLeituraProducao = PermissoesSistema.Rotinas.LeituraProducao;
     private static readonly Color SidebarActiveColor = Color.FromArgb(250, 105, 26);
-    private static readonly Color SidebarInactiveColor = Color.Transparent;
+    // SidebarInactiveColor saiu: era Color.Transparent, e a cor do item inativo passou a ser LIDA
+    // da propria barra em SetActiveSidebarMenuItem. Ver la o porque.
+
     private static readonly Color SidebarTextColor = Color.FromArgb(229, 231, 235);
+
+    /// <summary>
+    /// WS_EX_COMPOSITED: o Windows desenha a janela e TODOS os filhos fora da tela e so entao
+    /// mostra o resultado pronto.
+    /// <para>
+    /// POR QUE: sem isso, cada controle se repinta sozinho e na sua vez, e a troca de item do menu
+    /// — que repinta a barra e troca o conteudo ao lado — aparece como rasgo entre cores, que foi o
+    /// que o usuario relatou em 25/11/2026. Ajustar o menu sozinho nao bastaria: a parte mais
+    /// visivel era no Cadastro, onde o painel de conteudo e remontado.
+    /// </para>
+    /// <para>
+    /// O preco e que repinturas muito grandes podem ficar um pouco mais lentas. Esta tela e um
+    /// shell estatico — menu, rodape e um painel de cartoes —, nao uma grade rolando, entao o
+    /// preco nao aparece. As telas com DataGridView sao Forms proprios e nao herdam isto.
+    /// </para>
+    /// </summary>
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams parametros = base.CreateParams;
+            parametros.ExStyle |= WsExComposited;
+
+            return parametros;
+        }
+    }
+
+    private const int WsExComposited = 0x02000000;
 
     private System.Windows.Forms.Timer? _footerClockTimer;
     private ProcessoProducaoForm? _processoProducaoForm;
@@ -626,21 +656,67 @@ public partial class PainelInicialForm : Form
         await ShowSegurancaContentAsync();
     }
 
+    /// <summary>
+    /// Marca o item ativo do menu MEXENDO SO NO QUE MUDA.
+    /// <para>
+    /// POR QUE EXISTE ASSIM (relatado pelo usuario em 25/11/2026): trocar de item dava "um efeito
+    /// meio que de gap, quebra de cores", mais visivel no Cadastro.
+    /// </para>
+    /// <para>
+    /// MEDIDO, e nao suposto: reescrever as quatro propriedades de todos os itens NAO era a causa.
+    /// O WinForms ja ignora atribuicao de cor ou de fonte com valor igual ao atual, entao os itens
+    /// que nao mudavam tambem nao repintavam. O desperdicio ali era de objetos Font criados a toa,
+    /// nao de pintura. Escrever so o que muda fica, por ser mais barato e mais claro, mas quem
+    /// causava a piscada eram as duas causas abaixo.
+    /// </para>
+    /// <para>
+    /// 1. O item inativo ficava <c>Color.Transparent</c>, que no WinForms NAO e transparencia: o
+    /// filho pede ao PAI que pinte o fundo atras dele, e os rotulos (tambem transparentes) pintam
+    /// por cima. Voltar o item ativo a transparente disparava essa cadeia. Agora ele pinta o proprio
+    /// fundo, LIDO da barra — a barra tem cor lisa, entao o resultado e identico aos olhos e nao ha
+    /// repintura do pai.
+    /// </para>
+    /// <para>
+    /// 2. A regiao arredondada era recalculada a cada troca — e <see cref="ReempilharSidebar"/> ja a
+    /// aplica a TODOS os itens no tamanho final. Atribuir <c>Region</c> forca o pai a repintar
+    /// aquela area; era trabalho repetido que so produzia piscada.
+    /// </para>
+    /// </summary>
     private void SetActiveSidebarMenuItem(Panel activeItem)
     {
+        Color corInativa = sidebarPanel.BackColor;
+
+        sidebarPanel.SuspendLayout();
+
         foreach (var menuItem in _sidebarMenuItems)
         {
             bool isActive = menuItem.Key == activeItem;
-            menuItem.Key.BackColor = isActive ? SidebarActiveColor : SidebarInactiveColor;
-            menuItem.Value.Icon.ForeColor = SidebarTextColor;
-            menuItem.Value.Text.ForeColor = SidebarTextColor;
-            menuItem.Value.Text.Font = new Font(
-                menuItem.Value.Text.Font.FontFamily,
-                menuItem.Value.Text.Font.Size,
-                isActive ? FontStyle.Bold : FontStyle.Regular);
+
+            Color fundo = isActive ? SidebarActiveColor : corInativa;
+            if (menuItem.Key.BackColor != fundo)
+            {
+                menuItem.Key.BackColor = fundo;
+            }
+
+            if (menuItem.Value.Icon.ForeColor != SidebarTextColor)
+            {
+                menuItem.Value.Icon.ForeColor = SidebarTextColor;
+            }
+
+            if (menuItem.Value.Text.ForeColor != SidebarTextColor)
+            {
+                menuItem.Value.Text.ForeColor = SidebarTextColor;
+            }
+
+            FontStyle estilo = isActive ? FontStyle.Bold : FontStyle.Regular;
+            Font fonte = menuItem.Value.Text.Font;
+            if (fonte.Style != estilo)
+            {
+                menuItem.Value.Text.Font = new Font(fonte.FontFamily, fonte.Size, estilo);
+            }
         }
 
-        ApplyRoundedRegion(activeItem, 6);
+        sidebarPanel.ResumeLayout(true);
     }
 
     private void ShowPainelInicialContent()
