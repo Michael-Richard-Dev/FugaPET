@@ -179,28 +179,47 @@ public sealed class IdentidadeVisualCadastro127ATests
 
     // GATE 127A — a tela de Balanca tem motor de fonte PROPRIO, que recalcula tudo a cada Resize. Uma
     // escala aplicada no construtor seria apagada no primeiro redimensionamento, entao o alvo tem de
-    // estar DENTRO do motor. Antes ele parava em ~12pt, e por isso a tela parecia menor que as outras.
+    // estar DENTRO do motor.
+    //
+    // CORRIGIDO EM 25/11/2026: este teste exigia base x 2,0 e dizia, no comentario, que isso "bate o
+    // corpo das principais". NAO batia. Medindo Setor e Cargo montados em 1920x1080, os rotulos
+    // equivalentes ficam em 10,5 a 12,1pt — eles escalam pelo tamanho do CARTAO e limitam com Clamp.
+    // O Balanca em 17 e 18pt era o que o usuario via como "fora do padrao das outras duas telas".
+    // O teste fixava uma crenca que a medicao desmente.
+    //
+    // O alvo passa a ser base x min(Escala, escala do cartao): com o cartao no tamanho de projeto
+    // fica na base, e so cresce conforme o cartao cresce, ate o teto do fator global.
     [Theory]
-    [InlineData(8.5f, 1.0f, 8.5f, 17f)]    // cartao no tamanho de projeto: bate o corpo das principais
-    [InlineData(8.5f, 2.5f, 8.5f, 17f)]    // cartao maior NAO amplia alem do alvo
-    [InlineData(7.75f, 1.0f, 8.5f, 15.5f)] // rotulo: alvo = base x escala
-    public void Balanca_MotorDeFonte_MiraNoCorpoDasTelasPrincipais(
+    [InlineData(8.5f, 1.0f, 8.5f, 8.5f)]     // cartao no tamanho de projeto: fica na base
+    [InlineData(8.5f, 1.45f, 8.5f, 12.33f)]  // escala REAL do cartao em 1920x1080: ~12pt, como Setor
+    [InlineData(8.5f, 2.5f, 8.5f, 17f)]      // cartao enorme: para no teto do fator global
+    [InlineData(7.75f, 1.0f, 8.5f, 8.5f)]    // piso maior que a base vence
+    public void Balanca_MotorDeFonte_AcompanhaOCartao(
         float tamanhoBase, float escalaCartao, float minimo, float esperado)
     {
         float tamanho = InvocarDefinirFonte(tamanhoBase, escalaCartao, minimo);
-        Assert.Equal(esperado, tamanho, 2);
-        Assert.Equal(tamanhoBase * LegibilidadeRecebimentoMercadoria.Escala, tamanho, 2);
+
+        Assert.Equal(esperado, tamanho, 1);
+        Assert.True(
+            tamanho <= tamanhoBase * LegibilidadeRecebimentoMercadoria.Escala,
+            "o fator global continua sendo o teto");
     }
 
-    // Janela pequena: o texto ENCOLHE em vez de ser cortado, mas nunca abaixo do tamanho de projeto.
-    [Fact]
-    public void Balanca_MotorDeFonte_CartaoPequenoReduzSemPassarDoPiso()
+    // Janela pequena: o texto nunca cai ABAIXO do tamanho de projeto.
+    //
+    // CORRIGIDO EM 25/11/2026 junto com o teste acima: antes se exigia que com 3/4 do cartao a fonte
+    // ficasse ENTRE 8,5 e 17 — o que so fazia sentido quando o alvo era o dobro fixo. Agora o alvo
+    // acompanha o cartao, entao cartao menor que o projeto simplesmente fica na base. O que importa,
+    // e o que se cobra, e que o piso nunca seja furado.
+    [Theory]
+    [InlineData(0.5f)]
+    [InlineData(0.75f)]
+    [InlineData(1.0f)]
+    public void Balanca_MotorDeFonte_CartaoPequenoNaoFuraOPiso(float escalaCartao)
     {
-        float meio = InvocarDefinirFonte(8.5f, 0.5f, 8.5f);
-        Assert.Equal(8.5f, meio, 2);
+        float tamanho = InvocarDefinirFonte(8.5f, escalaCartao, 8.5f);
 
-        float tresQuartos = InvocarDefinirFonte(8.5f, 0.75f, 8.5f);
-        Assert.True(tresQuartos > 8.5f && tresQuartos < 17f, $"esperado entre 8,5 e 17; veio {tresQuartos}");
+        Assert.True(tamanho >= 8.5f, $"o piso e 8,5 e veio {tamanho}");
     }
 
     private static float InvocarDefinirFonte(float tamanhoBase, float escala, float minimo)

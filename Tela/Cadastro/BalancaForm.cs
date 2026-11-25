@@ -917,8 +917,23 @@ public partial class BalancaForm : Form
     /// </summary>
     private static void DefinirFonte(Control controle, float tamanhoBase, float escala, float minimo, FontStyle estilo)
     {
-        float alvo = tamanhoBase * LegibilidadeRecebimentoMercadoria.Escala;
+        // O ALVO SAI DA ESCALA DO CARTAO, NAO DO FATOR GLOBAL (relatado pelo usuario em 25/11/2026:
+        // "ver sobre a fonte, nao esta padrao das outras duas telas").
+        //
+        // Antes o alvo era tamanhoBase * Escala, com Escala = 2,0 — e como o segundo fator nunca
+        // passa de 1, o resultado era SEMPRE o dobro: 17pt onde Setor e Cargo mostram 12,1pt, e
+        // 18pt na busca contra 12pt. Era por isso que "Balancas Cadastradas" quebrava em duas
+        // linhas e esta tela parecia de outro sistema.
+        //
+        // Setor e Cargo escalam pelo tamanho do CARTAO e limitam com Clamp; o efeito pratico deles
+        // e ~1,43x a base. Usar o menor entre o fator global e a escala do cartao reproduz isso sem
+        // precisar de uma tabela de tetos por controle: o cartao e o mesmo nas tres telas.
         float piso = Math.Max(minimo, tamanhoBase);
+
+        // O teto nunca pode ficar ABAIXO do piso: antes de a tela ser esticada a escala do cartao e
+        // menor que 1, o alvo cai para a base e um minimo maior que ela fazia o Clamp estourar com
+        // "'9' cannot be greater than 8,5" ja no construtor.
+        float alvo = Math.Max(piso, tamanhoBase * Math.Min(LegibilidadeRecebimentoMercadoria.Escala, Math.Max(escala, 1f)));
         float tamanho = Math.Clamp(alvo * Math.Min(escala, 1f), piso, alvo);
         if (Math.Abs(controle.Font.Size - tamanho) < 0.05f && controle.Font.Style == estilo)
         {

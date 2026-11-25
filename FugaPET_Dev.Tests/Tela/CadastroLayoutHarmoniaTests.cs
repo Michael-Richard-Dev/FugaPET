@@ -246,6 +246,39 @@ public sealed class CadastroLayoutHarmoniaTests
             }
         });
 
+    /// <summary>
+    /// A FONTE DO BALANCA ACOMPANHA A DAS OUTRAS DUAS TELAS (relatado em 25/11/2026: "ver sobre a
+    /// fonte, nao esta padrao das outras duas telas").
+    /// <para>
+    /// O Balanca mirava em <c>base * Escala</c>, com Escala = 2,0 — e como o segundo fator nunca
+    /// passa de 1, o resultado era SEMPRE o dobro: 17pt onde Setor e Cargo mostram 12,1pt, e 18pt
+    /// na busca contra 12pt. Era por isso que "Balancas Cadastradas" quebrava em duas linhas.
+    /// </para>
+    /// <para>
+    /// A tolerancia de 1,5pt existe porque as telas chegam ao tamanho por caminhos diferentes
+    /// (Clamp por controle contra escala do cartao); o que nao pode e a diferenca de 5pt que o
+    /// usuario viu.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("balancasTitleLabel", "profilesTitleLabel")]
+    [InlineData("searchTextBox", "searchTextBox")]
+    [InlineData("listaNomeHeaderLabel", "profilesHeaderProfileLabel")]
+    [InlineData("resumoTitleLabel", "summaryTitleLabel")]
+    public void Balanca_TemAMesmaFonteDasOutrasTelas(string noBalanca, string noSetor)
+    {
+        float tamanhoBalanca = 0;
+        float tamanhoSetor = 0;
+
+        ComATela("BalancaForm", c => tamanhoBalanca = c[noBalanca].Font.Size);
+        ComATela("SetorForm", c => tamanhoSetor = c[noSetor].Font.Size);
+
+        Assert.True(
+            Math.Abs(tamanhoBalanca - tamanhoSetor) <= 1.5f,
+            $"'{noBalanca}' do Balanca esta em {tamanhoBalanca:0.00}pt e o equivalente do Setor "
+            + $"('{noSetor}') em {tamanhoSetor:0.00}pt");
+    }
+
     private static int Ocorrencias(string texto, string agulha)
         => texto.Split(agulha).Length - 1;
 
