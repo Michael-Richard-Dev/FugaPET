@@ -90,6 +90,11 @@ public sealed partial class CamposEtiquetaForm : Form
         minimizeWindowLabel.Click += (_, _) => WindowState = FormWindowState.Minimized;
         maximizeWindowLabel.Click += (_, _) => WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
         closeWindowLabel.Click += (_, _) => Close();
+
+        // Realce ao passar o mouse, o mesmo da tela inicial. Aqui o cabecalho e escuro, entao a
+        // regra clareia em vez de escurecer — ver Comum/BarraDeTituloHelper.
+        FugaPET_Dev.Tela.Comum.BarraDeTituloHelper.AplicarRealceDosBotoes(
+            headerBar, minimizeWindowLabel, maximizeWindowLabel, closeWindowLabel);
         headerBar.MouseDown += (_, e) => ArrastarJanela(e);
         headerTitleLabel.MouseDown += (_, e) => ArrastarJanela(e);
         headerSubtitleLabel.MouseDown += (_, e) => ArrastarJanela(e);

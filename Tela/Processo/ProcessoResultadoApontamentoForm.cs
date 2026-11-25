@@ -55,6 +55,13 @@ public partial class ProcessoResultadoApontamentoForm : Form
         KeyDown += ProcessoResultadoApontamentoForm_KeyDown;
         FormClosing += ProcessoResultadoApontamentoForm_FormClosing;
         closeWindowLabel.Click += (_, _) => FecharSePermitido();
+
+        // Realce no botao de fechar e arraste pelo cabecalho — ver Comum/BarraDeTituloHelper.
+        // Esta tela tem SO o botao de fechar; nao se inventam aqui os de minimizar e maximizar,
+        // que ela nunca teve. O arraste tambem faltava: era a unica das nove sem ele.
+        FugaPET_Dev.Tela.Comum.BarraDeTituloHelper.AplicarRealceDosBotoes(headerPanel, closeWindowLabel);
+        FugaPET_Dev.Tela.Comum.BarraDeTituloHelper.PermitirArrastarPeloCabecalho(
+            this, headerPanel, headerTitleLabel, headerSubtitleLabel);
         fecharButton.Click += (_, _) => FecharSePermitido();
         gravarResultadoButton.Click += async (_, _) =>
         {

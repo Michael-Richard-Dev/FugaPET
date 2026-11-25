@@ -921,6 +921,12 @@ public partial class ModeloEtiquetaForm : Form
             WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
         };
         closeWindowLabel.Click += (_, _) => Close();
+
+        // Realce ao passar o mouse, o mesmo da tela inicial. A cor sai do PROPRIO cabecalho — ver
+        // Comum/BarraDeTituloHelper. Esta tela estava sem o efeito porque ele vivia como copia
+        // privada em cada Form, e nove nunca receberam a copia.
+        FugaPET_Dev.Tela.Comum.BarraDeTituloHelper.AplicarRealceDosBotoes(
+            customTitleBarPanel, minimizeWindowLabel, maximizeWindowLabel, closeWindowLabel);
     }
 
     private void ConfigureDragOnTitleBar()
