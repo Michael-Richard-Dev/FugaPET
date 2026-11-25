@@ -1,3 +1,7 @@
+using System.Drawing;
+using System.Reflection;
+using System.Windows.Forms;
+
 namespace FugaPET_Dev.Tests.Cadastro;
 
 public sealed class EtiquetaFormTecnicaTests
@@ -129,14 +133,68 @@ public sealed class EtiquetaFormTecnicaTests
     [Fact]
     public void Tela_ResumoNaoSobrepoeTipTextComDivisorOuBotoes()
     {
-        string metodo = ExtrairEntre(Form, "private void LayoutSummaryCard()", "private static void ApplyScaledFont");
+        // ESTE TESTE PASSOU A MEDIR, EM 25/11/2026. Antes ele casava TEXTO do fonte
+        // ("int tipY = Scale(314, scaleY)", "salvarY - tipY - Scale(16, scaleY)") e proibia o 244 por
+        // literal. Isso prendia UMA implementacao, nao a garantia do nome do teste: a dica nao
+        // sobrepor o divisor nem os botoes. Com o 314 a dica ficava ABAIXO do ultimo divisor e abria
+        // uma faixa vazia de ~87px entre os divisores 4 e 5, fora do padrao do Cargo e da Tara.
+        // A garantia continua, e agora e verificada na TELA MONTADA, que e mais forte que o texto.
+        Exception? erro = null;
+        Thread t = new(() =>
+        {
+            try
+            {
+                Type tipo = typeof(FugaPET_Dev.Tela.Cadastro.SetorForm).Assembly
+                    .GetType("FugaPET_Dev.Tela.Cadastro.EtiquetaForm")!;
+                ConstructorInfo construtor = tipo.GetConstructors().Single();
+                using Form tela = (Form)construtor.Invoke(
+                    [.. construtor.GetParameters().Select(_ => (object?)null)]);
+                tela.StartPosition = FormStartPosition.Manual;
+                tela.Location = new Point(-5000, -5000);
+                tela.Size = new Size(1920, 1080);
+                tela.ShowInTaskbar = false;
+                tela.Show();
+                tela.Refresh();
 
-        Assert.Contains("summaryDividerLabel5.Bounds = new Rectangle(Scale(26, scaleX), Scale(286, scaleY)", metodo, StringComparison.Ordinal);
-        Assert.Contains("int tipY = Scale(314, scaleY)", metodo, StringComparison.Ordinal);
-        Assert.Contains("int salvarY = Scale(402, scaleY)", metodo, StringComparison.Ordinal);
-        Assert.Contains("salvarY - tipY - Scale(16, scaleY)", metodo, StringComparison.Ordinal);
-        Assert.Contains("tipTextLabel.Bounds = new Rectangle(textLeft, tipY", metodo, StringComparison.Ordinal);
-        Assert.DoesNotContain("tipTextLabel.Bounds = new Rectangle(Scale(32, scaleX), Scale(244, scaleY)", metodo, StringComparison.Ordinal);
+                Control Obter(string nome) =>
+                    (Control)tipo.GetField(nome, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(tela)!;
+
+                Control dica = Obter("tipTextLabel");
+                Control divisorAcima = Obter("summaryDividerLabel4");
+                Control divisorAbaixo = Obter("summaryDividerLabel5");
+                Control primeiroBotao = Obter("salvarButton");
+
+                Assert.True(
+                    dica.Top >= divisorAbaixo.Bottom || dica.Bottom <= divisorAbaixo.Top,
+                    $"a dica ocupa {dica.Top}..{dica.Bottom} e o divisor de baixo esta em "
+                    + $"{divisorAbaixo.Top}..{divisorAbaixo.Bottom} — ela cruza o traco");
+
+                Assert.True(
+                    dica.Top >= divisorAcima.Bottom,
+                    $"a dica comeca em {dica.Top}, acima do divisor que a antecede "
+                    + $"({divisorAcima.Bottom})");
+
+                Assert.True(
+                    dica.Bottom <= primeiroBotao.Top,
+                    $"a dica termina em {dica.Bottom} e o primeiro botao comeca em "
+                    + $"{primeiroBotao.Top} — ela invade os botoes");
+
+                tela.Hide();
+            }
+            catch (Exception ex)
+            {
+                erro = ex;
+            }
+        });
+
+        t.SetApartmentState(ApartmentState.STA);
+        t.Start();
+        t.Join();
+
+        if (erro is not null)
+        {
+            throw erro;
+        }
     }
 
     [Fact]

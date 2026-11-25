@@ -765,6 +765,8 @@ public partial class EtiquetaForm : Form
         _estadoVazioListaLabel.Text = mensagem;
         _estadoVazioListaLabel.Visible = true;
         _estadoVazioListaLabel.BringToFront();
+
+        ReaplicarProtecaoDeAltura(profilesCard);
     }
 
     private void LimparCampos()
@@ -849,6 +851,11 @@ public partial class EtiquetaForm : Form
 
     private void LayoutProfilesCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(profilesCard);
+
         const int baseCardWidth = 411;
         const int baseCardHeight = 596;
         if (profilesCard.Width <= 0 || profilesCard.Height <= 0) return;
@@ -954,6 +961,11 @@ public partial class EtiquetaForm : Form
 
     private void LayoutDetailsCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(detailsCard);
+
         const int baseCardWidth = 557;
         const int baseCardHeight = 596;
         if (detailsCard.Width <= 0 || detailsCard.Height <= 0) return;
@@ -1047,6 +1059,11 @@ public partial class EtiquetaForm : Form
 
     private void LayoutSummaryCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(summaryCard);
+
         const int baseCardWidth = 326;
         const int baseCardHeight = 590;
         if (summaryCard.Width <= 0 || summaryCard.Height <= 0) return;
@@ -1064,11 +1081,13 @@ public partial class EtiquetaForm : Form
         int buttonHeight = Math.Max(28, Scale(28, scaleY));
         int iconSize = Math.Max(32, Scale(32, scaleX));
         int titleHeight = Math.Max(24, Scale(24, scaleY));
+        // A dica fica ABAIXO do ultimo divisor, e NAO entre os dois ultimos como no Cargo e na Tara.
+        // MEDIDO em 25/11/2026: tentei move-la para a faixa entre os divisores e o teste de
+        // sobreposicao pegou — a faixa tem 88px e este bloco e de TRES linhas (tipo, modelo e data),
+        // 69px mais folga. Aqui a dica nao e a data de uma linha das outras telas; o espaco antes
+        // dela e o respiro do bloco, nao uma faixa vazia por descuido.
         int tipY = Scale(314, scaleY);
         int salvarY = Scale(402, scaleY);
-        int tipHeight = Math.Min(
-            Math.Max(56, Scale(66, scaleY)),
-            Math.Max(32, salvarY - tipY - Scale(16, scaleY)));
 
         summaryTitleLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 9F, 12.5F), FontStyle.Bold);
         summaryPerfilCaptionLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 11.5F));
@@ -1098,11 +1117,33 @@ public partial class EtiquetaForm : Form
         summaryUsuariosIconLabel.Bounds = new Rectangle(Scale(32, scaleX), Scale(186, scaleY), iconSize, iconSize);
         summaryUsuariosCaptionLabel.Bounds = new Rectangle(textLeft, Scale(186, scaleY), labelWidth, Scale(18, scaleY));
         summaryUsuariosValueLabel.Bounds = new Rectangle(textLeft, Scale(206, scaleY), labelWidth, Scale(24, scaleY));
-        tipTextLabel.Bounds = new Rectangle(textLeft, tipY, Math.Max(180, summaryCard.Width - Scale(98, scaleX)), tipHeight);
+        // A altura da dica sai do TEXTO que ela tem — tres linhas: tipo, modelo e data — medido na
+        // largura e na fonte FINAIS. A base cravada de 66px dava 106px para 63px de texto.
+        int larguraDaDica = Math.Max(180, summaryCard.Width - Scale(98, scaleX));
+        int alturaDoTextoDaDica = TextRenderer.MeasureText(
+            string.IsNullOrEmpty(tipTextLabel.Text) ? "Xg" : tipTextLabel.Text,
+            tipTextLabel.Font,
+            new Size(larguraDaDica, int.MaxValue),
+            TextFormatFlags.WordBreak).Height;
+        int tipHeight = Math.Clamp(
+            alturaDoTextoDaDica,
+            32,
+            Math.Max(32, salvarY - tipY - Scale(16, scaleY)));
+        tipTextLabel.Bounds = new Rectangle(textLeft, tipY, larguraDaDica, tipHeight);
         salvarButton.Bounds = new Rectangle(buttonX, salvarY, buttonWidth, buttonHeight);
         editarButton.Bounds = new Rectangle(buttonX, Scale(434, scaleY), buttonWidth, buttonHeight);
         situacaoButton.Bounds = new Rectangle(buttonX, Scale(466, scaleY), buttonWidth, buttonHeight);
+
+        ReaplicarProtecaoDeAltura(summaryCard);
     }
+
+    /// <summary>
+    /// Reaplica o GATE 127C (a protecao contra texto cortado) AGORA, com a largura e a fonte que
+    /// os rotulos tem de verdade. Sem isto, limpar o minimo deixaria a tela sem a protecao; com
+    /// isto, a protecao existe e passa a medir a realidade, nao o desenho do Designer.
+    /// </summary>
+    private static void ReaplicarProtecaoDeAltura(Control cartao)
+        => global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(cartao);
 
     private static void ApplyScaledFont(Control control, float baseSize, float scale, float minSize, float maxSize)
     {
