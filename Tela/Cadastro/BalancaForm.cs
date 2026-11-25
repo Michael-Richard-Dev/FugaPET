@@ -55,6 +55,10 @@ public partial class BalancaForm : Form
         // tipografico com a tela de Recebimento foi feito DENTRO daquele motor.
         IdentidadeVisualFugaPet.AplicarNoCabecalho(companyLogoPictureBox, headerDividerLabel);
 
+        // O rodape da lista passa a ser posicionado por AjustarLayout; o Anchor do Designer e quem o
+        // jogava para fora do cartao.
+        quantidadeBalancasLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+
         ConfigurarRodape();
         ConfigurarEventos();
         ConfigurarCombos();
@@ -700,6 +704,10 @@ public partial class BalancaForm : Form
         parametrosSeriaisSectionLabel.Text = manual ? "OPERAÇÃO MANUAL" : "PARÂMETROS SERIAIS";
         identificacaoLocalTextBox.Enabled = usb || serial || tcp;
         manualWarningLabel.Visible = manual;
+
+        // A troca de tipo muda o que fica VISIVEL, entao a pilha tem de ser refeita aqui tambem —
+        // nao so no Resize. Sem isto o vao do painel escondido so sumiria ao redimensionar a janela.
+        ReempilharDados();
     }
 
     private void AjustarLayout()
@@ -719,6 +727,91 @@ public partial class BalancaForm : Form
 
         AlinharCabecalhosDaLista();
         ReempilharResumo();
+        ReempilharDados();
+    }
+
+    /// <summary>
+    /// Reempilha as secoes do cartao de Dados, PULANDO o que esta escondido.
+    /// <para>
+    /// POR QUE (apontado pelo usuario em 25/11/2026): com a conexao SERIAL o painel de TCP/IP some,
+    /// mas a linha dele na conexaoTable continua com os 62px fixos e nada abaixo sobe — ficava um
+    /// vao enorme entre "Tipo de Conexao" e "Porta Serial". O mesmo vale para a secao de parametros
+    /// seriais, que some em USB e deixa o buraco dela.
+    /// </para>
+    /// <para>
+    /// Aqui a linha de um painel escondido vai a ZERO e cada secao comeca onde a anterior terminou.
+    /// Os respiros sao os do desenho original (2px entre o titulo da secao e o conteudo, 10px entre
+    /// uma secao e a proxima), nao numeros novos.
+    /// </para>
+    /// </summary>
+    private void ReempilharDados()
+    {
+        const int respiroDaSecao = 2;
+        const int respiroEntreSecoes = 10;
+
+        // A linha do painel escondido vai a zero; a do visivel volta a altura dele. Sem isso a
+        // tabela guarda o espaco de um painel que ninguem ve.
+        ColapsarLinhaSeEscondida(1, tcpPanel);
+        ColapsarLinhaSeEscondida(2, portaSerialPanel);
+
+        conexaoTable.Height = AlturaDasLinhas(conexaoTable);
+
+        // A tabela dos parametros seriais declara DUAS linhas de 62px mas foi desenhada com 186 de
+        // altura — espaco de tres. A sobra era distribuida entre as linhas e esticava a de baixo:
+        // "Stop Bits", "Flow Control" e "Protocolo" ficavam com caixas quase tres vezes mais altas
+        // que "Baud Rate", "Data Bits" e "Paridade", logo acima delas.
+        // Quem manda e o PAINEL: a tabela tem Dock=Fill e segue a altura dele. Ajustar a tabela
+        // direto nao gruda — foi o que eu tentei primeiro e nada mudou na tela.
+        serialPanel.Height = AlturaDasLinhas(serialTable)
+            + (serialPanel.Height - serialPanel.ClientSize.Height)
+            + serialPanel.Padding.Vertical;
+
+        int y = identificacaoSectionLabel.Top;
+
+        foreach (Control[] secao in new[]
+                 {
+                     new Control[] { identificacaoSectionLabel, identificacaoTable },
+                     [conexaoSectionLabel, conexaoTable],
+                     [parametrosSeriaisSectionLabel, serialPanel, manualWarningLabel],
+                     [observacaoSectionLabel, observacaoInputPanel],
+                 })
+        {
+            Control[] visiveis = [.. secao.Where(c => c.Visible)];
+            if (visiveis.Length == 0)
+            {
+                continue;
+            }
+
+            foreach (Control parte in visiveis)
+            {
+                parte.Top = y;
+                y = parte.Bottom + respiroDaSecao;
+            }
+
+            y += respiroEntreSecoes - respiroDaSecao;
+        }
+    }
+
+    /// <summary>
+    /// A altura ORIGINAL de cada linha da tabela de conexao, guardada antes de qualquer colapso.
+    /// <para>
+    /// Sem isto a altura da linha sairia da altura ATUAL do painel — e o painel preenche a celula,
+    /// entao os dois se puxam para baixo a cada passe: na primeira tentativa a linha e o painel
+    /// chegaram a 1px. A altura de projeto e fixa; so a visibilidade muda.
+    /// </para>
+    /// </summary>
+    private float[]? _alturasOriginaisDaConexao;
+
+    /// <summary>A soma das alturas declaradas das linhas — o tamanho que a tabela deveria ter.</summary>
+    private static int AlturaDasLinhas(TableLayoutPanel tabela)
+        => (int)tabela.RowStyles.Cast<RowStyle>().Sum(linha => linha.Height);
+
+    /// <summary>Zera a altura da linha quando o painel dela esta escondido, e a devolve quando volta.</summary>
+    private void ColapsarLinhaSeEscondida(int linha, Control painel)
+    {
+        _alturasOriginaisDaConexao ??= [.. conexaoTable.RowStyles.Cast<RowStyle>().Select(l => l.Height)];
+
+        conexaoTable.RowStyles[linha].Height = painel.Visible ? _alturasOriginaisDaConexao[linha] : 0;
     }
 
     /// <summary>
@@ -820,7 +913,13 @@ public partial class BalancaForm : Form
             y += folga;
         }
 
-        resumoDataLabel.SetBounds(margem, y, larguraDivisor, AlturaDoTexto(resumoDataLabel));
+        // Alinhada com a COLUNA DOS VALORES, como no Setor e no Cargo — centralizada ela destoava
+        // de todo o resto do cartao.
+        resumoDataLabel.TextAlign = ContentAlignment.MiddleLeft;
+        int esquerdaDaData = resumoNomeLabel.Left;
+        // Largura ANTES de medir: medir na largura antiga devolve a altura de outra quebra de linha.
+        resumoDataLabel.Width = Math.Max(140, resumoCard.ClientSize.Width - esquerdaDaData - margem);
+        resumoDataLabel.SetBounds(esquerdaDaData, y, resumoDataLabel.Width, AlturaDoTexto(resumoDataLabel));
     }
 
     /// <summary>
@@ -889,6 +988,9 @@ public partial class BalancaForm : Form
             DefinirFonte(legenda, 8.5f, csResumo, 8.5f, FontStyle.Regular);
         foreach (Label valor in new[] { resumoNomeValueLabel, resumoSetorValueLabel, resumoConexaoValueLabel, resumoSituacaoValueLabel })
             DefinirFonte(valor, 8.5f, csResumo, 8.5f, FontStyle.Bold);
+        // A data do cadastro acompanha as legendas: nas telas de Setor e Cargo ela tem o mesmo
+        // corpo do resto do resumo. Ficar em 9pt fixo era o que a fazia parecer de outra tela.
+        DefinirFonte(resumoDataLabel, 8.5f, csResumo, 8.5f, FontStyle.Regular);
         foreach (Button botao in new[] { salvarButton, salvarAlteracoesButton, alterarSituacaoButton })
             DefinirFonte(botao, 8f, csResumo, 8f, FontStyle.Bold);
     }
@@ -1018,6 +1120,16 @@ public partial class BalancaForm : Form
         searchPanel.Height = Math.Max(34, (int)Math.Round(34 * escalaY));
         listaHeaderPanel.Top = searchPanel.Bottom + (int)Math.Round(16 * escalaY);
         balancasFlowPanel.Top = listaHeaderPanel.Bottom + (int)Math.Round(2 * escalaY);
+        // O rodape "Exibindo N de N" vem do FUNDO DO CARTAO, nao do Anchor do Designer.
+        // MEDIDO em 25/11/2026: ancorado, ele parava em Y=1436 num cartao de 950 — 486px fora da
+        // tela, invisivel. E como a altura da lista saia DELE, a lista tambem transbordava o cartao.
+        quantidadeBalancasLabel.Width = larguraConteudo;
+        int alturaRodape = Math.Max(22, AlturaDoTexto(quantidadeBalancasLabel));
+        quantidadeBalancasLabel.SetBounds(
+            lado,
+            Math.Max(0, balancasCard.ClientSize.Height - alturaRodape - (int)Math.Round(14 * escalaY)),
+            larguraConteudo,
+            alturaRodape);
         int limiteInferiorLista = quantidadeBalancasLabel.Top - (int)Math.Round(6 * escalaY);
         balancasFlowPanel.Height = Math.Max(120, limiteInferiorLista - balancasFlowPanel.Top);
 

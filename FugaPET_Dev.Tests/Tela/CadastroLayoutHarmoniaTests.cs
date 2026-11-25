@@ -279,6 +279,58 @@ public sealed class CadastroLayoutHarmoniaTests
             + $"('{noSetor}') em {tamanhoSetor:0.00}pt");
     }
 
+    /// <summary>
+    /// O RODAPE "Exibindo N de N" FICA DENTRO DO CARTAO, E A LISTA PARA ANTES DELE.
+    /// <para>
+    /// MEDIDO em 25/11/2026: o rodape vinha do Anchor Bottom do Designer e parava em Y=1436 num
+    /// cartao de 950 — 486px fora da tela, invisivel. E como a altura da lista era calculada A
+    /// PARTIR DELE (<c>quantidadeBalancasLabel.Top - folga</c>), a lista tambem transbordava o
+    /// cartao. Nas outras telas de cadastro esse rodape aparece; nesta, nao.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Balanca_ORodapeDaLista_FicaDentroDoCartao()
+        => ComATela("BalancaForm", c =>
+        {
+            Control cartao = c["balancasCard"];
+            Control rodape = c["quantidadeBalancasLabel"];
+            Control lista = c["balancasFlowPanel"];
+
+            Assert.True(
+                rodape.Bottom <= cartao.ClientSize.Height,
+                $"o rodape da lista termina em {rodape.Bottom} e o cartao so vai ate "
+                + $"{cartao.ClientSize.Height} — fora da tela, como estava antes da correcao");
+
+            Assert.True(
+                lista.Bottom <= rodape.Top,
+                $"a lista termina em {lista.Bottom} e o rodape comeca em {rodape.Top} — "
+                + "a lista passa por cima do rodape");
+        });
+
+    /// <summary>
+    /// A DATA DO CADASTRO SEGUE O PADRAO DO SETOR E DO CARGO: alinhada a COLUNA DOS VALORES e no
+    /// mesmo corpo do resto do resumo.
+    /// <para>
+    /// MEDIDO em 25/11/2026: estava centralizada no cartao e cravada em 9pt enquanto todo o resumo
+    /// ia a 12,1pt — era a linha que o usuario apontou como "fora do tamanho padrao das outras
+    /// telas".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Balanca_ADataDoCadastro_SegueOPadraoDoResumo()
+        => ComATela("BalancaForm", c =>
+        {
+            Label data = (Label)c["resumoDataLabel"];
+            Label legenda = (Label)c["resumoNomeLabel"];
+
+            Assert.Equal(legenda.Left, data.Left);
+            Assert.Equal(ContentAlignment.MiddleLeft, data.TextAlign);
+            Assert.True(
+                Math.Abs(data.Font.Size - legenda.Font.Size) <= 0.5f,
+                $"a data esta em {data.Font.Size:0.00}pt e as legendas do resumo em "
+                + $"{legenda.Font.Size:0.00}pt");
+        });
+
     private static int Ocorrencias(string texto, string agulha)
         => texto.Split(agulha).Length - 1;
 
