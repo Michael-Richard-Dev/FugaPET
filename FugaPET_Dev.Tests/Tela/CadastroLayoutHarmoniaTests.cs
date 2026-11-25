@@ -443,6 +443,45 @@ public sealed class CadastroLayoutHarmoniaTests
                 logo.Tag as string);
         });
 
+    /// <summary>
+    /// O "+" DO BOTAO "NOVO ..." ACOMPANHA O TEXTO DO BOTAO, NAO O TETO DE ICONE.
+    /// <para>
+    /// O usuario em 25/11/2026: "esse simbolo de mais ficou muito fora de proporcao, nas outras
+    /// telas ele esta certinho". MEDIDO: havia DOIS grupos — Balanca e Etiqueta com o glifo a 10pt
+    /// ao lado de um texto de 10,5pt (razao 0,95), e Setor, Cargo, Tipo de Tara, Tara e Modelo de
+    /// Etiqueta com o glifo a 18pt (razao 1,71), porque a escala de conteudo leva todo glifo MDL2 ao
+    /// teto de icone.
+    /// </para>
+    /// <para>
+    /// O "+" ali nao e um icone de cartao: e INLINE com o rotulo, e por isso segue o corpo do texto.
+    /// A tolerancia de 1,2 aceita os 0,95 de desenho da Balanca e os 1,00 das demais, e barra o 1,71.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("SetorForm")]
+    [InlineData("CargoForm")]
+    [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
+    [InlineData("ModeloEtiquetaForm")]
+    [InlineData("EtiquetaForm")]
+    [InlineData("BalancaForm")]
+    public void OMaisDoBotaoNovo_SegueOCorpoDoTexto(string tela)
+        => ComATela(tela, c =>
+        {
+            // Duas convencoes de nome convivem na tela de Balanca; a varredura aceita as duas em vez
+            // de deixar aquela tela de fora.
+            Control glifo = c.TryGetValue("novoPerfilIconLabel", out Control? i) ? i : c["novoBalancaIconLabel"];
+            Control rotulo = c.TryGetValue("novoPerfilTextLabel", out Control? r) ? r : c["novoBalancaTextLabel"];
+
+            float razao = glifo.Font.Size / rotulo.Font.Size;
+
+            Assert.True(
+                razao <= 1.2f,
+                $"o \"+\" esta em {glifo.Font.Size:0.0}pt ao lado de um texto de "
+                + $"{rotulo.Font.Size:0.0}pt (razao {razao:0.00}) — virou icone de cartao em vez de "
+                + "acompanhar o rotulo do botao");
+        });
+
     private static int Ocorrencias(string texto, string agulha)
         => texto.Split(agulha).Length - 1;
 

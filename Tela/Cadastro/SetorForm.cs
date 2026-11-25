@@ -837,6 +837,12 @@ public partial class SetorForm : Form
         profilesTitleLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 12F), FontStyle.Bold);
         profilesFooterLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 11F));
         novoPerfilTextLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
+        // O "+" e INLINE com o rotulo do botao, nao um icone de cartao: acompanha o corpo do TEXTO.
+        // MEDIDO em 25/11/2026: sem isto a escala leva o glifo ao teto de icone (18pt) ao lado de um
+        // texto de 10,5pt — razao 1,71 — enquanto na Balanca e na Etiqueta a razao e 0,95. Era o
+        // "fora de proporcao" apontado pelo usuario.
+        novoPerfilIconLabel.Font = new Font(
+            novoPerfilIconLabel.Font.FontFamily, novoPerfilTextLabel.Font.Size, GraphicsUnit.Point);
         searchTextBox.Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 9F, 12F));
         profilesSearchIconLabel.Font = new Font("Segoe MDL2 Assets", Math.Clamp(11F * contentScale, 11F, 14F));
         profilesHeaderProfileLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
