@@ -250,4 +250,43 @@ public static class LegibilidadeRecebimentoMercadoria
 
         return estilo.Height;
     }
+
+    /// <summary>
+    /// APAGA A ALTURA MINIMA que <see cref="AdaptarAlturasParaFonte"/> gravou nos rotulos de uma
+    /// arvore, para que um novo calculo de layout possa ENCOLHE-LOS.
+    /// <para>
+    /// POR QUE EXISTE (medido em 25/11/2026 na tela de Setor): o GATE 127C grava
+    /// <c>MinimumSize.Height</c> com a altura que o texto precisa NA LARGURA DAQUELE MOMENTO. Nas
+    /// telas de cadastro isso acontece com o cartao ainda no tamanho do Designer. Depois o cartao e
+    /// esticado e a fonte e reajustada para baixo — o texto passa a caber em UMA linha —, mas o
+    /// minimo velho continua valendo e a caixa nunca encolhe.
+    /// </para>
+    /// <para>
+    /// O estrago e visivel: "Resumo do Setor" ficava numa caixa de 62px calculada para tres linhas
+    /// a 18pt numa largura de 200px, quando o real era uma linha a 12pt em 285px; e "Situacao",
+    /// centralizado numa caixa de 84px calculada para quatro linhas em 58px de largura, descia
+    /// ~25px e parecia outra linha da tabela.
+    /// </para>
+    /// <para>
+    /// NAO remove a protecao: quem chama deve reaplicar <see cref="AdaptarAlturasParaFonte"/> depois
+    /// de posicionar, e ai o calculo acontece com a largura e a fonte REAIS.
+    /// </para>
+    /// </summary>
+    public static void LimparAlturaMinimaDosRotulos(Control? raiz)
+    {
+        if (raiz is null)
+        {
+            return;
+        }
+
+        if (raiz is Label && raiz.MinimumSize.Height > 0)
+        {
+            raiz.MinimumSize = new Size(raiz.MinimumSize.Width, 0);
+        }
+
+        foreach (Control filho in raiz.Controls)
+        {
+            LimparAlturaMinimaDosRotulos(filho);
+        }
+    }
 }
