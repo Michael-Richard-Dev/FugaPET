@@ -113,6 +113,11 @@ public partial class TaraForm : Form
         LayoutProfilesCard();
         LayoutDetailsCard();
         LayoutSummaryCard();
+        // Mesmo acerto do Cargo: sem AutoSize e alinhado a esquerda, a linha da data fica na coluna
+        // dos valores em vez de flutuar.
+        tipTextLabel.AutoEllipsis = true;
+        tipTextLabel.AutoSize = false;
+        tipTextLabel.TextAlign = ContentAlignment.MiddleLeft;
 
         AtualizarRodapePerfis();
         AtualizarBotoesAcao(ModoAcaoBotoes.Nenhum);
@@ -1069,6 +1074,11 @@ public partial class TaraForm : Form
 
     private void LayoutSummaryCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(summaryCard);
+
         const int baseCardWidth = 326;
         const int baseCardHeight = 590;
 
@@ -1125,15 +1135,30 @@ public partial class TaraForm : Form
         SetBounds(summaryUsuariosCaptionLabel, textLeft, Scale(186, scaleY), labelWidth, Scale(18, scaleY));
         SetBounds(summaryUsuariosValueLabel, textLeft, Scale(206, scaleY), labelWidth, titleHeight);
 
-        SetBounds(tipTextLabel, textLeft, Scale(314, scaleY), Math.Max(180, summaryCard.Width - Scale(98, scaleX)), Math.Max(56, Scale(66, scaleY)));
+        SetBounds(tipTextLabel, textLeft, Scale(244, scaleY), Math.Max(180, summaryCard.Width - Scale(98, scaleX)), Math.Max(22, Scale(24, scaleY)));
 
         SetBounds(salvarButton, buttonX, Scale(402, scaleY), buttonWidth, buttonHeight);
         SetBounds(novoButton, buttonX, Scale(434, scaleY), buttonWidth, buttonHeight);
         SetBounds(excluirButton, buttonX, Scale(466, scaleY), buttonWidth, buttonHeight);
+
+        ReaplicarProtecaoDeAltura(summaryCard);
     }
+
+    /// <summary>
+    /// Reaplica o GATE 127C (a protecao contra texto cortado) AGORA, com a largura e a fonte que
+    /// os rotulos tem de verdade. Sem isto, limpar o minimo deixaria a tela sem a protecao; com
+    /// isto, a protecao existe e passa a medir a realidade, nao o desenho do Designer.
+    /// </summary>
+    private static void ReaplicarProtecaoDeAltura(Control cartao)
+        => global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.AdaptarAlturasParaFonte(cartao);
 
     private void LayoutDetailsCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(detailsCard);
+
         const int baseCardWidth = 557;
         const int baseCardHeight = 596;
 
@@ -1251,6 +1276,11 @@ public partial class TaraForm : Form
 
     private void LayoutProfilesCard()
     {
+        // A ALTURA MINIMA VELHA SAI ANTES DE POSICIONAR. O GATE 127C a gravou com o cartao ainda no
+        // tamanho do Designer; depois o cartao estica e a fonte cai, mas o minimo continuava
+        // prendendo a caixa no tamanho antigo. Reaplicado no fim, ja com a largura e a fonte reais.
+        global::FugaPET_Dev.Tela.Processo.LegibilidadeRecebimentoMercadoria.LimparAlturaMinimaDosRotulos(profilesCard);
+
         const int baseCardWidth = 411;
         const int baseCardHeight = 596;
 
@@ -1316,6 +1346,8 @@ public partial class TaraForm : Form
 
         AtualizarLayoutLinhas();
         ApplyProfilesFilter();
+
+        ReaplicarProtecaoDeAltura(profilesCard);
     }
 
     private void AtualizarLayoutLinhas()

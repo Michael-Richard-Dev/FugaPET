@@ -35,6 +35,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
     public void OsCabecalhosDaLista_FicamNaMesmaLinha(string tela)
         => ComATela(tela, c =>
         {
@@ -54,6 +55,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
     public void NenhumRotulo_FicaComCaixaInflada(string tela)
         => ComATela(tela, c =>
         {
@@ -83,6 +85,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
     public void NenhumRotulo_FicaCortado(string tela)
         => ComATela(tela, c =>
         {
@@ -111,6 +114,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
     public void OsDivisores_NaoCruzamOsTextos(string tela)
         => ComATela(tela, c =>
         {
@@ -147,6 +151,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("SetorForm")]
     [InlineData("CargoForm")]
     [InlineData("TipoTaraForm")]
+    [InlineData("TaraForm")]
     public void OMinimoELimpoAntes_EAProtecaoReaplicadaDepois(string tela)
     {
         string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "Cadastro", tela + ".cs"));
