@@ -6,23 +6,29 @@ using Xunit;
 namespace FugaPET_Dev.Tests.Tela;
 
 /// <summary>
-/// O MENU LATERAL DEPOIS DE TIRAR "ETIQUETAS" (pedido do usuario em 25/11/2026, com print).
+/// O MENU LATERAL DEPOIS DE TIRAR CINCO ITENS (pedidos do usuario em 25/11/2026, com prints).
 /// <para>
-/// "Remova esse botao de etiqueta que esta na tela inicial, ajuste os outros botoes para cima, para
-/// nao ficar com um buraco no meio entre eles."
+/// Primeiro "remova esse botao de etiqueta... ajuste os outros botoes para cima, para nao ficar
+/// com um buraco no meio entre eles"; depois "faz o mesmo com esses outros quatro botoes"
+/// (Historico, Relatorios, Integracao SAP e Configuracoes).
 /// </para>
 /// <para>
 /// As duas metades importam: o item tem de sumir E os de baixo tem de subir. Remover sem
 /// reempilhar deixaria exatamente o buraco que ele mandou evitar.
 /// </para>
 /// </summary>
-public sealed class PainelInicialMenuSemEtiquetasTests
+public sealed class PainelInicialMenuLateralTests
 {
-    /// <summary>O item "Etiquetas" nao existe mais no menu — nem escondido.</summary>
-    [Fact]
-    public void Etiquetas_NaoEstaMaisNoMenu()
+    /// <summary>Os cinco itens removidos nao existem mais no menu — nem escondidos.</summary>
+    [Theory]
+    [InlineData("Etiqueta")]
+    [InlineData("Histórico")]
+    [InlineData("Relatórios")]
+    [InlineData("Integração SAP")]
+    [InlineData("Configurações")]
+    public void OsItensRemovidos_NaoEstaoMaisNoMenu(string removido)
         => ComAMenuMontado(itens =>
-            Assert.DoesNotContain(itens, item => Texto(item).Contains("Etiqueta", StringComparison.OrdinalIgnoreCase)));
+            Assert.DoesNotContain(itens, item => Texto(item).Contains(removido, StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// NAO FICA BURACO: o vao entre itens consecutivos e sempre o mesmo. Era por aqui que a remocao
@@ -50,31 +56,51 @@ public sealed class PainelInicialMenuSemEtiquetasTests
     [InlineData("Início")]
     [InlineData("Cadastro")]
     [InlineData("Processo de Produção")]
-    [InlineData("Histórico")]
-    [InlineData("Relatórios")]
-    [InlineData("Integração SAP")]
-    [InlineData("Configurações")]
     [InlineData("Segurança")]
     public void OsDemaisModulos_ContinuamNoMenu(string modulo)
         => ComAMenuMontado(itens =>
             Assert.Contains(itens, item => Texto(item).Contains(modulo, StringComparison.Ordinal)));
 
     /// <summary>
-    /// Nada ficou pela metade: o item sumiu do Designer e do codigo, e o metodo que abria a consulta
-    /// de etiqueta foi junto. Metodo privado sem quem o chame e codigo morto.
+    /// Nada ficou pela metade: os itens sumiram do Designer e do codigo, e os metodos que abriam
+    /// cada consulta foram junto. Metodo privado sem quem o chame e codigo morto.
     /// </summary>
     [Fact]
     public void NaoSobrouFiacaoOrfa()
     {
+        string[] sumiram =
+        [
+            "menuItemEtiquetas", "menuEtiquetasIcon", "menuEtiquetasText", "OpenConsultaEtiquetaAsync",
+            "menuItemHistorico", "menuHistoricoIcon", "menuHistoricoText", "OpenConsultaHistoricoAsync",
+            "menuItemRelatorios", "menuRelatoriosIcon", "menuRelatoriosText",
+            "menuItemSap", "menuSapIcon", "menuSapText", "OpenConsultaIntegracaoSapAsync",
+            "menuItemConfig", "menuConfigIcon", "menuConfigText",
+        ];
+
         foreach (string arquivo in new[] { "PainelInicialForm.cs", "PainelInicialForm.Designer.cs" })
         {
             string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", arquivo));
 
-            Assert.DoesNotContain("menuItemEtiquetas", fonte, StringComparison.Ordinal);
-            Assert.DoesNotContain("menuEtiquetasIcon", fonte, StringComparison.Ordinal);
-            Assert.DoesNotContain("menuEtiquetasText", fonte, StringComparison.Ordinal);
-            Assert.DoesNotContain("OpenConsultaEtiquetaAsync", fonte, StringComparison.Ordinal);
+            foreach (string sumiu in sumiram)
+            {
+                Assert.DoesNotContain(sumiu, fonte, StringComparison.Ordinal);
+            }
         }
+    }
+
+    /// <summary>
+    /// O MECANISMO DE "ROTINA EM DESENVOLVIMENTO" SAIU INTEIRO. Ele so casava com Relatorios e
+    /// Configuracoes; sem os dois, continuava chamado em tres pontos e respondia sempre "nao" — um
+    /// desvio que nao desvia nada, com um metodo e um ToolTip vivos so para alimenta-lo.
+    /// </summary>
+    [Fact]
+    public void OMecanismoDeRotinaEmDesenvolvimento_SaiuInteiro()
+    {
+        string fonte = File.ReadAllText(Path.Combine(RaizProjeto(), "Tela", "PainelInicialForm.cs"));
+
+        Assert.DoesNotContain("TryObterRotinaEmDesenvolvimento", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("AplicarMenuEmDesenvolvimento", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("_menuRotinaDesenvolvimentoToolTip", fonte, StringComparison.Ordinal);
     }
 
     // ------------------------------------------------- apoio

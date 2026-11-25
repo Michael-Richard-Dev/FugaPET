@@ -35,18 +35,6 @@ partial class PainelInicialForm
     private Panel menuItemConsulta;
     private Label menuConsultaIcon;
     private Label menuConsultaText;
-    private Panel menuItemHistorico;
-    private Label menuHistoricoIcon;
-    private Label menuHistoricoText;
-    private Panel menuItemRelatorios;
-    private Label menuRelatoriosIcon;
-    private Label menuRelatoriosText;
-    private Panel menuItemSap;
-    private Label menuSapIcon;
-    private Label menuSapText;
-    private Panel menuItemConfig;
-    private Label menuConfigIcon;
-    private Label menuConfigText;
     private Panel menuItemSeguranca;
     private Label menuSegurancaText;
     private Panel sidebarUserPanel;
@@ -300,18 +288,6 @@ partial class PainelInicialForm
         menuItemLeitura = new Panel();
         menuLeituraIcon = new Label();
         menuLeituraText = new Label();
-        menuItemHistorico = new Panel();
-        menuHistoricoIcon = new Label();
-        menuHistoricoText = new Label();
-        menuItemRelatorios = new Panel();
-        menuRelatoriosIcon = new Label();
-        menuRelatoriosText = new Label();
-        menuItemSap = new Panel();
-        menuSapIcon = new Label();
-        menuSapText = new Label();
-        menuItemConfig = new Panel();
-        menuConfigIcon = new Label();
-        menuConfigText = new Label();
         menuItemSeguranca = new Panel();
         menuSegurancaIcon = new Label();
         menuSegurancaText = new Label();
@@ -544,10 +520,6 @@ partial class PainelInicialForm
         menuItemInicio.SuspendLayout();
         menuItemCadastro.SuspendLayout();
         menuItemLeitura.SuspendLayout();
-        menuItemHistorico.SuspendLayout();
-        menuItemRelatorios.SuspendLayout();
-        menuItemSap.SuspendLayout();
-        menuItemConfig.SuspendLayout();
         menuItemSeguranca.SuspendLayout();
         sidebarUserPanel.SuspendLayout();
         rightAreaLayout.SuspendLayout();
@@ -658,10 +630,6 @@ partial class PainelInicialForm
         sidebarPanel.Controls.Add(menuItemInicio);
         sidebarPanel.Controls.Add(menuItemCadastro);
         sidebarPanel.Controls.Add(menuItemLeitura);
-        sidebarPanel.Controls.Add(menuItemHistorico);
-        sidebarPanel.Controls.Add(menuItemRelatorios);
-        sidebarPanel.Controls.Add(menuItemSap);
-        sidebarPanel.Controls.Add(menuItemConfig);
         sidebarPanel.Controls.Add(menuItemSeguranca);
         sidebarPanel.Controls.Add(sidebarUserPanel);
         sidebarPanel.Dock = DockStyle.Fill;
@@ -786,146 +754,6 @@ partial class PainelInicialForm
         menuLeituraText.TabIndex = 1;
         menuLeituraText.Text = "Processo de Produção";
         menuLeituraText.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // menuItemHistorico
-        // 
-        menuItemHistorico.BackColor = Color.Transparent;
-        menuItemHistorico.Controls.Add(menuHistoricoIcon);
-        menuItemHistorico.Controls.Add(menuHistoricoText);
-        menuItemHistorico.Cursor = Cursors.Hand;
-        menuItemHistorico.Location = new Point(9, 274);
-        menuItemHistorico.Name = "menuItemHistorico";
-        menuItemHistorico.Size = new Size(360, 40);
-        menuItemHistorico.TabIndex = 7;
-        // 
-        // menuHistoricoIcon
-        // 
-        menuHistoricoIcon.BackColor = Color.Transparent;
-        menuHistoricoIcon.Font = new Font("Segoe MDL2 Assets", 13F);
-        menuHistoricoIcon.ForeColor = Color.FromArgb(189, 196, 209);
-        menuHistoricoIcon.Location = new Point(12, 0);
-        menuHistoricoIcon.Name = "menuHistoricoIcon";
-        menuHistoricoIcon.Size = new Size(28, 40);
-        menuHistoricoIcon.TabIndex = 0;
-        menuHistoricoIcon.Text = "";
-        menuHistoricoIcon.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // menuHistoricoText
-        // 
-        menuHistoricoText.BackColor = Color.Transparent;
-        menuHistoricoText.Font = new Font("Segoe UI", 8.5F);
-        menuHistoricoText.ForeColor = Color.FromArgb(189, 196, 209);
-        menuHistoricoText.Location = new Point(48, 0);
-        menuHistoricoText.Name = "menuHistoricoText";
-        menuHistoricoText.Size = new Size(108, 40);
-        menuHistoricoText.TabIndex = 1;
-        menuHistoricoText.Text = "Histórico";
-        menuHistoricoText.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // menuItemRelatorios
-        // 
-        menuItemRelatorios.BackColor = Color.Transparent;
-        menuItemRelatorios.Controls.Add(menuRelatoriosIcon);
-        menuItemRelatorios.Controls.Add(menuRelatoriosText);
-        menuItemRelatorios.Cursor = Cursors.Hand;
-        menuItemRelatorios.Location = new Point(9, 322);
-        menuItemRelatorios.Name = "menuItemRelatorios";
-        menuItemRelatorios.Size = new Size(360, 40);
-        menuItemRelatorios.TabIndex = 8;
-        // 
-        // menuRelatoriosIcon
-        // 
-        menuRelatoriosIcon.BackColor = Color.Transparent;
-        menuRelatoriosIcon.Font = new Font("Segoe MDL2 Assets", 13F);
-        menuRelatoriosIcon.ForeColor = Color.FromArgb(189, 196, 209);
-        menuRelatoriosIcon.Location = new Point(12, 0);
-        menuRelatoriosIcon.Name = "menuRelatoriosIcon";
-        menuRelatoriosIcon.Size = new Size(28, 40);
-        menuRelatoriosIcon.TabIndex = 0;
-        menuRelatoriosIcon.Text = "";
-        menuRelatoriosIcon.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // menuRelatoriosText
-        // 
-        menuRelatoriosText.BackColor = Color.Transparent;
-        menuRelatoriosText.Font = new Font("Segoe UI", 8.5F);
-        menuRelatoriosText.ForeColor = Color.FromArgb(189, 196, 209);
-        menuRelatoriosText.Location = new Point(48, 0);
-        menuRelatoriosText.Name = "menuRelatoriosText";
-        menuRelatoriosText.Size = new Size(108, 40);
-        menuRelatoriosText.TabIndex = 1;
-        menuRelatoriosText.Text = "Relatórios";
-        menuRelatoriosText.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // menuItemSap
-        // 
-        menuItemSap.BackColor = Color.Transparent;
-        menuItemSap.Controls.Add(menuSapIcon);
-        menuItemSap.Controls.Add(menuSapText);
-        menuItemSap.Cursor = Cursors.Hand;
-        menuItemSap.Location = new Point(9, 370);
-        menuItemSap.Name = "menuItemSap";
-        menuItemSap.Size = new Size(360, 40);
-        menuItemSap.TabIndex = 9;
-        // 
-        // menuSapIcon
-        // 
-        menuSapIcon.BackColor = Color.Transparent;
-        menuSapIcon.Font = new Font("Segoe MDL2 Assets", 13F);
-        menuSapIcon.ForeColor = Color.FromArgb(189, 196, 209);
-        menuSapIcon.Location = new Point(12, 0);
-        menuSapIcon.Name = "menuSapIcon";
-        menuSapIcon.Size = new Size(28, 40);
-        menuSapIcon.TabIndex = 0;
-        menuSapIcon.Text = "";
-        menuSapIcon.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // menuSapText
-        // 
-        menuSapText.BackColor = Color.Transparent;
-        menuSapText.Font = new Font("Segoe UI", 8.5F);
-        menuSapText.ForeColor = Color.FromArgb(189, 196, 209);
-        menuSapText.Location = new Point(48, 0);
-        menuSapText.Name = "menuSapText";
-        menuSapText.Size = new Size(108, 40);
-        menuSapText.TabIndex = 1;
-        menuSapText.Text = "Integração SAP";
-        menuSapText.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // menuItemConfig
-        // 
-        menuItemConfig.BackColor = Color.Transparent;
-        menuItemConfig.Controls.Add(menuConfigIcon);
-        menuItemConfig.Controls.Add(menuConfigText);
-        menuItemConfig.Cursor = Cursors.Hand;
-        menuItemConfig.Location = new Point(9, 418);
-        menuItemConfig.Name = "menuItemConfig";
-        menuItemConfig.Size = new Size(360, 40);
-        menuItemConfig.TabIndex = 10;
-        // 
-        // menuConfigIcon
-        // 
-        menuConfigIcon.BackColor = Color.Transparent;
-        menuConfigIcon.Font = new Font("Segoe MDL2 Assets", 13F);
-        menuConfigIcon.ForeColor = Color.FromArgb(189, 196, 209);
-        menuConfigIcon.Location = new Point(12, 0);
-        menuConfigIcon.Name = "menuConfigIcon";
-        menuConfigIcon.Size = new Size(28, 40);
-        menuConfigIcon.TabIndex = 0;
-        menuConfigIcon.Text = "";
-        menuConfigIcon.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // menuConfigText
-        // 
-        menuConfigText.BackColor = Color.Transparent;
-        menuConfigText.Font = new Font("Segoe UI", 8.5F);
-        menuConfigText.ForeColor = Color.FromArgb(189, 196, 209);
-        menuConfigText.Location = new Point(48, 0);
-        menuConfigText.Name = "menuConfigText";
-        menuConfigText.Size = new Size(108, 40);
-        menuConfigText.TabIndex = 1;
-        menuConfigText.Text = "Configurações";
-        menuConfigText.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // menuItemSeguranca
         // 
@@ -3766,10 +3594,6 @@ partial class PainelInicialForm
         menuItemInicio.ResumeLayout(false);
         menuItemCadastro.ResumeLayout(false);
         menuItemLeitura.ResumeLayout(false);
-        menuItemHistorico.ResumeLayout(false);
-        menuItemRelatorios.ResumeLayout(false);
-        menuItemSap.ResumeLayout(false);
-        menuItemConfig.ResumeLayout(false);
         menuItemSeguranca.ResumeLayout(false);
         sidebarUserPanel.ResumeLayout(false);
         rightAreaLayout.ResumeLayout(false);

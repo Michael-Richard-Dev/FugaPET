@@ -28,7 +28,6 @@ public partial class PainelInicialForm : Form
     private SegurancaForm? _segurancaForm;
     private Control? _currentContentView;
     private readonly Dictionary<Panel, (Label Icon, Label Text)> _sidebarMenuItems = new();
-    private readonly ToolTip _menuRotinaDesenvolvimentoToolTip = new();
     private readonly FugaPET_Dev.Servicos.Auditoria.AuditoriaServico _auditoriaServico =
         FugaPET_Dev.Controle.FabricaControladoresCadastro.CriarAuditoriaServico();
 
@@ -119,8 +118,7 @@ public partial class PainelInicialForm : Form
         // item. AutoSize é setado aqui no init (fora de qualquer SuspendLayout) para valer de fato.
         foreach (Label rotulo in new[]
                  {
-                     menuInicioText, menuCadastroText, menuLeituraText, menuHistoricoText,
-                     menuRelatoriosText, menuSapText, menuConfigText, menuSegurancaText,
+                     menuInicioText, menuCadastroText, menuLeituraText, menuSegurancaText,
                  })
         {
             rotulo.AutoSize = true;
@@ -140,10 +138,6 @@ public partial class PainelInicialForm : Form
             (menuItemInicio, menuInicioIcon, menuInicioText),
             (menuItemCadastro, menuCadastroIcon, menuCadastroText),
             (menuItemLeitura, menuLeituraIcon, menuLeituraText),
-            (menuItemHistorico, menuHistoricoIcon, menuHistoricoText),
-            (menuItemRelatorios, menuRelatoriosIcon, menuRelatoriosText),
-            (menuItemSap, menuSapIcon, menuSapText),
-            (menuItemConfig, menuConfigIcon, menuConfigText),
             (menuItemSeguranca, menuSegurancaIcon, menuSegurancaText),
         ];
 
@@ -519,10 +513,6 @@ public partial class PainelInicialForm : Form
     {
         ConfigurarDisponibilidadeMenu(menuItemCadastro, PermissoesSistema.Modulos.Cadastro);
         ConfigurarDisponibilidadeMenu(menuItemLeitura, PermissoesSistema.Modulos.ProcessoProducao);
-        ConfigurarDisponibilidadeMenu(menuItemHistorico, PermissoesSistema.Modulos.Historico);
-        ConfigurarDisponibilidadeMenu(menuItemRelatorios, PermissoesSistema.Modulos.Relatorio);
-        ConfigurarDisponibilidadeMenu(menuItemSap, PermissoesSistema.Modulos.IntegracaoSap);
-        ConfigurarDisponibilidadeMenu(menuItemConfig, PermissoesSistema.Modulos.Configuracao);
         ConfigurarDisponibilidadeMenu(menuItemSeguranca, PermissoesSistema.Modulos.Seguranca);
     }
 
@@ -533,12 +523,6 @@ public partial class PainelInicialForm : Form
 
         if (!permitido)
         {
-            return;
-        }
-
-        if (TryObterRotinaEmDesenvolvimento(item, out string nomeRotina))
-        {
-            AplicarMenuEmDesenvolvimento(item, nomeRotina);
             return;
         }
 
@@ -582,10 +566,6 @@ public partial class PainelInicialForm : Form
         RegisterSidebarMenuItem(menuItemInicio, menuInicioIcon, menuInicioText);
         RegisterSidebarMenuItem(menuItemCadastro, menuCadastroIcon, menuCadastroText);
         RegisterSidebarMenuItem(menuItemLeitura, menuLeituraIcon, menuLeituraText);
-        RegisterSidebarMenuItem(menuItemHistorico, menuHistoricoIcon, menuHistoricoText);
-        RegisterSidebarMenuItem(menuItemRelatorios, menuRelatoriosIcon, menuRelatoriosText);
-        RegisterSidebarMenuItem(menuItemSap, menuSapIcon, menuSapText);
-        RegisterSidebarMenuItem(menuItemConfig, menuConfigIcon, menuConfigText);
         RegisterSidebarMenuItem(menuItemSeguranca, menuSegurancaIcon, menuSegurancaText);
 
         SetActiveSidebarMenuItem(menuItemInicio);
@@ -600,54 +580,8 @@ public partial class PainelInicialForm : Form
         text.Click += (_, _) => NavigateFromSidebar(item);
     }
 
-    private void AplicarMenuEmDesenvolvimento(Panel item, string nomeRotina)
-    {
-        if (!_sidebarMenuItems.TryGetValue(item, out var menuItem))
-        {
-            return;
-        }
-
-        string mensagem = $"{nomeRotina}: rotina em desenvolvimento.";
-
-        item.Enabled = true;
-        item.Cursor = Cursors.No;
-        item.BackColor = SidebarInactiveColor;
-        menuItem.Icon.Cursor = Cursors.No;
-        menuItem.Text.Cursor = Cursors.No;
-        menuItem.Icon.ForeColor = Color.FromArgb(255, 255, 255);
-        menuItem.Text.ForeColor = Color.FromArgb(255, 255, 255);
-        menuItem.Text.Font = new Font(menuItem.Text.Font.FontFamily, menuItem.Text.Font.Size, FontStyle.Regular);
-
-        _menuRotinaDesenvolvimentoToolTip.SetToolTip(item, mensagem);
-        _menuRotinaDesenvolvimentoToolTip.SetToolTip(menuItem.Icon, mensagem);
-        _menuRotinaDesenvolvimentoToolTip.SetToolTip(menuItem.Text, mensagem);
-    }
-
-    private bool TryObterRotinaEmDesenvolvimento(Panel item, out string nomeRotina)
-    {
-        if (item == menuItemRelatorios)
-        {
-            nomeRotina = "Relatórios";
-            return true;
-        }
-
-        if (item == menuItemConfig)
-        {
-            nomeRotina = "Configurações";
-            return true;
-        }
-
-        nomeRotina = string.Empty;
-        return false;
-    }
-
     private async void NavigateFromSidebar(Panel item)
     {
-        if (TryObterRotinaEmDesenvolvimento(item, out _))
-        {
-            return;
-        }
-
         SetActiveSidebarMenuItem(item);
 
         if (item == menuItemInicio)
@@ -665,18 +599,6 @@ public partial class PainelInicialForm : Form
         if (item == menuItemLeitura)
         {
             await ShowProcessoProducaoContentAsync();
-            return;
-        }
-
-        if (item == menuItemHistorico)
-        {
-            await OpenConsultaHistoricoAsync();
-            return;
-        }
-
-        if (item == menuItemSap)
-        {
-            await OpenConsultaIntegracaoSapAsync();
             return;
         }
 
@@ -708,12 +630,6 @@ public partial class PainelInicialForm : Form
     {
         foreach (var menuItem in _sidebarMenuItems)
         {
-            if (TryObterRotinaEmDesenvolvimento(menuItem.Key, out string nomeRotina))
-            {
-                AplicarMenuEmDesenvolvimento(menuItem.Key, nomeRotina);
-                continue;
-            }
-
             bool isActive = menuItem.Key == activeItem;
             menuItem.Key.BackColor = isActive ? SidebarActiveColor : SidebarInactiveColor;
             menuItem.Value.Icon.ForeColor = SidebarTextColor;
@@ -1396,42 +1312,6 @@ public partial class PainelInicialForm : Form
     {
         if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.ProcessoProducao, PermissoesSistema.Rotinas.OrdemAndamento, "Consulta de Ordem de Produção")) return;
         using Consulta.ConsultaOrdemProducaoForm form = new();
-
-        Hide();
-
-        try
-        {
-            form.ShowDialog(this);
-        }
-        finally
-        {
-            Show();
-        }
-    }
-
-    private async Task OpenConsultaHistoricoAsync()
-    {
-        if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.Historico, "Histórico")) return;
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.Historico, PermissoesSistema.Rotinas.Movimentacao, "Consulta de Histórico")) return;
-        using Consulta.ConsultaHistoricoForm form = new();
-
-        Hide();
-
-        try
-        {
-            form.ShowDialog(this);
-        }
-        finally
-        {
-            Show();
-        }
-    }
-
-    private async Task OpenConsultaIntegracaoSapAsync()
-    {
-        if (!await PodeAcessarModuloAsync(PermissoesSistema.Modulos.IntegracaoSap, "SAP")) return;
-        if (!await PermiteAbrirTelaAsync(PermissoesSistema.Modulos.IntegracaoSap, PermissoesSistema.Rotinas.MonitoramentoSap, "Consulta de Integração SAP")) return;
-        using Consulta.ConsultaIntegracaoSapForm form = new();
 
         Hide();
 
