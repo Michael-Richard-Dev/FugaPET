@@ -151,6 +151,37 @@ public sealed class VinculoProdutoEtiquetaChromeTests
             Assert.True(cartoes >= 2, $"esperava ao menos dois cartoes, achei {cartoes}");
         });
 
+    /// <summary>
+    /// O BOTAO DE VOLTAR PARA O CADASTRO, o mesmo glifo das outras telas (U+E700), e ele fica a
+    /// ESQUERDA do logo — e o primeiro elemento da faixa.
+    /// </summary>
+    [Fact]
+    public void OCabecalho_TemOBotaoDeVoltar()
+        => ComATela(f =>
+        {
+            Label? voltar = null;
+            PictureBox? logo = null;
+            Procurar(f, c =>
+            {
+                if (c is Label rotulo && rotulo.Text == "\uE700") { voltar = rotulo; }
+                if (c is PictureBox p && (p.Tag as string) == global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.TagLogo) { logo = p; }
+            });
+
+            Assert.NotNull(voltar);
+            Assert.NotNull(logo);
+            Assert.True(
+                voltar!.Left < logo!.Left,
+                $"o botao de voltar esta em x={voltar.Left} e o logo em x={logo.Left} — ele deveria vir antes");
+        });
+
+    /// <summary>
+    /// A MESMA FONTE BASE DAS OUTRAS TELAS DE CADASTRO. Medido em 26/11/2026: la o Form e Cascadia
+    /// Code e aqui era Segoe UI, e por isso o titulo nao tinha o mesmo desenho.
+    /// </summary>
+    [Fact]
+    public void ATela_UsaAFonteBaseDasOutrasTelasDeCadastro()
+        => ComATela(f => Assert.Equal("Cascadia Code", f.Font.Name));
+
     private static Label[] BotoesDeJanela(Form f)
     {
         List<Label> achados = [];

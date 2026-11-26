@@ -53,6 +53,10 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         // de montar o layout porque a faixa da marca passa a ser tambem a barra de titulo.
         FormBorderStyle = FormBorderStyle.None;
         BackColor = Color.FromArgb(0xF7, 0xF8, 0xFA);
+        // MESMA FONTE BASE DAS OUTRAS TELAS DE CADASTRO. Medido em 26/11/2026: la o Form e
+        // "Cascadia Code" 9pt e aqui era "Segoe UI" — por isso o titulo desta tela nao tinha o mesmo
+        // desenho dos demais. O CONTEUDO segue em Segoe UI, explicito, como nas outras.
+        Font = new Font("Cascadia Code", 9f);
         Comum.IconeJanelaHelper.AplicarIconePadrao(this);
 
         MontarLayout();
@@ -122,17 +126,37 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         };
         Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(logo);
 
-        // Divisor fino entre o logo e o assunto da tela, como nas demais.
+        // BOTAO DE VOLTAR para a pagina de Cadastro, o mesmo glifo e o mesmo gesto das outras telas:
+        // U+E700 do Segoe MDL2 Assets, e o clique FECHA a tela — quem reabre o painel e o shell.
+        Label voltar = new()
+        {
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            Dock = DockStyle.Left,
+            Font = new Font("Segoe MDL2 Assets", Font.Size + 5f),
+            ForeColor = Color.White,
+            Text = "\uE700",
+            TextAlign = ContentAlignment.MiddleCenter,
+            Width = Escalar(40),
+        };
+        voltar.Click += (_, _) => Close();
+
+        // DIVISOR com ar dos dois lados e altura menor que a faixa. Antes ele ia de topo a base e
+        // colava no icone da tela — foi o que o usuario viu como "linha branca conflitando com o
+        // icone". A moldura transparente da o respiro; o fio mora dentro dela.
+        Panel molduraDoDivisor = new()
+        {
+            BackColor = Color.Transparent,
+            Dock = DockStyle.Left,
+            Width = Escalar(25),
+            Padding = new Padding(Escalar(12), Escalar(9), Escalar(12), Escalar(9)),
+        };
         Panel divisor = new()
         {
-            Dock = DockStyle.Left,
-            // Escalar(1) e nao 1: o teste da tela exige que todo tamanho passe pela escala, e num
-            // monitor de DPI alto um fio de 1px some.
-            Width = Escalar(1),
+            Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(0xE8, 0xAE, 0x8C),
-            Margin = new Padding(0),
-            Padding = new Padding(0),
         };
+        molduraDoDivisor.Controls.Add(divisor);
 
         // Icone da tela e titulo com subtitulo, como nas demais telas de cadastro. O icone reusa o
         // mesmo recurso da tela de Etiqueta, que e o assunto desta aqui.
@@ -213,10 +237,13 @@ public sealed class VinculoProdutoEtiquetaForm : Form
 
         faixa.SizeChanged += (_, _) => Reposicionar();
 
+        // ORDEM IMPORTA com Dock=Left: quem tem o MAIOR indice doca mais a esquerda. Por isso o botao
+        // de voltar entra por ultimo — ele e o primeiro elemento da faixa.
         faixa.Controls.Add(bloco);
         faixa.Controls.Add(icone);
-        faixa.Controls.Add(divisor);
+        faixa.Controls.Add(molduraDoDivisor);
         faixa.Controls.Add(logo);
+        faixa.Controls.Add(voltar);
         faixa.Controls.Add(minimizar);
         faixa.Controls.Add(maximizar);
         faixa.Controls.Add(fechar);
@@ -234,6 +261,8 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         // Realce ao passar o mouse e arraste pela faixa, os mesmos das outras telas.
         Comum.BarraDeTituloHelper.AplicarRealceDosBotoes(faixa, minimizar, maximizar, fechar);
         Comum.BarraDeTituloHelper.PermitirArrastarPeloCabecalho(this, faixa, bloco, titulo, subtitulo, logo);
+        // O realce do botao de voltar segue a mesma regra dos de janela.
+        Comum.BarraDeTituloHelper.AplicarRealceDosBotoes(faixa, voltar);
         return faixa;
     }
 
@@ -265,6 +294,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         {
             Text = "Filtrar por código ou descrição:",
             AutoSize = true,
+            Font = new Font("Segoe UI", 9f),
             Margin = new Padding(0, Escalar(8), Escalar(8), 0),
         };
 
@@ -461,6 +491,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         Height = Escalar(20),
         TextAlign = ContentAlignment.BottomLeft,
         Margin = new Padding(0),
+        Font = new Font("Segoe UI", 9f),
     };
 
     private Control MontarPainelDecisao()
@@ -486,7 +517,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         _rotuloProduto.Dock = DockStyle.Top;
         _rotuloProduto.Height = Escalar(38);
         _rotuloProduto.TextAlign = ContentAlignment.TopLeft;
-        _rotuloProduto.Font = new Font(Font, FontStyle.Bold);
+        _rotuloProduto.Font = new Font("Segoe UI", Font.Size + 1f, FontStyle.Bold);
         _rotuloProduto.Margin = new Padding(0, 0, 0, Escalar(8));
 
         Label rotuloEtiqueta = CriarRotuloDoCampo("Etiqueta:");
@@ -496,6 +527,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         _etiquetas.Margin = new Padding(0, Escalar(2), 0, Escalar(10));
 
         _semEtiqueta.Text = "Este produto não leva etiqueta";
+        _semEtiqueta.Font = new Font("Segoe UI", 9f);
         _semEtiqueta.AutoSize = false;
         _semEtiqueta.Dock = DockStyle.Top;
         _semEtiqueta.Height = Escalar(24);
@@ -522,6 +554,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         // Cinza, não o laranja de alerta: o texto passou a DESCREVER o processo, não a avisar de uma
         // limitação. Manter a cor de alarme faria uma escolha normal parecer arriscada.
         _avisoProcesso.ForeColor = Color.FromArgb(0x6B, 0x72, 0x80);
+        _avisoProcesso.Font = new Font("Segoe UI", 9f);
         _avisoProcesso.Margin = new Padding(0, 0, 0, Escalar(12));
 
         // OS DOIS BOTOES no padrao MEDIDO das telas de cadastro: o de gravar e laranja solido com
@@ -566,6 +599,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         _situacao.Height = Escalar(22);
         _situacao.TextAlign = ContentAlignment.MiddleLeft;
         _situacao.ForeColor = Color.FromArgb(0x47, 0x55, 0x69);
+        _situacao.Font = new Font("Segoe UI", 9f);
         _situacao.Margin = new Padding(0, Escalar(8), 0, 0);
         return _situacao;
     }
