@@ -208,6 +208,16 @@ internal static class ShellProcessoPadraoHelper
         TextAlign = ContentAlignment.MiddleCenter
     };
 
+    /// <summary>
+    /// O rodape padrao do sistema: usuario, terminal, empresa, banco, hora e data.
+    /// <para>
+    /// EXPOSTO em 26/11/2026 para a tela de Vinculo de Produto e Etiqueta reusar em vez de ganhar
+    /// uma COPIA. Copia privada por tela foi exatamente o que deixou nove telas sem o realce dos
+    /// botoes de janela — ver Comum/BarraDeTituloHelper.
+    /// </para>
+    /// </summary>
+    internal static Control CriarRodapePadrao() => CriarRodape();
+
     private static Control CriarRodape()
     {
         Panel footerBar = new()

@@ -2,6 +2,7 @@ using FugaPET_Dev.Controle;
 using FugaPET_Dev.Controle.Cadastro;
 using FugaPET_Dev.Modelo.Cadastro;
 using FugaPET_Dev.Servicos.Cadastro;
+using FugaPET_Dev.Tela.Controls;
 
 namespace FugaPET_Dev.Tela.Cadastro;
 
@@ -48,6 +49,12 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         MinimumSize = new Size(Escalar(900), Escalar(560));
         KeyPreview = true;
 
+        // A barra de titulo do Windows sai e entra a do sistema, como nas demais telas. Feito ANTES
+        // de montar o layout porque a faixa da marca passa a ser tambem a barra de titulo.
+        FormBorderStyle = FormBorderStyle.None;
+        BackColor = Color.FromArgb(0xF7, 0xF8, 0xFA);
+        Comum.IconeJanelaHelper.AplicarIconePadrao(this);
+
         MontarLayout();
         Shown += async (_, _) => await CarregarAsync();
         KeyDown += AoTeclar;
@@ -59,24 +66,32 @@ public sealed class VinculoProdutoEtiquetaForm : Form
 
     private void MontarLayout()
     {
+        // Duas linhas: o conteudo e a linha de situacao. O FILTRO saiu daqui e foi para DENTRO do
+        // cartao da lista, como a busca das outras telas de cadastro — solto sobre o fundo ele era o
+        // que mais denunciava que esta tela vinha de outra geracao.
         TableLayoutPanel raiz = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 2,
             Padding = new Padding(Escalar(12)),
         };
-        raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         raiz.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        raiz.Controls.Add(MontarCabecalho(), 0, 0);
-        raiz.Controls.Add(MontarConteudo(), 0, 1);
-        raiz.Controls.Add(MontarRodape(), 0, 2);
+        raiz.Controls.Add(MontarConteudo(), 0, 0);
+        raiz.Controls.Add(MontarLinhaDeSituacao(), 0, 1);
 
-        // A faixa da marca fica FORA do TableLayoutPanel, ancorada no topo do formulario: ela precisa
-        // ir de borda a borda, enquanto a raiz tem recuo interno.
+        // A ORDEM DE INSERCAO IMPORTA com Dock: o ultimo a entrar fica mais perto da borda. Por isso
+        // a raiz (Fill) entra primeiro e as faixas depois — assim o conteudo ocupa o que sobra entre
+        // a faixa da marca no topo e o rodape do sistema embaixo, sem nenhuma das duas por cima.
+        // As faixas ficam FORA do TableLayoutPanel porque vao de borda a borda, e a raiz tem recuo.
         Controls.Add(raiz);
+
+        Panel rodapeDoSistema = new() { Dock = DockStyle.Bottom, Height = Escalar(38) };
+        rodapeDoSistema.Controls.Add(Comum.ShellProcessoPadraoHelper.CriarRodapePadrao());
+        Controls.Add(rodapeDoSistema);
+
         Controls.Add(MontarFaixaDaMarca());
         raiz.Padding = new Padding(Escalar(12), Escalar(12), Escalar(12), Escalar(12));
     }
@@ -109,20 +124,125 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         };
         Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(logo);
 
+        // Divisor fino entre o logo e o assunto da tela, como nas demais.
+        Panel divisor = new()
+        {
+            Dock = DockStyle.Left,
+            // Escalar(1) e nao 1: o teste da tela exige que todo tamanho passe pela escala, e num
+            // monitor de DPI alto um fio de 1px some.
+            Width = Escalar(1),
+            BackColor = Color.FromArgb(0xE8, 0xAE, 0x8C),
+            Margin = new Padding(0),
+            Padding = new Padding(0),
+        };
+
+        // Icone da tela e titulo com subtitulo, como nas demais telas de cadastro. O icone reusa o
+        // mesmo recurso da tela de Etiqueta, que e o assunto desta aqui.
+        PictureBox icone = new()
+        {
+            BackColor = Color.Transparent,
+            Dock = DockStyle.Left,
+            Image = Properties.Resources.etiqueta_24x_white,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            TabStop = false,
+            Width = Escalar(30),
+            Margin = new Padding(0),
+        };
+
+        Panel bloco = new() { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+
         Label titulo = new()
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             Text = $"Vínculo de Produto e Etiqueta  ·  centro {_centro}",
             ForeColor = Color.White,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(Escalar(16), 0, 0, 0),
+            AutoSize = false,
+            Height = Escalar(26),
+            TextAlign = ContentAlignment.BottomLeft,
+            Padding = new Padding(Escalar(12), 0, 0, 0),
             Font = new Font(Font.FontFamily, Font.Size + 3f, FontStyle.Bold),
         };
 
-        faixa.Controls.Add(titulo);
+        Label subtitulo = new()
+        {
+            Dock = DockStyle.Top,
+            Text = "Define a etiqueta e o processo de pesagem de cada produto acabado",
+            ForeColor = Color.White,
+            AutoSize = false,
+            Height = Escalar(18),
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(Escalar(12), 0, 0, 0),
+            Font = new Font(Font.FontFamily, Font.Size - 0.5f),
+        };
+
+        bloco.Controls.Add(subtitulo);
+        bloco.Controls.Add(titulo);
+
+        // OS TRES BOTOES DE JANELA, porque a barra do Windows saiu. Eles sao REPOSICIONADOS a cada
+        // mudanca de largura, nunca cravados: foi posicao cravada para 1366 que deixou a tela Campos
+        // da Etiqueta sem saida — os botoes dela terminavam a 1100px fora do visivel.
+        Label minimizar = CriarBotaoDeJanela("–");
+        minimizar.Click += (_, _) => WindowState = FormWindowState.Minimized;
+
+        Label maximizar = CriarBotaoDeJanela("□");
+        maximizar.Click += (_, _) => WindowState = WindowState == FormWindowState.Maximized
+            ? FormWindowState.Normal
+            : FormWindowState.Maximized;
+
+        Label fechar = CriarBotaoDeJanela("×");
+        fechar.Click += (_, _) => Close();
+
+        void Reposicionar()
+        {
+            // Sem SetBounds: o teste Tela_NaoUsaGeometriaCravadaEmPixel proibe a chamada nesta tela,
+            // e com razao — e por ali que entra geometria cravada. Aqui tudo sai de variaveis.
+            int largura = Escalar(46);
+            int altura = faixa.ClientSize.Height;
+
+            foreach (Label botao in new[] { minimizar, maximizar, fechar })
+            {
+                botao.Width = largura;
+                botao.Height = altura;
+                botao.Top = 0;
+            }
+
+            fechar.Left = faixa.ClientSize.Width - largura;
+            maximizar.Left = fechar.Left - largura;
+            minimizar.Left = maximizar.Left - largura;
+            // O titulo para antes dos botoes, para o texto nunca correr por baixo deles.
+            bloco.Padding = new Padding(0, 0, (largura * 3) + Escalar(8), 0);
+        }
+
+        faixa.SizeChanged += (_, _) => Reposicionar();
+
+        faixa.Controls.Add(bloco);
+        faixa.Controls.Add(icone);
+        faixa.Controls.Add(divisor);
         faixa.Controls.Add(logo);
+        faixa.Controls.Add(minimizar);
+        faixa.Controls.Add(maximizar);
+        faixa.Controls.Add(fechar);
+        Reposicionar();
+
+        // Realce ao passar o mouse e arraste pela faixa, os mesmos das outras telas.
+        Comum.BarraDeTituloHelper.AplicarRealceDosBotoes(faixa, minimizar, maximizar, fechar);
+        Comum.BarraDeTituloHelper.PermitirArrastarPeloCabecalho(this, faixa, bloco, titulo, subtitulo, logo);
         return faixa;
     }
+
+    /// <summary>
+    /// Um botao de janela da faixa: so a aparencia. A POSICAO e o tamanho saem do
+    /// <c>Reposicionar</c> da faixa, que roda a cada mudanca de largura.
+    /// </summary>
+    private Label CriarBotaoDeJanela(string glifo) => new()
+    {
+        BackColor = Color.Transparent,
+        Cursor = Cursors.Hand,
+        Font = new Font(Font.FontFamily, Font.Size + 3f),
+        ForeColor = Color.White,
+        Text = glifo,
+        TextAlign = ContentAlignment.MiddleCenter,
+    };
 
     private Control MontarCabecalho()
     {
@@ -147,9 +267,11 @@ public sealed class VinculoProdutoEtiquetaForm : Form
 
         // O botao SINCRONIZA; abrir a tela apenas LE o catalogo local. Era o contrario ate
         // 18/11/2026, e abrir custava 51 consultas ao SAP.
-        _atualizar.Text = "Atualizar do SAP (F5)";
-        _atualizar.AutoSize = true;
-        _atualizar.Margin = new Padding(0, Escalar(3), 0, 0);
+        EstilizarBotao(_atualizar, "Atualizar do SAP (F5)", principal: false);
+        _atualizar.Dock = DockStyle.None;
+        _atualizar.AutoSize = false;
+        _atualizar.Width = Escalar(170);
+        _atualizar.Margin = new Padding(0, Escalar(2), 0, 0);
         _atualizar.Click += async (_, _) => await SincronizarAsync();
 
         faixa.Controls.AddRange([rotulo, _filtro, _atualizar]);
@@ -166,11 +288,61 @@ public sealed class VinculoProdutoEtiquetaForm : Form
             Margin = new Padding(0, Escalar(8), 0, Escalar(8)),
         };
         conteudo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        conteudo.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        // LARGURA ABSOLUTA para a coluna da decisao, nao AutoSize: com AutoSize o cartao decidia a
+        // largura da coluna e a coluna decidia a do cartao, e o resultado media mais que a tela —
+        // "Salvar vínculo" e "Este produto não leva etiqueta" saiam cortados na borda direita.
+        conteudo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Escalar(360)));
 
-        conteudo.Controls.Add(MontarGrade(), 0, 0);
+        // O cartao da lista leva o filtro no topo e a grade embaixo.
+        TableLayoutPanel listaComFiltro = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0),
+        };
+        listaComFiltro.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        listaComFiltro.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        listaComFiltro.Controls.Add(MontarCabecalho(), 0, 0);
+        listaComFiltro.Controls.Add(MontarGrade(), 0, 1);
+
+        conteudo.Controls.Add(EmCartao(listaComFiltro, "Produtos do centro"), 0, 0);
         conteudo.Controls.Add(MontarPainelDecisao(), 1, 0);
         return conteudo;
+    }
+
+    /// <summary>
+    /// Envolve um conteudo no cartao branco arredondado das telas de cadastro, com um titulo em
+    /// cima. E o mesmo <see cref="RoundedPanel"/> que Setor, Cargo e companhia usam — aqui so vem
+    /// montado em codigo, porque esta tela nao tem Designer.
+    /// </summary>
+    private Control EmCartao(Control conteudo, string titulo)
+    {
+        RoundedPanel cartao = new()
+        {
+            BackColor = Color.Transparent,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
+            Padding = new Padding(Escalar(14), Escalar(12), Escalar(14), Escalar(14)),
+            ShadowBlur = 0,
+            ShadowOffsetY = 0,
+        };
+
+        Label rotulo = new()
+        {
+            Dock = DockStyle.Top,
+            Text = titulo,
+            AutoSize = false,
+            Height = Escalar(26),
+            ForeColor = Color.FromArgb(0x0F, 0x17, 0x2A),
+            Font = new Font("Segoe UI", Font.Size + 1.5f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+
+        conteudo.Dock = DockStyle.Fill;
+        cartao.Controls.Add(conteudo);
+        cartao.Controls.Add(rotulo);
+        return cartao;
     }
 
     private Control MontarGrade()
@@ -194,6 +366,38 @@ public sealed class VinculoProdutoEtiquetaForm : Form
             Coluna("Processo", 16),
         ]);
 
+        // APARENCIA no padrao das listas de cadastro: fundo branco, cabecalho claro com texto
+        // escuro, linha selecionada em laranja claro e separador fino. Sem isso a grade entrega o
+        // cinza padrao do WinForms, que e o que fazia esta tela parecer de outro sistema.
+        _grade.BackgroundColor = Color.White;
+        _grade.BorderStyle = BorderStyle.None;
+        _grade.EnableHeadersVisualStyles = false;
+        _grade.GridColor = Color.FromArgb(0xE2, 0xE8, 0xF0);
+        _grade.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _grade.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        _grade.ColumnHeadersHeight = Escalar(34);
+        _grade.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.EnableResizing;
+        _grade.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.FromArgb(0xF8, 0xFA, 0xFC),
+            ForeColor = Color.FromArgb(0x0F, 0x17, 0x2A),
+            Font = new Font("Segoe UI", Font.Size, FontStyle.Bold),
+            Alignment = DataGridViewContentAlignment.MiddleLeft,
+            Padding = new Padding(Escalar(8), 0, 0, 0),
+            SelectionBackColor = Color.FromArgb(0xF8, 0xFA, 0xFC),
+            SelectionForeColor = Color.FromArgb(0x0F, 0x17, 0x2A),
+        };
+        _grade.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.White,
+            ForeColor = Color.FromArgb(0x33, 0x3D, 0x4D),
+            Font = new Font("Segoe UI", Font.Size),
+            Padding = new Padding(Escalar(8), 0, 0, 0),
+            SelectionBackColor = Color.FromArgb(0xFD, 0xE4, 0xD3),
+            SelectionForeColor = Color.FromArgb(0x0F, 0x17, 0x2A),
+        };
+        _grade.RowTemplate.Height = Escalar(30);
+
         _grade.SelectionChanged += (_, _) => MostrarSelecionado();
         return _grade;
     }
@@ -205,16 +409,44 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         SortMode = DataGridViewColumnSortMode.NotSortable,
     };
 
+    /// <summary>
+    /// Aparencia dos botoes de acao, nas cores MEDIDAS nas telas de cadastro em 26/11/2026:
+    /// gravar = #C84E0A com texto branco; destrutivo = branco, borda #CBD5E1 e texto #C84E0A.
+    /// </summary>
+    private void EstilizarBotao(Button botao, string texto, bool principal)
+    {
+        botao.Text = texto;
+        botao.Dock = DockStyle.Top;
+        botao.Height = Escalar(34);
+        botao.FlatStyle = FlatStyle.Flat;
+        botao.Cursor = Cursors.Hand;
+        botao.Font = new Font("Segoe UI", Font.Size, FontStyle.Bold);
+        botao.UseVisualStyleBackColor = false;
+
+        if (principal)
+        {
+            botao.BackColor = Color.FromArgb(0xC8, 0x4E, 0x0A);
+            botao.ForeColor = Color.White;
+            botao.FlatAppearance.BorderColor = Color.FromArgb(0xC8, 0x4E, 0x0A);
+        }
+        else
+        {
+            botao.BackColor = Color.White;
+            botao.ForeColor = Color.FromArgb(0xC8, 0x4E, 0x0A);
+            botao.FlatAppearance.BorderColor = Color.FromArgb(0xCB, 0xD5, 0xE1);
+        }
+    }
+
     private Control MontarPainelDecisao()
     {
+        // A borda quadrada de um pixel (BorderStyle.FixedSingle) saiu: o cartao arredondado vem do
+        // EmCartao, igual ao da lista e ao das telas com Designer.
         TableLayoutPanel painel = new()
         {
             ColumnCount = 1,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(Escalar(16), 0, 0, 0),
-            Padding = new Padding(Escalar(12)),
-            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0),
             Width = Escalar(320),
         };
 
@@ -255,13 +487,14 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         _avisoProcesso.ForeColor = Color.FromArgb(0x6B, 0x72, 0x80);
         _avisoProcesso.Margin = new Padding(0, 0, 0, Escalar(12));
 
-        _salvar.Text = "Salvar vínculo";
-        _salvar.Width = Escalar(290);
+        // OS DOIS BOTOES no padrao MEDIDO das telas de cadastro: o de gravar e laranja solido com
+        // texto branco, e o destrutivo e branco com borda cinza e texto laranja. Era o visual padrao
+        // do Windows que fazia estes dois parecerem de outro sistema.
+        EstilizarBotao(_salvar, "Salvar vínculo", principal: true);
         _salvar.Margin = new Padding(0, 0, 0, Escalar(6));
         _salvar.Click += async (_, _) => await SalvarAsync();
 
-        _remover.Text = "Remover vínculo";
-        _remover.Width = Escalar(290);
+        EstilizarBotao(_remover, "Remover vínculo", principal: false);
         _remover.Click += async (_, _) => await RemoverAsync();
 
         painel.Controls.AddRange(
@@ -272,10 +505,23 @@ public sealed class VinculoProdutoEtiquetaForm : Form
 
         AtualizarAvisoProcesso();
         HabilitarDecisao(false);
-        return painel;
+
+        // O painel para de mandar na largura: quem manda e a coluna (absoluta), e o cartao a
+        // preenche. Assim os rotulos e os botoes tem a largura real para desenhar.
+        painel.AutoSize = false;
+        painel.Dock = DockStyle.Fill;
+
+        Control cartao = EmCartao(painel, "Decisão do produto");
+        cartao.Margin = new Padding(Escalar(16), 0, 0, 0);
+        return cartao;
     }
 
-    private Control MontarRodape()
+    /// <summary>
+    /// A LINHA DE SITUACAO da tela — o que a ultima operacao respondeu. Nao confundir com o rodape
+    /// do sistema (usuario, terminal, empresa, banco, hora, data), que entra separado e vem do
+    /// <see cref="Tela.Comum.ShellProcessoPadraoHelper"/> para esta tela nao ganhar uma copia dele.
+    /// </summary>
+    private Control MontarLinhaDeSituacao()
     {
         _situacao.Dock = DockStyle.Fill;
         _situacao.AutoSize = true;
