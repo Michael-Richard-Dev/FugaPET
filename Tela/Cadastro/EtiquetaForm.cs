@@ -974,8 +974,12 @@ public partial class EtiquetaForm : Form
         int tipoComboY = Math.Max(2, (roundedPanel1.Height - tipoComboHeight) / 2);
         tipoEtiquetaComboBox.Bounds = new Rectangle(Scale(12, scaleX), tipoComboY, campoTextoWidth, tipoComboHeight);
 
-        LblSetorTara.Bounds = new Rectangle(col2, Scale(182, scaleY), fieldWidth, Scale(19, scaleY));
-        RdpSetor.Bounds = new Rectangle(col2, Scale(204, scaleY), fieldWidth, Scale(33, scaleY));
+        // "Modelo da Etiqueta" (controles de nome legado: LblSetorTara / RdpSetor) desce para a
+        // COLUNA DA ESQUERDA. Sao cinco campos em duas colunas, entao uma celula sempre sobra: na
+        // direita ela encosta na Descricao, que ocupa a largura toda logo abaixo, e le-se como o fim
+        // da grade. Na esquerda, como estava, abria um buraco ao lado de um campo preenchido.
+        LblSetorTara.Bounds = new Rectangle(col1, Scale(182, scaleY), fieldWidth, Scale(19, scaleY));
+        RdpSetor.Bounds = new Rectangle(col1, Scale(204, scaleY), fieldWidth, Scale(33, scaleY));
         int modeloComboHeight = Math.Max(22, modeloEtiquetaComboBox.PreferredHeight);
         int modeloComboY = Math.Max(2, (RdpSetor.Height - modeloComboHeight) / 2);
         modeloEtiquetaComboBox.Bounds = new Rectangle(Scale(12, scaleX), modeloComboY, campoTextoWidth, modeloComboHeight);

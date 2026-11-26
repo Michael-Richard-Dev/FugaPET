@@ -487,6 +487,44 @@ public sealed class CadastroLayoutHarmoniaTests
                 + "acompanhar o rotulo do botao");
         });
 
+    /// <summary>
+    /// A GRADE DE CAMPOS DA ETIQUETA NAO DEIXA BURACO NO MEIO.
+    /// <para>
+    /// Relato do usuario em 26/11/2026. A tela tem CINCO campos em duas colunas, entao uma celula
+    /// sempre sobra — a questao e ONDE. Estava na esquerda da terceira linha, ao lado de "Modelo da
+    /// Etiqueta", e lia-se como buraco. Passou para a direita, encostada na Descricao, que ocupa a
+    /// largura toda logo abaixo.
+    /// </para>
+    /// <para>
+    /// A regra medida: em toda linha da grade, se a coluna DA DIREITA tem campo, a da ESQUERDA
+    /// tambem tem. O contrario e permitido — e exatamente o fim da grade.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Etiqueta_AGradeDeCampos_NaoDeixaBuracoNaEsquerda()
+        => ComATela("EtiquetaForm", c =>
+        {
+            Control[] molduras =
+            [
+                c["nomePerfilInputPanel"], c["situacaoInputPanel"],
+                c["roundedPanel2"], c["roundedPanel1"],
+                c["RdpSetor"],
+            ];
+
+            int esquerda = molduras.Min(m => m.Left);
+
+            foreach (IGrouping<int, Control> linha in molduras.GroupBy(m => m.Top))
+            {
+                bool temEsquerda = linha.Any(m => m.Left == esquerda);
+                bool temDireita = linha.Any(m => m.Left > esquerda);
+
+                Assert.True(
+                    !temDireita || temEsquerda,
+                    $"na linha y={linha.Key} ha campo na coluna da direita e nenhum na esquerda — "
+                    + "buraco no meio da grade");
+            }
+        });
+
     private static int Ocorrencias(string texto, string agulha)
         => texto.Split(agulha).Length - 1;
 
