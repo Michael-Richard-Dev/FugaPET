@@ -80,25 +80,6 @@ public sealed class EtiquetaFormTecnicaTests
     }
 
     [Fact]
-    public void Tela_CamposDaEtiquetaExigeRegistroSelecionadoEPermissao()
-    {
-        Assert.Contains("_idEtiquetaAtual > 0", Form, StringComparison.Ordinal);
-        Assert.Contains("&& _situacaoSelecionadaAtiva", Form, StringComparison.Ordinal);
-        Assert.Contains("PermissoesSistema.Rotinas.CampoEtiqueta", Form, StringComparison.Ordinal);
-        Assert.Contains("using CamposEtiquetaForm form = new(_idEtiquetaAtual)", Form, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Tela_CamposDaEtiquetaBloqueiaEtiquetaInativaComMensagemClara()
-    {
-        string metodo = ExtrairEntre(Form, "private void AbrirCamposEtiqueta()", "private void PreencherCampos");
-
-        Assert.Contains("if (!_situacaoSelecionadaAtiva)", metodo, StringComparison.Ordinal);
-        Assert.Contains("Reative a etiqueta antes de configurar seus campos.", metodo, StringComparison.Ordinal);
-        Assert.Contains("using CamposEtiquetaForm form = new(_idEtiquetaAtual)", metodo, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Tela_NovaEtiquetaExigeModeloAtivoAntesDoModoNovo()
     {
         string metodo = ExtrairEntre(Form, "private void PrepararNovaEtiqueta()", "private async Task SalvarEtiquetaAsync()");
@@ -111,7 +92,7 @@ public sealed class EtiquetaFormTecnicaTests
     [Fact]
     public void Tela_NovoCadastroForcaAtivoEEdicaoPreservaSituacaoSelecionada()
     {
-        string metodo = ExtrairEntre(Form, "private EtiquetaCadastro? CriarEtiquetaDaTela()", "private void AbrirCamposEtiqueta()");
+        string metodo = ExtrairEntre(Form, "private EtiquetaCadastro? CriarEtiquetaDaTela()", "private void PreencherCampos");
 
         Assert.Contains("_modoCard == ModoCard.Novo", metodo, StringComparison.Ordinal);
         Assert.Contains("situacaoAtiva = true", metodo, StringComparison.Ordinal);
@@ -239,7 +220,6 @@ public sealed class EtiquetaFormTecnicaTests
         Assert.Contains("ApplyScaledFont(LblSetorTara, 7.75F, contentScale, 8.5F, 11F)", metodo, StringComparison.Ordinal);
         Assert.Contains("ApplyScaledFont(descricaoLabel, 7.75F, contentScale, 8.5F, 11F)", metodo, StringComparison.Ordinal);
         Assert.Contains("ApplyScaledFont(_detailsEmptyLabel, 10F, contentScale, 9.5F, 13F)", metodo, StringComparison.Ordinal);
-        Assert.Contains("camposEtiquetaButton.Font = new Font(\"Segoe UI\", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold)", metodo, StringComparison.Ordinal);
     }
 
     [Fact]

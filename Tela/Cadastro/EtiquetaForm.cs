@@ -30,7 +30,6 @@ public partial class EtiquetaForm : Form
     private readonly List<LinhaEtiquetaUi> _linhasEtiquetas = [];
     private IReadOnlyList<EtiquetaCadastro> _etiquetasCarregadas = [];
     private IReadOnlyList<ModeloEtiquetaCadastro> _modelosCarregados = [];
-    private Button? camposEtiquetaButton;
     private long _idEtiquetaAtual;
     private bool _situacaoSelecionadaAtiva = true;
     private bool _operacaoEmAndamento;
@@ -150,22 +149,6 @@ public partial class EtiquetaForm : Form
 
     private void CriarControlesAuxiliaresOriginais()
     {
-        camposEtiquetaButton = new Button
-        {
-            Name = "camposEtiquetaButton",
-            Text = "Campos da Etiqueta",
-            Font = new Font("Segoe UI", 8F, FontStyle.Bold),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.White,
-            ForeColor = Color.FromArgb(15, 23, 42),
-            Width = 180,
-            Height = 28,
-            Cursor = Cursors.Hand
-        };
-        camposEtiquetaButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-        detailsCard.Controls.Add(camposEtiquetaButton);
-        camposEtiquetaButton.BringToFront();
-
         _detailsEmptyLabel.Name = "detailsEmptyLabel";
         _detailsEmptyLabel.Font = new Font("Segoe UI", 9F);
         _detailsEmptyLabel.ForeColor = Color.FromArgb(100, 116, 139);
@@ -202,7 +185,6 @@ public partial class EtiquetaForm : Form
             await ExecutarOperacaoProtegidaAsync(EditarEtiquetaAsync, "ETIQUETA_EDITAR_ERRO");
         situacaoButton.Click += async (_, _) =>
             await ExecutarOperacaoProtegidaAsync(AlternarSituacaoEtiquetaAsync, "ETIQUETA_SITUACAO_ERRO");
-        camposEtiquetaButton!.Click += (_, _) => AbrirCamposEtiqueta();
 
         profilesCard.Resize += (_, _) => LayoutProfilesCard();
         detailsCard.Resize += (_, _) => LayoutDetailsCard();
@@ -579,35 +561,6 @@ public partial class EtiquetaForm : Form
         };
     }
 
-    private void AbrirCamposEtiqueta()
-    {
-        if (_idEtiquetaAtual <= 0 || _modoCard != ModoCard.Edicao) return;
-        if (!_situacaoSelecionadaAtiva)
-        {
-            MessageBox.Show(
-                "Reative a etiqueta antes de configurar seus campos.",
-                "Cadastro de Etiqueta",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-            return;
-        }
-
-        if (!AutorizacaoServico.PodeVisualizarRotina(
-                PermissoesSistema.Modulos.Etiqueta,
-                PermissoesSistema.Rotinas.CampoEtiqueta))
-        {
-            MessageBox.Show(
-                "Você não possui permissão para acessar os Campos da Etiqueta.",
-                "Acesso negado",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-            return;
-        }
-
-        using CamposEtiquetaForm form = new(_idEtiquetaAtual);
-        form.ShowDialog(this);
-    }
-
     private void PreencherCampos(EtiquetaCadastro etiqueta)
     {
         nomeEtiquetaTextBox.Text = etiqueta.NomeEtiqueta;
@@ -711,17 +664,6 @@ public partial class EtiquetaForm : Form
             && (_situacaoSelecionadaAtiva
                 ? Pode(PermissoesSistema.Acoes.Excluir)
                 : Pode(PermissoesSistema.Acoes.Editar));
-
-        if (camposEtiquetaButton is not null)
-        {
-            camposEtiquetaButton.Enabled = livre
-                && _modoCard == ModoCard.Edicao
-                && _idEtiquetaAtual > 0
-                && _situacaoSelecionadaAtiva
-                && AutorizacaoServico.PodeVisualizarRotina(
-                    PermissoesSistema.Modulos.Etiqueta,
-                    PermissoesSistema.Rotinas.CampoEtiqueta);
-        }
 
         _etiquetasRowsPanel.Enabled = livre;
         searchTextBox.Enabled = livre;
@@ -998,8 +940,6 @@ public partial class EtiquetaForm : Form
         ApplyScaledFont(modeloEtiquetaComboBox, 9F, contentScale, 9F, 12F);
         ApplyScaledFont(descricaoEtiquetaTextBox, 9F, contentScale, 9F, 12F);
         ApplyScaledFont(_detailsEmptyLabel, 10F, contentScale, 9.5F, 13F);
-        if (camposEtiquetaButton is not null)
-            camposEtiquetaButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
 
         situacaoComboBox.IntegralHeight = false;
         situacaoComboBox.DropDownHeight = Math.Max(96, Scale(120, scaleY));
@@ -1048,12 +988,6 @@ public partial class EtiquetaForm : Form
 
     private void PosicionarControlesAuxiliares()
     {
-        if (camposEtiquetaButton is not null)
-        {
-            int largura = Math.Max(170, Math.Min(210, detailsCard.Width / 3));
-            int altura = Math.Max(28, (int)Math.Round(28 * Math.Min(detailsCard.Width / 557f, detailsCard.Height / 596f)));
-            camposEtiquetaButton.Bounds = new Rectangle(Math.Max(250, detailsCard.Width - largura - 24), 18, largura, altura);
-        }
         _detailsEmptyLabel.Bounds = new Rectangle(40, 70, Math.Max(100, detailsCard.Width - 80), Math.Max(100, detailsCard.Height - 150));
     }
 

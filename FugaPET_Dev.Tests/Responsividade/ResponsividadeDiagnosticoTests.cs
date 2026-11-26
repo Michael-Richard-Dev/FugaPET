@@ -83,7 +83,6 @@ public sealed class ResponsividadeDiagnosticoTests
     // ---- Telas maduras: MinimumSize declarado ----
 
     [Theory]
-    [InlineData("CamposEtiquetaForm")]
     [InlineData("CargoForm")]
     [InlineData("SetorForm")]
     [InlineData("TipoTaraForm")]
@@ -99,39 +98,6 @@ public sealed class ResponsividadeDiagnosticoTests
     }
 
     // ---- Padrão de ouro: percentuais somam 100 ----
-
-    [Fact]
-    public void CamposEtiqueta_BodyLayout_ColunasPercentuaisSomam100()
-    {
-        string txt = LerDesigner("CamposEtiquetaForm");
-        // bodyLayout: 30% + 35% + 35% = 100.
-        List<decimal> pct = ColunasPercentuais(txt, "bodyLayout");
-        Assert.Equal(3, pct.Count);
-        Assert.Equal(100m, pct.Sum());
-    }
-
-    [Fact]
-    public void CamposEtiqueta_FooterLayout_ColunasPercentuaisSomam100()
-    {
-        string txt = LerDesigner("CamposEtiquetaForm");
-        // footerBarLayout: 16.6 + 16.6 + 26.8 + 20 + 10 + 10 = 100.0.
-        List<decimal> pct = ColunasPercentuais(txt, "footerBarLayout");
-        Assert.Equal(6, pct.Count);
-        Assert.Equal(100.0m, pct.Sum());
-    }
-
-    [Fact]
-    public void CamposEtiqueta_RootLayout_ContainerBased_SemReescalaManualDeFonte()
-    {
-        string txt = LerDesigner("CamposEtiquetaForm");
-        Assert.Contains("rootLayout = new TableLayoutPanel()", txt, StringComparison.Ordinal);
-        Assert.Contains("rootLayout.Dock = DockStyle.Fill", txt, StringComparison.Ordinal);
-        // Diferencial do padrão de ouro: NÃO há re-escala manual de FONTE sobre o AutoScaleMode.Font
-        // (sem ApplyScaledFont / contentScale) — é o que evita a dupla escala de fonte das telas manuais.
-        string form = File.ReadAllText(CaminhoForm("CamposEtiquetaForm"));
-        Assert.DoesNotContain("ApplyScaledFont", form, StringComparison.Ordinal);
-        Assert.DoesNotContain("contentScale", form, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void GrupoDeRiscoDuplaEscala_ReescalaFonteManualSobreAutoScaleFont()
