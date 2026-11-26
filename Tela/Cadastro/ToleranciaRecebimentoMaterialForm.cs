@@ -50,6 +50,10 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
         MinimumSize = new Size(Escalar(900), Escalar(560));
         KeyPreview = true;
 
+        // A moldura (barra de titulo propria, rodape, cartoes, grade e botoes) vem do helper que as
+        // tres telas de cadastro montadas em codigo compartilham.
+        Comum.ShellCadastroFluidoHelper.PrepararFormulario(this);
+
         MontarLayout();
         Shown += async (_, _) => await CarregarAsync();
         KeyDown += AoTeclar;
@@ -65,53 +69,23 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 1,
             Padding = new Padding(Escalar(12)),
         };
-        raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         raiz.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        raiz.Controls.Add(MontarCabecalho(), 0, 0);
-        raiz.Controls.Add(MontarConteudo(), 0, 1);
-        raiz.Controls.Add(MontarRodape(), 0, 2);
+        raiz.Controls.Add(MontarConteudo(), 0, 0);
 
+        // A ORDEM DE INSERCAO IMPORTA com Dock: a raiz (Fill) entra primeiro e as faixas depois, para
+        // o conteudo ocupar o que sobra entre a barra de titulo e o rodape.
         Controls.Add(raiz);
-        Controls.Add(MontarFaixaDaMarca());
-    }
-
-    private Control MontarFaixaDaMarca()
-    {
-        Panel faixa = new()
-        {
-            Dock = DockStyle.Top,
-            BackColor = Color.FromArgb(0xC8, 0x4E, 0x0A),
-            Height = Escalar(62),
-            Padding = new Padding(Escalar(16), Escalar(8), Escalar(16), Escalar(8)),
-        };
-
-        PictureBox logo = new()
-        {
-            Dock = DockStyle.Left,
-            SizeMode = PictureBoxSizeMode.Zoom,
-            Width = Escalar(132),
-            BackColor = Color.Transparent,
-        };
-        Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(logo);
-
-        Label titulo = new()
-        {
-            Dock = DockStyle.Fill,
-            Text = $"Tolerância de Recebimento  ·  centro {_centro}",
-            ForeColor = Color.White,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(Escalar(16), 0, 0, 0),
-            Font = new Font(Font.FontFamily, Font.Size + 3f, FontStyle.Bold),
-        };
-
-        faixa.Controls.Add(titulo);
-        faixa.Controls.Add(logo);
-        return faixa;
+        Controls.Add(Comum.ShellCadastroFluidoHelper.CriarRodape(Escalar));
+        Controls.Add(Comum.ShellCadastroFluidoHelper.CriarBarraDeTitulo(
+            this,
+            Escalar,
+            $"Tolerância de Recebimento  ·  centro {_centro}",
+            "Percentual aceito a mais ou a menos no recebimento de cada material",
+            Properties.Resources.etiqueta_24x_white));
     }
 
     private Control MontarCabecalho()
@@ -128,23 +102,30 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
         {
             Text = "Filtrar por código ou descrição:",
             AutoSize = true,
-            Margin = new Padding(0, Escalar(8), Escalar(8), 0),
+            Font = new Font("Segoe UI", Font.Size),
+            Margin = new Padding(0, Escalar(10), Escalar(8), 0),
         };
 
         _filtro.Width = Escalar(280);
-        _filtro.Margin = new Padding(0, Escalar(4), Escalar(16), 0);
+        _filtro.Font = new Font("Segoe UI", Font.Size);
+        _filtro.Margin = new Padding(0, Escalar(6), Escalar(16), 0);
         _filtro.TextChanged += (_, _) => AplicarFiltro();
 
         // Atalho para o trabalho que esta tela realmente cria: como material sem tolerancia BLOQUEIA o
         // recebimento, a pergunta mais frequente aqui vai ser "o que ainda falta?".
         _soNaoConfigurados.Text = "Só os que faltam";
         _soNaoConfigurados.AutoSize = true;
-        _soNaoConfigurados.Margin = new Padding(0, Escalar(8), Escalar(16), 0);
+        _soNaoConfigurados.Font = new Font("Segoe UI", Font.Size);
+        _soNaoConfigurados.Margin = new Padding(0, Escalar(10), Escalar(16), 0);
         _soNaoConfigurados.CheckedChanged += (_, _) => AplicarFiltro();
 
-        _atualizar.Text = "Atualizar do SAP (F5)";
-        _atualizar.AutoSize = true;
-        _atualizar.Margin = new Padding(0, Escalar(3), 0, 0);
+        // O mesmo desenho do botao secundario do cartao de decisao, mas com tamanho proprio: num
+        // FlowLayoutPanel o Dock=Top do helper nao vale.
+        Comum.ShellCadastroFluidoHelper.EstilizarBotao(_atualizar, Escalar, Font, "Atualizar do SAP (F5)", principal: false);
+        _atualizar.Dock = DockStyle.None;
+        _atualizar.AutoSize = false;
+        _atualizar.Width = Escalar(170);
+        _atualizar.Margin = new Padding(0, Escalar(2), 0, 0);
         _atualizar.Click += async (_, _) => await SincronizarAsync();
 
         faixa.Controls.AddRange([rotulo, _filtro, _soNaoConfigurados, _atualizar]);
@@ -161,9 +142,28 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
             Margin = new Padding(0, Escalar(8), 0, Escalar(8)),
         };
         conteudo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        conteudo.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        // LARGURA ABSOLUTA, nao AutoSize: com AutoSize o cartao decide a largura da coluna e a coluna
+        // a do cartao, e o texto dos botoes sai cortado na borda.
+        conteudo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Escalar(360)));
 
-        conteudo.Controls.Add(MontarGrade(), 0, 0);
+        // O cartao da lista leva o filtro em cima e a contagem embaixo, como a busca e o
+        // "Exibindo N de N" das telas com Designer.
+        TableLayoutPanel listaComFiltro = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Margin = new Padding(0),
+        };
+        listaComFiltro.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        listaComFiltro.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        listaComFiltro.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        listaComFiltro.Controls.Add(MontarCabecalho(), 0, 0);
+        listaComFiltro.Controls.Add(MontarGrade(), 0, 1);
+        listaComFiltro.Controls.Add(MontarLinhaDeSituacao(), 0, 2);
+
+        conteudo.Controls.Add(
+            Comum.ShellCadastroFluidoHelper.EmCartao(Escalar, Font, listaComFiltro, "Materiais do centro"), 0, 0);
         conteudo.Controls.Add(MontarPainelDecisao(), 1, 0);
         return conteudo;
     }
@@ -188,6 +188,8 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
             Coluna("Tolerância", 16),
         ]);
 
+        Comum.ShellCadastroFluidoHelper.EstilizarGrade(_grade, Escalar, Font);
+
         _grade.SelectionChanged += (_, _) => MostrarSelecionado();
         return _grade;
     }
@@ -201,26 +203,31 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
 
     private Control MontarPainelDecisao()
     {
+        // A borda quadrada saiu: o cartao arredondado vem do helper. E quem manda na largura passa a
+        // ser a COLUNA, nao o painel — assim rotulos, caixas e botoes tem a largura real para desenhar.
         TableLayoutPanel painel = new()
         {
             ColumnCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Margin = new Padding(Escalar(16), 0, 0, 0),
-            Padding = new Padding(Escalar(12)),
-            BorderStyle = BorderStyle.FixedSingle,
-            Width = Escalar(320),
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
         };
+        // SEM ESTA LINHA a coluna nasce AutoSize e se dimensiona pelo filho mais largo: medido em
+        // 26/11/2026, os campos sairam com 359px dentro de um cartao de 316 e vazavam pela borda.
+        painel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
         _rotuloMaterial.Text = "Selecione um material na lista";
-        _rotuloMaterial.AutoSize = true;
-        _rotuloMaterial.MaximumSize = new Size(Escalar(290), 0);
-        _rotuloMaterial.Font = new Font(Font, FontStyle.Bold);
-        _rotuloMaterial.Margin = new Padding(0, 0, 0, Escalar(12));
+        _rotuloMaterial.AutoSize = false;
+        _rotuloMaterial.Dock = DockStyle.Top;
+        _rotuloMaterial.Height = Escalar(38);
+        _rotuloMaterial.TextAlign = ContentAlignment.TopLeft;
+        _rotuloMaterial.Font = new Font("Segoe UI", Font.Size + 1f, FontStyle.Bold);
+        _rotuloMaterial.Margin = new Padding(0, 0, 0, Escalar(8));
 
-        Label rotuloPercentual = new() { Text = "Tolerância (± %):", AutoSize = true };
-        _percentual.Width = Escalar(290);
-        _percentual.Margin = new Padding(0, Escalar(4), 0, Escalar(8));
+        Label rotuloPercentual = Comum.ShellCadastroFluidoHelper.CriarRotuloDoCampo(Escalar, Font, "Tolerância (± %):");
+        _percentual.Dock = DockStyle.Top;
+        _percentual.Margin = new Padding(0, Escalar(2), 0, Escalar(10));
+        _percentual.Font = new Font("Segoe UI", Font.Size);
         _percentual.DecimalPlaces = 2;
         _percentual.Increment = 0.5m;
         _percentual.Minimum = 0m;
@@ -232,22 +239,24 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
         // O exemplo nao e enfeite: percentual e abstrato na hora de decidir, e o operador erra a ordem
         // de grandeza com facilidade. Ver o intervalo em numeros torna o engano visivel antes de salvar.
         _exemplo.AutoSize = true;
-        _exemplo.MaximumSize = new Size(Escalar(290), 0);
+        _exemplo.Dock = DockStyle.Top;
         _exemplo.ForeColor = Color.FromArgb(0x6B, 0x72, 0x80);
+        _exemplo.Font = new Font("Segoe UI", Font.Size);
         _exemplo.Margin = new Padding(0, 0, 0, Escalar(12));
 
         _ativa.Text = "Tolerância ativa";
-        _ativa.AutoSize = true;
+        _ativa.AutoSize = false;
+        _ativa.Dock = DockStyle.Top;
+        _ativa.Height = Escalar(24);
         _ativa.Checked = true;
+        _ativa.Font = new Font("Segoe UI", Font.Size);
         _ativa.Margin = new Padding(0, 0, 0, Escalar(12));
 
-        _salvar.Text = "Salvar tolerância";
-        _salvar.Width = Escalar(290);
+        Comum.ShellCadastroFluidoHelper.EstilizarBotao(_salvar, Escalar, Font, "Salvar tolerância", principal: true);
         _salvar.Margin = new Padding(0, 0, 0, Escalar(6));
         _salvar.Click += async (_, _) => await SalvarAsync();
 
-        _remover.Text = "Remover tolerância";
-        _remover.Width = Escalar(290);
+        Comum.ShellCadastroFluidoHelper.EstilizarBotao(_remover, Escalar, Font, "Remover tolerância", principal: false);
         _remover.Click += async (_, _) => await RemoverAsync();
 
         painel.Controls.AddRange(
@@ -257,14 +266,24 @@ public sealed class ToleranciaRecebimentoMaterialForm : Form
 
         AtualizarExemplo();
         HabilitarDecisao(false);
-        return painel;
+
+        Control cartao = Comum.ShellCadastroFluidoHelper.EmCartao(Escalar, Font, painel, "Decisão do material");
+        cartao.Margin = new Padding(Escalar(16), 0, 0, 0);
+        return cartao;
     }
 
-    private Control MontarRodape()
+    /// <summary>
+    /// A LINHA DE SITUACAO da tela. Nao confundir com o rodape do sistema, que vem do helper.
+    /// </summary>
+    private Control MontarLinhaDeSituacao()
     {
         _situacao.Dock = DockStyle.Fill;
-        _situacao.AutoSize = true;
-        _situacao.Margin = new Padding(0, Escalar(4), 0, 0);
+        _situacao.AutoSize = false;
+        _situacao.Height = Escalar(22);
+        _situacao.TextAlign = ContentAlignment.MiddleLeft;
+        _situacao.ForeColor = Color.FromArgb(0x47, 0x55, 0x69);
+        _situacao.Font = new Font("Segoe UI", Font.Size);
+        _situacao.Margin = new Padding(0, Escalar(8), 0, 0);
         return _situacao;
     }
 

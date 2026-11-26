@@ -47,12 +47,22 @@ public sealed class VinculoProdutoEtiquetaTela065Tests
         }
     }
 
-    /// <summary>A tela leva a marca FugaPET, pelo caminho compartilhado e nao por imagem propria.</summary>
+    /// <summary>
+    /// A tela leva a marca FugaPET pelo CAMINHO COMPARTILHADO, nunca por imagem propria.
+    /// <para>
+    /// Ate 26/11/2026 este teste exigia a chamada direta a IdentidadeVisualFugaPet. A barra de
+    /// titulo virou helper compartilhado com a tela de Tolerancia, e o logo passou a vir de la —
+    /// entao o que se cobra agora e a DELEGACAO. Que o logo chega mesmo a tela e medido vivo, no
+    /// ShellCadastroFluidoChromeTests.OCabecalho_TrazOLogoFugaPet.
+    /// </para>
+    /// </summary>
     [Fact]
     public void Tela_LevaOLogoFugaPetPeloCaminhoCompartilhado()
     {
         string fonte = LerTela();
-        Assert.Contains("IdentidadeVisualFugaPet.AplicarNoCabecalho", fonte, StringComparison.Ordinal);
+
+        Assert.Contains("ShellCadastroFluidoHelper.CriarBarraDeTitulo", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("new PictureBox", fonte, StringComparison.Ordinal);
     }
 
     /// <summary>
