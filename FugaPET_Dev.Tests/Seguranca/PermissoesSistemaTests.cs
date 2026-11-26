@@ -27,7 +27,6 @@ public sealed class PermissoesSistemaTests
     {
         Assert.Equal("PERFIL_ACESSO", PermissoesSistema.Rotinas.PerfilAcesso);
         Assert.Equal("PERMISSAO", PermissoesSistema.Rotinas.Permissao);
-        Assert.Equal("MAPEAMENTO_CAMPO_ETIQUETA", PermissoesSistema.Rotinas.MapeamentoCampoEtiqueta);
     }
 
     // Valores seedados no SQL que NAO devem (ainda) virar constante. Mantido vazio de proposito:

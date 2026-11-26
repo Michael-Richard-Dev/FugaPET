@@ -54,8 +54,6 @@ public static class PermissoesSistema
         public const string Etiqueta = "ETIQUETA";
         public const string ModeloEtiqueta = "MODELO_ETIQUETA";
         public const string ImpressaoEtiqueta = "IMPRESSAO_ETIQUETA";
-        public const string CampoEtiqueta = "CAMPO_ETIQUETA";
-        public const string MapeamentoCampoEtiqueta = "MAPEAMENTO_CAMPO_ETIQUETA";
         public const string Movimentacao = "MOVIMENTACAO";
         public const string Auditoria = "AUDITORIA";
         public const string CacheSap = "CACHE_SAP";

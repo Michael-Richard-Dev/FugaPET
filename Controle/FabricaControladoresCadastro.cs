@@ -192,20 +192,6 @@ public static class FabricaControladoresCadastro
     public static AutorizacaoToleranciaProducaoServico CriarAutorizacaoToleranciaProducaoServico()
         => new(CriarAutenticacaoServico(), new LiberacaoToleranciaProcessoRepositorio(FabricaConexao.Value));
 
-    public static CampoEtiquetaController CriarCampoEtiquetaController()
-    {
-        CampoEtiquetaRepositorio repositorio = new(FabricaConexao.Value);
-        CampoEtiquetaServico servico = new(repositorio, CriarAuditoriaServico());
-        return new CampoEtiquetaController(servico);
-    }
-
-    public static MapeamentoCampoEtiquetaController CriarMapeamentoCampoEtiquetaController()
-    {
-        MapeamentoCampoEtiquetaRepositorio repositorio = new(FabricaConexao.Value);
-        MapeamentoCampoEtiquetaServico servico = new(repositorio, CriarAuditoriaServico());
-        return new MapeamentoCampoEtiquetaController(servico);
-    }
-
     public static PermissaoController CriarPermissaoController()
     {
         PermissaoRepositorio repositorio = new(FabricaConexao.Value);
