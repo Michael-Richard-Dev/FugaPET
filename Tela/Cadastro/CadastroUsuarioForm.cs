@@ -73,6 +73,12 @@ public partial class CadastroUsuarioForm : Form
         // E o mesmo limite da tela de Consumo de Material: a adaptacao compartilhada so cresce
         // ALTURAS, nunca LARGURAS, e so a tela de Recebimento tem o ajuste de largura sob medida que
         // a fonte 2x exige. Antes de tentar de novo aqui, esta tela precisa desse mesmo trabalho.
+        //
+        // CONFIRMADO DE NOVO em 26/11/2026, desta vez medindo: ao padronizar a tela eu apliquei o
+        // par do GATE 127C (LimparAlturaMinimaDosRotulos + AdaptarAlturasParaFonte) que as sete
+        // telas de cartao simples usam. O resultado na foto foi exatamente o descrito acima — Cargo,
+        // Setor e Situacao fora do cartao e um vazio de 195px no topo. Foi revertido. A familia e a
+        // mesma: cresce altura em tela de geometria fixa. NAO reintroduzir sem o trabalho de largura.
         global::FugaPET_Dev.Tela.Comum.IdentidadeVisualFugaPet.AplicarNoCabecalho(
             companyLogoPictureBox, headerDividerLabel);
         FormClosed += (_, _) =>
@@ -251,17 +257,33 @@ public partial class CadastroUsuarioForm : Form
         avatarIconLabel.Left = (panelWidth - avatarIconLabel.Width) / 2;
         avatarTitleLabel.Left = (panelWidth - avatarTitleLabel.Width) / 2;
 
+        // O BOTAO ACOMPANHA O TEXTO, nao o contrario. MEDIDO em 26/11/2026: o painel tinha 114px
+        // cravados do Designer, sobravam 66px para "Alterar Foto" e o texto QUEBRAVA em duas linhas
+        // dentro de um rotulo de 20px — saia cortado pela metade. Derivar a largura da fonte vigente
+        // e o que faz isso sobreviver a outro DPI; largura cravada nao (ver a licao do pixel cravado).
+        const int recuoDoTexto = 42;
+        const int folgaDireita = 12;
+        int larguraDoTexto = Math.Max(
+            TextRenderer.MeasureText(uploadTextLabel.Text, uploadTextLabel.Font).Width,
+            TextRenderer.MeasureText(uploadHintLabel.Text, uploadHintLabel.Font).Width);
+
+        int larguraDesejada = recuoDoTexto + larguraDoTexto + folgaDireita;
+        int tetoDoCartao = Math.Max(0, panelWidth - (2 * uploadButtonPanel.Margin.Left));
+        uploadButtonPanel.Width = tetoDoCartao > 0
+            ? Math.Min(Math.Max(uploadButtonPanel.Width, larguraDesejada), tetoDoCartao)
+            : Math.Max(uploadButtonPanel.Width, larguraDesejada);
+
         uploadButtonPanel.Left = (panelWidth - uploadButtonPanel.Width) / 2;
 
         uploadIconLabel.Left = 10;
 
         uploadTextLabel.TextAlign = ContentAlignment.MiddleLeft;
-        uploadTextLabel.Left = 42;
-        uploadTextLabel.Width = Math.Max(0, uploadButtonPanel.Width - 48);
+        uploadTextLabel.Left = recuoDoTexto;
+        uploadTextLabel.Width = Math.Max(0, uploadButtonPanel.Width - recuoDoTexto - folgaDireita);
 
         uploadHintLabel.TextAlign = ContentAlignment.MiddleLeft;
-        uploadHintLabel.Left = 42;
-        uploadHintLabel.Width = Math.Max(0, uploadButtonPanel.Width - 48);
+        uploadHintLabel.Left = recuoDoTexto;
+        uploadHintLabel.Width = Math.Max(0, uploadButtonPanel.Width - recuoDoTexto - folgaDireita);
     }
 
     private void ConfigureUploadImagePicker()
@@ -1087,6 +1109,7 @@ public partial class CadastroUsuarioForm : Form
         LayoutEmailInputContent(scaleX, scaleY);
         LayoutConfirmarSenhaInputContent(scaleX, scaleY);
         LayoutSenhaInputContent(scaleX, scaleY);
+
     }
 
     private static void LayoutTextInputContent(RoundedPanel panel, Label iconLabel, TextBox textBox, float scaleX, float scaleY)
@@ -1186,11 +1209,18 @@ public partial class CadastroUsuarioForm : Form
         static void SetBounds(Control control, int x, int y, int width, int height) =>
             control.Bounds = new Rectangle(x, y, width, height);
 
-        int comboLeft = Scale(8, scaleX);
+        // Situacao ganhou o icone que faltava, e passa a ser posicionada como as irmas do cartao:
+        // era o unico campo sem icone, e isso aparecia como um buraco na coluna.
+        int iconLeft = Scale(8, scaleX);
+        int iconSize = Math.Max(16, Scale(20, Math.Min(scaleX, scaleY)));
+        int iconTop = Math.Max(2, (situacaoInputPanel.Height - iconSize) / 2);
+
+        int comboLeft = Scale(38, scaleX);
         int comboHeight = Math.Max(23, situacaoComboBox.PreferredHeight);
         int comboTop = Math.Max(2, (situacaoInputPanel.Height - comboHeight) / 2);
         int comboWidth = Math.Max(60, situacaoInputPanel.Width - comboLeft - Scale(8, scaleX));
 
+        SetBounds(situacaoIconLabel, iconLeft, iconTop, iconSize, iconSize);
         SetBounds(situacaoComboBox, comboLeft, comboTop, comboWidth, comboHeight);
     }
 
@@ -1261,6 +1291,7 @@ public partial class CadastroUsuarioForm : Form
         }
         SetBounds(novoButton, side, summaryCard.Height - Scale(96, scaleY), buttonW, buttonH);
         SetBounds(excluirButton, side, summaryCard.Height - Scale(64, scaleY), buttonW, buttonH);
+
     }
 
     private void ClearRowSelection()
@@ -1463,6 +1494,7 @@ public partial class CadastroUsuarioForm : Form
         }
 
         SetBounds(profilesFooterLabel, Scale(20, scaleX), footerY, Math.Max(180, Scale(240, scaleX)), Scale(22, scaleY));
+
     }
 
     private sealed class UserRowSelection

@@ -438,6 +438,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("PerfilAcessoForm")]
     [InlineData("PermissaoForm")]
     [InlineData("ModeloEtiquetaForm")]
+    [InlineData("CadastroUsuarioForm")]
     public void OCabecalho_TrazOLogoFugaPet(string tela)
         => ComATela(tela, c =>
         {

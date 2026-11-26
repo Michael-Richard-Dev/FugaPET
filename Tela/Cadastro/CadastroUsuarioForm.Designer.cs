@@ -100,6 +100,7 @@ partial class CadastroUsuarioForm
     private ComboBox cargoComboBox;
     private Label situacaoLabel;
     private RoundedPanel situacaoInputPanel;
+    private Label situacaoIconLabel;
     private ComboBox situacaoComboBox;
     private Label setorLabel;
     private RoundedPanel setorInputPanel;
@@ -278,6 +279,7 @@ partial class CadastroUsuarioForm
         cargoComboBox = new ComboBox();
         situacaoLabel = new Label();
         situacaoInputPanel = new RoundedPanel();
+        situacaoIconLabel = new Label();
         situacaoComboBox = new ComboBox();
         setorLabel = new Label();
         setorInputPanel = new RoundedPanel();
@@ -1545,7 +1547,7 @@ partial class CadastroUsuarioForm
         perfilIconLabel.Name = "perfilIconLabel";
         perfilIconLabel.Size = new Size(22, 20);
         perfilIconLabel.TabIndex = 0;
-        perfilIconLabel.Text = "";
+        perfilIconLabel.Text = "";
         perfilIconLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // perfilComboBox
@@ -1592,11 +1594,11 @@ partial class CadastroUsuarioForm
         // 
         cargoIconLabel.Font = new Font("Segoe MDL2 Assets", 12F);
         cargoIconLabel.ForeColor = Color.FromArgb(71, 85, 105);
-        cargoIconLabel.Image = (Image)resources.GetObject("cargoIconLabel.Image");
         cargoIconLabel.Location = new Point(8, 5);
         cargoIconLabel.Name = "cargoIconLabel";
         cargoIconLabel.Size = new Size(22, 20);
         cargoIconLabel.TabIndex = 0;
+        cargoIconLabel.Text = "";
         cargoIconLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // cargoComboBox
@@ -1629,6 +1631,7 @@ partial class CadastroUsuarioForm
         situacaoInputPanel.BackColor = Color.Transparent;
         situacaoInputPanel.BorderColor = Color.FromArgb(203, 213, 225);
         situacaoInputPanel.BorderRadius = 5;
+        situacaoInputPanel.Controls.Add(situacaoIconLabel);
         situacaoInputPanel.Controls.Add(situacaoComboBox);
         situacaoInputPanel.Location = new Point(199, 186);
         situacaoInputPanel.Margin = new Padding(0, 0, 12, 8);
@@ -1638,15 +1641,26 @@ partial class CadastroUsuarioForm
         situacaoInputPanel.Size = new Size(161, 30);
         situacaoInputPanel.TabIndex = 30;
         // 
+        // situacaoIconLabel
+        // 
+        situacaoIconLabel.Font = new Font("Segoe MDL2 Assets", 12F);
+        situacaoIconLabel.ForeColor = Color.FromArgb(71, 85, 105);
+        situacaoIconLabel.Location = new Point(8, 5);
+        situacaoIconLabel.Name = "situacaoIconLabel";
+        situacaoIconLabel.Size = new Size(22, 20);
+        situacaoIconLabel.TabIndex = 0;
+        situacaoIconLabel.Text = "";
+        situacaoIconLabel.TextAlign = ContentAlignment.MiddleCenter;
+        // 
         // situacaoComboBox
         // 
         situacaoComboBox.FlatStyle = FlatStyle.Flat;
         situacaoComboBox.Font = new Font("Segoe UI", 9F);
         situacaoComboBox.ForeColor = Color.FromArgb(30, 41, 59);
         situacaoComboBox.Items.AddRange(new object[] { "Ativo", "Inativo" });
-        situacaoComboBox.Location = new Point(8, 3);
+        situacaoComboBox.Location = new Point(38, 3);
         situacaoComboBox.Name = "situacaoComboBox";
-        situacaoComboBox.Size = new Size(140, 23);
+        situacaoComboBox.Size = new Size(110, 23);
         situacaoComboBox.TabIndex = 0;
         // 
         // setorLabel
@@ -1682,11 +1696,11 @@ partial class CadastroUsuarioForm
         // 
         setorIconLabel.Font = new Font("Segoe MDL2 Assets", 12F);
         setorIconLabel.ForeColor = Color.FromArgb(71, 85, 105);
-        setorIconLabel.Image = (Image)resources.GetObject("setorIconLabel.Image");
         setorIconLabel.Location = new Point(8, 5);
         setorIconLabel.Name = "setorIconLabel";
         setorIconLabel.Size = new Size(22, 20);
         setorIconLabel.TabIndex = 0;
+        setorIconLabel.Text = "";
         setorIconLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // setorComboBox
