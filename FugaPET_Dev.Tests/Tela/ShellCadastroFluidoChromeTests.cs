@@ -8,8 +8,8 @@ namespace FugaPET_Dev.Tests.Tela;
 /// <summary>
 /// AS TELAS DE CADASTRO MONTADAS EM CODIGO USAM A MESMA MOLDURA DO SISTEMA.
 /// <para>
-/// Sao irmas de proposito: Vinculo de Produto x Etiqueta e Tolerancia de Recebimento cruzam catalogo
-/// de material com uma decisao do usuario. Quem opera uma tem de saber operar a outra sem aprender
+/// Sao irmas de proposito: Vinculo de Produto x Etiqueta, Tolerancia de Recebimento e Tolerancia de
+/// Producao cruzam catalogo de material ou produto com uma decisao do usuario. Quem opera uma tem de saber operar a outra sem aprender
 /// nada novo — e por isso a cobranca aqui e uma so, parametrizada pelas duas.
 /// </para>
 /// <para>
@@ -27,16 +27,19 @@ public sealed class ShellCadastroFluidoChromeTests
 {
     public const string Vinculo = "FugaPET_Dev.Tela.Cadastro.VinculoProdutoEtiquetaForm";
     public const string Tolerancia = "FugaPET_Dev.Tela.Cadastro.ToleranciaRecebimentoMaterialForm";
+    public const string ToleranciaProducao = "FugaPET_Dev.Tela.Cadastro.ToleranciaProcessoProducaoForm";
 
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void ATela_NaoUsaABarraDeTituloDoWindows(string tipo)
         => ComATela(tipo, f => Assert.Equal(FormBorderStyle.None, f.FormBorderStyle));
 
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void ATela_TemOsTresBotoesDeJanela(string tipo)
         => ComATela(tipo, f =>
         {
@@ -57,6 +60,9 @@ public sealed class ShellCadastroFluidoChromeTests
     [InlineData(Tolerancia, 1366, 768)]
     [InlineData(Tolerancia, 1600, 900)]
     [InlineData(Tolerancia, 1920, 1080)]
+    [InlineData(ToleranciaProducao, 1366, 768)]
+    [InlineData(ToleranciaProducao, 1600, 900)]
+    [InlineData(ToleranciaProducao, 1920, 1080)]
     public void OsBotoesDeJanela_FicamDentroDaFaixa(string tipo, int largura, int altura)
         => ComATela(
             tipo,
@@ -94,6 +100,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void OsBotoesDeJanela_FicamNaFrenteDoBlocoDoTitulo(string tipo)
         => ComATela(tipo, f =>
         {
@@ -120,6 +127,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void ATela_TemORodapeDoSistema(string tipo)
         => ComATela(tipo, f =>
         {
@@ -138,6 +146,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void OCabecalho_TrazOLogoFugaPet(string tipo)
         => ComATela(tipo, f =>
         {
@@ -160,6 +169,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void OConteudo_VemEmCartoesArredondados(string tipo)
         => ComATela(tipo, f =>
         {
@@ -187,6 +197,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void NenhumCampo_VazaABordaDoCartao(string tipo)
         => ComATela(tipo, f =>
         {
@@ -210,6 +221,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void OCabecalho_TemOBotaoDeVoltar(string tipo)
         => ComATela(tipo, f =>
         {
@@ -235,6 +247,7 @@ public sealed class ShellCadastroFluidoChromeTests
     [Theory]
     [InlineData(Vinculo)]
     [InlineData(Tolerancia)]
+    [InlineData(ToleranciaProducao)]
     public void ATela_UsaAFonteBaseDasOutrasTelasDeCadastro(string tipo)
         => ComATela(tipo, f => Assert.Equal("Cascadia Code", f.Font.Name));
 
