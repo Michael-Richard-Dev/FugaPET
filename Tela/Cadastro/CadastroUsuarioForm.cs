@@ -23,6 +23,10 @@ public partial class CadastroUsuarioForm : Form
     private readonly Dictionary<Panel, UserSummaryData> _userSummaryByRow = new();
     private readonly Dictionary<Panel, long> _idUsuarioPorLinha = new();
     private readonly Dictionary<Panel, UsuarioCadastro> _usuarioPorLinha = new();
+    // Os catalogos chegam para os combos; a LISTA precisa deles tambem, para mostrar o cargo e o setor
+    // do usuario em vez de um traco. Sem este mapa a coluna Cargo sai "-" para todo mundo.
+    private readonly Dictionary<long, string> _nomeDoCargo = new();
+    private readonly Dictionary<long, string> _nomeDoSetor = new();
     private readonly UsuarioController _usuarioController;
     private readonly CargoController _cargoController;
     private readonly SetorController _setorController;
@@ -32,6 +36,8 @@ public partial class CadastroUsuarioForm : Form
     private Task _selecaoUsuarioTask = Task.CompletedTask;
     private long _idUsuarioAtual;
     private Button? _alterarSenhaButton;
+    private readonly (Color Fundo, Color Borda, Color Texto) _paletaAtiva;
+    private readonly (Color Fundo, Color Borda, Color Texto) _paletaInativa;
 
     public CadastroUsuarioForm(UsuarioController? usuarioController = null)
     {
@@ -40,6 +46,14 @@ public partial class CadastroUsuarioForm : Form
         _setorController = FabricaControladoresCadastro.CriarSetorController();
         _perfilAcessoController = FabricaControladoresCadastro.CriarPerfilAcessoController();
         InitializeComponent();
+
+        // AS DUAS PALETAS DO SELO SAO CAPTURADAS AGORA, antes de qualquer pintura. Ler a cor direto de
+        // profileRow1StatusPanel na hora de pintar seria aliasing: a linha 1 tambem e repintada, entao
+        // bastaria o primeiro usuario ser inativo para a "paleta de ativo" virar laranja e contaminar
+        // todas as linhas seguintes.
+        _paletaAtiva = (profileRow1StatusPanel.FillColor, profileRow1StatusPanel.BorderColor, profileRow1StatusLabel.ForeColor);
+        _paletaInativa = (profileRow3StatusPanel.FillColor, profileRow3StatusPanel.BorderColor, profileRow3StatusLabel.ForeColor);
+
         cellUserText.Text = global::FugaPET_Dev.Tela.Comum.UsuarioLogadoUiHelper.ObterTextoUsuarioRodape();
         cellBancoText.Text = global::FugaPET_Dev.Tela.Comum.RodapeBancoHelper.ObterTextoBancoDados();
         cellTerminalText.Text = $"Terminal:  {Environment.MachineName}";
@@ -375,6 +389,18 @@ public partial class CadastroUsuarioForm : Form
             .OrderBy(p => p.NomePerfilAcesso)
             .ToList();
 
+        _nomeDoCargo.Clear();
+        foreach (CargoCadastro cargo in cargos)
+        {
+            _nomeDoCargo[cargo.IdCargo] = cargo.NomeCargo;
+        }
+
+        _nomeDoSetor.Clear();
+        foreach (SetorCadastro setor in setores)
+        {
+            _nomeDoSetor[setor.CodigoSetor] = setor.NomeSetor;
+        }
+
         ConfigurarCombo(cargoComboBox, cargos, "NomeCargo", "IdCargo");
         ConfigurarCombo(setorComboBox, setores, "NomeSetor", "CodigoSetor");
         ConfigurarCombo(perfilComboBox, perfis, "NomePerfilAcesso", "IdPerfilAcesso");
@@ -661,17 +687,17 @@ public partial class CadastroUsuarioForm : Form
     /// QAS110 o DEV110 passou de 2 para 35 usuarios e o teto ficou evidente.
     /// </para>
     /// </summary>
-    private readonly List<(Panel RowPanel, Label LoginLabel, Label CargoLabel, Label StatusLabel)> _linhasUsuario = new();
+    private readonly List<(Panel RowPanel, Label LoginLabel, Label CargoLabel, Label StatusLabel, RoundedPanel StatusPanel)> _linhasUsuario = new();
 
     /// <summary>Garante que existam ao menos <paramref name="quantidade"/> linhas na lista.</summary>
     private void GarantirLinhasDeUsuario(int quantidade)
     {
         if (_linhasUsuario.Count == 0)
         {
-            _linhasUsuario.Add((profileRow1Panel, profileRow1LoginLabel, profileRow1CargoLabel, profileRow1StatusLabel));
-            _linhasUsuario.Add((profileRow2Panel, profileRow2LoginLabel, profileRow2CargoLabel, profileRow2StatusLabel));
-            _linhasUsuario.Add((profileRow3Panel, profileRow3LoginLabel, profileRow3CargoLabel, profileRow3StatusLabel));
-            _linhasUsuario.Add((profileRow4Panel, profileRow4LoginLabel, profileRow4CargoLabel, profileRow4StatusLabel));
+            _linhasUsuario.Add((profileRow1Panel, profileRow1LoginLabel, profileRow1CargoLabel, profileRow1StatusLabel, profileRow1StatusPanel));
+            _linhasUsuario.Add((profileRow2Panel, profileRow2LoginLabel, profileRow2CargoLabel, profileRow2StatusLabel, profileRow2StatusPanel));
+            _linhasUsuario.Add((profileRow3Panel, profileRow3LoginLabel, profileRow3CargoLabel, profileRow3StatusLabel, profileRow3StatusPanel));
+            _linhasUsuario.Add((profileRow4Panel, profileRow4LoginLabel, profileRow4CargoLabel, profileRow4StatusLabel, profileRow4StatusPanel));
         }
 
         // A lista rola: sem isso, a partir da quinta linha o conteudo ficaria fora da area visivel.
@@ -694,11 +720,17 @@ public partial class CadastroUsuarioForm : Form
             Label cargo = ClonarRotulo(profileRow1CargoLabel, $"profileRow{indice + 1}CargoLabel");
             Label status = ClonarRotulo(profileRow1StatusLabel, $"profileRow{indice + 1}StatusLabel");
 
-            // O status mora dentro de um painel arredondado proprio; o clone preserva essa estrutura.
-            Panel statusHospedeiro = new()
+            // O SELO E UM RoundedPanel, e a cor dele vem do FillColor — nao do BackColor. Clonar como
+            // Panel comum copiava um BackColor Transparent e a linha saia SEM selo nenhum: medido na
+            // foto do usuario em 26/11/2026, as quatro primeiras linhas tinham a pilula e da quinta em
+            // diante so sobrava o texto solto.
+            RoundedPanel statusHospedeiro = new()
             {
                 Name = $"profileRow{indice + 1}StatusPanel",
                 BackColor = profileRow1StatusPanel.BackColor,
+                BorderRadius = profileRow1StatusPanel.BorderRadius,
+                ShadowBlur = 0,
+                ShadowOffsetY = 0,
                 Size = profileRow1StatusPanel.Size,
                 Location = profileRow1StatusPanel.Location
             };
@@ -709,13 +741,45 @@ public partial class CadastroUsuarioForm : Form
             linha.Controls.Add(statusHospedeiro);
             profilesTablePanel.Controls.Add(linha);
 
-            _linhasUsuario.Add((linha, login, cargo, status));
+            _linhasUsuario.Add((linha, login, cargo, status, statusHospedeiro));
             _profileSearchRows.Add(new ProfileSearchRow(linha, login));
             _userRowSelections.Add(new UserRowSelection(linha, linha.BackColor));
             AttachRowSelectionHandlers(linha, linha);
         }
 
         EnsureRowSelectionMarkers();
+    }
+
+    /// <summary>O nome do cargo do usuario, ou "-" quando ele nao tem cargo cadastrado.</summary>
+    private string NomeDoCargo(long? idCargo)
+        => idCargo is { } id && _nomeDoCargo.TryGetValue(id, out string? nome) ? nome : "-";
+
+    /// <summary>O nome do setor padrao do usuario, ou "-" quando ele nao tem setor.</summary>
+    private string NomeDoSetor(long? idSetor)
+        => idSetor is { } id && _nomeDoSetor.TryGetValue(id, out string? nome) ? nome : "-";
+
+    /// <summary>
+    /// PINTA O SELO DE SITUACAO A PARTIR DO DADO, nao do desenho do Designer.
+    /// <para>
+    /// Defeito visto na foto do usuario em 26/11/2026, com 37 usuarios carregados: a terceira linha
+    /// mostrava "Ativo" dentro de uma pilula LARANJA. A terceira linha do Designer e a de exemplo
+    /// "Inativo", e o codigo so trocava o TEXTO — a cor continuava a do desenho. Um selo que diz
+    /// Ativo em laranja e pior que selo nenhum: ele contradiz o proprio texto.
+    /// </para>
+    /// <para>
+    /// As duas paletas saem dos PROPRIOS controles do Designer (linha 1 = ativo, linha 3 = inativo),
+    /// para nao existir uma segunda fonte de cor que possa divergir do desenho — mas CAPTURADAS no
+    /// construtor, porque essas mesmas linhas sao repintadas depois.
+    /// </para>
+    /// </summary>
+    private void AplicarSeloDeSituacao(RoundedPanel selo, Label texto, bool ativa)
+    {
+        (Color fundo, Color borda, Color corDoTexto) = ativa ? _paletaAtiva : _paletaInativa;
+
+        selo.FillColor = fundo;
+        selo.BorderColor = borda;
+        texto.ForeColor = corDoTexto;
+        texto.Text = ativa ? "Ativo" : "Inativo";
     }
 
     private static Label ClonarRotulo(Label modelo, string nome) => new()
@@ -743,7 +807,7 @@ public partial class CadastroUsuarioForm : Form
 
         for (int i = 0; i < _linhasUsuario.Count; i++)
         {
-            (Panel linha, Label rotuloLogin, Label rotuloCargo, Label rotuloStatus) = _linhasUsuario[i];
+            (Panel linha, Label rotuloLogin, Label rotuloCargo, Label rotuloStatus, RoundedPanel selo) = _linhasUsuario[i];
 
             if (i >= usuarios.Count)
             {
@@ -756,8 +820,8 @@ public partial class CadastroUsuarioForm : Form
             linha.Visible = true;
             linha.Location = new Point(profileRow1Panel.Left, profileRow1Panel.Top + (profileRow1Panel.Height * i));
             rotuloLogin.Text = usuario.LoginUsuario;
-            rotuloCargo.Text = "-";
-            rotuloStatus.Text = usuario.SituacaoUsuario ? "Ativo" : "Inativo";
+            rotuloCargo.Text = NomeDoCargo(usuario.IdCargo);
+            AplicarSeloDeSituacao(selo, rotuloStatus, usuario.SituacaoUsuario);
 
             _idUsuarioPorLinha[linha] = usuario.IdUsuario;
             _usuarioPorLinha[linha] = usuario;
@@ -765,8 +829,8 @@ public partial class CadastroUsuarioForm : Form
                 usuario.NomeUsuario,
                 usuario.LoginUsuario,
                 usuario.SituacaoUsuario ? "Ativo" : "Inativo",
-                "-",
-                "-",
+                NomeDoCargo(usuario.IdCargo),
+                NomeDoSetor(usuario.IdSetorPadrao),
                 DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
         }
 
