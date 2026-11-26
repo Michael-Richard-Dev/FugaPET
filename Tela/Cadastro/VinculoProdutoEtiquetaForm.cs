@@ -73,14 +73,12 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 1,
             Padding = new Padding(Escalar(12)),
         };
         raiz.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        raiz.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         raiz.Controls.Add(MontarConteudo(), 0, 0);
-        raiz.Controls.Add(MontarLinhaDeSituacao(), 0, 1);
 
         // A ORDEM DE INSERCAO IMPORTA com Dock: o ultimo a entrar fica mais perto da borda. Por isso
         // a raiz (Fill) entra primeiro e as faixas depois — assim o conteudo ocupa o que sobra entre
@@ -222,6 +220,15 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         faixa.Controls.Add(minimizar);
         faixa.Controls.Add(maximizar);
         faixa.Controls.Add(fechar);
+        // OS BOTOES VEM PARA A FRENTE. O bloco do titulo tem Dock=Fill e entrou antes, entao ficava
+        // em z=0 — na frente — e, sendo BackColor.Transparent, REPINTAVA o laranja do pai por cima
+        // dos tres botoes: a janela abria sem ter como fechar.
+        // ATENCAO: o DrawToBitmap MENTIU aqui. No render os botoes apareciam; no app real, nao.
+        // Para z-order, a prova e a ordem dos Controls, nao a imagem.
+        minimizar.BringToFront();
+        maximizar.BringToFront();
+        fechar.BringToFront();
+
         Reposicionar();
 
         // Realce ao passar o mouse e arraste pela faixa, os mesmos das outras telas.
@@ -301,10 +308,15 @@ public sealed class VinculoProdutoEtiquetaForm : Form
             RowCount = 2,
             Margin = new Padding(0),
         };
+        listaComFiltro.RowCount = 3;
         listaComFiltro.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         listaComFiltro.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        listaComFiltro.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         listaComFiltro.Controls.Add(MontarCabecalho(), 0, 0);
         listaComFiltro.Controls.Add(MontarGrade(), 0, 1);
+        // A contagem fica DENTRO do cartao, embaixo da lista, como o "Exibindo N de N" das outras
+        // telas de cadastro. Solta sobre o fundo ela ficava orfa.
+        listaComFiltro.Controls.Add(MontarLinhaDeSituacao(), 0, 2);
 
         conteudo.Controls.Add(EmCartao(listaComFiltro, "Produtos do centro"), 0, 0);
         conteudo.Controls.Add(MontarPainelDecisao(), 1, 0);
@@ -437,6 +449,20 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         }
     }
 
+    /// <summary>
+    /// Rotulo de campo do cartao: mesma largura dos campos, margem horizontal zero. Sem isto ele
+    /// herdava a margem padrao de 3px do TableLayoutPanel e nascia desalinhado da propria caixa.
+    /// </summary>
+    private Label CriarRotuloDoCampo(string texto) => new()
+    {
+        Text = texto,
+        AutoSize = false,
+        Dock = DockStyle.Top,
+        Height = Escalar(20),
+        TextAlign = ContentAlignment.BottomLeft,
+        Margin = new Padding(0),
+    };
+
     private Control MontarPainelDecisao()
     {
         // A borda quadrada de um pixel (BorderStyle.FixedSingle) saiu: o cartao arredondado vem do
@@ -450,26 +476,37 @@ public sealed class VinculoProdutoEtiquetaForm : Form
             Width = Escalar(320),
         };
 
+        // TODOS OS FILHOS NA MESMA COLUNA VISUAL. MEDIDO em 26/11/2026: as caixas tinham 290px
+        // cravados enquanto os botoes (Dock=Top) iam a 316, e os rotulos herdavam a margem PADRAO do
+        // TableLayoutPanel (3px) enquanto as caixas tinham margem 0 — resultado: nada se alinhava com
+        // nada dentro do cartao. Agora todo filho ocupa a largura da coluna e tem margem horizontal
+        // zero; so a vertical varia.
         _rotuloProduto.Text = "Selecione um produto na lista";
-        _rotuloProduto.AutoSize = true;
-        _rotuloProduto.MaximumSize = new Size(Escalar(290), 0);
+        _rotuloProduto.AutoSize = false;
+        _rotuloProduto.Dock = DockStyle.Top;
+        _rotuloProduto.Height = Escalar(38);
+        _rotuloProduto.TextAlign = ContentAlignment.TopLeft;
         _rotuloProduto.Font = new Font(Font, FontStyle.Bold);
-        _rotuloProduto.Margin = new Padding(0, 0, 0, Escalar(12));
+        _rotuloProduto.Margin = new Padding(0, 0, 0, Escalar(8));
 
-        Label rotuloEtiqueta = new() { Text = "Etiqueta:", AutoSize = true };
+        Label rotuloEtiqueta = CriarRotuloDoCampo("Etiqueta:");
+
         _etiquetas.DropDownStyle = ComboBoxStyle.DropDownList;
-        _etiquetas.Width = Escalar(290);
-        _etiquetas.Margin = new Padding(0, Escalar(4), 0, Escalar(8));
+        _etiquetas.Dock = DockStyle.Top;
+        _etiquetas.Margin = new Padding(0, Escalar(2), 0, Escalar(10));
 
         _semEtiqueta.Text = "Este produto não leva etiqueta";
-        _semEtiqueta.AutoSize = true;
+        _semEtiqueta.AutoSize = false;
+        _semEtiqueta.Dock = DockStyle.Top;
+        _semEtiqueta.Height = Escalar(24);
         _semEtiqueta.Margin = new Padding(0, 0, 0, Escalar(12));
         _semEtiqueta.CheckedChanged += (_, _) => _etiquetas.Enabled = !_semEtiqueta.Checked;
 
-        Label rotuloProcesso = new() { Text = "Processo de pesagem:", AutoSize = true };
+        Label rotuloProcesso = CriarRotuloDoCampo("Processo de pesagem:");
+
         _processos.DropDownStyle = ComboBoxStyle.DropDownList;
-        _processos.Width = Escalar(290);
-        _processos.Margin = new Padding(0, Escalar(4), 0, Escalar(4));
+        _processos.Dock = DockStyle.Top;
+        _processos.Margin = new Padding(0, Escalar(2), 0, Escalar(6));
         _processos.Items.AddRange(
         [
             VinculoProdutoEtiqueta.RotuloDoProcesso(ProcessoPesagemProduto.CaixaACaixa),
@@ -481,7 +518,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         // O aviso nao e decoracao: o envio unico ainda nao existe no sistema, e cadastrar a intencao
         // sem dizer isso faria o usuario supor que a pesagem ja se comporta assim.
         _avisoProcesso.AutoSize = true;
-        _avisoProcesso.MaximumSize = new Size(Escalar(290), 0);
+        _avisoProcesso.Dock = DockStyle.Top;
         // Cinza, não o laranja de alerta: o texto passou a DESCREVER o processo, não a avisar de uma
         // limitação. Manter a cor de alarme faria uma escolha normal parecer arriscada.
         _avisoProcesso.ForeColor = Color.FromArgb(0x6B, 0x72, 0x80);
@@ -495,6 +532,7 @@ public sealed class VinculoProdutoEtiquetaForm : Form
         _salvar.Click += async (_, _) => await SalvarAsync();
 
         EstilizarBotao(_remover, "Remover vínculo", principal: false);
+        _remover.Margin = new Padding(0);
         _remover.Click += async (_, _) => await RemoverAsync();
 
         painel.Controls.AddRange(
@@ -524,8 +562,11 @@ public sealed class VinculoProdutoEtiquetaForm : Form
     private Control MontarLinhaDeSituacao()
     {
         _situacao.Dock = DockStyle.Fill;
-        _situacao.AutoSize = true;
-        _situacao.Margin = new Padding(0, Escalar(4), 0, 0);
+        _situacao.AutoSize = false;
+        _situacao.Height = Escalar(22);
+        _situacao.TextAlign = ContentAlignment.MiddleLeft;
+        _situacao.ForeColor = Color.FromArgb(0x47, 0x55, 0x69);
+        _situacao.Margin = new Padding(0, Escalar(8), 0, 0);
         return _situacao;
     }
 

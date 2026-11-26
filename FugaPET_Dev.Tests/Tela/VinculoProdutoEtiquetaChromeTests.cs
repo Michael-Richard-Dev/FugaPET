@@ -63,6 +63,42 @@ public sealed class VinculoProdutoEtiquetaChromeTests
             },
             new Size(largura, altura));
 
+    /// <summary>
+    /// OS BOTOES FICAM NA FRENTE DO BLOCO DO TITULO.
+    /// <para>
+    /// Defeito real visto pelo usuario em 26/11/2026: a janela abria SEM os tres botoes. O bloco do
+    /// titulo tem Dock=Fill, entrou antes e ficava em z=0; sendo BackColor.Transparent, ele repinta
+    /// o fundo do PAI por cima de quem esta atras — e os botoes sumiam.
+    /// </para>
+    /// <para>
+    /// O teste olha a ORDEM dos Controls, nao a imagem: o DrawToBitmap pinta em ordem diferente da
+    /// tela viva e mostrava os botoes que o app real nao mostrava.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OsBotoesDeJanela_FicamNaFrenteDoBlocoDoTitulo()
+        => ComATela(f =>
+        {
+            Label[] botoes = BotoesDeJanela(f);
+            Assert.NotEmpty(botoes);
+
+            Control faixa = botoes[0].Parent!;
+            int piorBotao = botoes.Max(b => faixa.Controls.GetChildIndex(b));
+
+            foreach (Control irmao in faixa.Controls)
+            {
+                if (irmao.Dock != DockStyle.Fill)
+                {
+                    continue;
+                }
+
+                Assert.True(
+                    faixa.Controls.GetChildIndex(irmao) > piorBotao,
+                    $"o irmao {irmao.GetType().Name} com Dock=Fill esta na FRENTE dos botoes de "
+                    + "janela (indice menor) e vai repintar por cima deles");
+            }
+        });
+
     [Fact]
     public void ATela_TemORodapeDoSistema()
         => ComATela(f =>
