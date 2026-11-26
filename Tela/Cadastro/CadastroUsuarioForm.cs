@@ -233,9 +233,7 @@ public partial class CadastroUsuarioForm : Form
         closeWindowLabel.Location = new Point(right - 52, 0);
         maximizeWindowLabel.Location = new Point(right - 100, 0);
         minimizeWindowLabel.Location = new Point(right - 148, 0);
-        sapStatusPanel.Location = new Point(right - 456, 12);
 
-        sapStatusPanel.BringToFront();
         minimizeWindowLabel.BringToFront();
         maximizeWindowLabel.BringToFront();
         closeWindowLabel.BringToFront();
@@ -785,6 +783,7 @@ public partial class CadastroUsuarioForm : Form
     private static Label ClonarRotulo(Label modelo, string nome) => new()
     {
         Name = nome,
+        AutoEllipsis = modelo.AutoEllipsis,
         AutoSize = modelo.AutoSize,
         Font = modelo.Font,
         ForeColor = modelo.ForeColor,
@@ -820,6 +819,7 @@ public partial class CadastroUsuarioForm : Form
             linha.Visible = true;
             linha.Location = new Point(profileRow1Panel.Left, profileRow1Panel.Top + (profileRow1Panel.Height * i));
             rotuloLogin.Text = usuario.LoginUsuario;
+            rotuloCargo.AutoEllipsis = true;
             rotuloCargo.Text = NomeDoCargo(usuario.IdCargo);
             AplicarSeloDeSituacao(selo, rotuloStatus, usuario.SituacaoUsuario);
 
@@ -1105,6 +1105,9 @@ public partial class CadastroUsuarioForm : Form
         comboBox.SelectedValue = valor.Value;
     }
 
+    /// <summary>Os cinco pares rotulo+campo da grade de dados.</summary>
+    private const int ParesDeCampo = 5;
+
     private void LayoutFormCard()
     {
         const int baseCardWidth = 559;
@@ -1139,7 +1142,25 @@ public partial class CadastroUsuarioForm : Form
         SetBounds(formTitleDivider, side, Scale(55, scaleY), contentW, 1);
 
         int gridTop = Scale(68, scaleY);
-        int gridHeight = Math.Max(280, Math.Min(360, Scale(300, scaleY)));
+
+        // OS CAMPOS CRESCEM COM O CARTAO, mas continuam agrupados no alto.
+        // MEDIDO em 26/11/2026: as dez linhas eram Absolute (18 + 38, cinco vezes) com um teto de 360,
+        // entao num cartao de 962px os campos ficavam miudos e espremidos no topo — nada perto do
+        // tamanho que as telas irmas dao aos seus.
+        //
+        // NAO esticar ate o fim: fotografei a tela irma de Cargo e o padrao da casa e conteudo agrupado
+        // em cima com ar embaixo. Esticar as dez linhas ate os 962px abria vaos de 100px entre um par e
+        // o proximo e ficava pior que o defeito. Campo e rotulo crescem com o DPI, com teto.
+        int alturaDoCampo = Math.Clamp(Scale(38, scaleY), 34, 48);
+        int alturaDoRotulo = Math.Clamp(Scale(18, scaleY), 18, 30);
+
+        for (int i = 0; i < formGrid.RowStyles.Count; i++)
+        {
+            formGrid.RowStyles[i].SizeType = SizeType.Absolute;
+            formGrid.RowStyles[i].Height = i % 2 == 0 ? alturaDoRotulo : alturaDoCampo;
+        }
+
+        int gridHeight = ParesDeCampo * (alturaDoRotulo + alturaDoCampo);
         SetBounds(formGrid, side, gridTop, contentW, gridHeight);
 
         // Let fields naturally expand with the grid width.
@@ -1524,8 +1545,13 @@ public partial class CadastroUsuarioForm : Form
         int tableH = Math.Max(220, footerY - tableY - Scale(10, scaleY));
         SetBounds(profilesTablePanel, side, tableY, cardWidth, tableH);
 
-        int usersX = Math.Max(Scale(183, scaleX), cardWidth - Scale(196, scaleX));
         int statusX = Math.Max(Scale(311, scaleX), cardWidth - Scale(68, scaleX));
+
+        // A COLUNA DE CARGO LEVA O QUE SOBRA, e nao o resto de uma coluna de Login larga demais.
+        // MEDIDO em 26/11/2026 na foto do usuario: Cargo tinha 172px e "Administrador do Sistema"
+        // precisa de 208px — saia cortado em "Administrador do". No mesmo cartao, Login tinha 236px
+        // para um login que precisa de ~110px. O corte estava na REPARTICAO, nao na falta de espaco.
+        int usersX = Math.Max(Scale(150, scaleX), statusX - Scale(170, scaleX));
         SetBounds(profilesHeaderLoginLabel, Scale(16, scaleX), Scale(9, scaleY), Math.Max(110, usersX - Scale(24, scaleX)), Scale(20, scaleY));
         SetBounds(profilesHeaderCargoLabel, usersX, Scale(9, scaleY), Math.Max(80, statusX - usersX - Scale(6, scaleX)), Scale(20, scaleY));
         SetBounds(profilesHeaderStatusLabel, statusX, Scale(9, scaleY), Math.Max(50, Scale(52, scaleX)), Scale(20, scaleY));
@@ -1544,6 +1570,14 @@ public partial class CadastroUsuarioForm : Form
         int panelStatusW = Math.Max(50, Scale(50, scaleX));
         int panelStatusX = Math.Max(Scale(310, scaleX), rowWidth - panelStatusW - Scale(12, scaleX));
         int cargoW = Math.Max(60, panelStatusX - usersX - Scale(8, scaleX));
+
+        // E quando o nome do cargo for maior que QUALQUER largura, termina em reticencias em vez de
+        // ser cortado no meio da palavra: nenhuma largura serve para um texto livre de cadastro.
+        profilesHeaderCargoLabel.AutoEllipsis = true;
+        foreach (Label rotuloDeCargo in cargos)
+        {
+            rotuloDeCargo.AutoEllipsis = true;
+        }
 
         for (int i = 0; i < logins.Length; i++)
         {

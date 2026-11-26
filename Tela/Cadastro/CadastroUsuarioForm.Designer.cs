@@ -14,9 +14,6 @@ partial class CadastroUsuarioForm
     private PictureBox headerTitleIconPictureBox;
     private Label headerTitleLabel;
     private Label headerSubtitleLabel;
-    private RoundedPanel sapStatusPanel;
-    private Label sapStatusDotLabel;
-    private Label sapStatusLabel;
     private Label minimizeWindowLabel;
     private Label maximizeWindowLabel;
     private Label closeWindowLabel;
@@ -194,9 +191,6 @@ partial class CadastroUsuarioForm
         headerTitleIconPictureBox = new PictureBox();
         headerTitleLabel = new Label();
         headerSubtitleLabel = new Label();
-        sapStatusPanel = new RoundedPanel();
-        sapStatusDotLabel = new Label();
-        sapStatusLabel = new Label();
         minimizeWindowLabel = new Label();
         maximizeWindowLabel = new Label();
         closeWindowLabel = new Label();
@@ -357,7 +351,6 @@ partial class CadastroUsuarioForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).BeginInit();
         headerTitleIconPanel.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).BeginInit();
-        sapStatusPanel.SuspendLayout();
         contentPanel.SuspendLayout();
         contentLayout.SuspendLayout();
         bodyLayout.SuspendLayout();
@@ -430,7 +423,6 @@ partial class CadastroUsuarioForm
         customTitleBarPanel.Controls.Add(headerTitleIconPanel);
         customTitleBarPanel.Controls.Add(headerTitleLabel);
         customTitleBarPanel.Controls.Add(headerSubtitleLabel);
-        customTitleBarPanel.Controls.Add(sapStatusPanel);
         customTitleBarPanel.Controls.Add(minimizeWindowLabel);
         customTitleBarPanel.Controls.Add(maximizeWindowLabel);
         customTitleBarPanel.Controls.Add(closeWindowLabel);
@@ -521,46 +513,6 @@ partial class CadastroUsuarioForm
         headerSubtitleLabel.TabIndex = 5;
         headerSubtitleLabel.Text = "Cadastro e manutenção de usuários / Integração SAP";
         headerSubtitleLabel.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // sapStatusPanel
-        // 
-        sapStatusPanel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        sapStatusPanel.BackColor = Color.Transparent;
-        sapStatusPanel.BorderColor = Color.FromArgb(55, 65, 81);
-        sapStatusPanel.BorderRadius = 14;
-        sapStatusPanel.Controls.Add(sapStatusDotLabel);
-        sapStatusPanel.Controls.Add(sapStatusLabel);
-        sapStatusPanel.FillColor = Color.FromArgb(23, 32, 47);
-        sapStatusPanel.Location = new Point(910, 10);
-        sapStatusPanel.Name = "sapStatusPanel";
-        sapStatusPanel.ShadowBlur = 0;
-        sapStatusPanel.ShadowOffsetY = 0;
-        sapStatusPanel.Size = new Size(190, 28);
-        sapStatusPanel.TabIndex = 6;
-        // 
-        // sapStatusDotLabel
-        // 
-        sapStatusDotLabel.BackColor = Color.Transparent;
-        sapStatusDotLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-        sapStatusDotLabel.ForeColor = Color.FromArgb(250, 204, 21);
-        sapStatusDotLabel.Location = new Point(13, 4);
-        sapStatusDotLabel.Name = "sapStatusDotLabel";
-        sapStatusDotLabel.Size = new Size(18, 20);
-        sapStatusDotLabel.TabIndex = 0;
-        sapStatusDotLabel.Text = "●";
-        sapStatusDotLabel.TextAlign = ContentAlignment.MiddleCenter;
-        // 
-        // sapStatusLabel
-        // 
-        sapStatusLabel.BackColor = Color.Transparent;
-        sapStatusLabel.Font = new Font("Cascadia Code", 7F, FontStyle.Bold);
-        sapStatusLabel.ForeColor = Color.White;
-        sapStatusLabel.Location = new Point(31, 5);
-        sapStatusLabel.Name = "sapStatusLabel";
-        sapStatusLabel.Size = new Size(151, 18);
-        sapStatusLabel.TabIndex = 1;
-        sapStatusLabel.Text = "SAP: não configurado";
-        sapStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         // 
         // minimizeWindowLabel
         // 
@@ -2532,7 +2484,6 @@ partial class CadastroUsuarioForm
         ((System.ComponentModel.ISupportInitialize)companyLogoPictureBox).EndInit();
         headerTitleIconPanel.ResumeLayout(false);
         ((System.ComponentModel.ISupportInitialize)headerTitleIconPictureBox).EndInit();
-        sapStatusPanel.ResumeLayout(false);
         contentPanel.ResumeLayout(false);
         contentLayout.ResumeLayout(false);
         bodyLayout.ResumeLayout(false);
