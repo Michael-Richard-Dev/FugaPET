@@ -54,6 +54,13 @@ public static class PermissoesSistema
         public const string Etiqueta = "ETIQUETA";
         public const string ModeloEtiqueta = "MODELO_ETIQUETA";
         public const string ImpressaoEtiqueta = "IMPRESSAO_ETIQUETA";
+        // A TELA Campos da Etiqueta foi aposentada em 26/11/2026, mas estas duas rotinas CONTINUAM
+        // semeadas no SQL e concedidas nos perfis dos tres bancos — e o teste
+        // TodaPermissaoSeedadaNoSql_DeveExistirComoConstante cobra que toda permissao do seed tenha
+        // constante aqui. Removi as duas junto com a camada e quebrei esse contrato; voltaram.
+        // So saem daqui junto com as linhas do banco.
+        public const string CampoEtiqueta = "CAMPO_ETIQUETA";
+        public const string MapeamentoCampoEtiqueta = "MAPEAMENTO_CAMPO_ETIQUETA";
         public const string Movimentacao = "MOVIMENTACAO";
         public const string Auditoria = "AUDITORIA";
         public const string CacheSap = "CACHE_SAP";
