@@ -1534,9 +1534,46 @@ public sealed class ProdutoAcabadoController
         CancellationToken cancellationToken = default)
         => _taraController.ListarAtivasPorSetorAsync(codigoSetor, cancellationToken);
 
+    /// <summary>
+    /// O ITEM DO PRODUTO ACABADO DA OP — e nao "o primeiro que o SAP devolver".
+    /// <para>
+    /// Defeito visto pelo usuario no QAS130 em 27/11/2026: a tela mostrou o produto 2000183 (0,100 KG,
+    /// deposito PP05) no lugar do produto da ordem. Consultando o SAP 130, a OP 1000008 tem DOIS itens:
+    /// item 1 = 4000168 (200 UN, PA01), que e o produto acabado e e o Material do CABECALHO da ordem, e
+    /// item 2 = 2000183, um co-produto. A escolha era <c>Itens.FirstOrDefault()</c>: sem $orderby na
+    /// consulta e sem nenhum vinculo com o material da ordem, qual item aparece depende da ordem em que
+    /// o SAP devolve a colecao — isto e, de sorte.
+    /// </para>
+    /// <para>
+    /// A regra passa a ser explicita: o item cujo Material E o material do cabecalho; na falta dele, o
+    /// de MENOR numero de item; so entao o primeiro da lista. O material do cabecalho continua como
+    /// ultimo recurso quando nao ha item nenhum.
+    /// </para>
+    /// </summary>
+    internal static ItemOrdemProducaoSap? EscolherItemDoProdutoAcabado(OrdemProducaoSap ordemSap)
+    {
+        ArgumentNullException.ThrowIfNull(ordemSap);
+
+        string materialDaOrdem = (ordemSap.MaterialProduzido ?? string.Empty).Trim();
+
+        ItemOrdemProducaoSap? doCabecalho = ordemSap.Itens.FirstOrDefault(
+            i => !string.IsNullOrWhiteSpace(materialDaOrdem)
+                && string.Equals((i.Material ?? string.Empty).Trim(), materialDaOrdem, StringComparison.OrdinalIgnoreCase));
+
+        if (doCabecalho is not null)
+        {
+            return doCabecalho;
+        }
+
+        return ordemSap.Itens
+            .OrderBy(i => long.TryParse((i.ItemOrdem ?? string.Empty).Trim(), out long numero) ? numero : long.MaxValue)
+            .ThenBy(i => (i.ItemOrdem ?? string.Empty).Trim(), StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
     private static ProdutoAcabadoOrdem MapearOrdem(OrdemProducaoSap ordemSap)
     {
-        ItemOrdemProducaoSap? item = ordemSap.Itens.FirstOrDefault();
+        ItemOrdemProducaoSap? item = EscolherItemDoProdutoAcabado(ordemSap);
         decimal planejada = item?.QuantidadePrevista ?? ordemSap.QuantidadePrevista;
 
         // GATE 118B: a producao JA recebida vem de MfgOrderItemGoodsReceiptQty em TRI-STATE.

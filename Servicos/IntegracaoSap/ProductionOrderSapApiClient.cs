@@ -165,7 +165,9 @@ public sealed class ProductionOrderSapApiClient
             MontarUrlColecao("A_ProductionOrderOperation_2", numeroOrdem, ordenarPor: "ManufacturingOrderSequence,ManufacturingOrderOperation"),
             MapearOperacao, MapearOperacaoXml, cancellationToken);
         IReadOnlyList<ItemOrdemProducaoSap> itens = await ConsultarColecaoAsync(
-            MontarUrlColecao("A_ProductionOrderItem_2", numeroOrdem, ordenarPor: null),
+            // ORDENADO: sem $orderby a colecao volta na ordem que o SAP quiser, e a escolha do item do
+            // produto acabado passaria a depender disso.
+            MontarUrlColecao("A_ProductionOrderItem_2", numeroOrdem, ordenarPor: "ManufacturingOrderItem"),
             MapearItem, MapearItemXml, cancellationToken);
 
         return ordem with { Componentes = componentes, Operacoes = operacoes, Itens = itens };
