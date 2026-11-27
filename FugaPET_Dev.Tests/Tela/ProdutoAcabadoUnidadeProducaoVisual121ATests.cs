@@ -136,11 +136,18 @@ public sealed class ProdutoAcabadoUnidadeProducaoVisual121ATests
     {
         string fonte = SemComentarios(LerFonte("Tela", "Processo", "ProcessoProdutoAcabadoForm.cs"));
 
-        // O default silencioso para KG foi removido.
-        Assert.DoesNotContain("""_ordemAtual?.Unidade ?? "KG" """.Trim(), fonte, StringComparison.Ordinal);
-        Assert.Contains("_ordemAtual?.Unidade ?? string.Empty", fonte, StringComparison.Ordinal);
+        // O default silencioso para KG foi removido — NENHUM lugar do fonte inventa a unidade.
+        Assert.DoesNotContain("""?? "KG" """.Trim(), fonte, StringComparison.Ordinal);
         // E a propriedade de unidade tambem nao inventa KG.
         Assert.Contains("_ordemAtual?.Unidade?.Trim() ?? string.Empty", fonte, StringComparison.Ordinal);
+
+        // Em 27/11/2026 a regra "esta OP e medida por peso?" saiu de dentro do resumo e virou um
+        // metodo proprio, porque a GUARDA de saldo pendente precisava enxergar a MESMA regra — ela
+        // comparava quilo com unidade e barrava caixa legitima. A assercao que exigia o literal
+        // "_ordemAtual?.Unidade ?? string.Empty" dentro do resumo ia junto com o texto antigo; o que
+        // importa e que a unidade continue vindo da OP, sem default, e que exista um lugar so.
+        Assert.Contains("private bool OrdemMedidaPorPeso() => OrdemMedidaPorPeso(_ordemAtual?.Unidade);", fonte, StringComparison.Ordinal);
+        Assert.Contains("(unidadeDaOrdem ?? string.Empty).Trim().ToUpperInvariant()", fonte, StringComparison.Ordinal);
     }
 
     // ===================== I: nenhum valor numerico foi alterado =====================

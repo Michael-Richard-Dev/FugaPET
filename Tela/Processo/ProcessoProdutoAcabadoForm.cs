@@ -2000,10 +2000,35 @@ public partial class ProcessoProdutoAcabadoForm : Form
             return false;
         }
 
-        decimal totalNovo = _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg) + pesoLiquidoKg;
-        if (totalNovo > _ordemAtual.QuantidadePendente)
+        // A GUARDA COMPARA NA UNIDADE DA OP.
+        //
+        // Defeito visto pelo usuario no QAS130 em 27/11/2026: a OP 1000452 esta em UN (56 planejadas,
+        // 40 entregues, 16 pendentes), a norma da 8 produtos por caixa, e ele ainda tinha as duas
+        // ultimas caixas para pesar. A tela barrava com "Peso total das caixas ultrapassa o saldo
+        // pendente da OP" porque somava QUILOS e comparava com um saldo em UNIDADES: 2 x 14,400 kg =
+        // 28,8 "maior" que 16. Em produto eram 16 de 16 — exatamente o saldo.
+        //
+        // A regra peso x produto e a MESMA do resumo (GATE 121A) e agora sai de um lugar so, para as
+        // duas nao divergirem de novo. E o que vai ao SAP tambem e o produto, nao o peso:
+        // QuantityInEntryUnit = caixa.QuantidadeProdutos.
+        //
+        // Pendente INDETERMINADO (tri-state null) continua nao bloqueando nada, como antes.
+        bool porPeso = OrdemMedidaPorPeso();
+        if (CaixaUltrapassaSaldoPendente(
+                _ordemAtual.Unidade,
+                _ordemAtual.QuantidadePendente,
+                _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg),
+                pesoLiquidoKg,
+                _caixasPesadas.Sum(caixa => caixa.QuantidadeProdutos),
+                _normaEmbalagem.QuantidadeProdutosPorCaixa))
         {
-            MessageBox.Show("Peso total das caixas ultrapassa o saldo pendente da OP.", "Produto Acabado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                porPeso
+                    ? "Peso total das caixas ultrapassa o saldo pendente da OP."
+                    : "Quantidade total de produtos ultrapassa o saldo pendente da OP.",
+                "Produto Acabado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return false;
         }
 
@@ -3114,6 +3139,56 @@ public partial class ProcessoProdutoAcabadoForm : Form
     private bool ExisteCaixaLivreParaPalete()
         => _caixasPesadas.Any(c => string.IsNullOrWhiteSpace(c.CodigoPaleteLocal));
 
+    /// <summary>
+    /// A OP E MEDIDA POR PESO? (GATE 121A) Unidade de peso ⇒ o saldo pendente esta em quilo e a soma
+    /// das caixas tambem; qualquer outra (UN, PC, ...) ⇒ o saldo esta em QUANTIDADE DE PRODUTO.
+    /// <para>
+    /// Unidade AUSENTE continua caindo em peso, que era o comportamento anterior — este metodo so
+    /// reuniu num lugar so a regra que o resumo e a guarda de saldo precisam enxergar igual. Elas
+    /// divergiram ate 27/11/2026: o resumo ja mostrava "PRODUTOS REGISTRADOS 016 de 16" e a guarda
+    /// comparava 28,8 kg com 16 UN, barrando caixa legitima.
+    /// </para>
+    /// </summary>
+    private bool OrdemMedidaPorPeso() => OrdemMedidaPorPeso(_ordemAtual?.Unidade);
+
+    /// <summary>A mesma regra, pura, para poder ser exercitada em teste sem montar a tela.</summary>
+    internal static bool OrdemMedidaPorPeso(string? unidadeDaOrdem)
+    {
+        string unidade = (unidadeDaOrdem ?? string.Empty).Trim().ToUpperInvariant();
+        return unidade is "KG" or "KGM" or "G" or "TO" or "";
+    }
+
+    /// <summary>
+    /// A CAIXA QUE VAI ENTRAR ULTRAPASSA O SALDO PENDENTE DA OP?
+    /// <para>
+    /// Compara sempre na unidade da ORDEM: peso com peso, produto com produto. Saldo pendente
+    /// INDETERMINADO (null, tri-state do GATE 118B) nao bloqueia — nao se inventa limite.
+    /// </para>
+    /// <para>
+    /// Igualdade PASSA: fechar exatamente o saldo e o caso normal, nao estouro. Era isso que o
+    /// usuario tinha em maos no QAS130 em 27/11/2026 — 16 produtos para um saldo de 16.
+    /// </para>
+    /// </summary>
+    internal static bool CaixaUltrapassaSaldoPendente(
+        string? unidadeDaOrdem,
+        decimal? saldoPendente,
+        decimal pesoLiquidoJaRegistradoKg,
+        decimal pesoLiquidoDaCaixaKg,
+        int produtosJaRegistrados,
+        int produtosDaCaixa)
+    {
+        if (saldoPendente is not decimal saldo)
+        {
+            return false;
+        }
+
+        decimal totalNovo = OrdemMedidaPorPeso(unidadeDaOrdem)
+            ? pesoLiquidoJaRegistradoKg + pesoLiquidoDaCaixaKg
+            : produtosJaRegistrados + (decimal)produtosDaCaixa;
+
+        return totalNovo > saldo;
+    }
+
     private void AtualizarResumoOperacional()
     {
         // Tarefa 21.6.3 (Ajuste 13): contadores sem total fixo; unidade da OP decide peso x produtos.
@@ -3125,8 +3200,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
         // GATE 121A: a unidade da OP NAO e mais defaultada para "KG" quando ausente — nada de
         // inventar unidade. A escolha do bloco (peso x produtos) fica IDENTICA ao comportamento
         // anterior, porque unidade vazia continua caindo em ehPeso (a agregacao nao muda).
-        string unidade = (_ordemAtual?.Unidade ?? string.Empty).Trim().ToUpperInvariant();
-        bool ehPeso = unidade is "KG" or "KGM" or "G" or "TO" or "";
+        bool ehPeso = OrdemMedidaPorPeso();
         if (ehPeso)
         {
             packagesTitleLabel.Text = "PESO REGISTRADO";
