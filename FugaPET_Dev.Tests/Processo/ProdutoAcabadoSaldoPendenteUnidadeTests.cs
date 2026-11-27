@@ -47,7 +47,7 @@ public sealed class ProdutoAcabadoSaldoPendenteUnidadeTests
         => Assert.Equal(
             esperaBloqueio,
             ProcessoProdutoAcabadoForm.CaixaUltrapassaSaldoPendente(
-                unidade, (decimal)saldo, (decimal)pesoJa, (decimal)pesoDaCaixa, produtosJaRegistrados: 999, produtosDaCaixa: 999));
+                unidade, (decimal)saldo, (decimal)pesoJa, (decimal)pesoDaCaixa, produtosAindaNaoContados: 999m, produtosDaCaixa: 999));
 
     /// <summary>
     /// SALDO INDETERMINADO NAO BLOQUEIA. O pendente e tri-state (GATE 118B): quando o SAP nao

@@ -2070,9 +2070,13 @@ public partial class ProcessoProdutoAcabadoForm : Form
         if (CaixaUltrapassaSaldoPendente(
                 _ordemAtual.Unidade,
                 _ordemAtual.QuantidadePendente,
-                _caixasPesadas.Sum(caixa => caixa.PesoLiquidoKg),
+                // SO AS CAIXAS QUE O SAP AINDA NAO CONTOU. Mesma regra do saldo exibido, e por um motivo
+                // medido: as caixas CONFIRMADA_SAP ja entraram no saldo que o SAP devolve (na OP 1000452
+                // elas postaram os 101 5000001277 e 5000001278, e as 40 recebidas ja as incluem).
+                // Somar todas aqui contava a mesma producao duas vezes e barrava caixa legitima.
+                CalculoSaldoProdutoAcabado.PesoLiquidoAindaNaoContadoNoSap(_caixasPesadas),
                 pesoLiquidoKg,
-                _caixasPesadas.Sum(caixa => caixa.QuantidadeProdutos),
+                CalculoSaldoProdutoAcabado.ProdutosAindaNaoContadosNoSap(_caixasPesadas, UnidadeProducaoAtual),
                 _normaEmbalagem.QuantidadeProdutosPorCaixa))
         {
             MessageBox.Show(
@@ -3225,9 +3229,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
     internal static bool CaixaUltrapassaSaldoPendente(
         string? unidadeDaOrdem,
         decimal? saldoPendente,
-        decimal pesoLiquidoJaRegistradoKg,
+        decimal pesoLiquidoAindaNaoContadoKg,
         decimal pesoLiquidoDaCaixaKg,
-        int produtosJaRegistrados,
+        decimal produtosAindaNaoContados,
         int produtosDaCaixa)
     {
         if (saldoPendente is not decimal saldo)
@@ -3236,8 +3240,8 @@ public partial class ProcessoProdutoAcabadoForm : Form
         }
 
         decimal totalNovo = OrdemMedidaPorPeso(unidadeDaOrdem)
-            ? pesoLiquidoJaRegistradoKg + pesoLiquidoDaCaixaKg
-            : produtosJaRegistrados + (decimal)produtosDaCaixa;
+            ? pesoLiquidoAindaNaoContadoKg + pesoLiquidoDaCaixaKg
+            : produtosAindaNaoContados + produtosDaCaixa;
 
         return totalNovo > saldo;
     }
