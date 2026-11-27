@@ -1687,9 +1687,9 @@ partial class CadastroUsuarioForm
         summaryCard.Controls.Add(lastValueLabel);
         summaryCard.Controls.Add(summaryDivider4);
         summaryCard.Controls.Add(tipTextLabel);
-        summaryCard.Controls.Add(salvarButton);
-        summaryCard.Controls.Add(novoButton);
-        summaryCard.Controls.Add(excluirButton);
+        formCard.Controls.Add(salvarButton);
+        formCard.Controls.Add(novoButton);
+        formCard.Controls.Add(excluirButton);
         summaryCard.Dock = DockStyle.Fill;
         summaryCard.Location = new Point(996, 0);
         summaryCard.Margin = new Padding(0);

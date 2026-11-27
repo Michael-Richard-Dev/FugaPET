@@ -437,7 +437,7 @@ public partial class CadastroUsuarioForm : Form
             Visible = false
         };
         _alterarSenhaButton.Click += async (_, _) => await AlterarSenhaUsuarioAsync();
-        summaryCard.Controls.Add(_alterarSenhaButton);
+        formCard.Controls.Add(_alterarSenhaButton);
         _alterarSenhaButton.BringToFront();
 
         AtualizarRotuloSalvar();
@@ -451,6 +451,10 @@ public partial class CadastroUsuarioForm : Form
         if (_alterarSenhaButton is not null)
         {
             _alterarSenhaButton.Visible = edicao;
+
+            // A BARRA DE ACOES SE REFAZ: com um botao a menos os outros se redistribuem, em vez de
+            // deixar um buraco do tamanho do "Alterar Senha" no meio da faixa.
+            LayoutFormCard();
         }
     }
 
@@ -1185,6 +1189,32 @@ public partial class CadastroUsuarioForm : Form
         int actionsHeight = Math.Max(84, formCard.Height - actionsTop - Scale(14, scaleY));
         SetBounds(actionsPanel, side, actionsTop, contentW, actionsHeight);
 
+        // A BARRA DE ACOES NO RODAPE DO CARTAO DE DADOS.
+        // Decisao do usuario em 26/11/2026: as acoes moraram no cartao de resumo ate aqui, e a metade
+        // de baixo DESTE cartao ficava vazia. Elas vem para ca, lado a lado, ocupando a largura util.
+        // So os botoes VISIVEIS entram na conta — com "Alterar Senha" escondido (cadastro novo), os
+        // tres restantes se redistribuem em vez de deixar um buraco no meio da faixa.
+        List<Button> acoes = [salvarButton];
+        if (_alterarSenhaButton is { Visible: true })
+        {
+            acoes.Add(_alterarSenhaButton);
+        }
+
+        acoes.Add(novoButton);
+        acoes.Add(excluirButton);
+
+        int alturaDaAcao = Math.Max(34, Scale(40, scaleY));
+        int folgaDaAcao = Scale(12, scaleX);
+        int larguraDaAcao = Math.Max(90, (contentW - (folgaDaAcao * (acoes.Count - 1))) / acoes.Count);
+        int topoDasAcoes = formCard.Height - alturaDaAcao - Scale(24, scaleY);
+
+        for (int i = 0; i < acoes.Count; i++)
+        {
+            acoes[i].Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 8.5F, 11F), FontStyle.Bold);
+            SetBounds(acoes[i], side + (i * (larguraDaAcao + folgaDaAcao)), topoDasAcoes, larguraDaAcao, alturaDaAcao);
+            acoes[i].BringToFront();
+        }
+
         LayoutCargoInputContent(scaleX, scaleY);
         LayoutSetorInputContent(scaleX, scaleY);
         LayoutPerfilInputContent(scaleX, scaleY);
@@ -1368,14 +1398,8 @@ public partial class CadastroUsuarioForm : Form
 
         SetBounds(tipTextLabel, Scale(72, scaleX), Scale(366, scaleY), Math.Max(170, summaryCard.Width - Scale(96, scaleX)), Math.Max(60, Scale(70, scaleY)));
 
-        SetBounds(salvarButton, side, summaryCard.Height - Scale(160, scaleY), buttonW, buttonH);
-        if (_alterarSenhaButton is not null)
-        {
-            _alterarSenhaButton.Font = new Font("Segoe UI", Math.Clamp(8F * contentScale, 8F, 11F), FontStyle.Bold);
-            SetBounds(_alterarSenhaButton, side, summaryCard.Height - Scale(128, scaleY), buttonW, buttonH);
-        }
-        SetBounds(novoButton, side, summaryCard.Height - Scale(96, scaleY), buttonW, buttonH);
-        SetBounds(excluirButton, side, summaryCard.Height - Scale(64, scaleY), buttonW, buttonH);
+        // AS ACOES SAIRAM DAQUI, por decisao do usuario em 26/11/2026: elas moram agora no rodape do
+        // cartao de dados, que tinha metade da altura vazia. O resumo fica so com a informacao.
 
     }
 

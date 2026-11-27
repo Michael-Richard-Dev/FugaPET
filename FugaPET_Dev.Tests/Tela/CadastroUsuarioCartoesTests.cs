@@ -96,6 +96,58 @@ public sealed class CadastroUsuarioCartoesTests
                 $"a grade termina em {grade.Bottom} e o cartao tem {cartao.Height} — transbordou");
         });
 
+    /// <summary>
+    /// AS ACOES MORAM NO CARTAO DE DADOS, nao no de resumo.
+    /// <para>
+    /// Decisao do usuario em 26/11/2026, depois de eu mostrar que o vazio no rodape do cartao do meio
+    /// era o padrao da casa: preencher com as acoes. O resumo fica so com a informacao.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AsAcoes_MoramNoCartaoDeDados()
+        => ComATela(c =>
+        {
+            foreach (string nome in new[] { "salvarButton", "novoButton", "excluirButton" })
+            {
+                Assert.Same(c["formCard"], c[nome].Parent);
+            }
+        });
+
+    /// <summary>
+    /// A BARRA FICA NO RODAPE E DENTRO DO CARTAO, lado a lado e sem sobreposicao. Com "Alterar Senha"
+    /// escondido (cadastro novo) sao tres botoes; eles se redistribuem em vez de deixar o buraco do
+    /// quarto no meio da faixa.
+    /// </summary>
+    [Fact]
+    public void ABarraDeAcoes_FicaNoRodapeSemSobrepor()
+        => ComATela(c =>
+        {
+            Control cartao = c["formCard"];
+            Button[] acoes =
+            [
+                (Button)c["salvarButton"], (Button)c["novoButton"], (Button)c["excluirButton"],
+            ];
+
+            foreach (Button acao in acoes)
+            {
+                Assert.True(
+                    acao.Bottom <= cartao.ClientSize.Height,
+                    $"'{acao.Text}' termina em {acao.Bottom} e o cartao tem {cartao.ClientSize.Height}");
+                Assert.True(
+                    acao.Top > c["formGrid"].Bottom,
+                    $"'{acao.Text}' esta por cima da grade de campos");
+            }
+
+            Button[] ordenados = [.. acoes.OrderBy(b => b.Left)];
+            for (int i = 1; i < ordenados.Length; i++)
+            {
+                Assert.True(
+                    ordenados[i].Left >= ordenados[i - 1].Right,
+                    $"'{ordenados[i].Text}' comeca em {ordenados[i].Left} e o anterior termina em "
+                    + $"{ordenados[i - 1].Right} — os botoes se sobrepoem");
+            }
+        });
+
     private static void ComATela(Action<Dictionary<string, Control>> verificar)
     {
         Exception? erro = null;
