@@ -471,6 +471,7 @@ public sealed class CadastroLayoutHarmoniaTests
     [InlineData("ModeloEtiquetaForm")]
     [InlineData("EtiquetaForm")]
     [InlineData("BalancaForm")]
+    [InlineData("CadastroUsuarioForm")]
     public void OMaisDoBotaoNovo_SegueOCorpoDoTexto(string tela)
         => ComATela(tela, c =>
         {

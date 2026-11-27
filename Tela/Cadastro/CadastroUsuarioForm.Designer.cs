@@ -200,7 +200,7 @@ partial class CadastroUsuarioForm
         profilesCard = new RoundedPanel();
         profilesTitleIconLabel = new Label();
         novoPerfilButtonPanel = new RoundedPanel();
-        label1 = new Label();
+        novoPerfilIconLabel = new Label();
         novoPerfilTextLabel = new Label();
         profilesSearchPanel = new RoundedPanel();
         profilesSearchIconLabel = new Label();
@@ -638,7 +638,7 @@ partial class CadastroUsuarioForm
         novoPerfilButtonPanel.BackColor = Color.Transparent;
         novoPerfilButtonPanel.BorderColor = Color.FromArgb(203, 213, 225);
         novoPerfilButtonPanel.BorderRadius = 4;
-        novoPerfilButtonPanel.Controls.Add(label1);
+        novoPerfilButtonPanel.Controls.Add(novoPerfilIconLabel);
         novoPerfilButtonPanel.Controls.Add(novoPerfilTextLabel);
         novoPerfilButtonPanel.Location = new Point(260, 18);
         novoPerfilButtonPanel.Name = "novoPerfilButtonPanel";
@@ -647,23 +647,23 @@ partial class CadastroUsuarioForm
         novoPerfilButtonPanel.Size = new Size(137, 27);
         novoPerfilButtonPanel.TabIndex = 2;
         // 
-        // label1
+        // novoPerfilIconLabel
         // 
-        label1.BackColor = Color.Transparent;
-        label1.Font = new Font("Segoe MDL2 Assets", 9F);
-        label1.ForeColor = Color.FromArgb(15, 23, 42);
-        label1.Location = new Point(6, 3);
-        label1.Name = "label1";
-        label1.Size = new Size(18, 21);
-        label1.TabIndex = 5;
-        label1.Text = "";
-        label1.TextAlign = ContentAlignment.MiddleCenter;
+        novoPerfilIconLabel.BackColor = Color.Transparent;
+        novoPerfilIconLabel.Font = new Font("Segoe MDL2 Assets", 9F);
+        novoPerfilIconLabel.ForeColor = Color.FromArgb(15, 23, 42);
+        novoPerfilIconLabel.Location = new Point(6, 3);
+        novoPerfilIconLabel.Name = "novoPerfilIconLabel";
+        novoPerfilIconLabel.Size = new Size(18, 21);
+        novoPerfilIconLabel.TabIndex = 5;
+        novoPerfilIconLabel.Text = "";
+        novoPerfilIconLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // novoPerfilTextLabel
         // 
         novoPerfilTextLabel.BackColor = Color.Transparent;
         novoPerfilTextLabel.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
-        novoPerfilTextLabel.ForeColor = Color.FromArgb(30, 41, 59);
+        novoPerfilTextLabel.ForeColor = Color.FromArgb(15, 23, 42);
         novoPerfilTextLabel.Location = new Point(34, 5);
         novoPerfilTextLabel.Name = "novoPerfilTextLabel";
         novoPerfilTextLabel.Size = new Size(95, 18);
@@ -1087,18 +1087,18 @@ partial class CadastroUsuarioForm
         formGrid.Controls.Add(photoPanel, 2, 0);
         formGrid.Controls.Add(emailLabel, 0, 2);
         formGrid.Controls.Add(emailInputPanel, 0, 3);
-        formGrid.Controls.Add(confirmarSenhaLabel, 1, 2);
-        formGrid.Controls.Add(confirmarSenhaInputPanel, 1, 3);
-        formGrid.Controls.Add(senhaLabel, 0, 4);
-        formGrid.Controls.Add(senhaInputPanel, 0, 5);
+        formGrid.Controls.Add(confirmarSenhaLabel, 0, 8);
+        formGrid.Controls.Add(confirmarSenhaInputPanel, 0, 9);
+        formGrid.Controls.Add(senhaLabel, 0, 6);
+        formGrid.Controls.Add(senhaInputPanel, 0, 7);
         formGrid.Controls.Add(perfilLabel, 1, 4);
         formGrid.Controls.Add(perfilInputPanel, 1, 5);
-        formGrid.Controls.Add(cargoLabel, 0, 6);
-        formGrid.Controls.Add(cargoInputPanel, 0, 7);
+        formGrid.Controls.Add(cargoLabel, 0, 4);
+        formGrid.Controls.Add(cargoInputPanel, 0, 5);
         formGrid.Controls.Add(situacaoLabel, 1, 6);
         formGrid.Controls.Add(situacaoInputPanel, 1, 7);
-        formGrid.Controls.Add(setorLabel, 0, 8);
-        formGrid.Controls.Add(setorInputPanel, 0, 9);
+        formGrid.Controls.Add(setorLabel, 1, 2);
+        formGrid.Controls.Add(setorInputPanel, 1, 3);
         formGrid.Location = new Point(24, 68);
         formGrid.Name = "formGrid";
         formGrid.RowCount = 10;
@@ -2693,7 +2693,7 @@ partial class CadastroUsuarioForm
         text.TextAlign = ContentAlignment.MiddleLeft;
     }
 
-    private Label label1;
+    private Label novoPerfilIconLabel;
 }
 
 

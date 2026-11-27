@@ -416,13 +416,15 @@ public partial class CadastroUsuarioForm : Form
     private void ConectarAcoesCadastro()
     {
         salvarButton.Click += async (_, _) => await SalvarUsuarioAsync();
-        novoButton.Click += (_, _) =>
-        {
-            CancelarSelecaoUsuarioPendente();
-            _idUsuarioAtual = 0;
-            ClearFields();
-            AtualizarRotuloSalvar();
-        };
+        novoButton.Click += (_, _) => PrepararNovoUsuario();
+
+        // O BOTAO "NOVO USUARIO" DO TOPO DA LISTA TAMBEM ABRE O CADASTRO NOVO.
+        // Ate 27/11/2026 ele nao tinha evento nenhum: era um desenho, o usuario clicava e nada
+        // acontecia. Nas telas irmas o mesmo botao chama o preparo do cadastro novo, e o clique e
+        // ligado RECURSIVAMENTE — ele costuma cair no rotulo ou no "+" que estao DENTRO do painel,
+        // e ligar so no painel nao pegaria.
+        LigarCliqueDeNovoUsuario(novoPerfilButtonPanel);
+
         excluirButton.Click += async (_, _) => await ExcluirUsuarioAsync();
 
         // Botao "Alterar Senha" criado em runtime: fluxo proprio, separado da edicao de dados.
@@ -441,6 +443,32 @@ public partial class CadastroUsuarioForm : Form
         _alterarSenhaButton.BringToFront();
 
         AtualizarRotuloSalvar();
+    }
+
+    /// <summary>Deixa a tela pronta para um cadastro novo. Um caminho so para os dois botoes.</summary>
+    private void PrepararNovoUsuario()
+    {
+        CancelarSelecaoUsuarioPendente();
+        _idUsuarioAtual = 0;
+        ClearFields();
+        AtualizarRotuloSalvar();
+        ClearRowSelection();
+        nomeTextBox.Focus();
+    }
+
+    /// <summary>
+    /// Liga o clique no painel E em cada filho dele, com a mao do mouse. Mesma forma do
+    /// <c>AttachNovoSetorClick</c> das telas irmas.
+    /// </summary>
+    private void LigarCliqueDeNovoUsuario(Control controle)
+    {
+        controle.Cursor = Cursors.Hand;
+        controle.Click += (_, _) => PrepararNovoUsuario();
+
+        foreach (Control filho in controle.Controls)
+        {
+            LigarCliqueDeNovoUsuario(filho);
+        }
     }
 
     // Rotulo do botao salvar reflete o modo (novo x edicao) e mostra/esconde "Alterar Senha".
@@ -1169,16 +1197,15 @@ public partial class CadastroUsuarioForm : Form
 
         // Let fields naturally expand with the grid width.
         foreach (Control control in new Control[]
-                 { nomeInputPanel, loginInputPanel, emailInputPanel, confirmarSenhaInputPanel, senhaInputPanel, perfilInputPanel, cargoInputPanel, situacaoInputPanel, photoPanel })
+                 { nomeInputPanel, loginInputPanel, emailInputPanel, confirmarSenhaInputPanel, senhaInputPanel, perfilInputPanel, cargoInputPanel, situacaoInputPanel, setorInputPanel, photoPanel })
         {
             control.Dock = DockStyle.Fill;
         }
 
-        // Keep setor aligned with the same visual structure of sibling inputs.
-        setorInputPanel.Dock = DockStyle.None;
-        setorInputPanel.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
-        setorInputPanel.Width = nomeInputPanel.Width;
-        setorInputPanel.Height = nomeInputPanel.Height;
+        // O TRATAMENTO ESPECIAL DO SETOR SAIU. Ele existia porque Setor era o campo SOZINHO na ultima
+        // linha; com a troca de 27/11/2026 quem fica sozinho e "Confirmar Senha", e a coluna ja tem
+        // largura propria (percentual fixo), entao Dock=Fill — o mesmo dos demais — da exatamente a
+        // mesma largura, sem caso particular para manter.
 
         int afterGridY = formGrid.Bottom + Scale(6, scaleY);
         SetBounds(permissionsDivider, side, afterGridY, contentW, 1);
@@ -1528,7 +1555,10 @@ public partial class CadastroUsuarioForm : Form
         profilesTitleLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 12F), FontStyle.Bold);
         profilesFooterLabel.Font = new Font("Segoe UI", Math.Clamp(8.5F * contentScale, 8.5F, 11F));
         novoPerfilTextLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
-        label1.Font = new Font("Segoe MDL2 Assets", Math.Clamp(9F * contentScale, 9F, 12F));
+        // O "+" SEGUE O CORPO DO TEXTO, como nas outras telas de cadastro. Com clamp proprio ele ia ao
+        // teto de icone e saia desproporcional ao lado do rotulo.
+        novoPerfilIconLabel.Font = new Font(
+            novoPerfilIconLabel.Font.FontFamily, novoPerfilTextLabel.Font.Size, GraphicsUnit.Point);
         profilesSearchTextBox.Font = new Font("Segoe UI", Math.Clamp(9F * contentScale, 9F, 12F));
         profilesSearchIconLabel.Font = new Font("Segoe MDL2 Assets", Math.Clamp(11F * contentScale, 11F, 14F));
         profilesHeaderLoginLabel.Font = new Font("Segoe UI", Math.Clamp(7.5F * contentScale, 7.5F, 10.5F), FontStyle.Bold);
@@ -1550,7 +1580,7 @@ public partial class CadastroUsuarioForm : Form
         int blockW = iconW + gap + textDrawW;
         int blockLeft = Math.Max(6, (quickW - blockW) / 2);
         int contentY = Math.Max(2, (quickH - buttonContentH) / 2);
-        SetBounds(label1, blockLeft, contentY, iconW, buttonContentH);
+        SetBounds(novoPerfilIconLabel, blockLeft, contentY, iconW, buttonContentH);
         SetBounds(novoPerfilTextLabel, blockLeft + iconW + gap, contentY, textDrawW, buttonContentH);
 
         int searchY = Scale(60, scaleY);
