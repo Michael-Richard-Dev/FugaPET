@@ -724,7 +724,8 @@ public sealed class ProdutoAcabadoController
         }
 
         LeituraFrescaOrdem261 fresca =
-            await _productionOrderSapServico.ConsultarEstadoFresco261Async(numeroOrdem, cancellationToken);
+            await _productionOrderSapServico.ConsultarEstadoFresco261Async(
+                numeroOrdem, cancellationToken, materialEsperado: caixa.Material);
 
         if (!fresca.Disponivel || fresca.Item is null)
         {

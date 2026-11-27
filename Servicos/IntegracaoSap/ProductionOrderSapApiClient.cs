@@ -239,9 +239,42 @@ public sealed class ProductionOrderSapApiClient
     /// Qualquer leitura nao-2xx/nao-mapeavel => resultado INDISPONIVEL (fail-closed), nunca lista vazia
     /// silenciosa.
     /// </summary>
+    /// <summary>
+    /// O ITEM DA LEITURA FRESCA: o do MATERIAL pedido; sem material pedido, o de MENOR numero.
+    /// <para>
+    /// A OP pode ter mais de um item (co-produto). Medido em 27/11/2026 na OP 1000008 do mandante
+    /// 130: item 1 = 4000168 (produto) e item 2 = 2000183 (co-produto). Pegar <c>itens[0]</c> era
+    /// "o primeiro que o SAP devolver" — e esta leitura alimenta o alocador do 261, que decide
+    /// postagem real.
+    /// </para>
+    /// <para>
+    /// Material pedido e NENHUM item dele ⇒ devolve null, e o chamador bloqueia. Nao se escolhe
+    /// "o mais parecido": alocar contra outro item e postar a quantidade de outro produto.
+    /// </para>
+    /// </summary>
+    internal static ItemOrdemProducaoSap? EscolherItemFresco(
+        IReadOnlyList<ItemOrdemProducaoSap> itens,
+        string? materialEsperado)
+    {
+        ArgumentNullException.ThrowIfNull(itens);
+
+        string material = (materialEsperado ?? string.Empty).Trim();
+        if (material.Length > 0)
+        {
+            return itens.FirstOrDefault(i =>
+                string.Equals((i.Material ?? string.Empty).Trim(), material, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return itens
+            .OrderBy(i => long.TryParse((i.ItemOrdem ?? string.Empty).Trim(), out long numero) ? numero : long.MaxValue)
+            .ThenBy(i => (i.ItemOrdem ?? string.Empty).Trim(), StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
     public async Task<LeituraFrescaOrdem261> ConsultarEstadoFresco261Async(
         string numeroOrdem,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? materialEsperado = null)
     {
         string ordem = numeroOrdem?.Trim() ?? string.Empty;
         if (ordem.Length == 0)
@@ -259,11 +292,20 @@ public sealed class ProductionOrderSapApiClient
                 ordem, "Leitura fresca do item da OP indisponivel no SAP: bloqueado (nenhum POST).");
         }
 
-        ItemOrdemProducaoSap? item = itens.Count > 0 ? itens[0] : null;
-        if (item is null)
+        if (itens.Count == 0)
         {
             return LeituraFrescaOrdem261.Indisponivel(
                 ordem, "Leitura fresca do item da OP voltou vazia: bloqueado (nenhum POST).");
+        }
+
+        ItemOrdemProducaoSap? item = EscolherItemFresco(itens, materialEsperado);
+        if (item is null)
+        {
+            // FAIL-CLOSED: material pedido e a OP tem itens, mas nenhum e dele. Alocar contra outro
+            // item seria postar 261 com a quantidade de um produto diferente.
+            return LeituraFrescaOrdem261.Indisponivel(
+                ordem,
+                "Leitura fresca: a OP nao tem item do material da caixa: bloqueado (nenhum POST).");
         }
 
         (IReadOnlyList<ComponenteOrdemProducaoSap> componentes, int? declarados, bool okComp) =

@@ -85,7 +85,8 @@ internal sealed class ProductionOrderSapServico : IProductionOrderSapServico
     /// </summary>
     public async Task<LeituraFrescaOrdem261> ConsultarEstadoFresco261Async(
         string numeroOrdem,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? materialEsperado = null)
     {
         string ordem = numeroOrdem?.Trim() ?? string.Empty;
         if (!_configuracao.ProductionOrderConfigurado)
@@ -98,7 +99,7 @@ internal sealed class ProductionOrderSapServico : IProductionOrderSapServico
         {
             using HttpClient httpClient = FabricaHttpClientSap.Criar(_configuracao);
             ProductionOrderSapApiClient cliente = new(_configuracao, httpClient, RegistrarDiagnostico);
-            return await cliente.ConsultarEstadoFresco261Async(ordem, cancellationToken);
+            return await cliente.ConsultarEstadoFresco261Async(ordem, cancellationToken, materialEsperado);
         }
         catch (OperationCanceledException)
         {
