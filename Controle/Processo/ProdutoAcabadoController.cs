@@ -827,6 +827,49 @@ public sealed class ProdutoAcabadoController
     }
 
     /// <summary>
+    /// RELE AS QUANTIDADES DA OP NO SAP, sem tocar na norma de embalagem.
+    /// <para>
+    /// Pedido do usuario em 27/11/2026: "esse calculo, que voce fez pela tela, o mais correto e fazer
+    /// por API, verificando o que ja foi para o SAP". A tela lia o saldo UMA vez, na consulta da OP, e
+    /// a partir dai so descontava as caixas locais. Depois que uma caixa e confirmada no SAP a base
+    /// envelhece: o cabecalho continuava mostrando 40 entregues / 16 pendentes mesmo com as caixas ja
+    /// confirmadas, porque ninguem relia a ordem.
+    /// </para>
+    /// <para>
+    /// Devolve a ordem com as quantidades FRESCAS (planejada, entregue, pendente) e a identidade
+    /// intacta. Devolve NULL quando o SAP nao responde ou a ordem nao vem utilizavel — e nesse caso o
+    /// chamador mantem o que ja tinha. Nunca inventa numero: saldo errado para baixo barra producao
+    /// legitima, para cima deixa produzir alem da ordem.
+    /// </para>
+    /// <para>
+    /// Diferente de <see cref="ConsultarOrdemProducaoAsync"/>, aqui NAO se consulta a norma (ela nao
+    /// muda a cada caixa e cada consulta e uma chamada ao CPI) e NAO se reaplica a recusa por saldo
+    /// zerado: chegar a zero e o fim normal da producao, nao um erro a ser mostrado como falha.
+    /// </para>
+    /// </summary>
+    public async Task<ProdutoAcabadoOrdem?> ReconsultarQuantidadesDaOrdemAsync(
+        string numeroOrdem,
+        CancellationToken cancellationToken = default)
+    {
+        string ordemConsultada = (numeroOrdem ?? string.Empty).Trim();
+        if (ordemConsultada.Length == 0)
+        {
+            return null;
+        }
+
+        ResultadoConsultaOrdemProducaoSap resultadoSap =
+            await _productionOrderSapServico.ConsultarOrdemAsync(ordemConsultada, cancellationToken);
+
+        if (resultadoSap.Cenario != CenarioConsultaOrdemProducaoSap.Encontrada || resultadoSap.Ordem is null)
+        {
+            return null;
+        }
+
+        ProdutoAcabadoOrdem ordem = MapearOrdem(resultadoSap.Ordem);
+        return string.IsNullOrWhiteSpace(ordem.MaterialProduzido) ? null : ordem;
+    }
+
+    /// <summary>
     /// Consulta REAL (somente leitura) da norma de embalagem pelo material acabado (contrato INT012) +
     /// interpretaÃ§Ã£o defensiva (Â§5/Â§6). NÃƒO executa POST. SÃ³ Ã© bem-sucedida no cenÃ¡rio Encontrada com
     /// interpretaÃ§Ã£o vÃ¡lida; qualquer outro cenÃ¡rio â‡’ Sucesso=false com o motivo sanitizado (nunca fallback).

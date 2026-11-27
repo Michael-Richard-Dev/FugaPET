@@ -746,6 +746,52 @@ public partial class ProcessoProdutoAcabadoForm : Form
             ? CalculoSaldoProdutoAcabado.SaldoPendenteExibido(pendente, _caixasPesadas, UnidadeProducaoAtual)
             : 0m;
 
+    /// <summary>
+    /// RELE AS QUANTIDADES DA OP NO SAP e repinta o cabecalho com elas.
+    /// <para>
+    /// Pedido do usuario em 27/11/2026: "o mais correto e fazer por API, verificando o que ja foi para
+    /// o SAP". Antes a tela lia o saldo UMA vez, na consulta da OP, e dai em diante so descontava as
+    /// caixas LOCAIS. Caixa confirmada deixa de ser local e passa a contar no SAP — mas a base nunca
+    /// era relida, entao o cabecalho continuava mostrando a entrega de antes do envio.
+    /// </para>
+    /// <para>
+    /// SAP indisponivel NAO apaga o que esta na tela: mantem-se o ultimo valor conhecido e o rodape
+    /// diz que a releitura falhou. Numero inventado aqui ou barra producao legitima, ou deixa produzir
+    /// alem da ordem.
+    /// </para>
+    /// </summary>
+    private async Task ReconsultarQuantidadesDaOpAsync()
+    {
+        if (_ordemAtual is null || string.IsNullOrWhiteSpace(_ordemAtual.NumeroOrdem))
+        {
+            return;
+        }
+
+        ProdutoAcabadoOrdem? fresca;
+        try
+        {
+            fresca = await _controller.ReconsultarQuantidadesDaOrdemAsync(_ordemAtual.NumeroOrdem);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProdutoAcabado] Releitura das quantidades da OP falhou: {ex.GetType().Name}");
+            fresca = null;
+        }
+
+        if (fresca is null)
+        {
+            statusLabel.Text =
+                "Não foi possível reler as quantidades da OP no SAP; os valores exibidos são os da última leitura.";
+            return;
+        }
+
+        _ordemAtual = fresca;
+        PreencherDadosOrdem();
+        AtualizarSaldoPendente();
+        AtualizarResumoOperacional();
+    }
+
     /// <summary>REGRA 4: atualiza IMEDIATAMENTE o campo SALDO PENDENTE (sem recarregar a OP), pela regra única.</summary>
     private void AtualizarSaldoPendente()
     {
@@ -943,8 +989,11 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AtualizarEstadoEnvioCaixaSap();
             AtualizarBotoesOperacao();
             // REGRA 4: recalcula o SALDO PENDENTE pela regra única (abate apenas caixas CONFIRMADA_SAP) após o
-            // resultado DEFINITIVO e persistido do envio — sem recarregar a OP manualmente.
+            // resultado DEFINITIVO e persistido do envio.
             AtualizarSaldoPendente();
+            // E a BASE vem do SAP de novo: o que foi confirmado agora conta na quantidade entregue da
+            // ordem, e sem reler a tela continuaria exibindo o saldo de antes do envio.
+            await ReconsultarQuantidadesDaOpAsync();
         }
     }
 
@@ -1003,6 +1052,9 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AtualizarEstadoEnvioCaixaSap();
             AtualizarBotoesOperacao();
             AtualizarSaldoPendente();
+            // O lote pode ter confirmado varias caixas: a base do saldo vem do SAP de novo, uma vez so,
+            // no fim do laco.
+            await ReconsultarQuantidadesDaOpAsync();
         }
     }
 
@@ -1205,6 +1257,7 @@ public partial class ProcessoProdutoAcabadoForm : Form
             AtualizarEstadoEnvioCaixaSap();
             AtualizarBotoesOperacao();
             AtualizarSaldoPendente();
+            await ReconsultarQuantidadesDaOpAsync();
         }
 
         // GATE 113E (§5): a etiqueta sai DEPOIS do finally, que já recarregou o snapshot persistido, e
